@@ -29,8 +29,11 @@ class Priority(str, enum.Enum):
 class Todo(UUIDPrimaryKey, TimestampMixin, Base):
     __tablename__ = 'todos'
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True, index=True
+    )
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey('projects.id', ondelete='SET NULL'), nullable=True, index=True
     )
 
     title: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -55,4 +58,4 @@ class Todo(UUIDPrimaryKey, TimestampMixin, Base):
 
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-    project: Mapped['Project'] = relationship('Project', back_populates='todos')  # type: ignore[name-defined]
+    project: Mapped[Optional['Project']] = relationship('Project', back_populates='todos')  # type: ignore[name-defined]

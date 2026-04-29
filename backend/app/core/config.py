@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     SLACK_CLIENT_SECRET: str = ''
     SLACK_REDIRECT_URI: str = ''
     SLACK_SIGNING_SECRET: str = ''
+    # xoxb- 봇 토큰 (OAuth 완료 후 SlackWorkspace.access_token_encrypted에 저장)
+    # 환경변수로도 설정 가능 (단일 워크스페이스 개발 용도)
+    SLACK_BOT_TOKEN: str = ''
 
     # ── GitHub ────────────────────────────────────────────────────────────
     GITHUB_CLIENT_ID: str = ''

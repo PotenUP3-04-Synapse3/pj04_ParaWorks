@@ -11,6 +11,11 @@ from app.models.review_item import ReviewItem, ReviewItemStatus, ReviewItemType
 from app.models.notification import Notification, NotificationType
 from app.models.audit_log import AuditLog
 from app.models.permission_policy import PermissionPolicy, AccessLevel
+from app.models.slack import (
+    SlackWorkspace, SlackChannel, SlackMessage, SlackThread,
+    SlackChannelPermission, SlackMessageType, SlackIngestionStatus, SlackThreadStatus,
+)
+from app.models.decision_record import DecisionRecord, DecisionRecordStatus
 
 __all__ = [
     'Organization',
@@ -26,4 +31,9 @@ __all__ = [
     'Notification', 'NotificationType',
     'AuditLog',
     'PermissionPolicy', 'AccessLevel',
+    # Slack
+    'SlackWorkspace', 'SlackChannel', 'SlackMessage', 'SlackThread',
+    'SlackChannelPermission', 'SlackMessageType', 'SlackIngestionStatus', 'SlackThreadStatus',
+    # Decision records
+    'DecisionRecord', 'DecisionRecordStatus',
 ]

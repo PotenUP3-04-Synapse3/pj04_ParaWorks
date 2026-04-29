@@ -14,6 +14,7 @@ celery_app = Celery(
         'app.tasks.ingestion_tasks',
         'app.tasks.drive_tasks',
         'app.tasks.audit_tasks',
+        'app.tasks.slack_tasks',
     ],
 )
 

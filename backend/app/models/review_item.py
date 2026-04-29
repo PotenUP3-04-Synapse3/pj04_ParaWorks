@@ -17,12 +17,17 @@ class ReviewItemType(str, enum.Enum):
     timeline_event = 'timeline_event'
     history_event = 'history_event'
     project = 'project'
+    decision_record = 'decision_record'
+    slack_thread_summary = 'slack_thread_summary'
 
 
 class ReviewItemStatus(str, enum.Enum):
     draft = 'draft'
+    pending_review = 'pending_review'
     approved = 'approved'
     rejected = 'rejected'
+    needs_more_evidence = 'needs_more_evidence'
+    archived = 'archived'
 
 
 class ReviewItem(UUIDPrimaryKey, TimestampMixin, Base):

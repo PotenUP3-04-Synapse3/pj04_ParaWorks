@@ -21,8 +21,11 @@ class HistoryStatus(str, enum.Enum):
 class HistoryEvent(UUIDPrimaryKey, TimestampMixin, Base):
     __tablename__ = 'history_events'
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True, index=True
+    )
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey('projects.id', ondelete='SET NULL'), nullable=True, index=True
     )
 
     title: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -47,4 +50,4 @@ class HistoryEvent(UUIDPrimaryKey, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True, index=True
     )
 
-    project: Mapped['Project'] = relationship('Project', back_populates='history_events')  # type: ignore[name-defined]
+    project: Mapped[Optional['Project']] = relationship('Project', back_populates='history_events')  # type: ignore[name-defined]
