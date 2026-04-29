@@ -36,14 +36,18 @@ class RejectBody(BaseModel):
 async def list_review_items(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    item_status: str = 'pending',
+    item_status: str = 'draft',
 ):
     org_id = request.state.org_id
+    try:
+        status_enum = ReviewItemStatus(item_status)
+    except ValueError:
+        status_enum = ReviewItemStatus.draft
     result = await db.execute(
         select(ReviewItem)
         .where(
             ReviewItem.organization_id == org_id,
-            ReviewItem.status == ReviewItemStatus(item_status),
+            ReviewItem.status == status_enum,
         )
         .order_by(ReviewItem.created_at.asc())
     )

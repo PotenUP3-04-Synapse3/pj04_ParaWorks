@@ -5,7 +5,14 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from pgvector.sqlalchemy import Vector
+try:
+    from pgvector.sqlalchemy import Vector as _Vector
+    _VECTOR_TYPE = _Vector(1536)
+    _HAS_VECTOR = True
+except Exception:
+    _HAS_VECTOR = False
+    _VECTOR_TYPE = None  # type: ignore[assignment]
+
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,7 +71,9 @@ class SourceSnippet(UUIDPrimaryKey, TimestampMixin, Base):
     version_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     # pgvector embedding (text-embedding-3-small = 1536 dims)
-    embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(1536), nullable=True)
+    embedding: Mapped[Optional[List[float]]] = mapped_column(
+        _VECTOR_TYPE if _HAS_VECTOR else Text, nullable=True
+    )
 
     # Denormalised columns for fast retriever SQL filtering (no JOIN needed)
     org_id: Mapped[Optional[uuid.UUID]] = mapped_column(

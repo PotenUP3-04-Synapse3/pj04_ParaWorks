@@ -1,11 +1,11 @@
-"""RAG Retrieval Agent — semantic search over pgvector with metadata filters."""
+﻿"""RAG Retrieval Agent — semantic search over pgvector with metadata filters."""
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
 from app.agents.base_agent import AgentState, get_llm

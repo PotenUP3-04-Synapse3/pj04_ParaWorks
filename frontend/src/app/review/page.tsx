@@ -17,7 +17,7 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(false);
 
   const load = () =>
-    apiFetch<ReviewItem[]>('/review-queue?item_status=pending').then(setItems);
+    apiFetch<ReviewItem[]>('/review-queue?item_status=draft').then(setItems);
 
   useEffect(() => { load(); }, []);
 

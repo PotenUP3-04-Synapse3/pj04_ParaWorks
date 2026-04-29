@@ -51,7 +51,7 @@ async def get_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     pending = await db.scalar(
         select(func.count(ReviewItem.id)).where(
             ReviewItem.organization_id == org_id,
-            ReviewItem.status == ReviewItemStatus.pending,
+            ReviewItem.status == ReviewItemStatus.draft,
         )
     )
     approved_todos = await db.scalar(

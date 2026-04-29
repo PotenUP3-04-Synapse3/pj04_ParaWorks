@@ -59,7 +59,7 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid refresh token')
 
-    user_id = payload.get('user_id')
+    user_id = payload.get('sub')
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Malformed token')
 

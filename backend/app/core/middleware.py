@@ -18,6 +18,7 @@ logger = structlog.get_logger()
 # ── Paths that skip authentication ──────────────────────────────────────────
 _PUBLIC_PATHS = {
     '/api/v1/auth/login',
+    '/api/v1/auth/login/google',
     '/api/v1/auth/google/callback',
     '/api/v1/auth/refresh',
     '/api/v1/webhooks/slack',
@@ -75,6 +76,8 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 record_audit_log.delay(
                     user_id=request.state.user_id,
                     action=request.method,
+                    resource_type='api',
+                    resource_id=None,
                     resource_path=request.url.path,
                     ip_addr=_get_client_ip(request),
                     user_agent=request.headers.get('user-agent', ''),

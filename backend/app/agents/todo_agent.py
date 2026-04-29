@@ -1,10 +1,10 @@
-"""Todo Agent — extracts actionable tasks from document chunks."""
+﻿"""Todo Agent — extracts actionable tasks from document chunks."""
 from __future__ import annotations
 
 import logging
 from typing import List
 
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
 from app.agents.base_agent import AgentState, DocumentChunk, get_llm

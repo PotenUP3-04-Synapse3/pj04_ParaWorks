@@ -31,8 +31,8 @@ async def verify_google_id_token(token: str) -> dict:
         )
         return claims
     except Exception as exc:
-        logger.warning('Invalid Google ID token: %s', exc)
-        raise ValueError('Invalid Google ID token')
+        logger.warning('Invalid Google ID token: %s', exc, exc_info=True)
+        raise ValueError(f'Invalid Google ID token: {exc}')
 
 
 async def get_or_create_user(
@@ -73,7 +73,7 @@ async def get_or_create_user(
         org = Organization(
             name=domain,
             domain=domain,
-            settings={},
+            settings='{}',
         )
         db.add(org)
         await db.flush()
@@ -96,10 +96,10 @@ async def get_or_create_user(
 def issue_tokens(user: User) -> Tuple[str, str]:
     """Issue access and refresh JWT tokens for a user."""
     payload = {
-        'user_id': str(user.id),
+        'sub': str(user.id),
         'org_id': str(user.organization_id),
         'role': user.role.value,
     }
     access_token = create_access_token(payload)
-    refresh_token = create_refresh_token({'user_id': str(user.id)})
+    refresh_token = create_refresh_token({'sub': str(user.id)})
     return access_token, refresh_token

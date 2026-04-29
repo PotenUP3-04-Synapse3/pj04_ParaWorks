@@ -1,6 +1,8 @@
-'use client';
+﻿'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Script from 'next/script';
 import { setTokens } from '@/lib/api';
 
 declare global {
@@ -34,34 +36,43 @@ export default function LoginPage() {
     }
   };
 
+  const initGoogle = () => {
+    if (!window.google) return;
+    window.google.accounts.id.initialize({
+      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
+      callback: handleGoogleLogin,
+    });
+    window.google.accounts.id.renderButton(
+      document.getElementById('google-login-btn'),
+      { theme: 'outline', size: 'large', width: 300 }
+    );
+  };
+
   useEffect(() => {
     if (window.google) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-        callback: handleGoogleLogin,
-      });
-      window.google.accounts.id.renderButton(
-        document.getElementById('google-login-btn'),
-        { theme: 'outline', size: 'large', width: 300 }
-      );
+      initGoogle();
     }
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm flex flex-col items-center gap-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">ParaWorks</h1>
-          <p className="text-sm text-gray-500 mt-1">Intelligent Workplace Collaboration</p>
+    <>
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="afterInteractive"
+        onLoad={initGoogle}
+      />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm flex flex-col items-center gap-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900">ParaWorks</h1>
+            <p className="text-sm text-gray-500 mt-1">Intelligent Workplace Collaboration</p>
+          </div>
+          <div id="google-login-btn" />
+          <p className="text-xs text-gray-400 text-center">
+            회사 계정으로 로그인하세요
+          </p>
         </div>
-        <div id="google-login-btn" />
-        <p className="text-xs text-gray-400 text-center">
-          회사 계정으로 로그인하세요
-        </p>
       </div>
-      <script src="https://accounts.google.com/gsi/client" async />
-    </div>
+    </>
   );
 }
-
-import { useEffect } from 'react';

@@ -1,11 +1,11 @@
-"""Priority Agent — assigns priority scores to todos."""
+﻿"""Priority Agent — assigns priority scores to todos."""
 from __future__ import annotations
 
 import json
 import logging
 from typing import Dict
 
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
 from app.agents.base_agent import AgentState, get_llm
