@@ -52,7 +52,12 @@ class Settings(BaseSettings):
     # ── Google OAuth ──────────────────────────────────────────────────────
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
-    GOOGLE_REDIRECT_URI: str
+    GOOGLE_REDIRECT_URI: str  # 로그인용 (GSI ID token 방식이므로 실질적으로 미사용)
+    # Google Drive / Gmail / Calendar 연동용 OAuth2 redirect URI
+    GOOGLE_INTEGRATION_REDIRECT_URI: str = 'http://localhost:8000/api/v1/integrations/google/callback'
+
+    # ── Frontend ──────────────────────────────────────────────────────────
+    FRONTEND_URL: str = 'http://localhost:3000'
 
     # ── Domain Restriction ────────────────────────────────────────────────
     ALLOWED_EMAIL_DOMAINS: str = ''
