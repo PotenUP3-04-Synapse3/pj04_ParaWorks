@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Float, Integer, JSON, String, Text
+from sqlalchemy import JSON, DateTime, Float, Integer, String, Text
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 

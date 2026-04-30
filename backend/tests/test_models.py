@@ -13,9 +13,9 @@ from backend.app.models import ReviewItem, Source, SyncJob
 def db_session() -> Generator[Session, None, None]:
     engine = create_engine('sqlite:///:memory:')
     Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine)
+    session_local = sessionmaker(bind=engine)
 
-    with SessionLocal() as session:
+    with session_local() as session:
         yield session
 
     Base.metadata.drop_all(engine)

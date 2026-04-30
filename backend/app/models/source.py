@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
