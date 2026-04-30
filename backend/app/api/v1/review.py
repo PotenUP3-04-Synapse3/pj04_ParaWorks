@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
 from backend.app.models import ReviewItem
+from backend.app.schemas.review import ReviewItemUpdate
 
 router = APIRouter(prefix='/review', tags=['review'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -35,6 +36,24 @@ def list_review_items(db: DbSession, status: str = 'pending_review') -> dict[str
     return {'items': [_review_item_response(item) for item in items]}
 
 
+@router.patch('/{item_id}')
+def update_review_item(
+    item_id: int,
+    update: ReviewItemUpdate,
+    db: DbSession,
+) -> dict:
+    item = db.get(ReviewItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail='Review item not found')
+
+    for field, value in update.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+
+    db.commit()
+    db.refresh(item)
+    return _review_item_response(item)
+
+
 @router.post('/{item_id}/approve')
 def approve_review_item(
     item_id: int,
@@ -48,6 +67,24 @@ def approve_review_item(
         raise HTTPException(status_code=400, detail='Review item requires source evidence')
 
     item.status = 'approved'
+    item.reviewer_id = user.id
+    item.reviewed_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(item)
+    return _review_item_response(item)
+
+
+@router.post('/{item_id}/request-more-evidence')
+def request_more_evidence_for_review_item(
+    item_id: int,
+    db: DbSession,
+    user: CurrentUser,
+) -> dict:
+    item = db.get(ReviewItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail='Review item not found')
+
+    item.status = 'needs_more_evidence'
     item.reviewer_id = user.id
     item.reviewed_at = datetime.now(UTC)
     db.commit()

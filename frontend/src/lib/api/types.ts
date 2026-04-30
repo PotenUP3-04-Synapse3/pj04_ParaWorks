@@ -12,6 +12,20 @@ export type DashboardResponse = {
   recent_jobs: SyncJob[];
 };
 
+export type ReviewStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "needs_more_evidence";
+
+export type ReviewItemUpdate = {
+  payload?: Record<string, unknown>;
+  source_links?: string[];
+  source_snippets?: string[];
+  confidence_score?: number;
+  permission_level?: string;
+};
+
 export type ReviewItem = {
   id: number;
   item_type: string;
@@ -20,7 +34,7 @@ export type ReviewItem = {
   source_snippets: string[];
   confidence_score: number;
   permission_level: string;
-  status: string;
+  status: ReviewStatus;
 };
 
 export type ReviewResponse = {

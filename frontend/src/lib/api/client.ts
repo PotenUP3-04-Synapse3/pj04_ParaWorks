@@ -42,3 +42,21 @@ export async function apiPost<T>(
 
   return parseResponse<T>(response);
 }
+
+export async function apiPatch<T>(
+  path: string,
+  body: unknown,
+  demoUser = "admin",
+): Promise<T> {
+  const response = await fetch(apiUrl(path), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Demo-User": demoUser,
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  return parseResponse<T>(response);
+}
