@@ -1,6 +1,7 @@
 # ParaWorks Harness Verification
 
-Run commands from `C:\potenup3\pj04-Paraworks`.
+Run commands from the repository checkout under review. For this branch, the active
+worktree is `C:\potenup3\pj04-Paraworks\.worktrees\paraworks-harness`.
 
 ## Task 2 Verification
 
@@ -10,7 +11,7 @@ docker compose config
 
 ## Full Harness Verification
 
-Run this after Task 6 creates `frontend/package.json`.
+Requires the frontend workspace under `frontend/`.
 
 ```powershell
 docker compose config

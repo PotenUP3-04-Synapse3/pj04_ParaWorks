@@ -34,22 +34,21 @@ Updated: 2026-04-30
   - Final review: approved
   - Notable correction: lazy `get_mock_connector` export avoids circular import; mock events are deep-copied; beta seed bodies include `scope`.
 
-## Current Task
+- Task 5: Ingestion, Review API, Search, and SSE
+  - Commit: `2be1492` `feat: add mock ingestion and review APIs`
 
-Task 5: Ingestion, Review API, Search, and SSE
+- Task 6: Frontend MVP Harness
+  - Commit: `d507390`
+  - Cleanup: `8677d20`
+  - Proxy fix: `0aa7353`
 
-Status: not implemented yet. First Task 5 worker was blocked by its file-edit tool before creating files. No Task 5 files were changed or committed.
+- Task 7: ADR and Final Verification
+  - Commit: `3eff18a`
 
-Next action:
+## Current Status
 
-1. Dispatch a fresh worker for Task 5, preferably with a narrower first slice:
-   - Add `backend/tests/conftest.py` and Task 5 API tests.
-   - Add ingestion, extractor, permissions, search schema, API routes, and wire `api_router`.
-   - Run `uv run pytest backend/tests -v` and `uv run ruff check backend/app backend/tests`.
-   - Commit `feat: add mock ingestion and review APIs`.
-2. Run spec compliance review.
-3. Run code quality review.
-4. Fix review issues before Task 6.
+All implementation plan tasks are complete. Final review is pending and should be
+the next action.
 
 ## Environmental Notes
 
@@ -60,6 +59,4 @@ Next action:
 
 ## Open Plan Tasks
 
-- Task 5: Ingestion, Review API, Search, and SSE
-- Task 6: Frontend MVP Harness
-- Task 7: ADR and Final Verification
+None.
