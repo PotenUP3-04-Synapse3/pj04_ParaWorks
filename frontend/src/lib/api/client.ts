@@ -1,7 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 function apiUrl(path: string) {
-  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return typeof window === "undefined" ? `${API_BASE}${normalizedPath}` : normalizedPath;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

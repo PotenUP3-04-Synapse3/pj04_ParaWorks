@@ -12,7 +12,7 @@ export function useJobStatus(jobId?: string) {
     }
 
     const stream = new EventSource(
-      `http://127.0.0.1:8000/api/v1/stream/job-status?job_id=${encodeURIComponent(jobId)}`,
+      `/api/v1/stream/job-status?job_id=${encodeURIComponent(jobId)}`,
     );
 
     const handleMessage = (event: MessageEvent<string>) => {
