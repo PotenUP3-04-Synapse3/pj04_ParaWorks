@@ -11,5 +11,10 @@ wheels/
 
 # env
 .env
+
+# Frontend generated files
+frontend/node_modules/
+frontend/.next/
+
 # Git worktrees
 .worktrees/
