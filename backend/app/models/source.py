@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -16,8 +17,8 @@ class Source(Base):
     title: Mapped[str] = mapped_column(String(300))
     author: Mapped[str | None] = mapped_column(String(200), nullable=True)
     permission_level: Mapped[str] = mapped_column(String(32), index=True)
-    raw_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    raw_metadata: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     documents: Mapped[list['Document']] = relationship(back_populates='source')
 
 
@@ -53,5 +54,5 @@ class DocumentChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     source_snippet: Mapped[str] = mapped_column(Text)
     permission_level: Mapped[str] = mapped_column(String(32), index=True)
-    metadata_: Mapped[dict] = mapped_column('metadata', JSON, default=dict)
+    metadata_: Mapped[dict] = mapped_column('metadata', MutableDict.as_mutable(JSON), default=dict)
     version: Mapped[DocumentVersion] = relationship(back_populates='chunks')
