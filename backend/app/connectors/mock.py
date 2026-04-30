@@ -1,8 +1,8 @@
+import copy
 from dataclasses import dataclass
 
 from backend.app.connectors.base import SourceEvent
 from backend.app.seeds.mock_sources import SEED_EVENTS
-
 
 CONNECTOR_TYPES = {'drive', 'gmail', 'slack', 'calendar'}
 
@@ -12,7 +12,7 @@ class MockConnector:
     source_type: str
 
     def fetch_events(self) -> list[SourceEvent]:
-        return [event for event in SEED_EVENTS if event.source_type == self.source_type]
+        return [copy.deepcopy(event) for event in SEED_EVENTS if event.source_type == self.source_type]
 
 
 def get_mock_connector(source_type: str) -> MockConnector:

@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 from backend.app.connectors.base import SourceEvent
 
-
 SEED_EVENTS = [
     SourceEvent(
         source_type='slack',
@@ -45,7 +44,7 @@ SEED_EVENTS = [
         source_id='calendar-project-beta-scope-meeting',
         source_url='https://calendar.mock/project-beta/scope-meeting',
         title='Project Beta scope meeting',
-        body='Meeting notes: advanced document diff UI moves out of MVP; Review Queue and Source Evidence are required for launch readiness.',
+        body='Meeting notes: advanced document diff UI moves out of MVP scope; Review Queue and Source Evidence are required for launch readiness.',
         author='sara@example.com',
         participants=['sara@example.com', 'maya@example.com', 'noah@example.com'],
         timestamp=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
@@ -57,7 +56,7 @@ SEED_EVENTS = [
         source_id='slack-project-beta-followup',
         source_url='https://slack.mock/project-beta/followup',
         title='Project Beta follow-up',
-        body='Follow-up todo: complete evidence inspection before launch and verify every Review Queue item links back to source evidence.',
+        body='Follow-up todo: confirm the MVP scope, complete evidence inspection before launch, and verify every Review Queue item links back to source evidence.',
         author='sara@example.com',
         participants=['sara@example.com', 'lee@example.com'],
         timestamp=datetime(2026, 4, 30, 13, 45, tzinfo=UTC),
