@@ -20,6 +20,13 @@ cd frontend
 npm.cmd run build
 ```
 
+For manual runtime checks against the local demo Postgres database, initialize
+the application schema before starting Uvicorn:
+
+```powershell
+uv run python -m backend.app.db.init_db
+```
+
 Expected backend checks:
 
 - health endpoint returns demo mode

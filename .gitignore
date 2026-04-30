@@ -12,6 +12,9 @@ wheels/
 # env
 .env
 
+# Test artifacts
+.pytest_cache/
+
 # Frontend generated files
 frontend/node_modules/
 frontend/.next/

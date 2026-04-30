@@ -8,6 +8,15 @@ Run commands from `C:\potenup3\pj04-Paraworks`.
 docker compose up -d postgres redis minio
 ```
 
+## Initialize Demo Database Schema
+
+```powershell
+uv run python -m backend.app.db.init_db
+```
+
+This creates the local demo application tables in Postgres before the backend
+starts.
+
 ## Start Backend
 
 ```powershell
