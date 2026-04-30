@@ -18,7 +18,7 @@ uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 
 ```powershell
 cd frontend
-npm run dev
+npm.cmd run dev
 ```
 
 ## Demo Users
