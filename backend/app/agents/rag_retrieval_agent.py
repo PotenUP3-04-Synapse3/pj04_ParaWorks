@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
 from app.agents.base_agent import AgentState, get_llm

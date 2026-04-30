@@ -1,13 +1,17 @@
 """Auth routes — Google OAuth login and token refresh."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
+from typing import Optional
 
 from app.core.database import get_db
 from app.services.auth_service import get_or_create_user, issue_tokens, verify_google_id_token
 from app.core.security import decode_token, create_access_token
+from app.models.user import User
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 
@@ -24,6 +28,20 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class MeResponse(BaseModel):
+    id: UUID
+    email: str
+    name: str
+    role: str
+    avatar_url: Optional[str]
+    organization_id: UUID
+    department_id: Optional[UUID]
+    team_id: Optional[UUID]
+    is_active: bool
+
+    model_config = {'from_attributes': True}
 
 
 @router.post('/login/google', response_model=TokenResponse)
@@ -63,9 +81,6 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Malformed token')
 
-    from sqlalchemy import select
-    from app.models.user import User
-
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
@@ -73,3 +88,25 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
 
     access_token, new_refresh = issue_tokens(user)
     return TokenResponse(access_token=access_token, refresh_token=new_refresh)
+
+
+@router.get('/me', response_model=MeResponse)
+async def me(request: Request, db: AsyncSession = Depends(get_db)):
+    """Return current authenticated user profile."""
+    user_id = getattr(request.state, 'user_id', None)
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return MeResponse.model_validate(user)
+
+
+@router.post('/logout', status_code=status.HTTP_204_NO_CONTENT)
+async def logout(request: Request):
+    """
+    Logout endpoint — client should discard tokens.
+    Stateless JWT: no server-side invalidation; client clears storage.
+    """
+    return None

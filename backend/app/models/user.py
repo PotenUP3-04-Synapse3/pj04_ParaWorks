@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.notification import Notification
     from app.models.audit_log import AuditLog
+    from app.models.department import Department
+    from app.models.team import Team
 
 
 class UserRole(str, enum.Enum):
@@ -41,9 +43,17 @@ class User(UUIDPrimaryKey, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False, index=True
     )
+    department_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey('departments.id', ondelete='SET NULL'), nullable=True, index=True
+    )
+    team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey('teams.id', ondelete='SET NULL'), nullable=True, index=True
+    )
 
     # Relationships
     organization: Mapped['Organization'] = relationship('Organization', back_populates='users')
+    department: Mapped[Optional['Department']] = relationship('Department', back_populates='users')
+    team: Mapped[Optional['Team']] = relationship('Team', back_populates='users')
     notifications: Mapped[List['Notification']] = relationship(
         'Notification', back_populates='user'
     )

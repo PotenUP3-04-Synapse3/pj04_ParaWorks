@@ -22,7 +22,10 @@ from app.models import (  # noqa: F401
 config = context.config
 
 # Override sqlalchemy.url from environment
-DATABASE_URL = os.environ['ASYNC_DATABASE_URL']
+DATABASE_URL = (
+    os.environ.get('ASYNC_DATABASE_URL')
+    or os.environ.get('DATABASE_URL', '')
+)
 config.set_main_option('sqlalchemy.url', DATABASE_URL)
 
 if config.config_file_name is not None:

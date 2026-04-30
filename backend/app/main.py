@@ -14,7 +14,21 @@ from app.core.middleware import (
     LLMTokenLoggingMiddleware,
     RequestIDMiddleware,
 )
-from app.api.v1 import auth, dashboard, projects, review_queue, integrations, webhooks, notifications, audit_logs
+from app.api.v1 import (
+    auth,
+    dashboard,
+    projects,
+    review_queue,
+    integrations,
+    webhooks,
+    notifications,
+    audit_logs,
+    search,
+    decisions,
+    stream,
+    admin,
+    knowledge_map,
+)
 
 settings = get_settings()
 log = structlog.get_logger()
@@ -53,6 +67,11 @@ def create_app() -> FastAPI:
     app.include_router(webhooks.router, prefix=prefix)
     app.include_router(notifications.router, prefix=prefix)
     app.include_router(audit_logs.router, prefix=prefix)
+    app.include_router(search.router, prefix=prefix)
+    app.include_router(decisions.router, prefix=prefix)
+    app.include_router(stream.router, prefix=prefix)
+    app.include_router(admin.router, prefix=prefix)
+    app.include_router(knowledge_map.router, prefix=prefix)
 
     @app.get('/health')
     async def health() -> dict:

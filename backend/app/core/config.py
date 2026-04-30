@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import List
 
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# config.py 위치: backend/app/core/config.py → 프로젝트 루트는 4단계 위
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file='.env',
+        env_file=str(_PROJECT_ROOT / '.env'),
         env_file_encoding='utf-8',
         case_sensitive=False,
         extra='ignore',

@@ -1,4 +1,5 @@
 import Sidebar from '@/components/Sidebar';
+import { Header } from '@/components/layout/Header';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'ParaWorks' };
@@ -7,7 +8,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 bg-gray-50">{children}</main>
+      <div className="flex flex-1 flex-col min-w-0">
+        <Header />
+        <main className="flex-1 bg-gray-50">{children}</main>
+      </div>
     </div>
   );
 }

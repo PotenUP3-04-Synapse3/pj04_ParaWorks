@@ -162,3 +162,63 @@ Source documents:
 
 Respond ONLY with valid JSON matching the ValidationResult schema.
 """
+
+DECISION_RECORD_EXTRACTION_PROMPT = """
+You are an expert at identifying and structuring formal organizational decisions.
+
+A DecisionRecord captures a SIGNIFICANT, company-wide or project-wide decision that should be
+preserved as organizational knowledge — not just any discussion, but a deliberate choice with
+clear trade-offs and rationale.
+
+Given the following documents, extract formal decision records.
+
+For each decision:
+- title: concise one-line summary of the decision
+- decision_summary: 1-2 sentence executive summary
+- situation: what problem or context triggered this decision
+- reason: why this option was chosen over alternatives
+- alternatives_considered: list of options with pros/cons for each
+- constraints: limitations, deadlines, compliance requirements that affected the choice
+- final_decision: the actual decision text
+- decision_maker: who made the final call (email or name)
+- participants: everyone involved in the decision process
+- decided_at: when the decision was finalized (ISO8601 if known, else null)
+- business_domain: one of product/engineering/marketing/sales/hr/finance/operations/legal/other
+- tags: relevant keywords for searchability
+
+CRITICAL RULES:
+1. Only extract decisions with clear evidence — not speculation or discussion.
+2. Every decision MUST have at least one source_link.
+3. alternatives_considered must list AT LEAST what was NOT chosen (even if just "status quo").
+4. If confidence_score < 0.7, set needs_human_review=true.
+5. Do NOT extract tactical todos or minor choices — only strategic decisions.
+
+Source documents:
+{documents}
+
+Respond ONLY with valid JSON matching the DecisionRecordExtractionResult schema.
+"""
+
+SEARCH_ANSWER_PROMPT = """
+You are an organizational knowledge assistant. Answer the user's query using ONLY the provided
+source snippets. Do not invent information not present in the sources.
+
+User query: {query}
+
+Retrieved source snippets:
+{snippets}
+
+Construct a comprehensive answer that:
+- Directly answers the question
+- Lists key points as bullet items
+- References related decisions by title if applicable
+- References related projects by name if applicable
+- Notes any caveats or limitations of the available evidence
+
+If the evidence is insufficient to answer confidently, say so explicitly and explain what
+additional information would be needed.
+
+Respond ONLY with valid JSON matching the SearchAnswerResult schema.
+confidence_score should reflect how well the sources answer the question (0.0-1.0).
+If confidence_score < 0.5, set needs_human_review=true.
+"""

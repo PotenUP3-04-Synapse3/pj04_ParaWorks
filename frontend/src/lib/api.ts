@@ -76,3 +76,24 @@ export async function apiFetch<T>(
 }
 
 export { setTokens, clearTokens, getAccessToken };
+
+// Convenience API object for use in components and hooks
+export const api = {
+  get: <T>(path: string) => apiFetch<T>(path, { method: 'GET' }),
+  post: <T>(path: string, body?: unknown) =>
+    apiFetch<T>(path, {
+      method: 'POST',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  patch: <T>(path: string, body?: unknown) =>
+    apiFetch<T>(path, {
+      method: 'PATCH',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  put: <T>(path: string, body?: unknown) =>
+    apiFetch<T>(path, {
+      method: 'PUT',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
+};

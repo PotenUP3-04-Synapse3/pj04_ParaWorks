@@ -122,3 +122,60 @@ class ValidationResult(BaseModel):
     issues: List[str] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0)
     recommendation: Literal['approve', 'reject', 'needs_review']
+
+
+# ── Decision Record Extraction ─────────────────────────────────────────────
+
+
+class AlternativeOption(BaseModel):
+    option: str
+    pros: List[str] = Field(default_factory=list)
+    cons: List[str] = Field(default_factory=list)
+
+
+class DecisionRecordItem(BaseModel):
+    title: str
+    decision_summary: str
+    situation: str
+    reason: str
+    alternatives_considered: List[AlternativeOption] = Field(default_factory=list)
+    constraints: str
+    final_decision: str
+    decision_maker: str
+    participants: List[str] = Field(default_factory=list)
+    decided_at: Optional[str] = None   # ISO8601 datetime string
+    business_domain: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+
+class DecisionRecordExtractionResult(AgentOutputBase):
+    decisions: List[DecisionRecordItem] = Field(default_factory=list)
+
+
+# ── Search Answer ──────────────────────────────────────────────────────────
+
+
+class SearchAnswer(BaseModel):
+    answer: str
+    key_points: List[str] = Field(default_factory=list)
+    related_decisions: List[str] = Field(default_factory=list)  # decision titles
+    related_projects: List[str] = Field(default_factory=list)   # project names
+    caveats: List[str] = Field(default_factory=list)
+
+
+class SearchAnswerResult(AgentOutputBase):
+    query: str
+    answer: SearchAnswer
+    similar_case_ids: List[str] = Field(default_factory=list)
+
+
+# ── Permission Check ───────────────────────────────────────────────────────
+
+
+class PermissionCheckResult(BaseModel):
+    allowed: bool
+    reason: str
+    required_level: str
+    user_level: str
+    escalation_path: Optional[str] = None
+

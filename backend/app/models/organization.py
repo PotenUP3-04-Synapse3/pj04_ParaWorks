@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.integration import Integration
     from app.models.permission_policy import PermissionPolicy
+    from app.models.department import Department
+    from app.models.team import Team
 
 
 class Organization(UUIDPrimaryKey, TimestampMixin, Base):
@@ -30,3 +32,7 @@ class Organization(UUIDPrimaryKey, TimestampMixin, Base):
     permission_policies: Mapped[List['PermissionPolicy']] = relationship(
         'PermissionPolicy', back_populates='organization'
     )
+    departments: Mapped[List['Department']] = relationship(
+        'Department', back_populates='organization'
+    )
+    teams: Mapped[List['Team']] = relationship('Team', back_populates='organization')

@@ -17,24 +17,39 @@ logger = structlog.get_logger()
 
 # ── Paths that skip authentication ──────────────────────────────────────────
 _PUBLIC_PATHS = {
+    '/',
+    '/health',
     '/api/v1/auth/login',
     '/api/v1/auth/google/callback',
     '/api/v1/auth/refresh',
     '/api/v1/webhooks/slack',
     '/api/v1/webhooks/google-drive',
     '/api/v1/webhooks/github',
-    '/health',
+    # Swagger / ReDoc (개발 환경)
+    '/api/docs',
+    '/api/redoc',
+    '/api/openapi.json',
+    # 하위 호환 (기본 경로)
     '/docs',
-    '/openapi.json',
     '/redoc',
+    '/openapi.json',
 }
 
+
+_PUBLIC_PATH_PREFIXES = (
+    '/api/docs',
+    '/api/redoc',
+    '/api/openapi.json',
+    '/docs',
+    '/redoc',
+)
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Validate JWT on every non-public request."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if request.url.path in _PUBLIC_PATHS:
+        path = request.url.path
+        if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PATH_PREFIXES):
             return await call_next(request)
 
         auth = request.headers.get('Authorization', '')
