@@ -2221,6 +2221,32 @@ Verification evidence:
 - In-app browser screenshot review checked `/dashboard` and `/integrations` in
   dark Liquid Glass mode.
 
+## 2026-05-02 - Gray Purple Dark Glass Palette
+
+Why it matters:
+
+- User feedback clarified that the dark mode should not feel like a navy SaaS
+  dashboard. The target palette is charcoal gray first, with white glass glow
+  and a Slack-like deep purple accent group.
+- This keeps the Liquid Glass look vivid while making the workspace calmer,
+  more business-like, and more consistent.
+
+Implemented scope:
+
+- Replaced the dark-mode navy/blue/cyan token group with charcoal gray,
+  white-glow, and deep purple glass tokens.
+- Updated dark page background, glass controls, panels, primary actions,
+  shadows, and hard-coded color overrides to reduce blue cast.
+- Verified `/dashboard` and `/integrations` visually in the in-app browser,
+  including OAuth/status panel contrast.
+
+Verification evidence:
+
+- `npx eslint src/app/layout.tsx src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 15/15 tests.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2279,3 +2305,4 @@ Verification evidence:
 - `feat: add liquid glass frontend theme`
 - `feat: intensify liquid glass theme`
 - `feat: add dark liquid glass mode`
+- `style: tune dark glass gray purple palette`
