@@ -390,6 +390,36 @@ Verification evidence:
   passed.
 - `uv run pytest backend/tests -v` passed with 44 backend tests.
 
+## UX Update: Integrations Multi-Agent Actions
+
+Recorded on 2026-05-01.
+
+Next product milestone is making the second backend agent visible from the
+same Integrations surface users already use for mock connector smoke testing.
+
+Portfolio angle:
+
+- Shows that the product can expose multiple independently owned agents without
+  duplicating UI state or endpoint-specific response types.
+- Makes the 3-person agent split tangible in the app: Slack Agent and
+  Mail/Docs Agent can both be run from the Korean business-user workflow.
+
+Implemented scope:
+
+- Generalized the frontend agent-review response type to `AgentReviewResponse`.
+- Replaced Slack-only action state with reusable agent action descriptors.
+- Added Mail/Docs Agent buttons to Gmail and Drive cards.
+- Kept Korean UX copy intact and displayed completed agent names in friendly
+  labels.
+
+Verification evidence:
+
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-mail-docs-ui.db`.
+- HTTP smoke returned 200 for `/health`, `/integrations`, and `/dashboard`.
+- Gmail sync, Drive sync, and `POST /api/v1/integrations/mail-docs/agent-review`
+  returned `agentName=mail_document_agent` and `created=1`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -406,3 +436,4 @@ Verification evidence:
 - `7b0a6f5 feat: expose slack agent review action`
 - `924f9d8 feat: improve agent-aware review UI`
 - `e7c6927 feat: persist agent run metadata`
+- `e53bec0 feat: add mail document agent slice`

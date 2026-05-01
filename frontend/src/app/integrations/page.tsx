@@ -14,7 +14,7 @@ import {
 import { useState } from "react";
 import { useJobStatus } from "@/hooks/useJobStatus";
 import { apiPost } from "@/lib/api/client";
-import type { IntegrationSyncResponse, SlackAgentReviewResponse } from "@/lib/api/types";
+import type { AgentReviewResponse, IntegrationSyncResponse } from "@/lib/api/types";
 
 const integrations = [
   {
@@ -24,6 +24,12 @@ const integrations = [
     status: "다음 우선순위",
     description: "채널 메시지를 수집해 타임라인과 히스토리 후보를 생성합니다.",
     accent: "bg-[#21132b] text-white",
+    agentAction: {
+      key: "slack",
+      label: "Slack Agent 실행",
+      runningLabel: "Slack Agent 실행 중",
+      path: "/api/v1/integrations/slack/agent-review",
+    },
   },
   {
     type: "gmail",
@@ -32,6 +38,12 @@ const integrations = [
     status: "메일 에이전트 준비",
     description: "메일 스레드를 요약하고 결정/후속 작업 후보를 추출합니다.",
     accent: "bg-blue-50 text-blue-700",
+    agentAction: {
+      key: "mail-docs",
+      label: "Mail/Docs Agent 실행",
+      runningLabel: "Mail/Docs Agent 실행 중",
+      path: "/api/v1/integrations/mail-docs/agent-review",
+    },
   },
   {
     type: "drive",
@@ -40,6 +52,12 @@ const integrations = [
     status: "문서 RAG 준비",
     description: "사내 문서와 버전을 보존하고 검색 가능한 근거로 연결합니다.",
     accent: "bg-emerald-50 text-emerald-700",
+    agentAction: {
+      key: "mail-docs",
+      label: "Mail/Docs Agent 실행",
+      runningLabel: "Mail/Docs Agent 실행 중",
+      path: "/api/v1/integrations/mail-docs/agent-review",
+    },
   },
   {
     type: "calendar",
@@ -48,15 +66,16 @@ const integrations = [
     status: "맥락 보강",
     description: "회의 일정을 히스토리 이벤트의 시간 맥락으로 활용합니다.",
     accent: "bg-amber-50 text-amber-700",
+    agentAction: undefined,
   },
 ];
 
 export default function IntegrationsPage() {
   const [activeJobId, setActiveJobId] = useState<string>();
   const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
-  const [agentResult, setAgentResult] = useState<SlackAgentReviewResponse>();
+  const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [pendingType, setPendingType] = useState<string>();
-  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentRunningKey, setAgentRunningKey] = useState<string>();
   const [error, setError] = useState<string>();
   const jobStatus = useJobStatus(activeJobId);
 
@@ -75,17 +94,17 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function runSlackAgent() {
-    setAgentRunning(true);
+  async function runAgent(agentKey: string, path: string) {
+    setAgentRunningKey(agentKey);
     setError(undefined);
 
     try {
-      const result = await apiPost<SlackAgentReviewResponse>("/api/v1/integrations/slack/agent-review");
+      const result = await apiPost<AgentReviewResponse>(path);
       setAgentResult(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Slack Agent 실행에 실패했습니다.");
+      setError(caught instanceof Error ? caught.message : "Agent 실행에 실패했습니다.");
     } finally {
-      setAgentRunning(false);
+      setAgentRunningKey(undefined);
     }
   }
 
@@ -111,6 +130,8 @@ export default function IntegrationsPage() {
             const Icon = integration.icon;
             const pending = pendingType === integration.type;
             const featured = integration.type === "slack";
+            const agentAction = integration.agentAction;
+            const agentRunning = agentAction ? agentRunningKey === agentAction.key : false;
             return (
               <article
                 key={integration.type}
@@ -156,15 +177,15 @@ export default function IntegrationsPage() {
                       <Icon className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
                     </button>
-                    {featured ? (
+                    {agentAction ? (
                       <button
                         type="button"
-                        onClick={() => void runSlackAgent()}
+                        onClick={() => void runAgent(agentAction.key, agentAction.path)}
                         disabled={agentRunning}
                         className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[#21132b] shadow-sm hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-neutral-400"
                       >
                         <Bot className="h-4 w-4" aria-hidden="true" />
-                        {agentRunning ? "Agent 실행 중" : "Slack Agent 실행"}
+                        {agentRunning ? agentAction.runningLabel : agentAction.label}
                       </button>
                     ) : null}
                   </div>
@@ -192,7 +213,7 @@ export default function IntegrationsPage() {
 
             {agentResult ? (
               <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
-                <p className="font-semibold">Slack Agent 완료</p>
+                <p className="font-semibold">{formatAgentName(agentResult.agent_name)} 완료</p>
                 <p className="mt-1">
                   Review Queue 후보 {agentResult.created_review_items}개를 생성했습니다.
                 </p>
@@ -237,4 +258,14 @@ export default function IntegrationsPage() {
       </section>
     </div>
   );
+}
+
+function formatAgentName(agentName: string) {
+  if (agentName === "slack_agent") {
+    return "Slack Agent";
+  }
+  if (agentName === "mail_document_agent") {
+    return "Mail/Docs Agent";
+  }
+  return agentName;
 }
