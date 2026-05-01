@@ -262,6 +262,7 @@ export default function IntegrationsPage() {
             const agentAction = visual.agentAction;
             const agentRunning = agentAction ? agentRunningKey === agentAction.key : false;
             const connection = connections.find((item) => item.connector_type === manifest.type);
+            const credentialAvailable = connection?.credential_status === "available";
             const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
             const showOAuthStatus = manifest.auth_type === "oauth";
             const oauthTheme =
@@ -334,7 +335,9 @@ export default function IntegrationsPage() {
                         <LockKeyhole className={`h-4 w-4 shrink-0 ${oauthTheme.icon}`} aria-hidden="true" />
                         <span className={`truncate font-semibold ${oauthTheme.text}`}>
                           {connection
-                            ? `${connection.workspace_name} 연결됨`
+                            ? credentialAvailable
+                              ? `${connection.workspace_name} 연결됨`
+                              : `${connection.workspace_name} 재연결 필요`
                             : oauthInstall?.configured
                               ? `${manifest.display_name} 연결 필요`
                               : "OAuth 설정 필요"}
@@ -342,7 +345,7 @@ export default function IntegrationsPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className={`rounded-full bg-white px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
-                          {connection?.status ?? "ready"}
+                          {connection ? (credentialAvailable ? connection.status : "token missing") : "ready"}
                         </span>
                         {oauthInstall?.configured && !connection ? (
                           <button
@@ -358,7 +361,9 @@ export default function IntegrationsPage() {
                     </div>
                     <p className="mt-2 text-xs leading-5 text-[var(--ink-muted)]">
                       {connection
-                        ? `권한 ${connection.scopes.length.toLocaleString()}개 확인됨 · ${connection.masked_bot_token}`
+                        ? credentialAvailable
+                          ? `권한 ${connection.scopes.length.toLocaleString()}개 확인됨 · ${connection.masked_bot_token}`
+                          : `권한 ${connection.scopes.length.toLocaleString()}개 확인됨 · backend 재시작으로 개발 vault 토큰이 비어 있어 재연결이 필요합니다.`
                         : oauthInstall?.configured
                           ? `${manifest.display_name} 설치 URL이 준비되었습니다. 설치 후에도 동기화는 변경분만 가져옵니다.`
                           : "환경 변수 설정 전까지는 mock 데이터로 안전하게 시연합니다."}

@@ -216,6 +216,7 @@ export type IntegrationConnection = {
   workspace_id: string;
   workspace_name: string;
   status: string;
+  credential_status?: "available" | "missing";
   masked_bot_token: string;
   scopes: string[];
 };

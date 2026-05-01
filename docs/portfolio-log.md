@@ -1585,6 +1585,36 @@ Cost/security note:
   resolution so accidental installs do not create downstream token or embedding
   costs.
 
+## 2026-05-02 - Slack OAuth Credential Status Guardrail
+
+Added a clearer boundary between stored Slack connection metadata and actual
+live-sync credential availability.
+
+Portfolio angle:
+
+- Shows a realistic integration hardening step: OAuth metadata in the database
+  is not the same as a usable secret in the runtime vault.
+- Prevents a misleading "connected" UI after local backend restarts, where the
+  development in-memory vault may no longer hold the bot token.
+- Keeps the secret boundary intact by exposing only `credential_status`, never
+  raw tokens or `token_ref` values.
+
+Implemented scope:
+
+- Added sanitized `credential_status` to `/api/v1/integrations/connections`.
+- Marked credentials as `available` only when the current backend process can
+  resolve the local vault token.
+- Updated the Integrations UI to show "재연결 필요" when connection metadata
+  exists but the local development token is missing.
+- Documented the local vault restart limitation in the Slack runbook.
+
+Cost/security note:
+
+- The UI now makes it harder to accidentally assume live Slack sync is ready.
+  Real Slack ingestion remains gated by `PARAWORKS_DEMO_MODE=false`, channel
+  ids, and a resolvable vault token before any downstream review, LLM, or
+  embedding work can run.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

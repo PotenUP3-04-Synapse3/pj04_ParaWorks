@@ -171,11 +171,11 @@ def test_integration_connections_api_hides_token_references(
     db_session.add(
         IntegrationConnection(
             connector_type='slack',
-            workspace_id='T123',
+            workspace_id='T999',
             workspace_name='ParaWorks',
             bot_user_id='U999',
             scopes=['channels:history'],
-            token_ref='local:slack:T123:bot',
+            token_ref='local:slack:T999:bot',
             masked_bot_token='xoxb...oken',
             status='connected',
             raw_metadata={'safe': True},
@@ -190,15 +190,48 @@ def test_integration_connections_api_hides_token_references(
     assert payload == [
         {
             'connector_type': 'slack',
-            'workspace_id': 'T123',
+            'workspace_id': 'T999',
             'workspace_name': 'ParaWorks',
             'status': 'connected',
+            'credential_status': 'missing',
             'masked_bot_token': 'xoxb...oken',
             'scopes': ['channels:history'],
         }
     ]
     assert 'token_ref' not in str(payload)
-    assert 'local:slack:T123:bot' not in str(payload)
+    assert 'local:slack:T999:bot' not in str(payload)
+
+
+def test_integration_connections_api_marks_resolvable_vault_token_available(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    token_ref = LOCAL_TOKEN_VAULT.store_bot_token(
+        connector_type='slack',
+        workspace_id='T777',
+        token='xoxb-available',
+    )
+    db_session.add(
+        IntegrationConnection(
+            connector_type='slack',
+            workspace_id='T777',
+            workspace_name='ParaWorks',
+            bot_user_id='U777',
+            scopes=['channels:history'],
+            token_ref=token_ref,
+            masked_bot_token='xoxb...able',
+            status='connected',
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/integrations/connections')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]['credential_status'] == 'available'
+    assert 'xoxb-available' not in str(payload)
+    assert token_ref not in str(payload)
 
 
 def test_slack_sync_endpoint_uses_installed_connection_token_without_exposing_it(

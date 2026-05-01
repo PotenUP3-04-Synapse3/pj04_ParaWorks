@@ -71,6 +71,7 @@ def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
             'workspace_id': connection.workspace_id,
             'workspace_name': connection.workspace_name,
             'status': connection.status,
+            'credential_status': 'available' if LOCAL_TOKEN_VAULT.resolve(connection.token_ref) else 'missing',
             'masked_bot_token': connection.masked_bot_token,
             'scopes': connection.scopes,
         }

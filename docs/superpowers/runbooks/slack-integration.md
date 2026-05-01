@@ -85,6 +85,17 @@ to `/api/v1/integrations/slack/oauth/callback`, then renders only sanitized
 workspace metadata. Do not expose raw tokens, OAuth secrets, or `token_ref`
 values in callback UI, browser logs, docs, or screenshots.
 
+In local MVP mode, the token vault is process memory. The database can keep a
+Slack `IntegrationConnection` row after a backend restart, but the actual bot
+token may no longer be resolvable from the local vault. The connections API
+therefore returns sanitized `credential_status`:
+
+- `available`: the current backend process can resolve the vault token and live
+  sync can proceed if demo mode is disabled and channel ids are configured.
+- `missing`: the connection metadata exists, but the local development vault no
+  longer has the token. Re-run Slack OAuth or replace the local vault with a
+  managed secret store before live sync.
+
 Never commit `.env`, Slack tokens, OAuth tokens, or exported API responses that
 contain private workspace content.
 
