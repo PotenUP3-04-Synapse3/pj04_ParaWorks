@@ -25,6 +25,7 @@ import type {
   IntegrationManifest,
   IntegrationSyncResponse,
   OAuthInstallUrlResponse,
+  SlackRuntimeStatus,
 } from "@/lib/api/types";
 
 const GOOGLE_CONNECTOR_TYPES = ["gmail", "drive", "calendar"] as const;
@@ -97,6 +98,7 @@ export default function IntegrationsPage() {
   const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
+  const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
@@ -145,6 +147,18 @@ export default function IntegrationsPage() {
             state: null,
             required_scopes: [],
           });
+        }
+      });
+
+    apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
+      .then((status) => {
+        if (active) {
+          setSlackRuntime(status);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSlackRuntime(undefined);
         }
       });
 
@@ -415,6 +429,8 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="space-y-3 p-4">
+            {slackRuntime ? <SlackRuntimeStatusPanel status={slackRuntime} /> : null}
+
             {error ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
             ) : null}
@@ -465,6 +481,51 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="rounded-lg bg-[#fbfaf8] p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
+function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
+  const channelLabel =
+    status.configured_channel_ids.length > 0 ? status.configured_channel_ids.join(", ") : "채널 미설정";
+  const latestSync = status.latest_sync;
+
+  return (
+    <div data-testid="slack-runtime-status" className="rounded-lg border border-[#e8deef] bg-[#fbf8fd] p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold text-[#21132b]">Slack 운영 상태</p>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">
+            상태 조회는 sync나 LLM 호출을 실행하지 않습니다.
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#611f69]">
+          {status.mode}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs">
+        <div className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-2">
+          <span className="text-[var(--ink-muted)]">채널</span>
+          <span className="max-w-[210px] truncate font-semibold">{channelLabel}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-2">
+          <span className="text-[var(--ink-muted)]">연결</span>
+          <span className="font-semibold">{status.connection_status}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-2">
+          <span className="text-[var(--ink-muted)]">자격 증명</span>
+          <span className="font-semibold">{status.credential_status}</span>
+        </div>
+      </div>
+      {latestSync ? (
+        <div className="mt-3 rounded-md bg-white px-2 py-2 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold">최근 sync</span>
+            <span className="font-semibold">{latestSync.status}</span>
+          </div>
+          <p className="mt-1 truncate text-[var(--ink-muted)]">{latestSync.message}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

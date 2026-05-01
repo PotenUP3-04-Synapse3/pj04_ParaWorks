@@ -60,6 +60,7 @@ test("integrations page shows Slack OAuth connection status without secrets", as
   await page.goto("/integrations");
 
   await expect(page.locator('[data-testid="slack-oauth-status"]')).toBeVisible();
+  await expect(page.getByTestId("slack-runtime-status")).toBeVisible();
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("xoxb-");

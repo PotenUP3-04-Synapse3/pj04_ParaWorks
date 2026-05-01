@@ -1943,6 +1943,44 @@ Verification evidence:
 - `uv run pytest backend/tests/test_review_knowledge_promotion.py backend/tests/test_review.py backend/tests/test_knowledge_api.py backend/tests/test_rag_orchestrator_service.py -v` passed with 17 tests.
 - `uv run ruff check backend/app/api/v1/review.py backend/tests/test_review_knowledge_promotion.py` passed.
 
+## 2026-05-02 - Slack Runtime Status Surface
+
+Added a Slack runtime status endpoint and connected it to the Integrations
+operations UI.
+
+Portfolio angle:
+
+- Gives operators a direct view of Slack sync readiness: mock/live mode,
+  configured channel ids, connection status, credential availability, and the
+  latest sync job.
+- Turns previous terminal-only Slack troubleshooting into product-visible
+  observability.
+- Reinforces cost discipline: the status lookup explicitly does not trigger
+  sync, embeddings, or LLM calls.
+
+Implemented scope:
+
+- Added `GET /api/v1/integrations/slack/runtime-status`.
+- The endpoint returns mode, configured channel ids, connection/credential
+  status, latest Slack sync job metadata, and cost-policy flags.
+- Added frontend `SlackRuntimeStatus` typing.
+- Added a Slack operations status panel to `/integrations`.
+- Extended Playwright smoke coverage to assert the runtime status panel is
+  visible and still does not expose secrets.
+
+Cost/security note:
+
+- Runtime status is read-only. It reports existing metadata and does not fetch
+  Slack messages, expose bot tokens, or invoke model/embedding work.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_integration_runtime_status.py backend/tests/test_slack_oauth.py backend/tests/test_connector_factory.py -v` passed with 18 tests.
+- `uv run ruff check backend/app/api/v1/integrations.py backend/tests/test_integration_runtime_status.py` passed.
+- `npx eslint src/app/integrations/page.tsx src/lib/api/types.ts e2e/visual-smoke.spec.ts` passed.
+- `npm run build` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts -g "integrations page shows Slack OAuth" --project=chromium-desktop` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1992,3 +2030,4 @@ Verification evidence:
 - `feat: add langgraph dry-run operations ux`
 - `feat: run agents through langgraph`
 - `feat: bulk approve agent candidates`
+- `feat: show slack runtime status`

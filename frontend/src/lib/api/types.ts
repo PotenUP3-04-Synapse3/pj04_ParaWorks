@@ -254,6 +254,24 @@ export type AgentReviewResponse = {
 
 export type SlackAgentReviewResponse = AgentReviewResponse;
 
+export type SlackRuntimeStatus = {
+  connector_type: "slack";
+  mode: "mock" | "live";
+  configured_channel_ids: string[];
+  connection_status: string;
+  credential_status: "available" | "missing";
+  latest_sync?: {
+    job_id: string;
+    status: string;
+    message: string;
+    progress_pct: number;
+  } | null;
+  cost_policy: {
+    status_lookup_triggers_sync: boolean;
+    status_lookup_triggers_llm: boolean;
+  };
+};
+
 export type MessageChannel = {
   id: string;
   name: string;

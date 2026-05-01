@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import PermissionContext
@@ -34,7 +35,7 @@ from backend.app.connectors.slack_oauth import (
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.models import IntegrationConnection
+from backend.app.models import IntegrationConnection, SyncJob
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -77,6 +78,36 @@ def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
         }
         for connection in connections
     ]
+
+
+@router.get('/slack/runtime-status')
+def get_slack_runtime_status(db: DbSession, settings: AppSettings) -> dict[str, object]:
+    connection = db.scalar(
+        select(IntegrationConnection)
+        .where(IntegrationConnection.connector_type == 'slack')
+        .order_by(IntegrationConnection.id.desc())
+    )
+    latest_sync = db.scalar(
+        select(SyncJob).where(SyncJob.connector_type == 'slack').order_by(SyncJob.id.desc())
+    )
+    credential_status = (
+        'available'
+        if connection and LOCAL_TOKEN_VAULT.resolve(connection.token_ref)
+        else 'missing'
+    )
+
+    return {
+        'connector_type': 'slack',
+        'mode': 'mock' if settings.paraworks_demo_mode else 'live',
+        'configured_channel_ids': _configured_channel_ids(settings.slack_channel_ids),
+        'connection_status': connection.status if connection else 'disconnected',
+        'credential_status': credential_status,
+        'latest_sync': _sync_job_response(latest_sync),
+        'cost_policy': {
+            'status_lookup_triggers_sync': False,
+            'status_lookup_triggers_llm': False,
+        },
+    }
 
 
 @router.post('/{connector_type}/sync')
@@ -244,4 +275,19 @@ def run_mail_document_agent_review(db: DbSession) -> dict[str, int | str]:
         'agent_name': 'mail_document_agent',
         'status': 'complete',
         'created_review_items': len(review_items),
+    }
+
+
+def _configured_channel_ids(raw_channel_ids: str) -> list[str]:
+    return [channel_id.strip() for channel_id in raw_channel_ids.split(',') if channel_id.strip()]
+
+
+def _sync_job_response(job: SyncJob | None) -> dict[str, object] | None:
+    if job is None:
+        return None
+    return {
+        'job_id': job.job_id,
+        'status': job.status,
+        'message': job.message,
+        'progress_pct': job.progress_pct,
     }
