@@ -554,6 +554,40 @@ Verification evidence:
   `totalTokens=100`, and `latestQuestion=Redis job state`.
 - HTTP smoke returned 200 for `/health`, `/dashboard`, and `/search`.
 
+## Knowledge Update: Review Approval Promotion
+
+Recorded on 2026-05-01.
+
+Next product milestone is closing the human-review loop so approved agent
+candidates become durable company memory records.
+
+Portfolio angle:
+
+- Completes the source evidence -> agent candidate -> human approval -> company
+  memory loop.
+- Shows that ParaWorks keeps human approval as the trust boundary before
+  writing durable history, decision, and task records.
+- Preserves the audit story by carrying source links, source snippets,
+  confidence, permission level, and approved review status into knowledge
+  tables.
+
+Implemented scope:
+
+- Added `promote_review_item` in `backend/app/knowledge/promotion.py`.
+- Mapped `decision_record` Review Items into `DecisionRecord`.
+- Mapped `history_event` Review Items into `HistoryEvent`.
+- Mapped `todo` Review Items into `Todo`.
+- Called promotion from the existing Review approve endpoint.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_review_knowledge_promotion.py -v` passed.
+- `uv run pytest backend/tests -v` passed with 55 backend tests.
+- Smoke server restarted with `.tmp/paraworks-review-promotion.db`.
+- Slack sync produced 3 pending Review Items, approving one returned
+  `approvedStatus=approved` and `approvedType=todo`.
+- HTTP smoke returned 200 for `/health`, `/review`, and `/dashboard`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -575,3 +609,4 @@ Verification evidence:
 - `af3c1f0 feat: add rag orchestrator agent`
 - `2b377fb feat: add company memory ask ui`
 - `15e1864 feat: add agent run observability`
+- `b90a709 feat: persist rag agent runs`

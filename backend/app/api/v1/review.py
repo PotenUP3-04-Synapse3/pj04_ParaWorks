@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
+from backend.app.knowledge.promotion import promote_review_item
 from backend.app.models import ReviewItem
 from backend.app.schemas.review import ReviewItemUpdate
 
@@ -69,6 +70,7 @@ def approve_review_item(
     item.status = 'approved'
     item.reviewer_id = user.id
     item.reviewed_at = datetime.now(UTC)
+    promote_review_item(db, item)
     db.commit()
     db.refresh(item)
     return _review_item_response(item)
