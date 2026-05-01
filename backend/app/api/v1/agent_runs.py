@@ -51,6 +51,59 @@ def list_agent_runs(db: DbSession) -> dict:
     }
 
 
+@router.get('/summary')
+def summarize_agent_runs(db: DbSession) -> dict:
+    runs = db.scalars(select(AgentRun).order_by(AgentRun.id.desc())).all()
+    total_runs = len(runs)
+    total_tokens = sum(run.total_tokens for run in runs)
+    estimated_cost_usd = sum(run.estimated_cost_usd for run in runs)
+    cache_hits = sum(1 for run in runs if run.metadata_.get('cache_hit') is True)
+    by_status: dict[str, int] = {}
+    by_agent: dict[str, dict] = {}
+
+    for run in runs:
+        by_status[run.status] = by_status.get(run.status, 0) + 1
+        agent_summary = by_agent.setdefault(
+            run.agent_name,
+            {
+                'agent_name': run.agent_name,
+                'run_count': 0,
+                'total_tokens': 0,
+                'estimated_cost_usd': 0.0,
+                'latest_run_id': run.id,
+                'latest_status': run.status,
+            },
+        )
+        agent_summary['run_count'] += 1
+        agent_summary['total_tokens'] += run.total_tokens
+        agent_summary['estimated_cost_usd'] += run.estimated_cost_usd
+
+    agent_rows = []
+    for agent_summary in by_agent.values():
+        run_count = agent_summary['run_count']
+        agent_rows.append(
+            {
+                **agent_summary,
+                'estimated_cost_usd': round(agent_summary['estimated_cost_usd'], 6),
+                'average_tokens_per_run': round(agent_summary['total_tokens'] / run_count) if run_count else 0,
+            }
+        )
+
+    return {
+        'totals': {
+            'total_runs': total_runs,
+            'total_tokens': total_tokens,
+            'estimated_cost_usd': round(estimated_cost_usd, 6),
+            'average_tokens_per_run': round(total_tokens / total_runs) if total_runs else 0,
+            'average_cost_per_run': round(estimated_cost_usd / total_runs, 6) if total_runs else 0,
+            'cache_hits': cache_hits,
+            'cache_hit_rate': round(cache_hits / total_runs, 4) if total_runs else 0,
+        },
+        'by_status': by_status,
+        'by_agent': sorted(agent_rows, key=lambda item: item['estimated_cost_usd'], reverse=True),
+    }
+
+
 @router.get('/{run_id}')
 def get_agent_run(run_id: int, db: DbSession) -> dict:
     run = db.get(AgentRun, run_id)

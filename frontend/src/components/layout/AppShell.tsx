@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  BarChart3,
   Bot,
   Database,
   Library,
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/review", labelKey: "review", icon: Activity, section: "workspace" },
   { href: "/knowledge", labelKey: "knowledge", icon: Library, section: "workspace" },
   { href: "/search", labelKey: "search", icon: Search, section: "workspace" },
+  { href: "/agent-runs", labelKey: "agentRuns", icon: BarChart3, section: "workspace" },
   { href: "/integrations", labelKey: "integrations", icon: Database, section: "tools" },
 ] as const;
 

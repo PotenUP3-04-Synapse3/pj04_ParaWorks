@@ -90,3 +90,86 @@ def test_agent_run_detail_api_returns_404_for_missing_run(client) -> None:
 
     assert response.status_code == 404
     assert response.json()['detail'] == 'Agent run not found'
+
+
+def test_agent_run_summary_api_returns_cost_and_agent_breakdown(client, db_session) -> None:
+    slack_first = AgentRun(
+        agent_name='slack_agent',
+        prompt_version='slack-timeline:v1',
+        status='complete',
+        source_window='mock-slack:all',
+        cache_key='slack-cache-key-1',
+        model_name='fake-slack-agent-model',
+        input_tokens=500,
+        output_tokens=100,
+        total_tokens=600,
+        estimated_cost_usd=0.00012,
+        permission_level='internal',
+        metadata_={'source_type': 'slack', 'cache_hit': False},
+    )
+    mail_failed = AgentRun(
+        agent_name='mail_document_agent',
+        prompt_version='mail-document-history:v1',
+        status='failed',
+        source_window='mock-mail-docs:all',
+        cache_key='mail-docs-cache-key',
+        model_name='fake-mail-document-agent-model',
+        input_tokens=300,
+        output_tokens=80,
+        total_tokens=380,
+        estimated_cost_usd=0.00009,
+        permission_level='restricted',
+        metadata_={'included_source_types': ['drive', 'gmail'], 'cache_hit': True},
+    )
+    slack_latest = AgentRun(
+        agent_name='slack_agent',
+        prompt_version='slack-timeline:v1',
+        status='complete',
+        source_window='mock-slack:channel:C-team',
+        cache_key='slack-cache-key-2',
+        model_name='fake-slack-agent-model',
+        input_tokens=700,
+        output_tokens=120,
+        total_tokens=820,
+        estimated_cost_usd=0.00017,
+        permission_level='internal',
+        metadata_={'source_type': 'slack', 'cache_hit': True},
+    )
+    db_session.add_all([slack_first, mail_failed, slack_latest])
+    db_session.commit()
+    db_session.refresh(slack_latest)
+
+    response = client.get('/api/v1/agent-runs/summary')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['totals'] == {
+        'total_runs': 3,
+        'total_tokens': 1800,
+        'estimated_cost_usd': 0.00038,
+        'average_tokens_per_run': 600,
+        'average_cost_per_run': 0.000127,
+        'cache_hits': 2,
+        'cache_hit_rate': 0.6667,
+    }
+    assert payload['by_status'] == {'complete': 2, 'failed': 1}
+    assert payload['by_agent'] == [
+        {
+            'agent_name': 'slack_agent',
+            'run_count': 2,
+            'total_tokens': 1420,
+            'estimated_cost_usd': 0.00029,
+            'average_tokens_per_run': 710,
+            'latest_run_id': slack_latest.id,
+            'latest_status': 'complete',
+        },
+        {
+            'agent_name': 'mail_document_agent',
+            'run_count': 1,
+            'total_tokens': 380,
+            'estimated_cost_usd': 0.00009,
+            'average_tokens_per_run': 380,
+            'latest_run_id': mail_failed.id,
+            'latest_status': 'failed',
+        },
+    ]

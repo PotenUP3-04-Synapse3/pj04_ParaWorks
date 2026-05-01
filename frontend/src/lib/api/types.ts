@@ -42,6 +42,30 @@ export type AgentRunsResponse = {
   recent_runs: AgentRunSummaryItem[];
 };
 
+export type AgentRunAgentSummary = {
+  agent_name: string;
+  run_count: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  average_tokens_per_run: number;
+  latest_run_id: number;
+  latest_status: string;
+};
+
+export type AgentRunSummaryResponse = {
+  totals: {
+    total_runs: number;
+    total_tokens: number;
+    estimated_cost_usd: number;
+    average_tokens_per_run: number;
+    average_cost_per_run: number;
+    cache_hits: number;
+    cache_hit_rate: number;
+  };
+  by_status: Record<string, number>;
+  by_agent: AgentRunAgentSummary[];
+};
+
 export type KnowledgeItem = {
   id: number;
   title: string;

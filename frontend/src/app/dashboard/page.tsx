@@ -1,4 +1,4 @@
-import { Bot, CircleDollarSign, Database, ShieldAlert, Sparkles } from "lucide-react";
+import { ArrowRight, Bot, CircleDollarSign, Database, ShieldAlert, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api/client";
 import type { AgentRunsResponse, DashboardResponse } from "@/lib/api/types";
@@ -110,9 +110,13 @@ export default async function DashboardPage() {
               프롬프트 버전, 토큰, 비용, 권한 레벨을 함께 추적합니다.
             </p>
           </div>
-          <span className="rounded-full bg-[#ecfbf6] px-2.5 py-1 text-xs font-semibold text-[#0f6f58]">
-            {agentRuns.recent_runs.length} runs
-          </span>
+          <Link
+            href="/agent-runs"
+            className="inline-flex items-center gap-1 rounded-full bg-[#ecfbf6] px-2.5 py-1 text-xs font-semibold text-[#0f6f58]"
+          >
+            전체 보기
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
         </div>
         <div className="divide-y divide-[var(--line-soft)]">
           {agentRuns.recent_runs.map((run) => (

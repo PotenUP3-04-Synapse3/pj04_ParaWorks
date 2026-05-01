@@ -733,6 +733,47 @@ Verification evidence:
   `npm.cmd run build` while the smoke dev server stayed open.
 - Browser smoke reloaded `/agent-runs/8` and rendered the styled AgentRun cards.
 
+## Observability Update: AgentRun Operations Summary
+
+Recorded on 2026-05-01.
+
+Next operations milestone is moving from single-run inspection to an overview
+that compares cost, token usage, cache behavior, and status across all agent
+tracks.
+
+Portfolio angle:
+
+- Shows AI cost governance at both detail and aggregate levels.
+- Gives the three-developer agent split a shared operational dashboard:
+  Slack Agent, Mail/Docs Agent, and RAG Orchestrator can be compared without
+  coupling their internals.
+- Turns token-cost optimization into a visible product workflow instead of a
+  hidden backend concern.
+
+Implemented scope:
+
+- Added `GET /api/v1/agent-runs/summary`.
+- Returned total runs, token totals, estimated cost, average cost, average
+  tokens per run, cache hits, cache hit rate, status counts, and per-agent
+  cost/token breakdowns.
+- Added frontend `AgentRunSummaryResponse` and `AgentRunAgentSummary` types.
+- Added `/agent-runs` as an operations summary page with cards, per-agent
+  table, status distribution, and links to run detail pages.
+- Added `AI 실행` / `AI Runs` navigation labels and linked the dashboard
+  AgentRun panel to the full operations page.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_agent_runs_api.py -v` passed.
+- `npm.cmd run build` from `frontend` passed and included `/agent-runs`.
+- Smoke server restarted with `.tmp/paraworks-agent-run-detail.db`.
+- HTTP smoke returned 200 for `/health`, `/agent-runs`, `/dashboard`, and
+  `/api/v1/agent-runs/summary`.
+- Summary smoke returned `totalRuns=8`, `totalTokens=666`,
+  `cacheHitRate=0.0`, and `agents=2`.
+- Browser smoke opened `/agent-runs` and confirmed the `AI 실행 관측`,
+  `Agent별 비용과 토큰`, `상태 분포`, and `최근 실행 로그` sections.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -759,3 +800,4 @@ Verification evidence:
 - `84707e2 feat: add knowledge library`
 - `6f6deab feat: use approved knowledge in rag`
 - `3161dff feat: add agent run detail view`
+- `9381bb1 fix: isolate smoke frontend cache`
