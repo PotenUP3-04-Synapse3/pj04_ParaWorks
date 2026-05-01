@@ -3,11 +3,12 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import get_db
-from backend.app.models import SyncJob
+from backend.app.models import SyncJob, VectorIndexState
 from backend.app.rag.embeddings import (
     DeterministicHashEmbeddingModel,
     OpenAIEmbeddingConfig,
@@ -59,6 +60,27 @@ def create_reindex_job(db: DbSession, settings: AppSettings, dry_run: bool = Tru
         'job_id': job.job_id,
         'status': job.status,
         **result,
+    }
+
+
+@router.get('/indexing/summary')
+def get_rag_indexing_summary(db: DbSession) -> dict:
+    state_counts = dict(
+        db.execute(
+            select(VectorIndexState.status, func.count(VectorIndexState.id))
+            .group_by(VectorIndexState.status)
+            .order_by(VectorIndexState.status)
+        ).all()
+    )
+    latest_jobs = db.scalars(
+        select(SyncJob)
+        .where(SyncJob.connector_type == 'rag-index')
+        .order_by(SyncJob.updated_at.desc(), SyncJob.id.desc())
+        .limit(5)
+    ).all()
+    return {
+        'state_counts': state_counts,
+        'latest_jobs': [_job_summary(job) for job in latest_jobs],
     }
 
 
@@ -131,3 +153,27 @@ def _reindex_components(
         'pgvector',
         True,
     )
+
+
+def _job_summary(job: SyncJob) -> dict:
+    counters = _parse_index_job_message(job.message)
+    return {
+        'job_id': job.job_id,
+        'connector_type': job.connector_type,
+        'status': job.status,
+        'message': job.message,
+        'progress_pct': job.progress_pct,
+        'indexed_count': counters.get('indexed', 0),
+        'skipped_count': counters.get('skipped', 0),
+        'saved_embedding_calls': counters.get('saved_embedding_calls', 0),
+        'updated_at': job.updated_at.isoformat(),
+    }
+
+
+def _parse_index_job_message(message: str) -> dict[str, int]:
+    counters: dict[str, int] = {}
+    for part in message.split():
+        key, separator, value = part.partition('=')
+        if separator and value.isdigit():
+            counters[key] = int(value)
+    return counters

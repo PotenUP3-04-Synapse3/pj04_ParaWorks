@@ -66,6 +66,23 @@ export type AgentRunSummaryResponse = {
   by_agent: AgentRunAgentSummary[];
 };
 
+export type RagIndexingJobSummary = {
+  job_id: string;
+  connector_type: string;
+  status: string;
+  message: string;
+  progress_pct: number;
+  indexed_count: number;
+  skipped_count: number;
+  saved_embedding_calls: number;
+  updated_at: string;
+};
+
+export type RagIndexingSummaryResponse = {
+  state_counts: Record<string, number>;
+  latest_jobs: RagIndexingJobSummary[];
+};
+
 export type KnowledgeItem = {
   id: number;
   title: string;

@@ -374,3 +374,32 @@ def test_reindex_job_endpoint_records_indexing_job(
     assert job.status == 'complete'
     assert job.progress_pct == 100
     assert job.message == 'indexed=1 skipped=0 saved_embedding_calls=0'
+
+
+def test_rag_indexing_summary_returns_latest_jobs_and_state_counts(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-summary-index')
+    db_session.add(
+        VectorIndexState(
+            document_id='chunk:existing',
+            embedding_model='deterministic-hash:v1',
+            embedding_dimensions=16,
+            content_hash='abc123',
+            status='indexed',
+        )
+    )
+    db_session.commit()
+    client.post('/api/v1/rag/reindex/jobs')
+
+    response = client.get('/api/v1/rag/indexing/summary')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['state_counts'] == {'indexed': 1}
+    assert body['latest_jobs'][0]['connector_type'] == 'rag-index'
+    assert body['latest_jobs'][0]['status'] == 'complete'
+    assert body['latest_jobs'][0]['indexed_count'] == 1
+    assert body['latest_jobs'][0]['skipped_count'] == 0
+    assert body['latest_jobs'][0]['saved_embedding_calls'] == 0

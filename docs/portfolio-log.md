@@ -990,6 +990,45 @@ Verification evidence:
   `embedding_request_count=1`, and `storage_backend=preview`.
 - HTTP smoke returned 200 for `/dashboard`, `/review`, and `/search`.
 
+## Product Observability Update: RAG Indexing Admin Panel
+
+Recorded on 2026-05-01.
+
+Moved RAG indexing cost-control signals into the Agent Operations/Admin surface
+instead of the end-user Search screen.
+
+Portfolio angle:
+
+- Shows the cost optimization work in a demo-friendly way without polluting the
+  final business-user product flow.
+- Demonstrates product judgment: technical counters belong in admin
+  observability, while Search remains focused on retrieval and evidence.
+- Makes `indexed`, `skipped`, and `saved embedding calls` visible for operators
+  so the team can prove incremental indexing is reducing provider calls.
+
+Implemented scope:
+
+- Added `GET /api/v1/rag/indexing/summary` with vector index state counts and
+  latest `rag-index` jobs.
+- Added RAG indexing types to the frontend API contract.
+- Added a RAG indexing operations panel to `/agent-runs` with admin-only
+  positioning and latest job counters.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_indexing.py::test_rag_indexing_summary_returns_latest_jobs_and_state_counts -v`
+  passed.
+- `uv run ruff check backend/app/api/v1/rag.py backend/tests/test_rag_indexing.py`
+  passed.
+- `uv run pytest backend/tests -v` passed with 88 backend tests.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-rag-indexing-observability.db`.
+- Slack and Gmail mock sync created source chunks; `POST /api/v1/rag/reindex/jobs`
+  returned `indexed_count=3`, `embedding_request_count=1`, and
+  `status=complete`.
+- `GET /api/v1/rag/indexing/summary` returned the latest `rag-index` job.
+- HTTP smoke returned 200 for `/agent-runs`, `/search`, and `/dashboard`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1023,3 +1062,4 @@ Verification evidence:
 - `feat: add rag vector indexing pipeline`
 - `feat: add incremental vector indexing`
 - `feat: add embedding provider and vector retrieval path`
+- `feat: show rag indexing observability`

@@ -4,7 +4,10 @@ import {
   BarChart3,
   Bot,
   CircleDollarSign,
+  Database,
   Gauge,
+  RefreshCw,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
@@ -13,16 +16,20 @@ import type {
   AgentRunAgentSummary,
   AgentRunsResponse,
   AgentRunSummaryResponse,
+  RagIndexingJobSummary,
+  RagIndexingSummaryResponse,
 } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AgentRunsPage() {
-  const [runs, summary] = await Promise.all([
+  const [runs, summary, ragIndexing] = await Promise.all([
     apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
     apiGet<AgentRunSummaryResponse>("/api/v1/agent-runs/summary"),
+    apiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary"),
   ]);
   const cacheHitPercent = (summary.totals.cache_hit_rate * 100).toFixed(1);
+  const latestRagJob = ragIndexing.latest_jobs[0];
 
   return (
     <div className="space-y-5">
@@ -65,6 +72,44 @@ export default async function AgentRunsPage() {
           value={`${cacheHitPercent}%`}
           detail={`${summary.totals.cache_hits.toLocaleString()} cached runs`}
         />
+      </section>
+
+      <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-3 border-b border-[var(--line-soft)] px-4 py-4 lg:flex-row lg:items-center">
+          <div>
+            <h3 className="text-sm font-semibold">RAG 인덱싱 운영 상태</h3>
+            <p className="mt-1 text-xs text-[var(--ink-muted)]">
+              운영자용 지표입니다. 검색 화면에는 노출하지 않고 인덱싱 비용 절감과 처리 상태만 관측합니다.
+            </p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#f4f8f6] px-3 py-2 text-xs font-semibold text-[#22513f]">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            Admin observability
+          </span>
+        </div>
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <IndexingMetric
+              icon={Database}
+              label="Indexed"
+              value={(ragIndexing.state_counts.indexed ?? 0).toLocaleString()}
+              detail="served vector states"
+            />
+            <IndexingMetric
+              icon={RefreshCw}
+              label="Skipped"
+              value={(latestRagJob?.skipped_count ?? 0).toLocaleString()}
+              detail="unchanged docs"
+            />
+            <IndexingMetric
+              icon={CircleDollarSign}
+              label="Saved Calls"
+              value={(latestRagJob?.saved_embedding_calls ?? 0).toLocaleString()}
+              detail="embedding calls avoided"
+            />
+          </div>
+          <LatestIndexingJob job={latestRagJob} />
+        </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -177,6 +222,67 @@ function MetricCard({
       </div>
       <p className="mt-3 text-3xl font-semibold">{value}</p>
       <p className="mt-1 text-xs text-[var(--ink-muted)]">{detail}</p>
+    </div>
+  );
+}
+
+function IndexingMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: MetricIcon;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-[var(--ink-muted)]">{label}</span>
+        <Icon className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
+      </div>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-[var(--ink-muted)]">{detail}</p>
+    </div>
+  );
+}
+
+function LatestIndexingJob({ job }: { job?: RagIndexingJobSummary }) {
+  if (!job) {
+    return (
+      <div className="rounded-lg border border-dashed border-[var(--line-soft)] px-4 py-5 text-sm text-[var(--ink-muted)]">
+        아직 실행된 RAG 인덱싱 작업이 없습니다.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{job.job_id}</p>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">{job.message}</p>
+        </div>
+        <span className="rounded-lg bg-[#f4f8f6] px-2 py-1 text-xs font-semibold capitalize text-[#22513f]">
+          {job.status}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <JobCounter label="indexed" value={job.indexed_count} />
+        <JobCounter label="skipped" value={job.skipped_count} />
+        <JobCounter label="saved" value={job.saved_embedding_calls} />
+      </div>
+    </div>
+  );
+}
+
+function JobCounter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg bg-[#fbfaf8] px-2 py-2">
+      <p className="font-semibold">{value.toLocaleString()}</p>
+      <p className="mt-0.5 text-[var(--ink-muted)]">{label}</p>
     </div>
   );
 }
