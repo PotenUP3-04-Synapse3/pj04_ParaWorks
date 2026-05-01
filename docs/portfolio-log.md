@@ -1029,6 +1029,47 @@ Verification evidence:
 - `GET /api/v1/rag/indexing/summary` returned the latest `rag-index` job.
 - HTTP smoke returned 200 for `/agent-runs`, `/search`, and `/dashboard`.
 
+## RAG Infrastructure Update: pgvector Dev Path and Fake Embedding Integration Test
+
+Recorded on 2026-05-01.
+
+Added a safe developer path for validating real PostgreSQL + pgvector behavior
+without putting live OpenAI calls in automated tests.
+
+Portfolio angle:
+
+- Shows production-readiness work beyond app code: runbooks, scripts,
+  environment boundaries, and integration-test gates.
+- Keeps provider cost and secret safety explicit by separating live manual
+  checks from automated fake-embedding tests.
+- Documents a real local blocker found during validation: Docker Postgres could
+  not bind `127.0.0.1:5432` on this machine, and cleanup was handled with
+  `docker compose down`.
+
+Implemented scope:
+
+- Added `docs/superpowers/runbooks/pgvector-dev.md` with startup, env,
+  `dry_run=false`, fake integration test, port-conflict, and cost-policy notes.
+- Added `scripts/start-pgvector-dev.ps1` for Postgres/Redis-backed local app
+  startup without embedding secrets in the script.
+- Added OpenAI embedding and pgvector search settings to `.env.example`.
+- Added runbook/script tests and a skipped-by-default real pgvector integration
+  test using `DeterministicHashEmbeddingModel`.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py -v`
+  passed with 2 tests and skipped the real pgvector integration when
+  `PARAWORKS_PGVECTOR_TEST_DATABASE_URL` was unset.
+- `uv run ruff check backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py`
+  passed.
+- `uv run pytest backend/tests -v` passed with 90 backend tests and 1 skipped
+  opt-in pgvector integration test.
+- `npm.cmd run build` from `frontend` passed.
+- `docker compose up -d postgres redis` pulled required images but failed to
+  bind `127.0.0.1:5432`; partial containers were cleaned up with
+  `docker compose down`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1063,3 +1104,4 @@ Verification evidence:
 - `feat: add incremental vector indexing`
 - `feat: add embedding provider and vector retrieval path`
 - `feat: show rag indexing observability`
+- `chore: document pgvector dev path`
