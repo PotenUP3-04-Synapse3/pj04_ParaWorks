@@ -1214,6 +1214,50 @@ Verification evidence:
   counts, and `/integrations` renders Korean copy without replacement
   characters.
 
+## Playwright Visual Smoke And RAG Permission Audit
+
+Recorded on 2026-05-01.
+
+Made frontend visual checking repeatable with Playwright and started the next
+RAG permission/security hardening slice.
+
+Portfolio angle:
+
+- Adds a real visual regression workflow across desktop and mobile, not only
+  HTTP smoke checks.
+- Turns the previous Korean mojibake issue into an automated guardrail by
+  checking key pages for Korean headings and broken replacement text.
+- Strengthens RAG auditability without leaking hidden source content:
+  end-users can see hidden match counts, while restricted source details remain
+  filtered.
+- Preserves connector ACL metadata on chunks so downstream RAG, review, and
+  portfolio explanations can trace why content was visible or hidden.
+
+Implemented scope:
+
+- Installed `@playwright/test` and Chromium for local visual smoke.
+- Added `frontend/playwright.config.ts`, `frontend/e2e/visual-smoke.spec.ts`,
+  and `scripts/run-visual-smoke.ps1`.
+- Added `npm run test:visual`.
+- Rewrote `/dashboard` Korean copy to remove mojibake.
+- Added `hidden_match_count` to search responses and `source_id` to visible
+  search results.
+- Preserved source id, permission level, participants, and connector raw
+  metadata in `DocumentChunk.metadata_`.
+- Updated `/search` to show hidden match counts without exposing hidden
+  snippets or links.
+
+Verification evidence:
+
+- Focused permission/connector tests passed with 6 tests.
+- Focused Ruff passed for changed backend search, ingestion, and tests.
+- Full backend tests passed with 102 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- Playwright visual smoke passed with 10 Chromium desktop/mobile tests.
+- Playwright initially failed because browser binaries were missing; installing
+  Chromium made the check executable for future runs.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

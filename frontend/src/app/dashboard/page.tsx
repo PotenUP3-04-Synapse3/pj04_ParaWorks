@@ -17,9 +17,9 @@ export default async function DashboardPage() {
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
           <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Workspace Overview</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">대시보드</h2>
+          <h2 className="mt-1 text-2xl font-semibold tracking-normal">오늘의 업무 흐름</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
-            출처, 검토 대기열, 동기화 작업, AI Agent 비용 흐름을 한 곳에서 확인합니다.
+            수집된 출처, 검토 대기열, 동기화 작업, AI Agent 비용 흐름을 한곳에서 확인합니다.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
@@ -29,37 +29,19 @@ export default async function DashboardPage() {
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--ink-muted)]">출처</span>
-            <Database className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
-          </div>
-          <p className="mt-3 text-3xl font-semibold">{totalSources}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--ink-muted)]">검토 대기</span>
-            <ShieldAlert className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
-          </div>
-          <p className="mt-3 text-3xl font-semibold">{dashboard.pending_review_count}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--ink-muted)]">Agent 실행</span>
-            <Bot className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
-          </div>
-          <p className="mt-3 text-3xl font-semibold">{agentRuns.total_runs}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--ink-muted)]">예상 비용</span>
-            <CircleDollarSign className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
-          </div>
-          <p className="mt-3 text-3xl font-semibold">${agentRuns.estimated_cost_usd.toFixed(6)}</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">
-            {agentRuns.total_tokens.toLocaleString()} tokens
-          </p>
-        </div>
+        <MetricCard icon={Database} label="수집 출처" value={totalSources.toLocaleString()} />
+        <MetricCard
+          icon={ShieldAlert}
+          label="검토 대기"
+          value={dashboard.pending_review_count.toLocaleString()}
+        />
+        <MetricCard icon={Bot} label="Agent 실행" value={agentRuns.total_runs.toLocaleString()} />
+        <MetricCard
+          icon={CircleDollarSign}
+          label="예상 비용"
+          value={`$${agentRuns.estimated_cost_usd.toFixed(6)}`}
+          detail={`${agentRuns.total_tokens.toLocaleString()} tokens`}
+        />
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -79,7 +61,9 @@ export default async function DashboardPage() {
               </div>
             ))}
             {dashboard.recent_jobs.length === 0 ? (
-              <p className="px-4 py-8 text-sm text-[var(--ink-muted)]">아직 실행된 동기화 작업이 없습니다.</p>
+              <p className="px-4 py-8 text-sm text-[var(--ink-muted)]">
+                아직 실행된 동기화 작업이 없습니다.
+              </p>
             ) : null}
           </div>
         </div>
@@ -96,7 +80,7 @@ export default async function DashboardPage() {
               </div>
             ))}
             {Object.keys(dashboard.source_counts).length === 0 ? (
-              <p className="px-4 py-8 text-sm text-[var(--ink-muted)]">아직 색인된 출처가 없습니다.</p>
+              <p className="px-4 py-8 text-sm text-[var(--ink-muted)]">아직 승인된 출처가 없습니다.</p>
             ) : null}
           </div>
         </div>
@@ -107,7 +91,7 @@ export default async function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold">최근 Agent 실행</h3>
             <p className="mt-1 text-xs text-[var(--ink-muted)]">
-              프롬프트 버전, 토큰, 비용, 권한 레벨을 함께 추적합니다.
+              프롬프트 버전, 토큰, 비용, 권한 범위를 함께 추적합니다.
             </p>
           </div>
           <Link
@@ -150,6 +134,31 @@ export default async function DashboardPage() {
           ) : null}
         </div>
       </section>
+    </div>
+  );
+}
+
+type MetricIcon = typeof Database;
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: MetricIcon;
+  label: string;
+  value: string;
+  detail?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-[var(--ink-muted)]">{label}</span>
+        <Icon className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
+      </div>
+      <p className="mt-3 text-3xl font-semibold">{value}</p>
+      {detail ? <p className="mt-1 text-xs text-[var(--ink-muted)]">{detail}</p> : null}
     </div>
   );
 }

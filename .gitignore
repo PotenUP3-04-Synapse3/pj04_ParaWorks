@@ -23,6 +23,8 @@ wheels/
 frontend/node_modules/
 frontend/.next/
 frontend/.next-smoke/
+frontend/playwright-report/
+frontend/test-results/
 frontend/tsconfig.tsbuildinfo
 
 # Git worktrees

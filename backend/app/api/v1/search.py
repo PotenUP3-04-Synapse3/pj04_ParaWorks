@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
-from backend.app.models import DocumentChunk
+from backend.app.models import DocumentChunk, Source
 from backend.app.permissions.service import can_access_permission
 from backend.app.schemas.search import SearchRequest
 
@@ -22,24 +22,32 @@ def search_knowledge(
     user: CurrentUser,
 ) -> dict:
     query = request.query.lower()
-    chunks = db.scalars(select(DocumentChunk).order_by(DocumentChunk.id)).all()
-    matching_chunks = [chunk for chunk in chunks if query in chunk.text.lower()]
+    rows = db.execute(
+        select(DocumentChunk, Source)
+        .join(Source, DocumentChunk.source_id == Source.id)
+        .order_by(DocumentChunk.id)
+    ).all()
+    matching_rows = [(chunk, source) for chunk, source in rows if query in chunk.text.lower()]
     visible_chunks = [
-        chunk for chunk in matching_chunks if can_access_permission(user, chunk.permission_level)
+        (chunk, source)
+        for chunk, source in matching_rows
+        if can_access_permission(user, chunk.permission_level)
     ]
-    hidden_matches = len(matching_chunks) - len(visible_chunks)
+    hidden_matches = len(matching_rows) - len(visible_chunks)
 
     response = {
+        'hidden_match_count': hidden_matches,
         'results': [
             {
                 'id': chunk.id,
+                'source_id': source.source_id,
                 'text': chunk.text,
                 'source_snippet': chunk.source_snippet,
                 'source_url': chunk.metadata_.get('source_url'),
                 'source_type': chunk.metadata_.get('source_type'),
                 'permission_level': chunk.permission_level,
             }
-            for chunk in visible_chunks
+            for chunk, source in visible_chunks
         ]
     }
     if hidden_matches:

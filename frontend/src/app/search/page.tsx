@@ -136,6 +136,11 @@ export default function SearchPage() {
           <div>
             <p className="font-semibold">권한 때문에 숨겨진 근거가 있습니다.</p>
             <p className="mt-1 text-amber-800">{permissionNotice}</p>
+            {searchResponse?.hidden_match_count ? (
+              <p className="mt-1 text-xs text-amber-800">
+                현재 권한에서 숨겨진 근거 {searchResponse.hidden_match_count.toLocaleString()}개
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -221,6 +226,9 @@ export default function SearchPage() {
                 </span>
                 <span className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-xs font-medium capitalize text-[var(--ink-muted)]">
                   {result.permission_level}
+                </span>
+                <span className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-xs font-medium text-[var(--ink-muted)]">
+                  {result.source_id}
                 </span>
               </div>
               <p className="mt-3 text-sm leading-6">{result.text}</p>

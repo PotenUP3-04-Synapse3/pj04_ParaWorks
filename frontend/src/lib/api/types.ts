@@ -146,6 +146,7 @@ export type ReviewResponse = {
 
 export type SearchResult = {
   id: number;
+  source_id: string;
   text: string;
   source_snippet: string;
   source_url?: string | null;
@@ -155,6 +156,7 @@ export type SearchResult = {
 
 export type SearchResponse = {
   results: SearchResult[];
+  hidden_match_count: number;
   permission_notice?: string;
 };
 

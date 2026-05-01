@@ -48,8 +48,12 @@ def ingest_events(db: Session, events: list[SourceEvent]) -> int:
             source_snippet=event.body[:240],
             permission_level=event.permission_level,
             metadata_={
+                **event.raw_metadata,
+                'source_id': event.source_id,
                 'source_url': event.source_url,
                 'source_type': event.source_type,
+                'permission_level': event.permission_level,
+                'participants': list(event.participants),
                 'scenario': event.raw_metadata.get('scenario'),
             },
         )
