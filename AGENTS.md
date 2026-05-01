@@ -165,6 +165,20 @@ Do not store agent output directly as official knowledge. Create
 - Avoid logging raw sensitive content. Prefer ids, hashes, counts, and short
   snippets when debugging.
 
+## RAG Storage Direction
+
+PostgreSQL + pgvector is the default production RAG storage path.
+
+- Keep `DocumentChunk`, approved knowledge tables, permissions, and audit data
+  in PostgreSQL.
+- Use pgvector for embedding search through `backend/app/rag/pgvector_store.py`.
+- Keep SQLite smoke mode working by using deterministic and in-memory retrieval
+  when Postgres is not running.
+- Do not introduce a separate vector database unless the team explicitly
+  decides that operational tradeoff is worth it.
+- All vector search adapters must preserve permission filtering and hidden-match
+  accounting.
+
 ## Token Cost Policy
 
 Token cost is a product requirement.

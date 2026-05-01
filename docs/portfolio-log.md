@@ -819,6 +819,43 @@ Verification evidence:
 - Browser smoke opened `/review` and confirmed approval preview cards for
   todo, history, and decision records.
 
+## RAG Infrastructure Update: PostgreSQL + pgvector Adapter
+
+Recorded on 2026-05-01.
+
+Confirmed PostgreSQL + pgvector as the production RAG storage direction while
+preserving SQLite smoke mode for fast demos.
+
+Portfolio angle:
+
+- Shows a practical RAG infrastructure choice instead of leaving vector storage
+  vague.
+- Keeps company memory, permissions, source evidence, and vector search close
+  to the same transactional Postgres boundary.
+- Avoids extra operational complexity from a separate vector database during
+  MVP development.
+
+Implemented scope:
+
+- Added `PgVectorStore` with schema SQL, upsert SQL, permission-filtered search
+  SQL, and hidden-match accounting.
+- Added `PgVectorConfig` with table-name and embedding-dimension validation.
+- Added Docker init SQL for `rag_vector_documents`, `embedding vector(1536)`,
+  ivfflat cosine index, and permission index.
+- Documented PostgreSQL + pgvector as the default RAG storage path in
+  `AGENTS.md` and `README.md`.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_pgvector_store.py -v` passed.
+- `uv run pytest backend/tests -v` passed with 74 backend tests.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-pgvector-adapter.db`.
+- HTTP smoke returned 200 for `/health`, `/dashboard`, `/review`, `/search`,
+  and `/agent-runs`.
+- Browser smoke opened `/search` and confirmed the Company Memory/Search
+  surface still rendered under SQLite smoke mode.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -847,3 +884,4 @@ Verification evidence:
 - `3161dff feat: add agent run detail view`
 - `9381bb1 fix: isolate smoke frontend cache`
 - `aee1e04 feat: add agent run operations summary`
+- `9f3a7b8 feat: add review vector orchestration foundations`
