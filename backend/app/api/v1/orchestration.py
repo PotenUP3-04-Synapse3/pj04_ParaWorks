@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import AgentWorkflowState, build_company_memory_workflow
 from backend.app.agent_runtime.company_memory import (
+    DEFAULT_AGENT_RUN_BUDGET_USD,
     run_company_memory_agent_orchestration,
 )
 from backend.app.core.demo_auth import DemoUser, get_demo_user
@@ -30,6 +31,8 @@ def _cost_policy_response() -> dict:
         'delta_sync': True,
         'source_hash_skip': True,
         'evidence_token_budget': True,
+        'per_run_budget_usd': DEFAULT_AGENT_RUN_BUDGET_USD,
+        'budget_actions': ['run', 'skip', 'use_cache'],
         'paid_llm_calls_in_status_api': False,
         'requires_explicit_run': True,
     }

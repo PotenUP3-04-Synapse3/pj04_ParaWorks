@@ -305,6 +305,8 @@ function IndexingMetric({
 }
 
 function OrchestrationStatusCard({ orchestration }: { orchestration: OrchestrationStatusResponse }) {
+  const perRunBudgetUsd = orchestration.cost_policy.per_run_budget_usd ?? 0;
+  const budgetActions = orchestration.cost_policy.budget_actions ?? ["run", "skip", "use_cache"];
   const costPolicyItems = [
     { label: "Delta sync", enabled: orchestration.cost_policy.delta_sync },
     { label: "Hash skip", enabled: orchestration.cost_policy.source_hash_skip },
@@ -331,6 +333,9 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
             <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
               dry-run cost $0
             </span>
+            <span className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs font-semibold text-[var(--ink-muted)]">
+              budget ${perRunBudgetUsd.toFixed(3)}/run
+            </span>
           </div>
           <h3 className="mt-4 text-base font-semibold">Company Memory 오케스트레이터</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink-muted)]">
@@ -352,6 +357,15 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
             <h4 className="text-sm font-semibold">비용 가드레일</h4>
+          </div>
+          <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium text-[var(--ink-muted)]">Per-run budget</span>
+              <span className="font-semibold">${perRunBudgetUsd.toFixed(3)}</span>
+            </div>
+            <p className="mt-2 text-[var(--ink-muted)]">
+              {budgetActions.join(" / ")} 정책으로 큰 입력과 캐시 히트를 분기합니다.
+            </p>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
             {costPolicyItems.map((item) => {

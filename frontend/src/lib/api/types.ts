@@ -75,6 +75,8 @@ export type OrchestrationStatusResponse = {
     delta_sync: boolean;
     source_hash_skip: boolean;
     evidence_token_budget: boolean;
+    per_run_budget_usd?: number;
+    budget_actions?: string[];
     paid_llm_calls_in_status_api: boolean;
     requires_explicit_run: boolean;
   };

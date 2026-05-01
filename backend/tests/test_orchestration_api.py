@@ -56,6 +56,8 @@ def test_company_memory_orchestration_api_exposes_langgraph_status(client) -> No
         'delta_sync': True,
         'source_hash_skip': True,
         'evidence_token_budget': True,
+        'per_run_budget_usd': 0.001,
+        'budget_actions': ['run', 'skip', 'use_cache'],
         'paid_llm_calls_in_status_api': False,
         'requires_explicit_run': True,
     }
@@ -114,3 +116,4 @@ def test_company_memory_orchestration_api_runs_agent_services(client, db_session
     assert payload['outputs']['mail_document_review_items_created'] == 1
     assert payload['outputs']['rag_agent_run_created'] is True
     assert payload['cost_policy']['requires_explicit_run'] is True
+    assert payload['cost_policy']['per_run_budget_usd'] == 0.001

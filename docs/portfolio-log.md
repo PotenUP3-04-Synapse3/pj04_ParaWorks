@@ -2399,6 +2399,36 @@ Verification evidence:
 - `uv run pytest backend/tests/test_agent_runtime_contracts.py backend/tests/test_company_memory_orchestration_service.py backend/tests/test_agent_orchestration.py backend/tests/test_agent_runs_api.py`
   passed with 16/16 tests.
 
+### Agent Budget Observability
+
+- Exposed the default per-run agent budget and the supported budget actions
+  (`run`, `skip`, `use_cache`) through the company memory orchestration status
+  and run APIs.
+- Updated the Agent Operations page so operators can see the active per-run
+  budget directly beside the LangGraph orchestration and cost guardrail status.
+- Added frontend fallback handling so the operations page stays renderable even
+  if a running backend still returns the older cost policy shape.
+- Kept status API calls free of paid LLM calls while still showing enough budget
+  metadata to explain cost behavior before a real run.
+
+Portfolio angle:
+
+- Shows an operator-facing cost control loop: policy, API contract, UI
+  visibility, and tests are aligned.
+- Makes cost optimization demonstrable during portfolio walkthroughs without
+  requiring real paid model calls.
+
+Verification evidence:
+
+- Added API tests first for budget metadata visibility.
+- `uv run pytest backend/tests/test_orchestration_api.py` passed with 3/3 tests.
+- `uv run ruff check backend/app/api/v1/orchestration.py backend/tests/test_orchestration_api.py`
+  passed.
+- `npx eslint src/app/agent-runs/page.tsx src/lib/api/types.ts` passed.
+- `npm run build` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 32/32 tests after adding the fallback.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2464,3 +2494,4 @@ Verification evidence:
 - `style: tune light gray purple palette`
 - `style: soften light purple palette`
 - `feat: add agent cost budget guardrails`
+- `feat: expose agent budget observability`
