@@ -2323,6 +2323,29 @@ Verification evidence:
   passed with 32/32 tests.
 - `npm run build` passed.
 
+## 2026-05-02 - Light Gray Deep Purple Palette
+
+Implemented scope:
+
+- Toned down the light-mode foundation from bright white glass to warm light
+  gray glass surfaces.
+- Shifted light-mode shell, active accents, primary controls, and outlines
+  toward ParaWorks deep purple (`#4a154b`) for stronger brand consistency.
+- Reduced mint/blue emphasis in the light-mode background, controls, cards,
+  and rows so the UI reads as one coherent gray-purple material system.
+- Kept dark-mode tokens unchanged while preserving the shared Liquid Glass
+  component structure.
+
+Verification evidence:
+
+- In-app browser screenshot review checked `/integrations` in light mode.
+- Playwright computed-style audit confirmed light shell `rgba(228, 225, 235, 0.74)`
+  and primary action `rgba(74, 21, 75, 0.9)`.
+- `npx eslint src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 32/32 tests.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2385,3 +2408,4 @@ Verification evidence:
 - `style: refine dark glass consistency`
 - `style: unify integration runtime glass`
 - `style: tokenize shell theme chrome`
+- `style: tune light gray purple palette`
