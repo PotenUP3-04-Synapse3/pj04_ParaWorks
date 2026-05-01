@@ -1,6 +1,9 @@
 # Local Development Runbook
 
-Run commands from `C:\potenup3\pj04-Paraworks`.
+Run commands from the repository root.
+
+For quick UI demos without Docker, use
+`docs/superpowers/runbooks/sqlite-smoke.md`.
 
 ## Start Runtime Services
 
@@ -27,7 +30,7 @@ uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 
 ```powershell
 cd frontend
-npm.cmd run dev
+npm.cmd run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
 ## Demo Users

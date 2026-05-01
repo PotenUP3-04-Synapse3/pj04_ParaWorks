@@ -1,7 +1,6 @@
 # ParaWorks Harness Verification
 
-Run commands from the repository checkout under review. For this branch, the active
-worktree is `C:\potenup3\pj04-Paraworks\.worktrees\paraworks-harness`.
+Run commands from the repository checkout under review.
 
 ## Task 2 Verification
 
@@ -39,4 +38,22 @@ Expected backend checks:
 
 Expected frontend check:
 
-- dashboard, integrations, review, and search routes compile
+- dashboard, integrations, messages, review, and search routes compile
+
+## SQLite Smoke Verification
+
+Use this when Docker is unavailable but the UI flow needs to be checked:
+
+```powershell
+$env:DATABASE_URL="sqlite:///.tmp/paraworks-smoke-verify.db"
+uv run python -m backend.app.db.init_db
+uv run pytest backend/tests -v
+cd frontend
+npm.cmd run build
+```
+
+For an interactive smoke run, use:
+
+```powershell
+.\scripts\start-smoke.ps1
+```

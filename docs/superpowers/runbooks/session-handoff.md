@@ -103,10 +103,10 @@ Generated files under `.tmp/`, `.next/`, and `frontend/tsconfig.tsbuildinfo` sho
 
 ## Suggested Next Steps
 
-1. Decide whether to keep Docker as the canonical local infra path or add an explicit SQLite smoke-mode runbook.
-2. Install or expose Docker Desktop/CLI if full Postgres + Redis + MinIO verification is required.
-3. Add a frontend regression test for the SSE hook behavior, especially that `done` does not become `job stream unavailable`.
-4. Consider adding a `dev:smoke` script or runbook that starts backend with SQLite for quick UI validation.
+1. Install or expose Docker Desktop/CLI if full Postgres + Redis + MinIO verification is required.
+2. Add a frontend regression test for the SSE hook behavior, especially that `done` does not become `job stream unavailable`.
+3. Move Messenger messages from in-memory mock state to database-backed persistence.
+4. Connect Messenger actions to Review/Knowledge workflows.
 
 ## 2026-05-01 Korean I18n and Messenger Update
 
@@ -140,3 +140,22 @@ Browser smoke covered:
 - Verify Korean default labels and Korean business channel seed data.
 - Switch to English with the mobile `EN` control.
 - Post a message and see it appended to the current channel.
+
+## 2026-05-01 SQLite Smoke Mode Update
+
+Added a Docker-free smoke mode for quick product review and browser testing.
+
+- Runbook: `docs/superpowers/runbooks/sqlite-smoke.md`
+- Script: `scripts/start-smoke.ps1`
+- Updated:
+  - `docs/superpowers/runbooks/local-dev.md`
+  - `docs/superpowers/runbooks/verification.md`
+
+Use:
+
+```powershell
+.\scripts\start-smoke.ps1
+```
+
+This initializes `.tmp/paraworks-smoke.db`, starts FastAPI on
+`http://127.0.0.1:8000`, and starts Next.js on `http://127.0.0.1:3000`.
