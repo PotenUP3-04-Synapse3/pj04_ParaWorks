@@ -26,6 +26,7 @@ from backend.app.connectors.slack_oauth import (
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
+from backend.app.models import IntegrationConnection
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -46,6 +47,26 @@ def list_integrations() -> list[dict[str, object]]:
             'cost_policy': manifest.cost_policy,
         }
         for manifest in list_connector_manifests()
+    ]
+
+
+@router.get('/connections')
+def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
+    connections = (
+        db.query(IntegrationConnection)
+        .order_by(IntegrationConnection.connector_type, IntegrationConnection.workspace_name)
+        .all()
+    )
+    return [
+        {
+            'connector_type': connection.connector_type,
+            'workspace_id': connection.workspace_id,
+            'workspace_name': connection.workspace_name,
+            'status': connection.status,
+            'masked_bot_token': connection.masked_bot_token,
+            'scopes': connection.scopes,
+        }
+        for connection in connections
     ]
 
 

@@ -12,6 +12,7 @@ Code:
 - `backend/app/connectors/slack_oauth.py`
 - `backend/app/models/integrations.py`
 - `backend/app/ingestion/sync.py`
+- `frontend/src/app/integrations/page.tsx`
 
 Responsibilities:
 
@@ -27,6 +28,8 @@ Responsibilities:
   `oauth.v2.access`.
 - `IntegrationConnection` stores workspace metadata, scopes, token references,
   and masked tokens only. Raw tokens stay behind the token vault boundary.
+- The Integrations UI displays Slack connection readiness/status from sanitized
+  API responses and never renders raw tokens or token references.
 - `sync_connector_events` handles `SyncJob`, duplicate skips, ingestion, and
   failure status.
 
@@ -92,6 +95,7 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 - OAuth callback persistence stores token references and masked tokens, never
   raw bot tokens in database metadata;
 - demo mode keeps mock sync active even if local Slack credentials exist;
+- the Integrations page renders Slack OAuth status without secrets;
 - payload mapping preserves source id, permalink, timestamp, permission level,
   required scopes, and channel metadata.
 

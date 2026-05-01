@@ -1348,6 +1348,50 @@ Verification evidence:
 - Frontend production build passed.
 - Playwright visual smoke passed with 10 Chromium desktop/mobile tests.
 
+## Slack OAuth UI Status
+
+Recorded on 2026-05-01.
+
+Wired the Slack OAuth installation boundary into the Integrations experience so
+users can see whether Slack is connected, installable, or still waiting for
+environment configuration.
+
+Portfolio angle:
+
+- Shows full-stack integration maturity: backend exposes sanitized connection
+  state, and the frontend renders status/CTA without leaking raw tokens or
+  `token_ref` values.
+- Keeps the portfolio demo safe and cost-aware: mock sync remains usable when
+  OAuth is not configured, and the UI clearly separates setup readiness from
+  actual data ingestion.
+- Adds visual smoke coverage so future UI work catches broken OAuth status
+  cards on both desktop and mobile.
+
+Implemented scope:
+
+- Added `/api/v1/integrations/connections` to return connection status,
+  workspace metadata, scopes, and masked tokens only.
+- Added frontend API types for Slack OAuth install URLs and integration
+  connections.
+- Updated `/integrations` Slack card with connection status, setup guidance,
+  and a safe Slack install CTA.
+- Added Playwright coverage that the Slack OAuth status renders and does not
+  expose common secret markers.
+
+Verification evidence:
+
+- RED backend test first: `/api/v1/integrations/connections` returned 404
+  before implementation.
+- RED visual smoke first: `[data-testid="slack-oauth-status"]` was missing
+  before UI implementation.
+- Focused backend connection API test passed.
+- Python Ruff passed for touched backend files and tests.
+- Full backend tests passed with 113 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- Playwright visual smoke passed with 12 Chromium desktop/mobile tests on fresh
+  alternate ports.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1386,3 +1430,4 @@ Verification evidence:
 - `feat: queue rag indexing jobs with celery`
 - `feat: add slack live connector boundary`
 - `feat: add slack oauth installation boundary`
+- `feat: show slack oauth connection status`

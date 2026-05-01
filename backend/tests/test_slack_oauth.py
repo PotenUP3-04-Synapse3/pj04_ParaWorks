@@ -159,3 +159,40 @@ def test_slack_oauth_callback_api_rejects_invalid_state(client: TestClient) -> N
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Slack OAuth state is malformed'
+
+
+def test_integration_connections_api_hides_token_references(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(
+        IntegrationConnection(
+            connector_type='slack',
+            workspace_id='T123',
+            workspace_name='ParaWorks',
+            bot_user_id='U999',
+            scopes=['channels:history'],
+            token_ref='local:slack:T123:bot',
+            masked_bot_token='xoxb...oken',
+            status='connected',
+            raw_metadata={'safe': True},
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/integrations/connections')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == [
+        {
+            'connector_type': 'slack',
+            'workspace_id': 'T123',
+            'workspace_name': 'ParaWorks',
+            'status': 'connected',
+            'masked_bot_token': 'xoxb...oken',
+            'scopes': ['channels:history'],
+        }
+    ]
+    assert 'token_ref' not in str(payload)
+    assert 'local:slack:T123:bot' not in str(payload)

@@ -40,3 +40,14 @@ test("integration sync shows connector counts", async ({ page }) => {
   await expect(page.getByText("Review items")).toBeVisible();
   await expect(page.getByText("Skipped")).toBeVisible();
 });
+
+test("integrations page shows Slack OAuth connection status without secrets", async ({ page }) => {
+  await page.goto("/integrations");
+
+  await expect(page.locator('[data-testid="slack-oauth-status"]')).toBeVisible();
+
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("xoxb-");
+  expect(bodyText).not.toContain("client-secret");
+  expect(bodyText).not.toContain("token_ref");
+});

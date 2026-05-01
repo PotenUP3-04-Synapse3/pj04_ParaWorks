@@ -201,6 +201,23 @@ export type IntegrationManifest = {
   cost_policy: string;
 };
 
+export type SlackOAuthInstallUrlResponse = {
+  connector_type: string;
+  configured: boolean;
+  install_url?: string | null;
+  state?: string | null;
+  required_scopes: string[];
+};
+
+export type IntegrationConnection = {
+  connector_type: string;
+  workspace_id: string;
+  workspace_name: string;
+  status: string;
+  masked_bot_token: string;
+  scopes: string[];
+};
+
 export type AgentReviewResponse = {
   agent_name: string;
   status: string;

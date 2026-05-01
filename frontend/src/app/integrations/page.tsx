@@ -5,7 +5,9 @@ import {
   Calendar,
   CheckCircle2,
   Database,
+  ExternalLink,
   KeyRound,
+  LockKeyhole,
   Mail,
   MessageSquare,
   PlugZap,
@@ -19,8 +21,10 @@ import { useJobStatus } from "@/hooks/useJobStatus";
 import { apiGet, apiPost } from "@/lib/api/client";
 import type {
   AgentReviewResponse,
+  IntegrationConnection,
   IntegrationManifest,
   IntegrationSyncResponse,
+  SlackOAuthInstallUrlResponse,
 } from "@/lib/api/types";
 
 const integrationVisuals = {
@@ -90,6 +94,8 @@ export default function IntegrationsPage() {
   const [activeJobId, setActiveJobId] = useState<string>();
   const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
+  const [connections, setConnections] = useState<IntegrationConnection[]>([]);
+  const [slackOAuth, setSlackOAuth] = useState<SlackOAuthInstallUrlResponse>();
   const [pendingType, setPendingType] = useState<string>();
   const [agentRunningKey, setAgentRunningKey] = useState<string>();
   const [error, setError] = useState<string>();
@@ -97,10 +103,16 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     let active = true;
-    apiGet<IntegrationManifest[]>("/api/v1/integrations")
-      .then((result) => {
+    Promise.all([
+      apiGet<IntegrationManifest[]>("/api/v1/integrations"),
+      apiGet<IntegrationConnection[]>("/api/v1/integrations/connections"),
+      apiGet<SlackOAuthInstallUrlResponse>("/api/v1/integrations/slack/oauth/install-url"),
+    ])
+      .then(([manifestResult, connectionResult, slackOAuthResult]) => {
         if (active) {
-          setManifests(result);
+          setManifests(manifestResult);
+          setConnections(connectionResult);
+          setSlackOAuth(slackOAuthResult);
         }
       })
       .catch((caught) => {
@@ -162,6 +174,15 @@ export default function IntegrationsPage() {
     }
   }
 
+  function startSlackOAuth() {
+    if (!slackOAuth?.install_url) {
+      setError("Slack OAuth 설정이 아직 준비되지 않았습니다. .env의 SLACK_CLIENT_ID와 redirect URI를 확인하세요.");
+      return;
+    }
+
+    window.location.assign(slackOAuth.install_url);
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
@@ -187,6 +208,8 @@ export default function IntegrationsPage() {
             const featured = manifest.type === "slack";
             const agentAction = visual.agentAction;
             const agentRunning = agentAction ? agentRunningKey === agentAction.key : false;
+            const connection = connections.find((item) => item.connector_type === manifest.type);
+            const showSlackOAuth = manifest.type === "slack";
             return (
               <article
                 key={manifest.type}
@@ -229,11 +252,48 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
 
+                {showSlackOAuth ? (
+                  <div
+                    data-testid="slack-oauth-status"
+                    className="mt-4 rounded-lg border border-[#e8deef] bg-[#fbf8fd] p-3 text-sm"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <LockKeyhole className="h-4 w-4 shrink-0 text-[#611f69]" aria-hidden="true" />
+                        <span className="truncate font-semibold text-[#21132b]">
+                          {connection ? `${connection.workspace_name} 연결됨` : slackOAuth?.configured ? "Slack 연결 필요" : "OAuth 설정 필요"}
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[#611f69]">
+                        {connection?.status ?? "ready"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[var(--ink-muted)]">
+                      {connection
+                        ? `권한 ${connection.scopes.length.toLocaleString()}개 확인됨 · ${connection.masked_bot_token}`
+                        : slackOAuth?.configured
+                          ? "Slack 워크스페이스 설치 URL이 준비되었습니다. 설치 후에도 동기화는 변경분만 가져옵니다."
+                          : "환경 변수 설정 전까지는 mock 데이터로 안전하게 시연합니다."}
+                    </p>
+                  </div>
+                ) : null}
+
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)] pt-4">
                   <span className="text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
                   </span>
                   <div className="flex flex-wrap gap-2">
+                    {showSlackOAuth ? (
+                      <button
+                        type="button"
+                        onClick={startSlackOAuth}
+                        disabled={!slackOAuth?.configured || Boolean(connection)}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#611f69] bg-white px-3 text-sm font-semibold text-[#611f69] shadow-sm hover:bg-[#fbf8fd] disabled:cursor-not-allowed disabled:border-neutral-200 disabled:text-neutral-400"
+                      >
+                        <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                        {connection ? "연결 완료" : slackOAuth?.configured ? "Slack 연결" : "설정 필요"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void startSync(manifest.type)}
