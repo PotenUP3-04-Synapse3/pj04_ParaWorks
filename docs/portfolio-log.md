@@ -2247,6 +2247,37 @@ Verification evidence:
   passed with 15/15 tests.
 - `npm run build` passed.
 
+## 2026-05-02 - Dark Glass Consistency QA Fix
+
+Why it matters:
+
+- Browser QA found that the integrations page still had inconsistent Liquid
+  Glass details: cards looked too milky, the language segment active state felt
+  flat, some OAuth text used old hard-coded colors, and sync buttons did not
+  belong to the same glass system.
+- The dark gray and deep purple palette needs consistent contrast and material
+  behavior across controls, cards, and status panels.
+
+Implemented scope:
+
+- Added a `liquid-segment-active` material for KO/EN and active mobile/sidebar
+  navigation states.
+- Added `integration-glass-card` to reduce unnatural white opacity on
+  integration cards and keep their glass tone closer to the primary purple
+  action.
+- Reworked integration sync and agent buttons to use `liquid-primary` and
+  `liquid-control` instead of flat dark/white button styles.
+- Replaced OAuth status hard-coded text colors with theme token colors so
+  contrast stays consistent in dark mode.
+
+Verification evidence:
+
+- In-app browser screenshot review checked `/integrations` in dark mode.
+- `npx eslint src/components/layout/AppShell.tsx src/app/integrations/page.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 15/15 tests.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2306,3 +2337,4 @@ Verification evidence:
 - `feat: intensify liquid glass theme`
 - `feat: add dark liquid glass mode`
 - `style: tune dark glass gray purple palette`
+- `style: refine dark glass consistency`

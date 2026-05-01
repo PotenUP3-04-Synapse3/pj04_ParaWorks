@@ -298,13 +298,39 @@ input {
   [data-theme="dark"] .liquid-control {
     border-color: rgba(245, 240, 250, 0.22);
     background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(42, 39, 46, 0.38) 54%, rgba(255, 255, 255, 0.08)),
-      linear-gradient(300deg, rgba(255, 255, 255, 0.08), transparent 44%, rgba(74, 21, 75, 0.12)),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(42, 39, 46, 0.4) 54%, rgba(255, 255, 255, 0.06)),
+      linear-gradient(300deg, rgba(255, 255, 255, 0.06), transparent 44%, rgba(74, 21, 75, 0.16)),
       rgba(54, 51, 58, 0.34);
     box-shadow:
       0 14px 36px rgba(0, 0, 0, 0.22),
       0 2px 8px rgba(255, 255, 255, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .liquid-segment-active {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.26), transparent 30%),
+      linear-gradient(132deg, rgba(96, 39, 98, 0.92), rgba(74, 21, 75, 0.86) 64%, rgba(177, 153, 216, 0.34));
+    color: #fff8ff;
+    box-shadow:
+      0 12px 28px rgba(74, 21, 75, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.38);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    backdrop-filter: blur(18px) saturate(1.3);
+  }
+
+  .liquid-segment-active::after {
+    pointer-events: none;
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+      linear-gradient(115deg, rgba(255, 255, 255, 0.36), transparent 32%),
+      linear-gradient(290deg, transparent 60%, rgba(255, 255, 255, 0.14));
   }
 
   .liquid-primary {
@@ -339,7 +365,8 @@ input {
   .liquid-surface > *,
   .liquid-dark > *,
   .liquid-control > *,
-  .liquid-primary > * {
+  .liquid-primary > *,
+  .liquid-segment-active > * {
     position: relative;
     z-index: 1;
   }
@@ -356,9 +383,34 @@ input {
   [data-theme="dark"] .bg-white {
     background-color: var(--panel) !important;
     background-image:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(31, 29, 34, 0.46)),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(31, 29, 34, 0.5)),
       linear-gradient(300deg, rgba(255, 255, 255, 0.08), transparent 44%, rgba(74, 21, 75, 0.12)) !important;
     border-color: rgba(245, 240, 250, 0.18) !important;
+  }
+
+  [data-theme="dark"] .integration-glass-card {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(36, 34, 39, 0.48) 50%, rgba(74, 21, 75, 0.1)),
+      rgba(31, 30, 34, 0.62) !important;
+    border-color: rgba(245, 240, 250, 0.18) !important;
+    box-shadow:
+      0 22px 60px rgba(0, 0, 0, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  }
+
+  [data-theme="dark"] .integration-glass-card::before {
+    opacity: 0.28 !important;
+    background:
+      linear-gradient(118deg, rgba(255, 255, 255, 0.2), transparent 26%),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.08), transparent 38%) !important;
+  }
+
+  [data-theme="dark"] .integration-glass-card:hover {
+    border-color: rgba(216, 199, 255, 0.34) !important;
+    box-shadow:
+      0 26px 70px rgba(0, 0, 0, 0.42),
+      0 8px 28px rgba(74, 21, 75, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
   }
 
   .bg-\[\#fbfaf8\] {

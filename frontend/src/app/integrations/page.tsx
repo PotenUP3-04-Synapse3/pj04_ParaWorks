@@ -304,25 +304,25 @@ export default function IntegrationsPage() {
             const oauthTheme =
               manifest.type === "slack"
                 ? {
-                    border: "border-[#e8deef]",
+                    border: "border-[var(--line-soft)]",
                     bg: "bg-[#fbf8fd]",
-                    icon: "text-[#611f69]",
-                    text: "text-[#21132b]",
-                    pill: "text-[#611f69]",
-                    button: "border-[#611f69] text-[#611f69] hover:bg-[#fbf8fd]",
+                    icon: "text-[var(--workspace-accent)]",
+                    text: "text-[var(--ink-strong)]",
+                    pill: "text-[var(--ink-strong)]",
+                    button: "border-[var(--line-soft)] text-[var(--ink-strong)] hover:bg-[#fbf8fd]",
                   }
                 : {
-                    border: "border-blue-100",
+                    border: "border-[var(--line-soft)]",
                     bg: "bg-blue-50/70",
-                    icon: "text-blue-700",
-                    text: "text-blue-950",
-                    pill: "text-blue-700",
-                    button: "border-blue-600 text-blue-700 hover:bg-blue-50",
+                    icon: "text-[var(--workspace-accent)]",
+                    text: "text-[var(--ink-strong)]",
+                    pill: "text-[var(--ink-strong)]",
+                    button: "border-[var(--line-soft)] text-[var(--ink-strong)] hover:bg-blue-50",
                   };
             return (
               <article
                 key={manifest.type}
-                className={`rounded-lg border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                className={`integration-glass-card rounded-lg border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                   featured ? "border-[#c9b7d5]" : "border-[var(--line-soft)]"
                 }`}
               >
@@ -417,7 +417,7 @@ export default function IntegrationsPage() {
                       type="button"
                       onClick={() => void startSync(manifest.type)}
                       disabled={Boolean(pendingType)}
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-300"
+                      className="liquid-primary inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
                     >
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
@@ -427,7 +427,7 @@ export default function IntegrationsPage() {
                         type="button"
                         onClick={() => void runAgent(agentAction.key, agentAction.path)}
                         disabled={agentRunning}
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[#21132b] shadow-sm hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-neutral-400"
+                        className="liquid-control inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)] disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         <Bot className="h-4 w-4" aria-hidden="true" />
                         {agentRunning ? agentAction.runningLabel : agentAction.label}

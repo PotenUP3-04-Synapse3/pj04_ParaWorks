@@ -126,7 +126,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("ko")}
                   className={`h-8 rounded-md text-xs font-semibold ${
-                    locale === "ko" ? "bg-white/90 text-[#21132b] shadow-sm" : "text-white/60 hover:bg-white/10"
+                    locale === "ko" ? "liquid-segment-active" : "text-white/62 hover:bg-white/10"
                   }`}
                 >
                   KO
@@ -135,7 +135,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("en")}
                   className={`h-8 rounded-md text-xs font-semibold ${
-                    locale === "en" ? "bg-white/90 text-[#21132b] shadow-sm" : "text-white/60 hover:bg-white/10"
+                    locale === "en" ? "liquid-segment-active" : "text-white/62 hover:bg-white/10"
                   }`}
                 >
                   EN
@@ -166,7 +166,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("ko")}
                   className={`h-8 rounded-md px-2 text-xs font-medium ${
-                    locale === "ko" ? "bg-neutral-900 text-white shadow-sm" : "text-muted"
+                    locale === "ko" ? "liquid-segment-active" : "text-muted hover:bg-white/10"
                   }`}
                 >
                   KO
@@ -175,7 +175,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("en")}
                   className={`h-8 rounded-md px-2 text-xs font-medium ${
-                    locale === "en" ? "bg-neutral-900 text-white shadow-sm" : "text-muted"
+                    locale === "en" ? "liquid-segment-active" : "text-muted hover:bg-white/10"
                   }`}
                 >
                   EN
@@ -190,7 +190,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                       key={item.href}
                       href={item.href}
                       className={`grid h-9 w-9 place-items-center rounded-lg ${
-                        active ? "bg-neutral-900 text-white shadow-sm" : "liquid-control text-muted"
+                        active ? "liquid-segment-active" : "liquid-control text-muted"
                       }`}
                       aria-label={shell[item.labelKey]}
                     >
@@ -281,7 +281,7 @@ function ShellLink({
       href={item.href}
       className={`flex h-10 items-center gap-3 rounded-[20px] px-3 text-sm font-medium transition ${
         active
-          ? "bg-white/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_rgba(0,0,0,0.12)]"
+          ? "liquid-segment-active"
           : "text-white/70 hover:bg-white/10 hover:text-white"
       }`}
     >
