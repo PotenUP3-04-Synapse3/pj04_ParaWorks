@@ -77,6 +77,34 @@ Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/api/v1/rag/reindex/jobs'
 Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/rag/indexing/summary'
 ```
 
+## Celery worker mode
+
+Local smoke and tests default to eager mode:
+
+```text
+CELERY_TASK_ALWAYS_EAGER=true
+```
+
+That keeps `/api/v1/rag/reindex/jobs` deterministic without requiring a worker.
+To validate the real Redis queue path, set eager mode off and run a worker in a
+separate terminal:
+
+```powershell
+$env:CELERY_TASK_ALWAYS_EAGER='false'
+.\scripts\start-celery-worker.ps1
+```
+
+On Windows, the worker script uses `--pool=solo`.
+
+With eager mode disabled, `POST /api/v1/rag/reindex/jobs` creates a queued
+`SyncJob`, returns immediately, and the worker moves it through
+`running -> complete` or `failed`. Poll:
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/rag/reindex/jobs/<job_id>'
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/rag/indexing/summary'
+```
+
 Then, only after setting a local provider key, run the paid write path:
 
 ```powershell

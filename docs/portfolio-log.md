@@ -1070,6 +1070,51 @@ Verification evidence:
   bind `127.0.0.1:5432`; partial containers were cleaned up with
   `docker compose down`.
 
+## RAG Operations Update: Celery/Redis Indexing Job Contract
+
+Recorded on 2026-05-01.
+
+Moved RAG reindex jobs behind a Celery/Redis worker contract while preserving
+deterministic eager execution for local smoke and tests.
+
+Portfolio angle:
+
+- Shows the difference between an API that does work synchronously and an
+  operational job pipeline with queue, polling, and worker boundaries.
+- Keeps cost controls intact: the worker executes the same incremental
+  hash-skip pipeline before any embedding provider call.
+- Demonstrates pragmatic local development: eager mode keeps SQLite smoke fast,
+  while `CELERY_TASK_ALWAYS_EAGER=false` enables real Redis worker validation.
+
+Implemented scope:
+
+- Added Celery app construction with Redis broker/result backend and eager-mode
+  settings.
+- Added `rag.reindex` task plus `execute_rag_reindex_job` for testable job
+  status transitions.
+- Moved reindex execution logic out of the API route into
+  `backend/app/rag/reindexing.py`.
+- Updated `POST /api/v1/rag/reindex/jobs` to create a queued job first, then
+  execute eagerly in local/test mode or enqueue for Celery in worker mode.
+- Added `GET /api/v1/rag/reindex/jobs/{job_id}` for polling.
+- Added `scripts/start-celery-worker.ps1` and documented worker mode in the
+  pgvector runbook.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_indexing_tasks.py backend/tests/test_rag_indexing.py -v`
+  passed with 17 focused tests.
+- `uv run ruff check backend/app/tasks/celery_app.py backend/app/tasks/rag_indexing.py backend/app/rag/reindexing.py backend/app/api/v1/rag.py backend/tests/test_rag_indexing_tasks.py backend/tests/test_rag_indexing.py`
+  passed.
+- `uv run pytest backend/tests -v` passed with 95 backend tests and 1 skipped
+  opt-in pgvector integration test.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-celery-rag-indexing.db`.
+- Slack and Gmail mock sync followed by `POST /api/v1/rag/reindex/jobs`
+  returned `status=complete`; `GET /api/v1/rag/reindex/jobs/{job_id}` returned
+  `indexed_count=3`; summary API returned one latest job.
+- HTTP smoke returned 200 for `/agent-runs`, `/dashboard`, and `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1105,3 +1150,4 @@ Verification evidence:
 - `feat: add embedding provider and vector retrieval path`
 - `feat: show rag indexing observability`
 - `chore: document pgvector dev path`
+- `feat: queue rag indexing jobs with celery`

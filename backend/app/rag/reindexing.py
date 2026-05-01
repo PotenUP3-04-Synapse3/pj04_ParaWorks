@@ -1,0 +1,90 @@
+from sqlalchemy.orm import Session
+
+from backend.app.core.config import Settings
+from backend.app.rag.embeddings import (
+    DeterministicHashEmbeddingModel,
+    OpenAIEmbeddingConfig,
+    OpenAIEmbeddingModel,
+)
+from backend.app.rag.indexing import (
+    PreviewVectorIndexWriter,
+    VectorIndexWriter,
+    build_rag_index_documents,
+    index_changed_vector_documents,
+)
+from backend.app.rag.pgvector_store import PgVectorConfig, PgVectorStore
+
+
+class ReindexConfigurationError(ValueError):
+    pass
+
+
+def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
+    writer, embedding_model, embedding_model_name, storage_backend, persist_state = reindex_components(
+        db=db,
+        settings=settings,
+        dry_run=dry_run,
+    )
+    result = index_changed_vector_documents(
+        db=db,
+        documents=build_rag_index_documents(db),
+        writer=writer,
+        embedding_model=embedding_model,
+        embedding_model_name=embedding_model_name,
+        persist_state=persist_state,
+    )
+    return {
+        'dry_run': dry_run,
+        'indexed_count': result.indexed_count,
+        'skipped_count': result.skipped_count,
+        'saved_embedding_calls': result.saved_embedding_calls,
+        'embedding_request_count': result.embedding_request_count,
+        'embedding_prompt_tokens': result.embedding_prompt_tokens,
+        'embedding_total_tokens': result.embedding_total_tokens,
+        'embedding_dimensions': result.embedding_dimensions,
+        'document_ids': result.document_ids,
+        'skipped_document_ids': result.skipped_document_ids or [],
+        'incremental': True,
+        'storage_backend': storage_backend,
+    }
+
+
+def reindex_components(
+    *,
+    db: Session,
+    settings: Settings,
+    dry_run: bool,
+) -> tuple[VectorIndexWriter, object, str, str, bool]:
+    if dry_run:
+        return (
+            PreviewVectorIndexWriter(),
+            DeterministicHashEmbeddingModel(dimensions=16),
+            'deterministic-hash:v1',
+            'preview',
+            False,
+        )
+
+    if db.bind is None or db.bind.dialect.name != 'postgresql':
+        raise ReindexConfigurationError('pgvector writes require a PostgreSQL database.')
+    if not settings.openai_api_key:
+        raise ReindexConfigurationError('OPENAI_API_KEY is required for pgvector writes.')
+
+    writer = PgVectorStore(
+        session=db,
+        config=PgVectorConfig(embedding_dimensions=settings.openai_embedding_dimensions),
+    )
+    writer.ensure_schema()
+    return (
+        writer,
+        OpenAIEmbeddingModel(
+            config=OpenAIEmbeddingConfig(
+                api_key=settings.openai_api_key,
+                model=settings.openai_embedding_model,
+                dimensions=settings.openai_embedding_dimensions,
+                timeout_seconds=settings.openai_embedding_timeout_seconds,
+            )
+        ),
+        settings.openai_embedding_model,
+        'pgvector',
+        True,
+    )

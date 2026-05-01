@@ -376,6 +376,27 @@ def test_reindex_job_endpoint_records_indexing_job(
     assert job.message == 'indexed=1 skipped=0 saved_embedding_calls=0'
 
 
+def test_reindex_job_detail_endpoint_returns_status(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-job-detail')
+    created = client.post('/api/v1/rag/reindex/jobs').json()
+
+    response = client.get(f"/api/v1/rag/reindex/jobs/{created['job_id']}")
+
+    assert response.status_code == 200
+    assert response.json()['job_id'] == created['job_id']
+    assert response.json()['status'] == 'complete'
+    assert response.json()['indexed_count'] == 1
+
+
+def test_reindex_job_detail_endpoint_returns_404_for_missing_job(client: TestClient) -> None:
+    response = client.get('/api/v1/rag/reindex/jobs/missing-job')
+
+    assert response.status_code == 404
+
+
 def test_rag_indexing_summary_returns_latest_jobs_and_state_counts(
     client: TestClient,
     db_session: Session,
