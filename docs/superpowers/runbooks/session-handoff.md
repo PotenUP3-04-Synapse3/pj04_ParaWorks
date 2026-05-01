@@ -217,3 +217,23 @@ Browser smoke covered:
 - See `검토 큐에 추가했습니다.`
 - Open `/review`.
 - Confirm `메신저 검토 요청` appears in the review queue.
+
+## 2026-05-01 Slack Connector Preparation Update
+
+Added a testable real Slack connector boundary without making live Slack API
+calls.
+
+- Connector: `backend/app/connectors/slack.py`
+- Test: `backend/tests/test_slack_connector.py`
+- Runbook: `docs/superpowers/runbooks/slack-integration.md`
+- Environment placeholders added to `.env.example`:
+  - `SLACK_BOT_TOKEN`
+  - `SLACK_CHANNEL_IDS`
+  - `SLACK_WORKSPACE_URL`
+
+The connector maps Slack `conversations.history` message payloads into
+ParaWorks `SourceEvent` records and records required history scopes in
+`raw_metadata`.
+
+The next Slack step is to implement a real Web API client behind the
+`SlackApiClient` protocol with cursor pagination and rate-limit handling.
