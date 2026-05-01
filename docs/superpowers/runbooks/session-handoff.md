@@ -8,6 +8,7 @@ Updated: 2026-05-01
 - Plan draft: `C:\Users\hanvv\Downloads\plan-merged.md`
 - Primary spec: `docs/superpowers/specs/2026-04-30-paraworks-harness-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-04-30-paraworks-harness.md`
+- Assistant guide: `AGENTS.md`
 - Portfolio log: `docs/portfolio-log.md`
 - Current browser URL during handoff: `http://127.0.0.1:3000/dashboard`
 

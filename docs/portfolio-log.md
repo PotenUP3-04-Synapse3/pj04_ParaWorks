@@ -160,6 +160,29 @@ Portfolio angle:
 - Supports a three-developer split across agent runtime, data/RAG, and product
   UX.
 
+## Collaboration Guide Update: Equal Agent Ownership
+
+Recorded on 2026-05-01.
+
+Added `AGENTS.md` as the repo-level collaboration guide for human developers
+and coding assistants. The guide changes the team split from technical layers
+to equal agent ownership:
+
+- Slack Agent.
+- Mail and Document Agent.
+- RAG and Orchestrator Agent.
+
+It also codifies evidence-first AI output, Review Queue as the trust boundary,
+permission propagation, token-cost accounting, fake-LLM testing, and assistant
+behavior rules for Codex, Claude Code, Gemini, and similar tools.
+
+Portfolio angle:
+
+- Shows that ParaWorks is being developed as a serious multi-agent system with
+  team-scale engineering discipline.
+- Makes AI safety, cost optimization, permissions, and human review explicit
+  development compliance requirements.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
