@@ -774,6 +774,51 @@ Verification evidence:
 - Browser smoke opened `/agent-runs` and confirmed the `AI 실행 관측`,
   `Agent별 비용과 토큰`, `상태 분포`, and `최근 실행 로그` sections.
 
+## Agent Platform Update: Review, Vector, and Orchestration Foundations
+
+Recorded on 2026-05-01.
+
+Next platform milestone is preparing the product loop for real multi-agent
+implementation: stricter human review, vector-ready retrieval, and a
+LangGraph-ready workflow contract.
+
+Portfolio angle:
+
+- Shows the core AI safety boundary: generated candidates cannot be approved
+  into company memory until required fields and evidence are present.
+- Introduces a vector-store abstraction without forcing paid embeddings or a
+  production Vector DB during MVP development.
+- Makes the future LangGraph migration concrete by fixing state and node names
+  before adding the dependency.
+
+Implemented scope:
+
+- Added Review promotion preview and approval validation for decision,
+  history, and todo review item types.
+- Added frontend Review Queue preview cards showing the exact normalized record
+  shape that will be promoted on approval.
+- Added a permission-aware `InMemoryVectorStore` with hidden-match counting and
+  exportable document shape for future pgvector, Chroma, or Qdrant adapters.
+- Added a RAG candidate to `VectorDocument` projection bridge.
+- Added a local company-memory workflow skeleton with append-only audit state
+  and LangGraph-ready node order: collect evidence, draft review candidates,
+  retrieve company memory, answer with RAG.
+
+Verification evidence:
+
+- Review preview and promotion tests passed.
+- Vector store and existing RAG service tests passed.
+- Agent orchestration skeleton tests passed.
+- Frontend build passed after Review Queue preview UI changes.
+- Full backend suite passed with 70 tests.
+- Smoke server restarted with `.tmp/paraworks-review-vector-langgraph.db`.
+- Slack sync created 3 pending review items; promotion preview returned
+  `canApprove=true` and `target=todo`.
+- HTTP smoke returned 200 for `/health`, `/review`, `/search`, and
+  `/agent-runs`.
+- Browser smoke opened `/review` and confirmed approval preview cards for
+  todo, history, and decision records.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -801,3 +846,4 @@ Verification evidence:
 - `6f6deab feat: use approved knowledge in rag`
 - `3161dff feat: add agent run detail view`
 - `9381bb1 fix: isolate smoke frontend cache`
+- `aee1e04 feat: add agent run operations summary`

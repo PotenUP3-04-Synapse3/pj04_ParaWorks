@@ -12,6 +12,7 @@ from backend.app.agents.rag_orchestrator_agent.agent import (
 from backend.app.core.demo_auth import DemoUser
 from backend.app.models import AgentRun, DecisionRecord, DocumentChunk, HistoryEvent, Source, Todo
 from backend.app.permissions.service import can_access_permission
+from backend.app.rag.vector_store import VectorDocument
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,24 @@ def retrieve_matching_evidence_candidates(*, db: Session, question: str) -> list
     return [
         *retrieve_matching_chunk_candidates(db=db, question=question),
         *retrieve_matching_knowledge_candidates(db=db, question=question),
+    ]
+
+
+def vector_documents_from_candidates(candidates: list[RagEvidenceCandidate]) -> list[VectorDocument]:
+    return [
+        VectorDocument(
+            document_id=candidate.source_id,
+            text=candidate.text,
+            source_url=candidate.source_url,
+            source_snippet=candidate.source_snippet,
+            permission_level=candidate.permission_level,
+            metadata={
+                **candidate.metadata,
+                'author': candidate.author,
+                'timestamp': candidate.timestamp,
+            },
+        )
+        for candidate in candidates
     ]
 
 

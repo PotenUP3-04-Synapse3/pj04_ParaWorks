@@ -14,7 +14,12 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
-import type { ReviewItem, ReviewItemUpdate, ReviewResponse } from "@/lib/api/types";
+import type {
+  ReviewItem,
+  ReviewItemUpdate,
+  ReviewPromotionPreview,
+  ReviewResponse,
+} from "@/lib/api/types";
 
 function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -70,6 +75,7 @@ export default function ReviewPage() {
   const [editingId, setEditingId] = useState<number>();
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
+  const [previews, setPreviews] = useState<Record<number, ReviewPromotionPreview>>({});
   const [pendingAction, setPendingAction] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -81,6 +87,13 @@ export default function ReviewPage() {
     try {
       const review = await apiGet<ReviewResponse>("/api/v1/review?status=pending_review");
       setItems(review.items);
+      const previewPairs = await Promise.all(
+        review.items.map(async (item) => [
+          item.id,
+          await apiGet<ReviewPromotionPreview>(`/api/v1/review/${item.id}/promotion-preview`),
+        ] as const),
+      );
+      setPreviews(Object.fromEntries(previewPairs));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "검토 항목을 불러오지 못했습니다.");
     } finally {
@@ -129,9 +142,11 @@ export default function ReviewPage() {
 
     try {
       const updated = await apiPatch<ReviewItem>(`/api/v1/review/${item.id}`, update);
+      const preview = await apiGet<ReviewPromotionPreview>(`/api/v1/review/${item.id}/promotion-preview`);
       setItems((current) =>
         current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
       );
+      setPreviews((current) => ({ ...current, [updated.id]: preview }));
       setEditingId(undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "검토 항목 수정에 실패했습니다.");
@@ -186,6 +201,8 @@ export default function ReviewPage() {
           const tokenUsage = recordField(item.payload.token_usage);
           const totalTokens = numberField(tokenUsage?.total_tokens);
           const isAgentItem = Boolean(agentName);
+          const preview = previews[item.id];
+          const canApprove = preview?.can_approve ?? true;
 
           return (
             <article key={item.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
@@ -247,6 +264,40 @@ export default function ReviewPage() {
                       <MetadataTile label="Cache" value={cacheKey ? `${cacheKey.slice(0, 10)}...` : "none"} />
                     </div>
                   ) : null}
+
+                  {preview ? (
+                    <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+                          승인 후 저장 형태 · {itemTypeLabel(preview.target_type)}
+                        </p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            preview.can_approve
+                              ? "bg-[#ecfbf6] text-[#0f6f58]"
+                              : "bg-red-50 text-red-700"
+                          }`}
+                        >
+                          {preview.can_approve ? "승인 가능" : "필수 필드 필요"}
+                        </span>
+                      </div>
+                      <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {Object.entries(preview.normalized_payload).map(([key, value]) => (
+                          <div key={key} className="min-w-0">
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+                              {key}
+                            </dt>
+                            <dd className="mt-0.5 truncate text-sm font-medium">{value || "비어 있음"}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      {preview.missing_required_fields.length > 0 ? (
+                        <p className="mt-3 text-xs font-medium text-red-700">
+                          누락 필드: {preview.missing_required_fields.join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex shrink-0 flex-col gap-3 sm:flex-row xl:items-start">
@@ -290,7 +341,7 @@ export default function ReviewPage() {
                     <button
                       type="button"
                       onClick={() => void runStatusAction(item, "approve")}
-                      disabled={Boolean(pendingAction)}
+                      disabled={Boolean(pendingAction) || !canApprove}
                       className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
                     >
                       <CheckCircle2 className="h-4 w-4" aria-hidden="true" />

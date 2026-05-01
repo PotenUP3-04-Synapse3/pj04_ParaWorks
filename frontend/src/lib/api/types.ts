@@ -115,6 +115,13 @@ export type ReviewItem = {
   status: ReviewStatus;
 };
 
+export type ReviewPromotionPreview = {
+  target_type: string;
+  can_approve: boolean;
+  missing_required_fields: string[];
+  normalized_payload: Record<string, string>;
+};
+
 export type ReviewResponse = {
   items: ReviewItem[];
 };

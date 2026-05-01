@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
-from backend.app.knowledge.promotion import promote_review_item
+from backend.app.knowledge.promotion import build_promotion_preview, promote_review_item, validate_review_item_for_approval
 from backend.app.models import ReviewItem
 from backend.app.schemas.review import ReviewItemUpdate
 
@@ -55,6 +55,14 @@ def update_review_item(
     return _review_item_response(item)
 
 
+@router.get('/{item_id}/promotion-preview')
+def preview_review_item_promotion(item_id: int, db: DbSession) -> dict:
+    item = db.get(ReviewItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail='Review item not found')
+    return build_promotion_preview(item)
+
+
 @router.post('/{item_id}/approve')
 def approve_review_item(
     item_id: int,
@@ -66,6 +74,10 @@ def approve_review_item(
         raise HTTPException(status_code=404, detail='Review item not found')
     if not item.source_links or not item.source_snippets:
         raise HTTPException(status_code=400, detail='Review item requires source evidence')
+    try:
+        validate_review_item_for_approval(item)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     item.status = 'approved'
     item.reviewer_id = user.id
