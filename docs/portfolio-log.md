@@ -2127,6 +2127,42 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
   passed with 14/14 tests.
 
+## 2026-05-02 - Liquid Glass Frontend Refresh
+
+Why it matters:
+
+- ParaWorks needed a more memorable portfolio-facing visual identity without
+  losing its Slack-like business workspace ergonomics.
+- The refresh follows Apple Liquid Glass guidance by treating navigation,
+  search, and primary controls as a floating functional layer while keeping
+  content surfaces readable.
+
+Implemented scope:
+
+- Reworked global visual tokens for translucent panels, glass controls,
+  stronger depth shadows, subtle structured background light, and accessibility
+  fallbacks for reduced transparency or increased contrast.
+- Refreshed `AppShell` with a floating glass sidebar, mobile glass toolbar,
+  glass search command surface, and stained-glass primary agent action.
+- Applied global surface behavior so existing cards and panels inherit the new
+  material without rewriting every page.
+
+Cost/security note:
+
+- This is a frontend-only visual change. It does not trigger connector sync,
+  embeddings, or LLM calls.
+- Status colors and operational labels remain visible so the design stays
+  useful for business users and live connector debugging.
+
+Verification evidence:
+
+- `npm run build` passed.
+- `npx eslint src/components/layout/AppShell.tsx` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 14/14 tests.
+- In-app browser screenshot review checked `/dashboard` and `/integrations` at
+  the current viewport.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2182,3 +2218,4 @@ Verification evidence:
 - `fix: redact runtime status secrets`
 - `docs: add portfolio case study`
 - `test: harden integration sync smoke selector`
+- `feat: add liquid glass frontend theme`

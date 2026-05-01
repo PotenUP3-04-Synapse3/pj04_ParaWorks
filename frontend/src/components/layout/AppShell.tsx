@@ -42,12 +42,12 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
   const toolItems = navItems.filter((item) => item.section === "tools");
 
   return (
-    <div className="min-h-screen bg-[#f6f3ef] text-ink">
-      <aside className="fixed inset-y-0 left-0 hidden w-[272px] bg-[var(--workspace-rail)] text-white md:block">
+    <div className="min-h-screen text-ink">
+      <aside className="liquid-dark fixed inset-y-3 left-3 hidden w-[272px] rounded-[28px] text-white md:block">
         <div className="flex h-full flex-col">
-          <div className="border-b border-white/10 px-4 py-4">
+          <div className="border-b border-white/[0.12] px-4 py-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--workspace-accent)] text-base font-black text-[#13231f]">
+              <div className="liquid-primary grid h-10 w-10 place-items-center rounded-2xl text-base font-black">
                 P
               </div>
               <div className="min-w-0">
@@ -58,7 +58,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="px-3 py-3">
-            <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-white/72 ring-1 ring-white/10">
+            <div className="flex items-center gap-2 rounded-2xl border border-white/[0.16] bg-white/[0.12] px-3 py-2 text-sm text-white/76 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-xl">
               <Search className="h-4 w-4" aria-hidden="true" />
               <span className="truncate">검색, 에이전트 실행, 문서 찾기</span>
             </div>
@@ -87,7 +87,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <div className="mx-2 rounded-lg border border-white/10 bg-white/[0.06] p-3">
+            <div className="mx-2 rounded-2xl border border-white/[0.14] bg-white/[0.1] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl">
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
                 <span className="text-sm font-semibold">Agent Inbox</span>
@@ -99,13 +99,13 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="border-t border-white/10 p-3">
-            <div className="mb-3 rounded-lg border border-white/10 p-1" aria-label={shell.language}>
+            <div className="mb-3 rounded-2xl border border-white/[0.14] bg-white/[0.08] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]" aria-label={shell.language}>
               <div className="grid grid-cols-2 gap-1">
                 <button
                   type="button"
                   onClick={() => setLocale("ko")}
                   className={`h-8 rounded-md text-xs font-semibold ${
-                    locale === "ko" ? "bg-white text-[#21132b]" : "text-white/60 hover:bg-white/10"
+                    locale === "ko" ? "bg-white/90 text-[#21132b] shadow-sm" : "text-white/60 hover:bg-white/10"
                   }`}
                 >
                   KO
@@ -114,36 +114,36 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("en")}
                   className={`h-8 rounded-md text-xs font-semibold ${
-                    locale === "en" ? "bg-white text-[#21132b]" : "text-white/60 hover:bg-white/10"
+                    locale === "en" ? "bg-white/90 text-[#21132b] shadow-sm" : "text-white/60 hover:bg-white/10"
                   }`}
                 >
                   EN
                 </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 rounded-lg bg-[#160d1d] px-3 py-2 text-xs text-white/62">
+            <div className="flex items-center gap-2 rounded-2xl border border-white/[0.12] bg-black/[0.18] px-3 py-2 text-xs text-white/68 backdrop-blur-xl">
               <span className="h-2 w-2 rounded-full bg-[var(--workspace-accent)]" />
               MVP smoke workspace
             </div>
           </div>
         </div>
       </aside>
-      <div className="md:pl-[272px]">
-        <header className="sticky top-0 z-20 border-b border-[var(--line-soft)] bg-white/90 px-4 py-3 backdrop-blur md:hidden">
+      <div className="md:pl-[296px]">
+        <header className="sticky top-0 z-20 border-b border-[var(--line-soft)] bg-white/70 px-4 py-3 backdrop-blur-2xl md:hidden">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--workspace-rail)] text-xs font-black text-white">
+              <span className="liquid-primary grid h-8 w-8 place-items-center rounded-2xl text-xs font-black">
                 P
               </span>
               <span className="text-sm font-semibold">ParaWorks</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex rounded-lg border border-[var(--line-soft)] bg-white p-0.5" aria-label={shell.language}>
+              <div className="liquid-control flex rounded-2xl p-0.5" aria-label={shell.language}>
                 <button
                   type="button"
                   onClick={() => setLocale("ko")}
                   className={`h-8 rounded-md px-2 text-xs font-medium ${
-                    locale === "ko" ? "bg-neutral-900 text-white" : "text-muted"
+                    locale === "ko" ? "bg-neutral-900 text-white shadow-sm" : "text-muted"
                   }`}
                 >
                   KO
@@ -152,7 +152,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("en")}
                   className={`h-8 rounded-md px-2 text-xs font-medium ${
-                    locale === "en" ? "bg-neutral-900 text-white" : "text-muted"
+                    locale === "en" ? "bg-neutral-900 text-white shadow-sm" : "text-muted"
                   }`}
                 >
                   EN
@@ -167,7 +167,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                       key={item.href}
                       href={item.href}
                       className={`grid h-9 w-9 place-items-center rounded-lg ${
-                        active ? "bg-neutral-900 text-white" : "text-muted"
+                        active ? "bg-neutral-900 text-white shadow-sm" : "liquid-control text-muted"
                       }`}
                       aria-label={shell[item.labelKey]}
                     >
@@ -179,15 +179,15 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <header className="sticky top-0 z-10 hidden border-b border-[var(--line-soft)] bg-[#f6f3ef]/88 px-8 py-4 backdrop-blur md:block">
+        <header className="sticky top-0 z-10 hidden px-8 py-4 md:block">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+            <div className="liquid-control flex min-w-0 flex-1 items-center gap-3 rounded-[24px] px-4 py-2 text-sm text-[var(--ink-muted)]">
               <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="truncate">메시지, 검토 항목, 사내 문서를 검색하거나 AI 에이전트에게 질문</span>
             </div>
             <button
               type="button"
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-4 text-sm font-semibold text-white shadow-sm"
+              className="liquid-primary inline-flex h-10 items-center gap-2 rounded-[24px] px-4 text-sm font-semibold transition hover:scale-[1.01] active:scale-[0.99]"
             >
               <Sparkles className="h-4 w-4" aria-hidden="true" />
               Agent 준비 중
@@ -217,7 +217,7 @@ function ShellLink({
       href={item.href}
       className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition ${
         active
-          ? "bg-[var(--workspace-rail-active)] text-white shadow-sm"
+          ? "bg-white/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_rgba(0,0,0,0.12)]"
           : "text-white/70 hover:bg-white/10 hover:text-white"
       }`}
     >
