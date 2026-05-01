@@ -12,6 +12,31 @@ export type DashboardResponse = {
   recent_jobs: SyncJob[];
 };
 
+export type AgentRunSummaryItem = {
+  id: number;
+  agent_name: string;
+  prompt_version: string;
+  status: string;
+  source_window: string;
+  cache_key: string;
+  model_name: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  permission_level: string;
+  metadata: Record<string, unknown>;
+  started_at: string;
+  completed_at?: string | null;
+};
+
+export type AgentRunsResponse = {
+  total_runs: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  recent_runs: AgentRunSummaryItem[];
+};
+
 export type ReviewStatus =
   | "pending_review"
   | "approved"

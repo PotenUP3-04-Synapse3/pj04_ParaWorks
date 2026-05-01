@@ -486,6 +486,40 @@ Verification evidence:
 - Gmail sync, Drive sync, and `POST /api/v1/ask` returned
   `agentName=rag_orchestrator_agent`, `sources=2`, `hidden=0`, and `tokens=100`.
 
+## Observability Update: Agent Run Cost Dashboard
+
+Recorded on 2026-05-01.
+
+Next operations milestone is making AI execution cost and token usage visible
+from the product, not only stored in the database.
+
+Portfolio angle:
+
+- Shows AI cost governance as a first-class product feature.
+- Gives the three-agent split a shared observability surface: Slack Agent,
+  Mail/Docs Agent, and future RAG runs can be compared through one audit table.
+- Demonstrates a production-minded pattern where every agent run has prompt,
+  model, token, cost, permission, and cache metadata.
+
+Implemented scope:
+
+- Added read-only `GET /api/v1/agent-runs`.
+- Returned aggregate run count, total tokens, estimated total cost, and recent
+  run details.
+- Added frontend `AgentRunsResponse` and `AgentRunSummaryItem` types.
+- Reworked `/dashboard` with Agent execution count, estimated cost, token total,
+  and recent Agent Runs panel.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_agent_runs_api.py -v` passed.
+- `uv run pytest backend/tests -v` passed with 51 backend tests.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-agent-runs.db`.
+- Slack Agent and Mail/Docs Agent smoke run produced `totalRuns=2`,
+  `totalTokens=226`, and `estimatedCost=0.000063`.
+- HTTP smoke returned 200 for `/health`, `/dashboard`, and `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -505,3 +539,4 @@ Verification evidence:
 - `e53bec0 feat: add mail document agent slice`
 - `79e7bc7 feat: expose mail docs agent in integrations`
 - `af3c1f0 feat: add rag orchestrator agent`
+- `2b377fb feat: add company memory ask ui`
