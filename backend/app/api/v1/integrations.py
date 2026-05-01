@@ -85,7 +85,10 @@ def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) ->
         raise HTTPException(status_code=404, detail='Connector not found')
 
     connector = get_sync_connector(connector_type, settings, db=db)
-    result = sync_connector_events(db=db, connector=connector)
+    try:
+        result = sync_connector_events(db=db, connector=connector)
+    except SlackApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {
         'job_id': result.job_id,

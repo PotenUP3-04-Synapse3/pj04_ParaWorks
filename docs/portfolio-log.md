@@ -1646,6 +1646,42 @@ Cost/security note:
   sync Slack history or trigger downstream LLM/embedding work while demo mode is
   enabled.
 
+## 2026-05-02 - Slack Live Sync Error Handling
+
+Started the first real Slack sync verification with `PARAWORKS_DEMO_MODE=false`
+and confirmed the connector reaches Slack, but the configured channel is not
+readable by the bot yet.
+
+Portfolio angle:
+
+- Shows real integration debugging beyond OAuth success: app installation,
+  bot-channel membership, and channel ids are separate operational checks.
+- Improves API resilience by turning Slack Web API failures into explicit 502
+  responses instead of generic 500 errors.
+- Keeps privacy intact during live testing by checking channel access and
+  counts without printing Slack message bodies.
+
+Implemented scope:
+
+- Added a regression test for Slack API failure handling on the sync endpoint.
+- Mapped `SlackApiError` from sync to an HTTP 502 with a clear detail message.
+- Documented `channel_not_found` and `not_in_channel` troubleshooting in the
+  Slack runbook.
+
+Verification evidence:
+
+- Live sync reached Slack and returned
+  `Slack conversations.history failed: channel_not_found`.
+- Follow-up channel access probes returned `not_in_channel` for sampled public
+  channels, meaning the bot must be invited to a target channel or
+  `SLACK_CHANNEL_IDS` must point to a bot-readable channel.
+
+Cost/security note:
+
+- The failed live sync did not trigger LLM or embedding work. Connector access
+  is still the first cost gate; downstream review/RAG processing should only
+  run after source access is valid and duplicate checks have completed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

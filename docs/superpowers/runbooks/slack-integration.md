@@ -79,6 +79,19 @@ URL printed in the Slack error with `SLACK_OAUTH_REDIRECT_URI` and the Slack
 App's Redirect URLs. Fix one side so they match exactly, then restart the
 backend process so the install URL is rebuilt from the new environment value.
 
+If live sync returns `Slack conversations.history failed: channel_not_found` or
+`not_in_channel`, the bot token is valid enough to call Slack, but the app is
+not able to read the configured channel. Check:
+
+- `SLACK_CHANNEL_IDS` uses the exact channel id from the same workspace.
+- The ParaWorks Slack App/Bot has been invited to the channel, especially for
+  private channels and public channels that require bot membership.
+- The installed app has the expected history/read scopes.
+
+For local testing, prefer a low-risk channel such as `aibot-test`, invite the
+ParaWorks bot there, then set `SLACK_CHANNEL_IDS` to that channel id before
+turning `PARAWORKS_DEMO_MODE=false`.
+
 The frontend callback route is
 `/integrations/slack/callback`. It forwards Slack's `code` and signed `state`
 to `/api/v1/integrations/slack/oauth/callback`, then renders only sanitized

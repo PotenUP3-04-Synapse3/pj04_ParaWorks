@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 import backend.app.api.v1.integrations as integrations_api
+from backend.app.connectors.base import ConnectorManifest
+from backend.app.connectors.slack import SlackApiError
 from backend.app.connectors.slack_oauth import (
     LOCAL_TOKEN_VAULT,
     LocalTokenVault,
@@ -17,6 +19,22 @@ from backend.app.connectors.slack_oauth import (
 )
 from backend.app.core.config import Settings, get_settings
 from backend.app.models import IntegrationConnection
+
+
+class FailingSlackConnector:
+    source_type = 'slack'
+    manifest = ConnectorManifest(
+        connector_type='slack',
+        display_name='Slack',
+        mode='live',
+        auth_type='oauth',
+        required_scopes=('channels:history',),
+        sync_strategy='incremental',
+        cost_policy='Fetch source deltas first.',
+    )
+
+    def fetch_events(self):
+        raise SlackApiError('Slack conversations.history failed: channel_not_found')
 
 
 def test_slack_oauth_install_url_contains_signed_state_and_hides_secret() -> None:
@@ -288,3 +306,18 @@ def test_slack_sync_endpoint_uses_installed_connection_token_without_exposing_it
     assert captured == {'bot_token': 'xoxb-installed', 'channel_ids': ['C123']}
     assert 'xoxb-installed' not in str(payload)
     assert 'token_ref' not in str(payload)
+
+
+def test_slack_sync_endpoint_returns_clear_error_for_slack_api_failure(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def fake_get_sync_connector(connector_type: str, settings: Settings, *, db: Session | None = None):
+        return FailingSlackConnector()
+
+    monkeypatch.setattr(integrations_api, 'get_sync_connector', fake_get_sync_connector)
+
+    response = client.post('/api/v1/integrations/slack/sync')
+
+    assert response.status_code == 502
+    assert response.json()['detail'] == 'Slack conversations.history failed: channel_not_found'
