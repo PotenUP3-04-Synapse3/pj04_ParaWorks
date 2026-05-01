@@ -241,6 +241,26 @@ Portfolio angle:
 - Prepares the interface for Slack Agent, Review Inbox, and RAG Orchestrator
   experiences without a later full layout rewrite.
 
+## Agent Development Update: Slack Agent Skeleton
+
+Recorded on 2026-05-01.
+
+Started the first functional agent track after the shared runtime and registry
+contracts. The Slack Agent skeleton is scoped to:
+
+- accept shared `EvidencePacket` input;
+- use a fake/model client boundary instead of live LLM calls;
+- return `AgentRunResult`;
+- preserve source links, snippets, and strictest permission level;
+- record token/cost metadata.
+
+Portfolio angle:
+
+- Shows the project moving from architecture contracts into actual agent
+  implementation.
+- Keeps the work merge-friendly because Slack Agent lives in its own owned
+  package and integrates only through shared runtime contracts.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
