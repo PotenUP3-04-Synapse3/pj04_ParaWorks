@@ -3,6 +3,7 @@ import math
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import Settings, get_settings
 from backend.app.models import (
     DecisionRecord,
     Document,
@@ -391,10 +392,62 @@ def test_reindex_job_detail_endpoint_returns_status(
     assert response.json()['indexed_count'] == 1
 
 
+def test_reindex_job_detail_endpoint_returns_failure_reason(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    job = SyncJob(
+        job_id='rag-index-failed-detail',
+        connector_type='rag-index',
+        status='failed',
+        message='failed: pgvector writes require a PostgreSQL database.',
+        progress_pct=100,
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    response = client.get('/api/v1/rag/reindex/jobs/rag-index-failed-detail')
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'failed'
+    assert response.json()['failure_reason'] == 'pgvector writes require a PostgreSQL database.'
+
+
 def test_reindex_job_detail_endpoint_returns_404_for_missing_job(client: TestClient) -> None:
     response = client.get('/api/v1/rag/reindex/jobs/missing-job')
 
     assert response.status_code == 404
+
+
+def test_reindex_job_endpoint_queues_without_eager_execution(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    from backend.app.api.v1 import rag as rag_api
+
+    enqueued_jobs: list[tuple[str, bool]] = []
+
+    def record_enqueue(*, job_id: str, dry_run: bool) -> None:
+        enqueued_jobs.append((job_id, dry_run))
+
+    def override_settings() -> Settings:
+        return Settings(database_url='sqlite://', celery_task_always_eager=False)
+
+    monkeypatch.setattr(rag_api, 'enqueue_rag_reindex_job', record_enqueue)
+    client.app.dependency_overrides[get_settings] = override_settings
+
+    response = client.post('/api/v1/rag/reindex/jobs')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'queued'
+    assert body['dry_run'] is True
+    assert enqueued_jobs == [(body['job_id'], True)]
+    job = db_session.query(SyncJob).one()
+    assert job.status == 'queued'
+    assert job.message == 'queued'
+    assert job.progress_pct == 0
 
 
 def test_rag_indexing_summary_returns_latest_jobs_and_state_counts(

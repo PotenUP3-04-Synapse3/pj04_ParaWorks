@@ -2,23 +2,32 @@
 
 import {
   Bot,
-  CircleDollarSign,
+  CheckCircle2,
+  Clock3,
+  Database,
   FileText,
+  KeyRound,
   Link2,
   Search,
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { apiPost } from "@/lib/api/client";
-import type { AskResponse, SearchResponse } from "@/lib/api/types";
+import { apiGet, apiPost } from "@/lib/api/client";
+import type {
+  AskResponse,
+  RagIndexingJobSummary,
+  RagIndexingSummaryResponse,
+  SearchResponse,
+} from "@/lib/api/types";
 
-const DEFAULT_QUESTION = "Redis job state";
+const DEFAULT_QUESTION = "Redis 작업 상태는 어떻게 관리되고 있나요?";
 
 export default function SearchPage() {
   const [query, setQuery] = useState(DEFAULT_QUESTION);
   const [searchResponse, setSearchResponse] = useState<SearchResponse>();
   const [askResponse, setAskResponse] = useState<AskResponse>();
+  const [ragIndexing, setRagIndexing] = useState<RagIndexingSummaryResponse>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -54,6 +63,26 @@ export default function SearchPage() {
     void runMemoryQuery(DEFAULT_QUESTION);
   }, [runMemoryQuery]);
 
+  useEffect(() => {
+    let active = true;
+
+    apiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary")
+      .then((result) => {
+        if (active) {
+          setRagIndexing(result);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setRagIndexing(undefined);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const permissionNotice = askResponse?.permission_notice ?? searchResponse?.permission_notice;
 
   return (
@@ -63,7 +92,7 @@ export default function SearchPage() {
           <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Company Memory</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-normal">회사 메모리에 질문하기</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
-            viewer 권한으로 답변과 검색 근거를 함께 확인합니다.
+            승인된 메일, 메시지, 업무 기록을 바탕으로 답변과 근거를 확인합니다.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
@@ -71,6 +100,8 @@ export default function SearchPage() {
           RAG Orchestrator
         </div>
       </div>
+
+      <MemoryFreshnessPanel summary={ragIndexing} />
 
       <form onSubmit={submit} className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
         <label htmlFor="query" className="text-sm font-semibold">
@@ -82,7 +113,7 @@ export default function SearchPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm outline-none focus:border-[var(--workspace-rail-active)]"
-            placeholder="예: Redis는 무엇에 쓰이나요?"
+            placeholder="예: 지난주 Redis 장애 논의가 있었나요?"
           />
           <button
             type="submit"
@@ -90,7 +121,7 @@ export default function SearchPage() {
             className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-300"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
-            {loading ? "질문 중" : "AI에게 질문"}
+            {loading ? "답변 생성 중" : "AI에게 질문"}
           </button>
         </div>
       </form>
@@ -103,7 +134,7 @@ export default function SearchPage() {
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-semibold">권한으로 숨겨진 근거가 있습니다.</p>
+            <p className="font-semibold">권한 때문에 숨겨진 근거가 있습니다.</p>
             <p className="mt-1 text-amber-800">{permissionNotice}</p>
           </div>
         </div>
@@ -125,35 +156,16 @@ export default function SearchPage() {
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <MetricCard
-                    icon={CircleDollarSign}
-                    label="예상 비용"
-                    value={`$${askResponse.estimated_cost_usd.toFixed(6)}`}
-                  />
-                  <MetricCard
-                    icon={Sparkles}
-                    label="토큰"
-                    value={askResponse.token_usage.total_tokens.toLocaleString()}
+                    icon={FileText}
+                    label="답변 근거"
+                    value={`${askResponse.source_links.length.toLocaleString()}개`}
                   />
                   <MetricCard
                     icon={ShieldAlert}
-                    label="숨김 근거"
-                    value={askResponse.hidden_match_count.toString()}
+                    label="숨겨진 근거"
+                    value={`${askResponse.hidden_match_count.toLocaleString()}개`}
                   />
-                </div>
-
-                <div className="rounded-lg bg-[#fbfaf8] p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
-                    Agent metadata
-                  </p>
-                  <dl className="mt-2 grid gap-2 text-xs text-[var(--ink-muted)] sm:grid-cols-2">
-                    <MetaRow label="Agent" value={formatAgentName(askResponse.agent_name)} />
-                    <MetaRow label="Prompt" value={askResponse.prompt_version} />
-                    <MetaRow label="Model" value={askResponse.model_name} />
-                    <MetaRow label="Permission" value={askResponse.permission_level} />
-                  </dl>
-                  <p className="mt-2 break-all text-xs text-[var(--ink-muted)]">
-                    cache: {askResponse.cache_key}
-                  </p>
+                  <MetricCard icon={KeyRound} label="조회 권한" value={askResponse.permission_level} />
                 </div>
 
                 <div>
@@ -240,7 +252,7 @@ export default function SearchPage() {
   );
 }
 
-type MetricIcon = typeof CircleDollarSign;
+type MetricIcon = typeof FileText;
 
 function MetricCard({
   icon: Icon,
@@ -257,23 +269,80 @@ function MetricCard({
         <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         {label}
       </div>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
+      <p className="mt-1 break-words text-sm font-semibold">{value}</p>
     </div>
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
+function MemoryFreshnessPanel({ summary }: { summary?: RagIndexingSummaryResponse }) {
+  const latestJob = summary?.latest_jobs[0];
+  const indexedCount = summary?.state_counts.indexed ?? 0;
+  const state = getFreshnessState(latestJob, indexedCount);
+  const Icon = state.icon;
+
   return (
-    <div className="min-w-0">
-      <dt className="font-semibold text-[var(--ink-strong)]">{label}</dt>
-      <dd className="mt-0.5 truncate">{value}</dd>
-    </div>
+    <section className={`rounded-lg border p-4 shadow-sm ${state.tone}`}>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-start gap-3">
+          <Icon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div>
+            <h3 className="text-sm font-semibold">{state.title}</h3>
+            <p className="mt-1 text-sm opacity-85">{state.description}</p>
+          </div>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-xs font-semibold">
+          <Database className="h-4 w-4" aria-hidden="true" />
+          {indexedCount.toLocaleString()}개 기억 사용 가능
+        </span>
+      </div>
+    </section>
   );
 }
 
-function formatAgentName(agentName: string) {
-  if (agentName === "rag_orchestrator_agent") {
-    return "RAG Orchestrator";
+function getFreshnessState(job: RagIndexingJobSummary | undefined, indexedCount: number) {
+  if (!job) {
+    return {
+      title: "회사 메모리 준비 전",
+      description: "아직 인덱싱 기록이 없습니다. 먼저 Slack, 메일, 문서를 동기화해 주세요.",
+      tone: "border-neutral-200 bg-white text-[var(--ink-strong)]",
+      icon: Clock3,
+    };
   }
-  return agentName;
+  if (job.status === "failed") {
+    return {
+      title: "회사 메모리 업데이트 확인 필요",
+      description: "최근 인덱싱 작업이 실패했습니다. 기존 기억은 계속 검색할 수 있지만 운영자 확인이 필요합니다.",
+      tone: "border-red-200 bg-red-50 text-red-900",
+      icon: ShieldAlert,
+    };
+  }
+  if (job.status === "queued" || job.status === "running") {
+    return {
+      title: "회사 메모리 업데이트 중",
+      description: "새로운 업무 기록을 반영하고 있습니다. 현재 검색은 마지막 완료된 기억을 기준으로 답변합니다.",
+      tone: "border-blue-200 bg-blue-50 text-blue-900",
+      icon: Clock3,
+    };
+  }
+  if (indexedCount === 0) {
+    return {
+      title: "검색 가능한 회사 메모리가 없습니다",
+      description: "권한으로 볼 수 있는 승인 기록이 아직 없습니다. 리뷰 승인 후 다시 검색해 주세요.",
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+      icon: ShieldAlert,
+    };
+  }
+  return {
+    title: "회사 메모리가 최신 상태입니다",
+    description: `최근 업데이트: ${formatDateTime(job.updated_at)}. 승인된 기록을 기준으로 답변합니다.`,
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    icon: CheckCircle2,
+  };
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

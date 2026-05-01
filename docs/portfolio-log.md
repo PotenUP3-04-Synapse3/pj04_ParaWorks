@@ -1115,6 +1115,60 @@ Verification evidence:
   `indexed_count=3`; summary API returned one latest job.
 - HTTP smoke returned 200 for `/agent-runs`, `/dashboard`, and `/search`.
 
+## RAG Operations UX And Dev Path Hardening
+
+Recorded on 2026-05-01.
+
+Implemented the next recommended ParaWorks steps: Admin-facing async job UX,
+normal-user search freshness UX, Celery queue-mode contract tests, and a
+resilient pgvector local development path.
+
+Portfolio angle:
+
+- Shows product judgment around cost visibility: normal business users see
+  company-memory freshness and evidence quality, while Admin/Ops users see
+  embedding calls avoided, skipped documents, and job status details.
+- Demonstrates operational maturity: RAG reindexing now has clearer
+  `queued/running/complete/failed` UX, failure reason surfacing, and polling
+  contracts.
+- Shows practical backend discipline: queue mode is tested separately from eager
+  local mode, so the API boundary stays safe when Redis/Celery is enabled.
+- Reduces onboarding friction for collaborators by making pgvector host ports
+  configurable instead of requiring tracked compose edits when `5432` is busy.
+
+Implemented scope:
+
+- Added `failure_reason` to RAG indexing job summaries for failed jobs.
+- Added tests for failed-job detail responses and non-eager queue behavior.
+- Updated `/agent-runs` with Korean operations copy, progress/status display,
+  failure reason display, latest RAG jobs, and Admin-only cost counters.
+- Updated `/search` with a non-technical company-memory freshness panel and
+  removed token/cost/cache details from the normal user answer area.
+- Added `PARAWORKS_POSTGRES_PORT` and `PARAWORKS_REDIS_PORT` compose defaults.
+- Added `-PostgresPort` and `-RedisPort` to `scripts/start-pgvector-dev.ps1`.
+- Documented alternate-port pgvector startup in the runbook.
+
+Cost policy reinforced:
+
+- Keep paid embedding and token-cost details in Admin/Ops screens.
+- Give end users confidence signals without encouraging them to reason about
+  provider internals.
+- Preserve incremental indexing as the first cost gate before provider calls.
+
+Verification evidence:
+
+- Focused RAG/Celery tests passed with 20 tests.
+- Focused Ruff passed for changed backend files.
+- Full backend tests passed with 98 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- HTTP smoke confirmed health, RAG job creation/detail/summary, `/agent-runs`,
+  and `/search`.
+- HTML smoke confirmed the new Korean titles render and replacement characters
+  are absent.
+- Real Redis/Celery worker-mode smoke confirmed `queued -> complete` with
+  `CELERY_TASK_ALWAYS_EAGER=false`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

@@ -90,17 +90,26 @@ def get_rag_indexing_summary(db: DbSession) -> dict:
 
 def _job_summary(job: SyncJob) -> dict:
     counters = _parse_index_job_message(job.message)
+    failure_reason = _parse_failure_reason(job.message) if job.status == 'failed' else None
     return {
         'job_id': job.job_id,
         'connector_type': job.connector_type,
         'status': job.status,
         'message': job.message,
+        'failure_reason': failure_reason,
         'progress_pct': job.progress_pct,
         'indexed_count': counters.get('indexed', 0),
         'skipped_count': counters.get('skipped', 0),
         'saved_embedding_calls': counters.get('saved_embedding_calls', 0),
         'updated_at': job.updated_at.isoformat(),
     }
+
+
+def _parse_failure_reason(message: str) -> str | None:
+    prefix = 'failed:'
+    if message.lower().startswith(prefix):
+        return message[len(prefix) :].strip() or None
+    return message or None
 
 
 def _parse_index_job_message(message: str) -> dict[str, int]:

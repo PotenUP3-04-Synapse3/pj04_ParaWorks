@@ -71,6 +71,7 @@ export type RagIndexingJobSummary = {
   connector_type: string;
   status: string;
   message: string;
+  failure_reason?: string | null;
   progress_pct: number;
   indexed_count: number;
   skipped_count: number;

@@ -18,11 +18,31 @@ docker compose down
 
 Then either free port `5432`, change the compose port mapping locally, or set a
 different `DATABASE_URL` that points at an existing Postgres + pgvector instance.
+The compose file also supports alternate host ports without editing tracked
+files:
+
+```powershell
+$env:PARAWORKS_POSTGRES_PORT='55432'
+$env:PARAWORKS_REDIS_PORT='56379'
+docker compose up -d postgres redis
+```
+
+Then point the app at the matching database URL:
+
+```powershell
+$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@localhost:55432/paraworks'
+```
 
 Or start the app stack with the helper:
 
 ```powershell
 .\scripts\start-pgvector-dev.ps1
+```
+
+If `5432` is already taken, use the helper's port flags:
+
+```powershell
+.\scripts\start-pgvector-dev.ps1 -PostgresPort 55432 -RedisPort 56379
 ```
 
 Default database URL:

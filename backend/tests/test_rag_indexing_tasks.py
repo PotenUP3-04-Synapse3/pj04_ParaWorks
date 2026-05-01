@@ -57,3 +57,16 @@ def test_celery_worker_script_disables_eager_mode() -> None:
     assert "$env:CELERY_TASK_ALWAYS_EAGER = 'false'" in script
     assert 'uv run celery -A backend.app.tasks.celery_app.celery_app worker' in script
     assert '--pool=solo' in script
+
+
+def test_pgvector_dev_stack_supports_alternate_host_ports() -> None:
+    script = (REPO_ROOT / 'scripts/start-pgvector-dev.ps1').read_text(encoding='utf-8')
+    compose = (REPO_ROOT / 'docker-compose.yml').read_text(encoding='utf-8')
+
+    assert '[int]$PostgresPort = 5432' in script
+    assert '[int]$RedisPort = 6379' in script
+    assert '$env:PARAWORKS_POSTGRES_PORT = "$PostgresPort"' in script
+    assert '$env:PARAWORKS_REDIS_PORT = "$RedisPort"' in script
+    assert 'localhost:$PostgresPort/paraworks' in script
+    assert '"127.0.0.1:${PARAWORKS_POSTGRES_PORT:-5432}:5432"' in compose
+    assert '"127.0.0.1:${PARAWORKS_REDIS_PORT:-6379}:6379"' in compose

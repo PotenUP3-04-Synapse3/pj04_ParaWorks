@@ -2,20 +2,30 @@ param(
     [string]$HostAddress = "127.0.0.1",
     [int]$BackendPort = 8000,
     [int]$FrontendPort = 3000,
-    [string]$DatabaseUrl = "postgresql+psycopg://paraworks:paraworks@localhost:5432/paraworks"
+    [int]$PostgresPort = 5432,
+    [int]$RedisPort = 6379,
+    [string]$DatabaseUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 
+if ([string]::IsNullOrWhiteSpace($DatabaseUrl)) {
+    $DatabaseUrl = "postgresql+psycopg://paraworks:paraworks@localhost:$PostgresPort/paraworks"
+}
+
 Write-Host "ParaWorks pgvector dev mode"
 Write-Host "Repository: $repoRoot"
 Write-Host "Database:   $DatabaseUrl"
+Write-Host "Postgres:   127.0.0.1:$PostgresPort -> container 5432"
+Write-Host "Redis:      127.0.0.1:$RedisPort -> container 6379"
 Write-Host ""
 
 Push-Location $repoRoot
 try {
+    $env:PARAWORKS_POSTGRES_PORT = "$PostgresPort"
+    $env:PARAWORKS_REDIS_PORT = "$RedisPort"
     docker compose up -d postgres redis
 
     $env:DATABASE_URL = $DatabaseUrl

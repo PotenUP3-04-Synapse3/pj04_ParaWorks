@@ -1,11 +1,15 @@
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   BarChart3,
   Bot,
+  CheckCircle2,
   CircleDollarSign,
+  Clock3,
   Database,
   Gauge,
+  Loader2,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -22,6 +26,41 @@ import type {
 
 export const dynamic = "force-dynamic";
 
+const STATUS_META: Record<
+  string,
+  {
+    label: string;
+    description: string;
+    tone: string;
+    icon: typeof CheckCircle2;
+  }
+> = {
+  queued: {
+    label: "대기 중",
+    description: "Redis/Celery worker가 처리할 차례를 기다리고 있습니다.",
+    tone: "border-amber-200 bg-amber-50 text-amber-900",
+    icon: Clock3,
+  },
+  running: {
+    label: "실행 중",
+    description: "변경된 문서만 선별해 인덱싱하고 있습니다.",
+    tone: "border-blue-200 bg-blue-50 text-blue-900",
+    icon: Loader2,
+  },
+  complete: {
+    label: "완료",
+    description: "회사 메모리 인덱스가 최신 작업 결과를 반영했습니다.",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    icon: CheckCircle2,
+  },
+  failed: {
+    label: "실패",
+    description: "작업이 중단되었습니다. 실패 사유를 확인한 뒤 재실행이 필요합니다.",
+    tone: "border-red-200 bg-red-50 text-red-900",
+    icon: AlertTriangle,
+  },
+};
+
 export default async function AgentRunsPage() {
   const [runs, summary, ragIndexing] = await Promise.all([
     apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
@@ -30,6 +69,7 @@ export default async function AgentRunsPage() {
   ]);
   const cacheHitPercent = (summary.totals.cache_hit_rate * 100).toFixed(1);
   const latestRagJob = ragIndexing.latest_jobs[0];
+  const jobStatusCounts = countJobStatuses(ragIndexing.latest_jobs);
 
   return (
     <div className="space-y-5">
@@ -38,7 +78,7 @@ export default async function AgentRunsPage() {
           <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Agent Operations</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-normal">AI 실행 관측</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
-            멀티에이전트 실행 비용, 토큰 사용량, 캐시 적중률, Agent별 상태를 한 화면에서 확인합니다.
+            에이전트 실행 비용, 토큰 사용량, 캐시 적중률, RAG 인덱싱 상태를 운영자 관점에서 확인합니다.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
@@ -52,7 +92,7 @@ export default async function AgentRunsPage() {
           icon={Bot}
           label="총 실행"
           value={summary.totals.total_runs.toLocaleString()}
-          detail="AgentRun rows"
+          detail="AgentRun records"
         />
         <MetricCard
           icon={Sparkles}
@@ -79,7 +119,7 @@ export default async function AgentRunsPage() {
           <div>
             <h3 className="text-sm font-semibold">RAG 인덱싱 운영 상태</h3>
             <p className="mt-1 text-xs text-[var(--ink-muted)]">
-              운영자용 지표입니다. 검색 화면에는 노출하지 않고 인덱싱 비용 절감과 처리 상태만 관측합니다.
+              검색 사용자에게는 단순한 최신성만 보여주고, 인덱싱 비용과 처리 상태는 이 운영 화면에서 관리합니다.
             </p>
           </div>
           <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#f4f8f6] px-3 py-2 text-xs font-semibold text-[#22513f]">
@@ -87,28 +127,38 @@ export default async function AgentRunsPage() {
             Admin observability
           </span>
         </div>
-        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <IndexingMetric
-              icon={Database}
-              label="Indexed"
-              value={(ragIndexing.state_counts.indexed ?? 0).toLocaleString()}
-              detail="served vector states"
-            />
-            <IndexingMetric
-              icon={RefreshCw}
-              label="Skipped"
-              value={(latestRagJob?.skipped_count ?? 0).toLocaleString()}
-              detail="unchanged docs"
-            />
-            <IndexingMetric
-              icon={CircleDollarSign}
-              label="Saved Calls"
-              value={(latestRagJob?.saved_embedding_calls ?? 0).toLocaleString()}
-              detail="embedding calls avoided"
-            />
+        <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,440px)]">
+          <div className="space-y-4">
+            <LatestIndexingJob job={latestRagJob} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <IndexingMetric
+                icon={Database}
+                label="Indexed"
+                value={(ragIndexing.state_counts.indexed ?? 0).toLocaleString()}
+                detail="serving vector states"
+              />
+              <IndexingMetric
+                icon={RefreshCw}
+                label="Skipped"
+                value={(latestRagJob?.skipped_count ?? 0).toLocaleString()}
+                detail="unchanged documents"
+              />
+              <IndexingMetric
+                icon={CircleDollarSign}
+                label="Saved Calls"
+                value={(latestRagJob?.saved_embedding_calls ?? 0).toLocaleString()}
+                detail="embedding calls avoided"
+              />
+            </div>
           </div>
-          <LatestIndexingJob job={latestRagJob} />
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:grid-cols-2">
+              {["queued", "running", "complete", "failed"].map((status) => (
+                <StatusCount key={status} status={status} count={jobStatusCounts[status] ?? 0} />
+              ))}
+            </div>
+            <RecentIndexingJobs jobs={ragIndexing.latest_jobs} />
+          </div>
         </div>
       </section>
 
@@ -117,7 +167,7 @@ export default async function AgentRunsPage() {
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <h3 className="text-sm font-semibold">Agent별 비용과 토큰</h3>
             <p className="mt-1 text-xs text-[var(--ink-muted)]">
-              비용 합계 기준으로 정렬합니다. 최신 실행은 상세 화면으로 바로 이동합니다.
+              비용 합계 기준으로 정렬합니다. 최신 실행은 상세 감사 화면으로 바로 이동할 수 있습니다.
             </p>
           </div>
           <div className="divide-y divide-[var(--line-soft)]">
@@ -258,21 +308,87 @@ function LatestIndexingJob({ job }: { job?: RagIndexingJobSummary }) {
     );
   }
 
+  const meta = getStatusMeta(job.status);
+  const Icon = meta.icon;
+
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className={`rounded-lg border px-4 py-4 ${meta.tone}`}>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{job.job_id}</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">{job.message}</p>
+          <div className="flex items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <p className="text-sm font-semibold">최근 인덱싱 작업: {meta.label}</p>
+          </div>
+          <p className="mt-1 text-xs opacity-80">{meta.description}</p>
+          <p className="mt-2 break-all text-xs opacity-80">{job.job_id}</p>
         </div>
-        <span className="rounded-lg bg-[#f4f8f6] px-2 py-1 text-xs font-semibold capitalize text-[#22513f]">
-          {job.status}
+        <span className="inline-flex w-fit items-center rounded-lg border border-current px-2 py-1 text-xs font-semibold">
+          {job.progress_pct}%
         </span>
+      </div>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/70">
+        <div className="h-full rounded-full bg-current" style={{ width: `${clampPercent(job.progress_pct)}%` }} />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <JobCounter label="indexed" value={job.indexed_count} />
         <JobCounter label="skipped" value={job.skipped_count} />
         <JobCounter label="saved" value={job.saved_embedding_calls} />
+      </div>
+      {job.failure_reason ? (
+        <div className="mt-3 rounded-lg border border-current bg-white/60 p-3 text-xs">
+          <p className="font-semibold">실패 사유</p>
+          <p className="mt-1">{job.failure_reason}</p>
+        </div>
+      ) : null}
+      <p className="mt-3 text-xs opacity-75">마지막 업데이트: {formatDateTime(job.updated_at)}</p>
+    </div>
+  );
+}
+
+function RecentIndexingJobs({ jobs }: { jobs: RagIndexingJobSummary[] }) {
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-white">
+      <div className="border-b border-[var(--line-soft)] px-3 py-3">
+        <h4 className="text-sm font-semibold">최근 RAG 작업</h4>
+      </div>
+      <div className="divide-y divide-[var(--line-soft)]">
+        {jobs.map((job) => {
+          const meta = getStatusMeta(job.status);
+          return (
+            <div key={job.job_id} className="px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-xs font-semibold">{job.job_id}</p>
+                <span className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${meta.tone}`}>
+                  {meta.label}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                indexed {job.indexed_count.toLocaleString()} · skipped {job.skipped_count.toLocaleString()} · saved{" "}
+                {job.saved_embedding_calls.toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs text-[var(--ink-muted)]">{formatDateTime(job.updated_at)}</p>
+            </div>
+          );
+        })}
+        {jobs.length === 0 ? (
+          <p className="px-3 py-6 text-sm text-[var(--ink-muted)]">표시할 RAG 작업이 없습니다.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function StatusCount({ status, count }: { status: string; count: number }) {
+  const meta = getStatusMeta(status);
+  const Icon = meta.icon;
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${meta.tone}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1 font-semibold">
+          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+          {meta.label}
+        </span>
+        <span>{count.toLocaleString()}</span>
       </div>
     </div>
   );
@@ -280,9 +396,9 @@ function LatestIndexingJob({ job }: { job?: RagIndexingJobSummary }) {
 
 function JobCounter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-[#fbfaf8] px-2 py-2">
+    <div className="rounded-lg bg-white/60 px-2 py-2">
       <p className="font-semibold">{value.toLocaleString()}</p>
-      <p className="mt-0.5 text-[var(--ink-muted)]">{label}</p>
+      <p className="mt-0.5 opacity-75">{label}</p>
     </div>
   );
 }
@@ -317,6 +433,33 @@ function AgentSummaryRow({ agent }: { agent: AgentRunAgentSummary }) {
       </Link>
     </div>
   );
+}
+
+function getStatusMeta(status: string) {
+  return STATUS_META[status] ?? {
+    label: status,
+    description: "알 수 없는 작업 상태입니다.",
+    tone: "border-neutral-200 bg-neutral-50 text-neutral-800",
+    icon: Activity,
+  };
+}
+
+function countJobStatuses(jobs: RagIndexingJobSummary[]) {
+  return jobs.reduce<Record<string, number>>((counts, job) => {
+    counts[job.status] = (counts[job.status] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function formatAgentName(agentName: string) {
