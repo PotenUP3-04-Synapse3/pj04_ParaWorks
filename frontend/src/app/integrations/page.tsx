@@ -103,21 +103,45 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      apiGet<IntegrationManifest[]>("/api/v1/integrations"),
-      apiGet<IntegrationConnection[]>("/api/v1/integrations/connections"),
-      apiGet<SlackOAuthInstallUrlResponse>("/api/v1/integrations/slack/oauth/install-url"),
-    ])
-      .then(([manifestResult, connectionResult, slackOAuthResult]) => {
+    apiGet<IntegrationManifest[]>("/api/v1/integrations")
+      .then((manifestResult) => {
         if (active) {
           setManifests(manifestResult);
-          setConnections(connectionResult);
-          setSlackOAuth(slackOAuthResult);
         }
       })
       .catch((caught) => {
         if (active) {
           setError(caught instanceof Error ? caught.message : "연동 정보를 불러오지 못했습니다.");
+        }
+      });
+
+    apiGet<IntegrationConnection[]>("/api/v1/integrations/connections")
+      .then((connectionResult) => {
+        if (active) {
+          setConnections(connectionResult);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setConnections([]);
+        }
+      });
+
+    apiGet<SlackOAuthInstallUrlResponse>("/api/v1/integrations/slack/oauth/install-url")
+      .then((slackOAuthResult) => {
+        if (active) {
+          setSlackOAuth(slackOAuthResult);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSlackOAuth({
+            connector_type: "slack",
+            configured: false,
+            install_url: null,
+            state: null,
+            required_scopes: [],
+          });
         }
       });
 
@@ -264,9 +288,21 @@ export default function IntegrationsPage() {
                           {connection ? `${connection.workspace_name} 연결됨` : slackOAuth?.configured ? "Slack 연결 필요" : "OAuth 설정 필요"}
                         </span>
                       </div>
-                      <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[#611f69]">
-                        {connection?.status ?? "ready"}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[#611f69]">
+                          {connection?.status ?? "ready"}
+                        </span>
+                        {slackOAuth?.configured && !connection ? (
+                          <button
+                            type="button"
+                            onClick={startSlackOAuth}
+                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#611f69] bg-white px-2.5 text-xs font-semibold text-[#611f69] shadow-sm hover:bg-[#fbf8fd]"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                            Slack 연결
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     <p className="mt-2 text-xs leading-5 text-[var(--ink-muted)]">
                       {connection
@@ -282,18 +318,7 @@ export default function IntegrationsPage() {
                   <span className="text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {showSlackOAuth ? (
-                      <button
-                        type="button"
-                        onClick={startSlackOAuth}
-                        disabled={!slackOAuth?.configured || Boolean(connection)}
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#611f69] bg-white px-3 text-sm font-semibold text-[#611f69] shadow-sm hover:bg-[#fbf8fd] disabled:cursor-not-allowed disabled:border-neutral-200 disabled:text-neutral-400"
-                      >
-                        <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                        {connection ? "연결 완료" : slackOAuth?.configured ? "Slack 연결" : "설정 필요"}
-                      </button>
-                    ) : null}
+                  <div data-testid={`${manifest.type}-card-actions`} className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => void startSync(manifest.type)}

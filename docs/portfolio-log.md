@@ -1435,6 +1435,45 @@ Verification evidence:
 - Playwright visual smoke passed with 12 Chromium desktop/mobile tests on fresh
   alternate ports.
 
+## 2026-05-01 - Route Audit, Integrations Resilience, And Next 16 Upgrade
+
+Audited the frontend after Slack OAuth status UI caused the integrations page to
+degrade when optional status endpoints were unavailable on a stale backend.
+
+Portfolio angle:
+
+- Shows production-minded frontend hardening: core connector manifests now render
+  independently from optional Slack OAuth connection metadata.
+- Demonstrates end-to-end QA ownership: route coverage expanded from a narrow
+  dashboard check to desktop/mobile smoke checks across dashboard, messages,
+  review, knowledge, integrations, agent runs, and search.
+- Keeps the cost story explicit: missing optional integration status APIs fail
+  locally in UI state instead of triggering extra live connector, Slack, or
+  embedding calls.
+
+Implemented scope:
+
+- Upgraded frontend dependencies to Next.js 16.2.4 and aligned ESLint with the
+  ESLint 9 flat-config path.
+- Fixed `/integrations` loading so Gmail, Google Drive, and Google Calendar
+  modules stay visible when Slack OAuth status endpoints are not available.
+- Removed the disabled Slack setup button from the normal demo path so the
+  `Slack Agent 실행` action no longer wraps because of an unnecessary control.
+- Added Playwright assertions for route-level rendering, mojibake prevention,
+  missing application errors, and connector-card presence.
+
+Verification evidence:
+
+- Frontend lint passed with ESLint 9.
+- Frontend production build passed on Next.js 16.2.4.
+- Full backend tests passed with 116 tests and 1 skipped pgvector integration
+  test.
+- Playwright visual smoke passed with 22 Chromium desktop/mobile tests across
+  all current MVP pages.
+- `npm audit --audit-level=moderate` still reports a moderate advisory through
+  Next's bundled PostCSS range; the suggested forced fix would downgrade Next and
+  should not be applied.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1475,3 +1514,4 @@ Verification evidence:
 - `feat: add slack oauth installation boundary`
 - `feat: show slack oauth connection status`
 - `feat: wire installed slack connection sync`
+- `fix: harden frontend route smoke`
