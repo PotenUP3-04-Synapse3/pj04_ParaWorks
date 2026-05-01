@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 
-
 _PERMISSION_RANK = {
     'public': 0,
     'internal': 1,
@@ -50,6 +49,10 @@ class EvidencePacket:
     @property
     def source_links(self) -> list[str]:
         return [message.source_url for message in self.messages]
+
+    @property
+    def source_ids(self) -> list[str]:
+        return [message.source_id for message in self.messages]
 
     @property
     def source_snippets(self) -> list[str]:

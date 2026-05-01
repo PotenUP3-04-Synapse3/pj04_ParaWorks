@@ -15,6 +15,7 @@ def test_ask_api_answers_with_visible_sources(client) -> None:
     assert payload['agent_name'] == 'rag_orchestrator_agent'
     assert payload['answer']
     assert payload['source_links']
+    assert payload['source_ids']
     assert payload['estimated_cost_usd'] > 0
     assert payload['token_usage']['total_tokens'] > 0
 
@@ -31,6 +32,7 @@ def test_ask_api_respects_viewer_permissions(client) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload['source_links'] == []
+    assert payload['source_ids'] == []
     assert payload['hidden_match_count'] == 1
     assert payload['permission_notice'] == 'Some sources may be hidden by permissions.'
 
@@ -58,5 +60,6 @@ def test_ask_api_answers_from_approved_knowledge(client, db_session) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload['source_links'] == ['https://knowledge.mock/redis-decision']
+    assert payload['source_ids'] == ['decision_record:1']
     assert payload['source_snippets'] == ['Approved Redis decision snippet']
     assert payload['hidden_match_count'] == 0

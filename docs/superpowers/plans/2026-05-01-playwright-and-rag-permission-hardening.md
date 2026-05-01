@@ -39,6 +39,10 @@
 **Files:**
 - Modify: `backend/tests/test_search_permissions.py`
 - Modify: `backend/tests/test_connector_ingestion_contract.py`
+- Modify: `backend/tests/test_ask_api.py`
+- Modify: `backend/app/agent_runtime/contracts.py`
+- Modify: `backend/app/agents/rag_orchestrator_agent/agent.py`
+- Modify: `backend/app/api/v1/ask.py`
 - Modify: `backend/app/ingestion/service.py`
 - Modify: `backend/app/api/v1/search.py`
 - Modify: `frontend/src/app/search/page.tsx`
@@ -49,6 +53,7 @@
 - [x] Add visible `source_id` to search results.
 - [x] Preserve source id, permission level, participants, and connector raw metadata in chunk metadata.
 - [x] Surface hidden count and source id in the search UI without leaking hidden content.
+- [x] Add `source_ids` to Ask/RAG answers so answer citations can be audited without exposing hidden matches.
 
 ### Task 4: Verification And Record
 

@@ -1242,6 +1242,8 @@ Implemented scope:
 - Rewrote `/dashboard` Korean copy to remove mojibake.
 - Added `hidden_match_count` to search responses and `source_id` to visible
   search results.
+- Added `source_ids` to Ask/RAG answers so visible answer citations are
+  auditable by stable source identifiers.
 - Preserved source id, permission level, participants, and connector raw
   metadata in `DocumentChunk.metadata_`.
 - Updated `/search` to show hidden match counts without exposing hidden
@@ -1249,7 +1251,7 @@ Implemented scope:
 
 Verification evidence:
 
-- Focused permission/connector tests passed with 6 tests.
+- Focused permission/connector/Ask tests passed with 15 tests.
 - Focused Ruff passed for changed backend search, ingestion, and tests.
 - Full backend tests passed with 102 tests and 1 skipped pgvector integration
   test.

@@ -36,6 +36,7 @@ def ask_company_memory(
         'prompt_version': answer.prompt_version,
         'question': answer.question,
         'answer': answer.answer,
+        'source_ids': answer.source_ids,
         'source_links': answer.source_links,
         'source_snippets': answer.source_snippets,
         'permission_level': answer.permission_level,

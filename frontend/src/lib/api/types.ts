@@ -165,6 +165,7 @@ export type AskResponse = {
   prompt_version: string;
   question: string;
   answer: string;
+  source_ids: string[];
   source_links: string[];
   source_snippets: string[];
   permission_level: string;

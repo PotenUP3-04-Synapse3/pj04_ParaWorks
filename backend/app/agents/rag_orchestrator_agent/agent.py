@@ -38,6 +38,7 @@ class RagAnswer:
     prompt_version: str
     question: str
     answer: str
+    source_ids: list[str]
     source_links: list[str]
     source_snippets: list[str]
     permission_level: str
@@ -108,6 +109,7 @@ class RagOrchestratorAgent:
             prompt_version=RAG_ORCHESTRATOR_AGENT_PROMPT_VERSION,
             question=question,
             answer=model_response.answer,
+            source_ids=packet.source_ids,
             source_links=packet.source_links,
             source_snippets=packet.source_snippets,
             permission_level=packet.strictest_permission,

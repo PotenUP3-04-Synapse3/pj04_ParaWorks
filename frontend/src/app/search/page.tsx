@@ -188,6 +188,11 @@ export default function SearchPage() {
                         className="block rounded-lg border border-[var(--line-soft)] bg-white p-3 text-sm hover:bg-[#fbfaf8]"
                       >
                         <span className="font-medium text-[#21132b]">근거 {index + 1}</span>
+                        {askResponse.source_ids[index] ? (
+                          <span className="mt-1 block text-xs text-[var(--ink-muted)]">
+                            {askResponse.source_ids[index]}
+                          </span>
+                        ) : null}
                         <span className="mt-1 block break-all text-xs text-[var(--ink-muted)]">{sourceLink}</span>
                       </a>
                     ))}
