@@ -9,6 +9,8 @@ const pages = [
   { path: "/integrations", heading: "연동과 에이전트 도구" },
   { path: "/agent-runs", heading: "AI 실행 관측" },
   { path: "/search", heading: "회사 메모리에 질문하기" },
+  { path: "/login", heading: "로그인" },
+  { path: "/admin", heading: "관리자 콘솔" },
 ];
 
 test.beforeAll(async () => {
@@ -77,6 +79,36 @@ test("top search submits to the company memory search page", async ({ page }, te
 
   await expect(page).toHaveURL(/\/search\?q=PostgreSQL\+durable\+record/);
   await expect(page.locator("#query")).toHaveValue("PostgreSQL durable record");
+});
+
+test("demo login switches the active API user", async ({ page }) => {
+  await page.goto("/login");
+
+  await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
+  await page.getByRole("button", { name: "이 계정으로 로그인" }).first().click();
+  await expect(page.getByText("ParaWorks Admin 계정으로 전환되었습니다.")).toBeVisible();
+
+  const storedUser = await page.evaluate(() => window.localStorage.getItem("paraworks-demo-user"));
+  expect(storedUser).toBe("demo-admin");
+});
+
+test("admin console is blocked for employee accounts", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "employee-soyeon"));
+  await page.goto("/admin");
+
+  await expect(page.getByRole("heading", { name: "관리자 권한 필요" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "관리자 계정으로 로그인" })).toBeVisible();
+});
+
+test("admin console lists demo employees and permission levels", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+  await page.goto("/admin");
+
+  await expect(page.getByRole("heading", { name: "관리자 콘솔" })).toBeVisible();
+  await expect(page.getByText("admin@paraworks.com")).toBeVisible();
+  await expect(page.getByText("mina@paraworks.com")).toBeVisible();
+  await expect(page.getByText("soyeon@paraworks.com")).toBeVisible();
+  await expect(page.getByText("restricted").first()).toBeVisible();
 });
 
 test("shell chrome uses distinct theme tokens across viewport modes", async ({ page }, testInfo) => {

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from backend.app.api.v1 import (
     agent_runs,
     ask,
+    auth,
     dashboard,
     integrations,
     knowledge,
@@ -17,6 +18,7 @@ from backend.app.api.v1 import (
 api_router = APIRouter(prefix='/api/v1')
 api_router.include_router(agent_runs.router)
 api_router.include_router(ask.router)
+api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(integrations.router)
 api_router.include_router(knowledge.router)

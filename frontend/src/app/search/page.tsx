@@ -53,8 +53,8 @@ function SearchPageContent() {
 
     try {
       const [askResult, searchResult] = await Promise.all([
-        apiPost<AskResponse>("/api/v1/ask", { question: trimmedQuery }, "viewer"),
-        apiPost<SearchResponse>("/api/v1/search", { query: trimmedQuery }, "viewer"),
+        apiPost<AskResponse>("/api/v1/ask", { question: trimmedQuery }),
+        apiPost<SearchResponse>("/api/v1/search", { query: trimmedQuery }),
       ]);
       setAskResponse(askResult);
       setSearchResponse(searchResult);

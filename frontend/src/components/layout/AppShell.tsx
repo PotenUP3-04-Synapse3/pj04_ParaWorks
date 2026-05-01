@@ -7,9 +7,11 @@ import {
   Database,
   Library,
   LayoutDashboard,
+  LogIn,
   MessageSquare,
   Moon,
   Search,
+  ShieldCheck,
   Sparkles,
   Sun,
 } from "lucide-react";
@@ -26,6 +28,8 @@ const navItems = [
   { href: "/search", labelKey: "search", icon: Search, section: "workspace" },
   { href: "/agent-runs", labelKey: "agentRuns", icon: BarChart3, section: "workspace" },
   { href: "/integrations", labelKey: "integrations", icon: Database, section: "tools" },
+  { href: "/admin", labelKey: "admin", icon: ShieldCheck, section: "tools" },
+  { href: "/login", labelKey: "login", icon: LogIn, section: "tools" },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {

@@ -12,6 +12,24 @@ export type DashboardResponse = {
   recent_jobs: SyncJob[];
 };
 
+export type DemoUser = {
+  id: string;
+  email: string;
+  role: "admin" | "employee" | string;
+  permission_levels: string[];
+  name: string;
+  title: string;
+  department: string;
+};
+
+export type AuthUserResponse = {
+  user: DemoUser;
+};
+
+export type AuthUsersResponse = {
+  users: DemoUser[];
+};
+
 export type AgentRunSummaryItem = {
   id: number;
   agent_name: string;

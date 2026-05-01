@@ -2525,6 +2525,32 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
   passed with 40/40 executed tests and 2 expected mobile skips.
 
+## Demo Login And Admin Permission Foundation
+
+What changed:
+
+- Added a demo auth API with `admin@paraworks.com` plus three employee
+  accounts so portfolio demos can switch between admin, internal employee, and
+  public-only permission scopes.
+- Added `/login` for demo account switching and `/admin` for an admin-only
+  user/permission console.
+- Aligned the frontend API client with the selected demo user so search, ask,
+  and admin APIs use the same permission header instead of hardcoded admin or
+  viewer behavior.
+- Updated Playwright to use `http://localhost:3000` by default because Next dev
+  hydration failed on `127.0.0.1` in this local environment.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_auth_api.py backend/tests/test_search_permissions.py backend/tests/test_ask_api.py backend/tests/test_agent_runs_api.py backend/tests/test_knowledge_api.py backend/tests/test_integration_runtime_status.py`
+  passed with 20 tests.
+- `npx eslint src/app/login/page.tsx src/app/admin/page.tsx src/app/search/page.tsx src/components/layout/AppShell.tsx src/lib/api/client.ts src/lib/api/types.ts src/lib/i18n/dictionary.ts e2e/visual-smoke.spec.ts playwright.config.ts`
+  passed.
+- `npm run build` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts` passed with 50 executed tests
+  and 2 expected mobile skips after starting the local smoke backend with a
+  SQLite dev DB because the local PostgreSQL password was rejected.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2594,3 +2620,4 @@ Verification evidence:
 - `feat: activate global search bars`
 - `feat: activate google oauth callback`
 - `style: tune light deep purple palette`
+- `feat: add demo login and admin console`
