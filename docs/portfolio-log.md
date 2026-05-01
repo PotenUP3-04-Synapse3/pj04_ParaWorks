@@ -623,6 +623,43 @@ Verification evidence:
 - HTTP smoke returned 200 for `/health`, `/knowledge`, `/review`, and
   `/dashboard`.
 
+## RAG Update: Approved Knowledge Retrieval
+
+Recorded on 2026-05-01.
+
+Next retrieval milestone is allowing the RAG Orchestrator to answer from
+human-approved company memory, not only raw source chunks.
+
+Portfolio angle:
+
+- Connects Knowledge Library records back into the user-facing Ask workflow.
+- Shows the intended learning loop: raw evidence is reviewed, promoted into
+  company memory, then reused as trusted RAG context.
+- Keeps the permission story intact by applying hidden-match behavior to
+  approved knowledge records as well as raw document chunks.
+
+Implemented scope:
+
+- Added `RagEvidenceCandidate` as a common retrieval candidate for raw chunks
+  and approved knowledge.
+- Added approved `DecisionRecord`, `HistoryEvent`, and `Todo` retrieval to the
+  RAG Orchestrator service.
+- Preserved source links and source snippets from approved knowledge records in
+  `EvidencePacket`.
+- Kept `/api/v1/ask` response shape unchanged.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_orchestrator_service.py backend/tests/test_ask_api.py -v`
+  passed.
+- `uv run pytest backend/tests -v` passed with 59 backend tests.
+- Smoke server restarted with `.tmp/paraworks-knowledge-rag.db`.
+- Slack sync and approving all 3 Review Items followed by `POST /api/v1/ask`
+  for `Redis queues` returned `askAgent=rag_orchestrator_agent`,
+  `sourceCount=2`, and `hidden=0`.
+- HTTP smoke returned 200 for `/health`, `/search`, `/knowledge`, and
+  `/dashboard`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -646,3 +683,4 @@ Verification evidence:
 - `15e1864 feat: add agent run observability`
 - `b90a709 feat: persist rag agent runs`
 - `870813c feat: promote approved review items`
+- `84707e2 feat: add knowledge library`

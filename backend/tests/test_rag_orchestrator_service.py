@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
 from backend.app.core.demo_auth import USERS
-from backend.app.models import AgentRun, Document, DocumentChunk, DocumentVersion, Source
+from backend.app.models import AgentRun, DecisionRecord, Document, DocumentChunk, DocumentVersion, Source, Todo
 
 
 def seed_chunk(db: Session, source_type: str, source_id: str, text: str, permission_level: str) -> None:
@@ -100,3 +100,49 @@ def test_rag_service_persists_agent_run_metadata(db_session: Session) -> None:
     assert agent_run.metadata_['question'] == 'Redis job state'
     assert agent_run.metadata_['source_count'] == 1
     assert agent_run.metadata_['hidden_match_count'] == 0
+
+
+def test_rag_service_answers_from_approved_knowledge_records(db_session: Session) -> None:
+    db_session.add(
+        DecisionRecord(
+            title='Use Redis for queues',
+            decision_summary='Redis should power queue and job progress updates.',
+            source_links=['https://knowledge.mock/redis-decision'],
+            source_snippets=['Approved Redis decision snippet'],
+            confidence_score=0.91,
+            permission_level='internal',
+            review_status='approved',
+        )
+    )
+    db_session.commit()
+
+    answer = answer_question_with_rag(db=db_session, user=USERS['viewer'], question='Redis queues')
+
+    assert answer.answer
+    assert answer.source_links == ['https://knowledge.mock/redis-decision']
+    assert answer.source_snippets == ['Approved Redis decision snippet']
+    assert answer.hidden_match_count == 0
+    assert answer.permission_notice is None
+
+
+def test_rag_service_hides_restricted_approved_knowledge_for_viewer(db_session: Session) -> None:
+    db_session.add(
+        Todo(
+            title='Review confidential pricing',
+            priority='high',
+            priority_reason='Confidential pricing requires finance approval.',
+            source_links=['https://knowledge.mock/restricted-pricing'],
+            source_snippets=['Restricted pricing snippet'],
+            confidence_score=0.8,
+            permission_level='restricted',
+            review_status='approved',
+        )
+    )
+    db_session.commit()
+
+    answer = answer_question_with_rag(db=db_session, user=USERS['viewer'], question='confidential pricing')
+
+    assert answer.answer == '권한 내에서 확인 가능한 근거를 찾지 못했습니다.'
+    assert answer.source_links == []
+    assert answer.hidden_match_count == 1
+    assert answer.permission_notice == 'Some sources may be hidden by permissions.'

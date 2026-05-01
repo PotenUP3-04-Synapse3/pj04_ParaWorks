@@ -24,9 +24,12 @@ class EvidenceMessage:
     timestamp: str
     permission_level: str
     metadata: dict = field(default_factory=dict)
+    source_snippet_override: str | None = None
 
     @property
     def source_snippet(self) -> str:
+        if self.source_snippet_override:
+            return self.source_snippet_override
         return self.text[:240]
 
 
