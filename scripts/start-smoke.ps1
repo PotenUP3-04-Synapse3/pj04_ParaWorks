@@ -27,13 +27,14 @@ try {
     $env:DATABASE_URL = $databaseUrl
     uv run python -m backend.app.db.init_db
 
-    $nextCache = Join-Path $repoRoot "frontend/.next"
+    $nextDistDir = ".next-smoke"
+    $nextCache = Join-Path $repoRoot "frontend/$nextDistDir"
     if (Test-Path $nextCache) {
         Remove-Item -LiteralPath $nextCache -Recurse -Force
     }
 
     $backendCommand = "`$env:DATABASE_URL='$databaseUrl'; uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort"
-    $frontendCommand = "npm.cmd run dev -- --hostname $HostAddress --port $FrontendPort"
+    $frontendCommand = "`$env:NEXT_DIST_DIR='$nextDistDir'; npm.cmd run dev -- --hostname $HostAddress --port $FrontendPort"
 
     $backend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory $repoRoot -ArgumentList @("-NoProfile", "-Command", $backendCommand)
     $frontend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory (Join-Path $repoRoot "frontend") -ArgumentList @("-NoProfile", "-Command", $frontendCommand)

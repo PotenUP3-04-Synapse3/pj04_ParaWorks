@@ -698,6 +698,41 @@ Verification evidence:
 - Browser smoke opened `/agent-runs/8`, rendered the Rag Orchestrator run
   details, and reported no console errors.
 
+## Harness Reliability: Isolated Frontend Smoke Cache
+
+Recorded on 2026-05-01.
+
+During browser retesting, the AgentRun detail page rendered without Tailwind
+styles because the running Next dev server and `npm run build` shared the same
+`.next` directory.
+
+Portfolio angle:
+
+- Shows debugging across browser rendering, CSS asset serving, Next build
+  artifacts, and local smoke scripts.
+- Turns a flaky local-demo failure into a repeatable regression test.
+- Protects future AI-assisted workflows where test/build commands may run
+  while the smoke UI remains open.
+
+Implemented scope:
+
+- Added `NEXT_DIST_DIR` support to `frontend/next.config.ts`.
+- Updated `scripts/start-smoke.ps1` so smoke dev uses `.next-smoke` instead of
+  the production build `.next` directory.
+- Added `backend/tests/test_smoke_frontend_cache.py` to guard the cache
+  isolation contract.
+
+Verification evidence:
+
+- Reproduced the broken page as a CSS 404 for
+  `/_next/static/css/app/layout.css`.
+- `uv run pytest backend/tests/test_smoke_frontend_cache.py -v` failed before
+  the fix and passed after the fix.
+- Restarted smoke with `.tmp/paraworks-agent-run-detail.db`.
+- Confirmed `/agent-runs/8` and its CSS file returned 200 before and after
+  `npm.cmd run build` while the smoke dev server stayed open.
+- Browser smoke reloaded `/agent-runs/8` and rendered the styled AgentRun cards.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -723,3 +758,4 @@ Verification evidence:
 - `870813c feat: promote approved review items`
 - `84707e2 feat: add knowledge library`
 - `6f6deab feat: use approved knowledge in rag`
+- `3161dff feat: add agent run detail view`
