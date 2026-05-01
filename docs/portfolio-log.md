@@ -2082,6 +2082,29 @@ Verification evidence:
 - `uv run pytest backend/tests/test_integration_runtime_status.py -v` passed.
 - `uv run ruff check backend/app/api/v1/integrations.py backend/app/core/redaction.py backend/tests/test_integration_runtime_status.py` passed.
 
+## 2026-05-02 - Portfolio Case Study Draft
+
+Why it matters:
+
+- The project now has enough architecture and implementation evidence to be
+  presented as more than a UI clone or basic RAG demo.
+- A dedicated case study helps explain the engineering value: multi-agent
+  ownership, LangGraph orchestration, evidence-first review, pgvector-ready RAG,
+  cost controls, and connector security boundaries.
+
+Implemented scope:
+
+- Added `docs/portfolio-case-study.md`.
+- Structured the story around problem, architecture, agent ownership, cost
+  optimization, security/review boundaries, frontend experience, verification,
+  and a resume bullet draft.
+- Referenced the saved LangGraph graph capture assets.
+
+Verification evidence:
+
+- Documentation-only change reviewed against `AGENTS.md` and the current
+  implementation history.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2135,3 +2158,4 @@ Verification evidence:
 - `feat: show google runtime status`
 - `feat: add execution cost plan`
 - `fix: redact runtime status secrets`
+- `docs: add portfolio case study`
