@@ -1,4 +1,5 @@
 import { Bot, CircleDollarSign, Database, ShieldAlert, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { apiGet } from "@/lib/api/client";
 import type { AgentRunsResponse, DashboardResponse } from "@/lib/api/types";
 
@@ -115,8 +116,9 @@ export default async function DashboardPage() {
         </div>
         <div className="divide-y divide-[var(--line-soft)]">
           {agentRuns.recent_runs.map((run) => (
-            <div
+            <Link
               key={run.id}
+              href={`/agent-runs/${run.id}`}
               className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(180px,0.8fr)_120px_120px]"
             >
               <div className="min-w-0">
@@ -135,7 +137,7 @@ export default async function DashboardPage() {
                 <p className="font-semibold">${run.estimated_cost_usd.toFixed(6)}</p>
                 <p className="text-xs capitalize text-[var(--ink-muted)]">{run.permission_level}</p>
               </div>
-            </div>
+            </Link>
           ))}
           {agentRuns.recent_runs.length === 0 ? (
             <p className="px-4 py-8 text-sm text-[var(--ink-muted)]">

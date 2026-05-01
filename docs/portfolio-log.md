@@ -660,6 +660,44 @@ Verification evidence:
 - HTTP smoke returned 200 for `/health`, `/search`, `/knowledge`, and
   `/dashboard`.
 
+## Observability Update: AgentRun Detail View
+
+Recorded on 2026-05-01.
+
+Next observability milestone is inspecting one AI execution from dashboard
+summary to prompt, model, token, cost, cache, permission, and metadata detail.
+
+Portfolio angle:
+
+- Makes AI orchestration cost and behavior auditable at the individual run
+  level.
+- Gives reviewers a concrete UI for explaining prompt versions, token usage,
+  cache keys, permission level, and runtime metadata.
+- Connects the executive dashboard to an engineer-facing trace view without
+  changing the agent execution contract.
+
+Implemented scope:
+
+- Added `GET /api/v1/agent-runs/{id}` with a shared AgentRun serializer.
+- Added `token_usage` to AgentRun API payloads while preserving flat token
+  fields for existing UI code.
+- Added `/agent-runs/[id]` frontend detail page.
+- Linked recent dashboard AgentRun rows to their detail pages.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_agent_runs_api.py -v` passed.
+- `uv run pytest backend/tests -v` passed with 61 backend tests.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-agent-run-detail.db`.
+- Gmail and Drive sync followed by `POST /api/v1/ask` produced AgentRun `8`
+  with `agent=rag_orchestrator_agent`, `tokens=136`, and
+  `question=Redis job state` from `/api/v1/agent-runs/8`.
+- HTTP smoke returned 200 for `/health`, `/dashboard`, `/agent-runs/8`, and
+  `/review`.
+- Browser smoke opened `/agent-runs/8`, rendered the Rag Orchestrator run
+  details, and reported no console errors.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -684,3 +722,4 @@ Verification evidence:
 - `b90a709 feat: persist rag agent runs`
 - `870813c feat: promote approved review items`
 - `84707e2 feat: add knowledge library`
+- `6f6deab feat: use approved knowledge in rag`

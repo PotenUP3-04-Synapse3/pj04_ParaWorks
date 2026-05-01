@@ -47,3 +47,46 @@ def test_agent_runs_api_returns_recent_runs_and_totals(client, db_session) -> No
     assert payload['recent_runs'][0]['prompt_version'] == 'mail-document-history:v1'
     assert payload['recent_runs'][0]['permission_level'] == 'restricted'
     assert payload['recent_runs'][0]['metadata']['included_source_types'] == ['drive', 'gmail']
+
+
+def test_agent_run_detail_api_returns_single_run(client, db_session) -> None:
+    agent_run = AgentRun(
+        agent_name='rag_orchestrator_agent',
+        prompt_version='rag-answer:v1',
+        status='complete',
+        source_window='ask:Redis queues',
+        cache_key='rag-cache-key',
+        model_name='fake-rag-orchestrator-model',
+        input_tokens=80,
+        output_tokens=32,
+        total_tokens=112,
+        estimated_cost_usd=0.000031,
+        permission_level='internal',
+        metadata_={'question': 'Redis queues', 'source_count': 2},
+    )
+    db_session.add(agent_run)
+    db_session.commit()
+    db_session.refresh(agent_run)
+
+    response = client.get(f'/api/v1/agent-runs/{agent_run.id}')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['id'] == agent_run.id
+    assert payload['agent_name'] == 'rag_orchestrator_agent'
+    assert payload['prompt_version'] == 'rag-answer:v1'
+    assert payload['cache_key'] == 'rag-cache-key'
+    assert payload['token_usage'] == {
+        'input_tokens': 80,
+        'output_tokens': 32,
+        'total_tokens': 112,
+    }
+    assert payload['metadata']['question'] == 'Redis queues'
+    assert payload['estimated_cost_usd'] == 0.000031
+
+
+def test_agent_run_detail_api_returns_404_for_missing_run(client) -> None:
+    response = client.get('/api/v1/agent-runs/404')
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Agent run not found'

@@ -23,6 +23,11 @@ export type AgentRunSummaryItem = {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  token_usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
   estimated_cost_usd: number;
   permission_level: string;
   metadata: Record<string, unknown>;
