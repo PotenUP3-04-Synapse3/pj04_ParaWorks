@@ -8,6 +8,7 @@ import type {
   Message,
   MessageChannel,
   MessageChannelsResponse,
+  ReviewItem,
 } from "@/lib/api/types";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 
@@ -20,6 +21,8 @@ export default function MessagesPage() {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [reviewMessageId, setReviewMessageId] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
 
   const activeChannel = useMemo(
@@ -89,6 +92,21 @@ export default function MessagesPage() {
     }
   }
 
+  async function sendToReview(message: Message) {
+    setReviewMessageId(message.id);
+    setNotice(undefined);
+    setError(undefined);
+
+    try {
+      await apiPost<ReviewItem>(`/api/v1/messages/messages/${message.id}/send-to-review`);
+      setNotice(copy.reviewSent);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : copy.reviewError);
+    } finally {
+      setReviewMessageId(undefined);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -148,6 +166,11 @@ export default function MessagesPage() {
                 {error}
               </div>
             ) : null}
+            {notice ? (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                {notice}
+              </div>
+            ) : null}
             {loading ? <p className="text-sm text-muted">Loading...</p> : null}
             {!loading && messages.length === 0 ? (
               <p className="text-sm text-muted">{copy.empty}</p>
@@ -169,6 +192,14 @@ export default function MessagesPage() {
                     </time>
                   </div>
                   <p className="mt-1 text-sm leading-6">{message.body}</p>
+                  <button
+                    type="button"
+                    onClick={() => void sendToReview(message)}
+                    disabled={Boolean(reviewMessageId)}
+                    className="mt-2 inline-flex h-8 items-center rounded-md border border-line bg-white px-3 text-xs font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
+                  >
+                    {reviewMessageId === message.id ? copy.sendingToReview : copy.sendToReview}
+                  </button>
                 </div>
               </article>
             ))}

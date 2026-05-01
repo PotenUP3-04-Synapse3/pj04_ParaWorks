@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.demo_auth import DemoUser
 from backend.app.models.messages import Message, MessageChannel
+from backend.app.models.review import ReviewItem
 
 KST = timezone(timedelta(hours=9))
 
@@ -165,3 +166,30 @@ def append_message(db: Session, channel_id: str, body: str, user: DemoUser) -> d
     db.commit()
     db.refresh(message)
     return serialize_message(message)
+
+
+def get_message_record(db: Session, message_id: str) -> Message | None:
+    ensure_seed_data(db)
+    return db.get(Message, message_id)
+
+
+def create_review_item_from_message(db: Session, message: Message) -> ReviewItem:
+    review_item = ReviewItem(
+        item_type='message_review',
+        payload={
+            'title': '메신저 검토 요청',
+            'summary': message.body,
+            'channel_id': message.channel_id,
+            'message_id': message.id,
+            'author_name': message.author_name,
+        },
+        source_links=[f'paraworks://messages/{message.id}'],
+        source_snippets=[message.body],
+        confidence_score=0.9,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db.add(review_item)
+    db.commit()
+    db.refresh(review_item)
+    return review_item

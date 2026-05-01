@@ -67,3 +67,27 @@ def test_unknown_channel_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()['detail'] == 'message channel not found'
+
+
+def test_send_message_to_review_creates_source_backed_review_item(
+    client: TestClient,
+) -> None:
+    messages_response = client.get('/api/v1/messages/channels/project-alpha/messages')
+    message = messages_response.json()['messages'][0]
+
+    response = client.post(f"/api/v1/messages/messages/{message['id']}/send-to-review")
+
+    assert response.status_code == 200
+    review_item = response.json()
+    assert review_item['item_type'] == 'message_review'
+    assert review_item['status'] == 'pending_review'
+    assert review_item['payload']['title'] == '메신저 검토 요청'
+    assert review_item['source_links'] == [f"paraworks://messages/{message['id']}"]
+    assert review_item['source_snippets'] == [message['body']]
+
+
+def test_send_unknown_message_to_review_returns_404(client: TestClient) -> None:
+    response = client.post('/api/v1/messages/messages/missing/send-to-review')
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'message not found'

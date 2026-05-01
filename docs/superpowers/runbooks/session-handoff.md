@@ -187,3 +187,33 @@ npm.cmd run build
 ```
 
 Result after this update: backend 23 tests passed; frontend build passed.
+
+## 2026-05-01 Messenger to Review Queue Update
+
+Connected Messenger to the Review workflow.
+
+- API: `POST /api/v1/messages/messages/{message_id}/send-to-review`
+- UI: `/messages` now shows `검토 큐로 보내기` on each message.
+- Created review items use:
+  - `item_type="message_review"`
+  - `payload.title="메신저 검토 요청"`
+  - `source_links=["paraworks://messages/{message_id}"]`
+  - `source_snippets=[message.body]`
+
+Verification:
+
+```powershell
+uv run pytest backend/tests -v
+cd frontend
+npm.cmd run build
+```
+
+Result after this update: backend 25 tests passed; frontend build passed.
+
+Browser smoke covered:
+
+- Open `/messages`.
+- Click `검토 큐로 보내기`.
+- See `검토 큐에 추가했습니다.`
+- Open `/review`.
+- Confirm `메신저 검토 요청` appears in the review queue.
