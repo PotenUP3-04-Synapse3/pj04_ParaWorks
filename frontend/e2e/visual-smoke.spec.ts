@@ -120,7 +120,9 @@ test("Slack OAuth status shows reconnect CTA when the local credential is missin
 
   await page.goto("/integrations");
 
-  await expect(page.getByText("ParaWorks Demo 재연결 필요")).toBeVisible();
+  await expect(page.getByTestId("slack-oauth-workspace-name")).toHaveText("ParaWorks Demo");
+  await expect(page.getByTestId("slack-oauth-workspace-name")).toHaveCSS("white-space", "nowrap");
+  await expect(page.getByText("ParaWorks Demo 재연결 필요")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Slack 재연결" })).toBeVisible();
   await expect(page.getByTestId("slack-card-actions").getByRole("button", { name: "Slack 재연결" })).toHaveCount(0);
 });

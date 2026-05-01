@@ -331,14 +331,15 @@ export default function IntegrationsPage() {
                     data-testid={`${manifest.type}-oauth-status`}
                     className={`mt-4 rounded-lg border ${oauthTheme.border} ${oauthTheme.bg} p-3 text-sm`}
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2">
                         <LockKeyhole className={`h-4 w-4 shrink-0 ${oauthTheme.icon}`} aria-hidden="true" />
-                        <span className={`break-words font-semibold ${oauthTheme.text}`}>
+                        <span
+                          data-testid={`${manifest.type}-oauth-workspace-name`}
+                          className={`truncate font-semibold ${oauthTheme.text}`}
+                        >
                           {connection
-                            ? credentialAvailable
-                              ? `${connection.workspace_name} 연결됨`
-                              : `${connection.workspace_name} 재연결 필요`
+                            ? connection.workspace_name
                             : oauthInstall?.configured
                               ? `${manifest.display_name} 연결 필요`
                               : "OAuth 설정 필요"}

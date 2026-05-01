@@ -1627,7 +1627,8 @@ Portfolio angle:
 - Keeps the primary sync/agent actions stable while placing the reconnect CTA
   inside the OAuth status area where it belongs.
 - Adds desktop/mobile visual coverage for the `token missing -> Slack 재연결`
-  state so long workspace names do not hide the status text or action.
+  state so the workspace name remains a single-line title and the recovery
+  action stays readable.
 
 Implemented scope:
 
@@ -1635,7 +1636,9 @@ Implemented scope:
   `credential_status` is missing.
 - Kept the reconnect CTA out of the primary action row to avoid crowding
   `동기화` and `Slack Agent 실행`.
-- Changed the OAuth status row to wrap cleanly across desktop and mobile.
+- Simplified the OAuth status title to the workspace name only.
+- Kept the workspace title on one line with truncation; reconnect state is
+  carried by the status pill, helper copy, and `Slack 재연결` CTA.
 
 Cost/security note:
 
