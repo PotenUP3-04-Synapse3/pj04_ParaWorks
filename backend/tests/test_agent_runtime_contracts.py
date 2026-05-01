@@ -7,6 +7,7 @@ from backend.app.agent_runtime import (
     TokenUsage,
     build_evidence_cache_key,
     estimate_agent_run_cost,
+    evaluate_agent_cost_budget,
 )
 
 
@@ -100,3 +101,36 @@ def test_estimate_agent_run_cost_records_token_metadata() -> None:
     assert cost.token_usage.total_tokens == 1250
     assert cost.estimated_cost_usd == 0.0003
     assert cost.cache_hit is False
+
+
+def test_cost_budget_decision_skips_over_budget_run() -> None:
+    decision = evaluate_agent_cost_budget(
+        model_name='gpt-test',
+        token_usage=TokenUsage(input_tokens=20_000, output_tokens=5_000),
+        input_cost_per_1m=0.15,
+        output_cost_per_1m=0.60,
+        max_cost_usd=0.001,
+        cache_hit=False,
+    )
+
+    assert decision.action == 'skip'
+    assert decision.reason == 'budget_exceeded'
+    assert decision.budget_status == 'over_budget'
+    assert decision.estimated_cost_usd == 0.006
+    assert decision.budget_limit_usd == 0.001
+
+
+def test_cost_budget_decision_uses_cache_before_budget_rejection() -> None:
+    decision = evaluate_agent_cost_budget(
+        model_name='gpt-test',
+        token_usage=TokenUsage(input_tokens=20_000, output_tokens=5_000),
+        input_cost_per_1m=0.15,
+        output_cost_per_1m=0.60,
+        max_cost_usd=0.001,
+        cache_hit=True,
+    )
+
+    assert decision.action == 'use_cache'
+    assert decision.reason == 'cache_hit'
+    assert decision.budget_status == 'cached'
+    assert decision.estimated_cost_usd == 0.006

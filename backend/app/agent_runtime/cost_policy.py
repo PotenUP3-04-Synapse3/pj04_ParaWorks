@@ -1,8 +1,13 @@
+import json
 from decimal import Decimal
 from hashlib import sha256
-import json
 
-from backend.app.agent_runtime.contracts import AgentRunCost, EvidencePacket, TokenUsage
+from backend.app.agent_runtime.contracts import (
+    AgentCostBudgetDecision,
+    AgentRunCost,
+    EvidencePacket,
+    TokenUsage,
+)
 
 
 def build_evidence_cache_key(packet: EvidencePacket, prompt_version: str) -> str:
@@ -42,4 +47,57 @@ def estimate_agent_run_cost(
         token_usage=token_usage,
         estimated_cost_usd=float(estimated_cost),
         cache_hit=cache_hit,
+    )
+
+
+def evaluate_agent_cost_budget(
+    *,
+    model_name: str,
+    token_usage: TokenUsage,
+    input_cost_per_1m: float,
+    output_cost_per_1m: float,
+    max_cost_usd: float | None,
+    cache_hit: bool,
+) -> AgentCostBudgetDecision:
+    estimated_cost = estimate_agent_run_cost(
+        model_name=model_name,
+        token_usage=token_usage,
+        input_cost_per_1m=input_cost_per_1m,
+        output_cost_per_1m=output_cost_per_1m,
+        cache_hit=cache_hit,
+    )
+
+    if cache_hit:
+        return AgentCostBudgetDecision(
+            action='use_cache',
+            reason='cache_hit',
+            budget_status='cached',
+            model_name=model_name,
+            token_usage=token_usage,
+            estimated_cost_usd=estimated_cost.estimated_cost_usd,
+            budget_limit_usd=max_cost_usd,
+            cache_hit=True,
+        )
+
+    if max_cost_usd is not None and estimated_cost.estimated_cost_usd > max_cost_usd:
+        return AgentCostBudgetDecision(
+            action='skip',
+            reason='budget_exceeded',
+            budget_status='over_budget',
+            model_name=model_name,
+            token_usage=token_usage,
+            estimated_cost_usd=estimated_cost.estimated_cost_usd,
+            budget_limit_usd=max_cost_usd,
+            cache_hit=False,
+        )
+
+    return AgentCostBudgetDecision(
+        action='run',
+        reason='within_budget',
+        budget_status='within_budget',
+        model_name=model_name,
+        token_usage=token_usage,
+        estimated_cost_usd=estimated_cost.estimated_cost_usd,
+        budget_limit_usd=max_cost_usd,
+        cache_hit=False,
     )

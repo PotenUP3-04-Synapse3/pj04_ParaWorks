@@ -1,6 +1,6 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-01
+Last updated: 2026-05-02
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
@@ -2367,6 +2367,38 @@ Verification evidence:
   passed with 32/32 tests.
 - `npm run build` passed.
 
+### Agent Cost Budget Guardrails
+
+- Added a reusable agent runtime cost decision that estimates input/output
+  token cost before execution and returns `run`, `skip`, or `use_cache`.
+- Connected the company memory LangGraph orchestration cost plan to a per-run
+  budget limit so large evidence windows can be skipped before calling an LLM.
+- Preserved explicit skip reasons such as `no_slack_evidence`,
+  `empty_question`, and `budget_exceeded` so the UI/API can explain why an
+  agent did or did not run.
+- Kept cache hits as a first-class policy outcome so future prompt/result cache
+  reuse can avoid paid calls even when the potential token window is large.
+
+Portfolio angle:
+
+- Demonstrates that ParaWorks treats LLM cost as an architecture concern, not a
+  post-hoc dashboard metric.
+- Gives the three-agent split a shared budget contract, making independently
+  developed Slack, Mail/Document, and RAG agents easier to merge safely.
+- Supports the final product goal of multi-agent orchestration while protecting
+  against expensive repeated sync and re-vectorization patterns.
+
+Verification evidence:
+
+- Added RED tests first for over-budget skip behavior and cache-first budget
+  decisions.
+- `uv run pytest backend/tests/test_agent_runtime_contracts.py backend/tests/test_company_memory_orchestration_service.py`
+  passed with 9/9 tests.
+- `uv run ruff check backend/app/agent_runtime backend/tests/test_agent_runtime_contracts.py backend/tests/test_company_memory_orchestration_service.py`
+  passed after applying automatic import cleanup.
+- `uv run pytest backend/tests/test_agent_runtime_contracts.py backend/tests/test_company_memory_orchestration_service.py backend/tests/test_agent_orchestration.py backend/tests/test_agent_runs_api.py`
+  passed with 16/16 tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2431,3 +2463,4 @@ Verification evidence:
 - `style: tokenize shell theme chrome`
 - `style: tune light gray purple palette`
 - `style: soften light purple palette`
+- `feat: add agent cost budget guardrails`

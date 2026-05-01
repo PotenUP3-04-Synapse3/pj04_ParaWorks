@@ -94,6 +94,18 @@ class AgentRunCost:
 
 
 @dataclass(frozen=True)
+class AgentCostBudgetDecision:
+    action: str
+    reason: str
+    budget_status: str
+    model_name: str
+    token_usage: TokenUsage
+    estimated_cost_usd: float
+    budget_limit_usd: float | None
+    cache_hit: bool
+
+
+@dataclass(frozen=True)
 class AgentRunResult:
     agent_name: str
     prompt_version: str

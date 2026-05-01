@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from backend.app.agent_runtime import (
     AgentWorkflowState,
     PermissionContext,
+    TokenUsage,
     build_agent_workflow,
+    evaluate_agent_cost_budget,
 )
 from backend.app.agents.mail_document_agent import (
     DeterministicMailDocumentAgentModel,
@@ -21,6 +23,11 @@ from backend.app.agents.slack_agent import (
 )
 from backend.app.core.demo_auth import DemoUser
 from backend.app.models import DocumentChunk, Source
+
+DEFAULT_AGENT_RUN_BUDGET_USD = 0.001
+DEFAULT_INPUT_COST_PER_1M = 0.15
+DEFAULT_OUTPUT_COST_PER_1M = 0.60
+DEFAULT_ESTIMATED_OUTPUT_TOKENS = 32
 
 
 @dataclass(frozen=True)
@@ -60,7 +67,7 @@ def run_company_memory_agent_orchestration(
     )
 
 
-def build_company_memory_cost_plan(*, db: Session, question: str) -> dict[str, dict[str, int | str]]:
+def build_company_memory_cost_plan(*, db: Session, question: str) -> dict[str, dict[str, float | int | str | None]]:
     slack_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('slack',))
     mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'drive'))
     question_token_estimate = _estimate_tokens(question)
@@ -87,7 +94,7 @@ def build_company_memory_cost_plan(*, db: Session, question: str) -> dict[str, d
     }
 
 
-def _collect_evidence_node(db: Session, cost_plan: dict[str, dict[str, int | str]]):
+def _collect_evidence_node(db: Session, cost_plan: dict[str, dict[str, float | int | str | None]]):
     def collect_evidence(state: AgentWorkflowState) -> AgentWorkflowState:
         slack_count = _count_chunks(db=db, source_types=('slack',))
         mail_document_count = _count_chunks(db=db, source_types=('gmail', 'drive'))
@@ -106,7 +113,7 @@ def _collect_evidence_node(db: Session, cost_plan: dict[str, dict[str, int | str
 def _draft_review_candidates_node(
     db: Session,
     permission_context: PermissionContext,
-    cost_plan: dict[str, dict[str, int | str]],
+    cost_plan: dict[str, dict[str, float | int | str | None]],
 ):
     def draft_review_candidates(state: AgentWorkflowState) -> AgentWorkflowState:
         slack_items = []
@@ -149,7 +156,7 @@ def _answer_with_rag_node(
     db: Session,
     user: DemoUser,
     question: str,
-    cost_plan: dict[str, dict[str, int | str]],
+    cost_plan: dict[str, dict[str, float | int | str | None]],
 ):
     def answer_with_rag(state: AgentWorkflowState) -> AgentWorkflowState:
         if cost_plan['rag_orchestrator_agent']['action'] == 'skip':
@@ -201,10 +208,36 @@ def _agent_cost_plan(
     run_reason: str,
     skip_reason: str,
     estimated_input_tokens: int,
-) -> dict[str, int | str]:
+) -> dict[str, float | int | str | None]:
+    if not has_input:
+        return {
+            'action': 'skip',
+            'reason': skip_reason,
+            'estimated_input_tokens': estimated_input_tokens,
+            'estimated_output_tokens': 0,
+            'estimated_cost_usd': 0.0,
+            'budget_limit_usd': DEFAULT_AGENT_RUN_BUDGET_USD,
+            'budget_status': 'no_input',
+        }
+
+    decision = evaluate_agent_cost_budget(
+        model_name='planning-estimate',
+        token_usage=TokenUsage(
+            input_tokens=estimated_input_tokens,
+            output_tokens=DEFAULT_ESTIMATED_OUTPUT_TOKENS,
+        ),
+        input_cost_per_1m=DEFAULT_INPUT_COST_PER_1M,
+        output_cost_per_1m=DEFAULT_OUTPUT_COST_PER_1M,
+        max_cost_usd=DEFAULT_AGENT_RUN_BUDGET_USD,
+        cache_hit=False,
+    )
+
     return {
-        'action': 'run' if has_input else 'skip',
-        'reason': run_reason if has_input else skip_reason,
+        'action': decision.action,
+        'reason': run_reason if decision.action == 'run' else decision.reason,
         'estimated_input_tokens': estimated_input_tokens,
-        'estimated_output_tokens': 32 if has_input else 0,
+        'estimated_output_tokens': DEFAULT_ESTIMATED_OUTPUT_TOKENS,
+        'estimated_cost_usd': round(decision.estimated_cost_usd, 6),
+        'budget_limit_usd': decision.budget_limit_usd,
+        'budget_status': decision.budget_status,
     }

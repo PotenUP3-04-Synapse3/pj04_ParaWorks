@@ -80,26 +80,19 @@ def test_company_memory_orchestration_runs_real_agent_services(db_session: Sessi
     assert result.outputs['mail_document_review_items_created'] == 1
     assert result.outputs['rag_agent_run_created'] is True
     assert result.outputs['token_budget_policy'] == 'delta_sync_hash_skip_evidence_budget'
-    assert result.outputs['cost_plan'] == {
-        'slack_agent': {
-            'action': 'run',
-            'reason': 'slack_evidence_available',
-            'estimated_input_tokens': 13,
-            'estimated_output_tokens': 32,
-        },
-        'mail_document_agent': {
-            'action': 'run',
-            'reason': 'mail_document_evidence_available',
-            'estimated_input_tokens': 22,
-            'estimated_output_tokens': 32,
-        },
-        'rag_orchestrator_agent': {
-            'action': 'run',
-            'reason': 'question_provided',
-            'estimated_input_tokens': 3,
-            'estimated_output_tokens': 32,
-        },
-    }
+    cost_plan = result.outputs['cost_plan']
+    assert cost_plan['slack_agent']['action'] == 'run'
+    assert cost_plan['slack_agent']['reason'] == 'slack_evidence_available'
+    assert cost_plan['slack_agent']['estimated_input_tokens'] == 13
+    assert cost_plan['slack_agent']['budget_status'] == 'within_budget'
+    assert cost_plan['mail_document_agent']['action'] == 'run'
+    assert cost_plan['mail_document_agent']['reason'] == 'mail_document_evidence_available'
+    assert cost_plan['mail_document_agent']['estimated_input_tokens'] == 22
+    assert cost_plan['mail_document_agent']['budget_status'] == 'within_budget'
+    assert cost_plan['rag_orchestrator_agent']['action'] == 'run'
+    assert cost_plan['rag_orchestrator_agent']['reason'] == 'question_provided'
+    assert cost_plan['rag_orchestrator_agent']['estimated_input_tokens'] == 3
+    assert cost_plan['rag_orchestrator_agent']['budget_status'] == 'within_budget'
 
     agent_names = [run.agent_name for run in db_session.query(AgentRun).order_by(AgentRun.id).all()]
     assert agent_names == ['slack_agent', 'mail_document_agent', 'rag_orchestrator_agent']
@@ -126,3 +119,29 @@ def test_company_memory_orchestration_marks_missing_evidence_as_cost_skips(db_se
     assert result.outputs['cost_plan']['rag_orchestrator_agent']['action'] == 'skip'
     assert result.outputs['cost_plan']['rag_orchestrator_agent']['reason'] == 'empty_question'
     assert db_session.query(AgentRun).count() == 0
+
+
+def test_company_memory_orchestration_skips_agents_that_exceed_cost_budget(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'slack',
+        'slack-large-channel',
+        'Redis budget pressure requires selective summarization. ' * 3_000,
+    )
+
+    result = run_company_memory_agent_orchestration(
+        db=db_session,
+        user=USERS['admin'],
+        question='Redis job state',
+    )
+
+    slack_plan = result.outputs['cost_plan']['slack_agent']
+    assert slack_plan['action'] == 'skip'
+    assert slack_plan['reason'] == 'budget_exceeded'
+    assert slack_plan['budget_status'] == 'over_budget'
+    assert slack_plan['estimated_cost_usd'] > slack_plan['budget_limit_usd']
+    assert result.outputs['slack_review_items_created'] == 0
+    assert result.outputs['rag_agent_run_created'] is True
+
+    agent_names = [run.agent_name for run in db_session.query(AgentRun).order_by(AgentRun.id).all()]
+    assert agent_names == ['rag_orchestrator_agent']
