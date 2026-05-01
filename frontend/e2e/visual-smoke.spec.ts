@@ -222,3 +222,70 @@ test("Google connector cards show OAuth readiness outside primary action rows", 
   expect(bodyText).not.toContain("refresh-token");
   expect(bodyText).not.toContain("token_ref");
 });
+
+test("Gmail and Google Drive cards show connect CTAs when OAuth is configured", async ({ page }) => {
+  await page.route("**/api/v1/integrations/connections", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: [] });
+  });
+  for (const connectorType of ["gmail", "drive"]) {
+    await page.route(`**/api/v1/integrations/${connectorType}/oauth/install-url`, async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          connector_type: connectorType,
+          configured: true,
+          install_url: `https://accounts.google.com/o/oauth2/v2/auth?client_id=G123&state=${connectorType}-state`,
+          state: `${connectorType}-state`,
+          required_scopes: [`https://www.googleapis.com/auth/${connectorType}.readonly`],
+        },
+      });
+    });
+  }
+
+  await page.goto("/integrations");
+
+  await expect(page.getByTestId("gmail-oauth-status").getByRole("button", { name: "Gmail 연결" })).toBeVisible();
+  await expect(page.getByTestId("drive-oauth-status").getByRole("button", { name: "Google Drive 연결" })).toBeVisible();
+  await expect(page.getByTestId("gmail-card-actions").getByRole("button", { name: "Gmail 연결" })).toHaveCount(0);
+  await expect(page.getByTestId("drive-card-actions").getByRole("button", { name: "Google Drive 연결" })).toHaveCount(0);
+});
+
+test("Google OAuth callback route renders a safe local error without secrets", async ({ page }) => {
+  await page.goto("/integrations/google/callback");
+
+  await expect(page.getByRole("heading", { name: "Google 연결 확인" })).toBeVisible();
+  await expect(page.getByText("Google 연결 정보를 확인할 수 없습니다.")).toBeVisible();
+
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("google-secret");
+  expect(bodyText).not.toContain("refresh-token");
+  expect(bodyText).not.toContain("token_ref");
+});
+
+test("Google OAuth callback route can complete Gmail and Drive connections", async ({ page }) => {
+  await page.route("**/api/v1/integrations/google/oauth/callback?**", async (route) => {
+    const url = new URL(route.request().url());
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: url.searchParams.get("connector_type") ?? "gmail",
+        workspace_id: "google-user-123",
+        workspace_name: "para@example.com",
+        status: "connected",
+        credential_status: "available",
+        masked_bot_token: "1//r...oken",
+        scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      },
+    });
+  });
+
+  await page.goto("/integrations/google/callback?code=temporary-code&state=signed-state");
+
+  await expect(page.getByRole("heading", { name: "Google 연결 확인" })).toBeVisible();
+  await expect(page.getByText("Google 연결 완료")).toBeVisible();
+  await expect(page.getByText("para@example.com 계정이 ParaWorks에 연결되었습니다.")).toBeVisible();
+
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("refresh-token");
+  expect(bodyText).not.toContain("token_ref");
+});

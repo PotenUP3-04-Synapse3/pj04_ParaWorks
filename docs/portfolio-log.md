@@ -2461,6 +2461,45 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
   passed with 34/34 executed tests and 2 expected mobile skips.
 
+### Google OAuth Callback Activation
+
+- Added a generic backend Google OAuth callback route at
+  `/api/v1/integrations/google/oauth/callback` that reads the signed state to
+  determine whether the returning connection is Gmail, Google Drive, or
+  Calendar.
+- Added the frontend `/integrations/google/callback` route so Google Cloud's
+  shared redirect URI can complete OAuth installs and persist connection
+  metadata.
+- Kept raw Google access/refresh tokens and internal token refs out of the UI,
+  matching the Slack OAuth redaction pattern.
+- Added explicit visual coverage for Gmail and Google Drive connect CTAs when
+  OAuth is configured, while keeping those CTAs outside the primary sync/action
+  row.
+
+Portfolio angle:
+
+- Moves Google integration from a readiness boundary into a real OAuth install
+  loop for Gmail and Drive.
+- Shows secure connector UX: signed state routing, token redaction, safe local
+  error states, and post-callback connection metadata.
+
+Verification evidence:
+
+- Added RED tests first for missing generic Google callback API and missing
+  frontend callback route.
+- `uv run pytest backend/tests/test_google_oauth.py` passed with 6/6 tests.
+- `uv run ruff check backend/app/api/v1/integrations.py backend/tests/test_google_oauth.py`
+  passed.
+- `npx eslint src/app/integrations/google/callback/page.tsx src/app/integrations/google/callback/GoogleCallbackClient.tsx src/app/integrations/page.tsx e2e/visual-smoke.spec.ts`
+  passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop -g "Google"`
+  passed with 4/4 tests.
+- `npm run build` passed and listed `/integrations/google/callback`.
+- `uv run pytest backend/tests/test_google_oauth.py backend/tests/test_integration_runtime_status.py backend/tests/test_google_connector.py`
+  passed with 16/16 tests.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 40/40 executed tests and 2 expected mobile skips.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2528,3 +2567,4 @@ Verification evidence:
 - `feat: add agent cost budget guardrails`
 - `feat: expose agent budget observability`
 - `feat: activate global search bars`
+- `feat: activate google oauth callback`

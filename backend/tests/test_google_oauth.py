@@ -144,3 +144,13 @@ def test_google_oauth_callback_api_rejects_connector_mismatch(client: TestClient
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Google OAuth state connector mismatch'
+
+
+def test_google_generic_oauth_callback_api_rejects_malformed_state(client: TestClient) -> None:
+    response = client.get(
+        '/api/v1/integrations/google/oauth/callback',
+        params={'code': 'temporary-code', 'state': 'not-a-signed-state'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'Google OAuth state is malformed'

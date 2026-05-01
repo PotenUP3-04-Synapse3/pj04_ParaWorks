@@ -20,6 +20,7 @@ from backend.app.connectors.google_oauth import (
     GOOGLE_OAUTH_CONNECTOR_TYPES,
     GoogleOAuthConfigurationError,
     GoogleOAuthError,
+    GoogleOAuthStateSigner,
     build_google_oauth_install_url,
     complete_google_oauth_callback,
 )
@@ -244,6 +245,38 @@ def get_google_oauth_install_url(connector_type: str, settings: AppSettings) -> 
         'install_url': install.install_url,
         'state': install.state,
         'required_scopes': install.required_scopes,
+    }
+
+
+@router.get('/google/oauth/callback')
+def complete_google_oauth_install_from_state(
+    code: str,
+    state: str,
+    db: DbSession,
+    settings: AppSettings,
+) -> dict[str, object]:
+    try:
+        connector_type = GoogleOAuthStateSigner(settings.google_oauth_state_secret).validate(state).connector_type
+        connection = complete_google_oauth_callback(
+            db=db,
+            settings=settings,
+            connector_type=connector_type,
+            code=code,
+            state=state,
+            token_vault=LOCAL_TOKEN_VAULT,
+        )
+    except GoogleOAuthConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except GoogleOAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        'connector_type': connection.connector_type,
+        'status': connection.status,
+        'workspace_id': connection.workspace_id,
+        'workspace_name': connection.workspace_name,
+        'masked_bot_token': connection.masked_bot_token,
+        'scopes': connection.scopes,
     }
 
 
