@@ -1474,6 +1474,46 @@ Verification evidence:
   Next's bundled PostCSS range; the suggested forced fix would downgrade Next and
   should not be applied.
 
+## 2026-05-01 - Google OAuth Boundary For Gmail, Drive, And Calendar
+
+Added a Google OAuth installation boundary for the three Google connector cards
+without enabling live Google sync yet.
+
+Portfolio angle:
+
+- Shows disciplined integration sequencing: OAuth security and connection
+  metadata land before live data ingestion.
+- Demonstrates multi-connector architecture: Gmail, Drive, and Calendar share a
+  signed-state OAuth boundary while preserving each connector's own scope set.
+- Keeps the cost story visible: OAuth readiness does not trigger Google sync,
+  LLM calls, or embedding work; future sync should fetch deltas and hash-check
+  content before downstream agent work.
+
+Implemented scope:
+
+- Added `google_oauth.py` with signed state, install URL generation, callback
+  completion, Google token exchange boundary, and sanitized persistence.
+- Added backend settings for Google client id, client secret, redirect URI, and
+  OAuth state secret.
+- Extended the local token vault with a generic token kind so Google stores
+  `local:<connector>:<account>:oauth` instead of a Slack-specific bot token ref.
+- Added generic Google OAuth install/callback API routes under
+  `/api/v1/integrations/{gmail|drive|calendar}/oauth/...`.
+- Updated the Integrations UI to show OAuth status boxes for Gmail, Drive, and
+  Calendar while keeping primary card actions focused on sync/agent execution.
+- Added a Google integration runbook and a plan note for the implementation
+  sequence.
+
+Verification evidence:
+
+- RED backend test first failed because `backend.app.connectors.google_oauth`
+  did not exist.
+- RED Playwright test first failed because `gmail-oauth-status` was missing.
+- Focused Google/Slack OAuth backend tests passed with 12 tests.
+- Frontend lint passed after the OAuth UI update.
+- Playwright visual smoke passed with 24 Chromium desktop/mobile tests after
+  Google OAuth readiness assertions were added.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1515,3 +1555,4 @@ Verification evidence:
 - `feat: show slack oauth connection status`
 - `feat: wire installed slack connection sync`
 - `fix: harden frontend route smoke`
+- `feat: add google oauth boundary`

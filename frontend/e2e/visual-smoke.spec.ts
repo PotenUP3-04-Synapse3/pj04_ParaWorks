@@ -75,3 +75,25 @@ test("Slack card keeps OAuth install outside primary action row", async ({ page 
   await expect(slackActions.getByRole("button", { name: "Slack Agent 실행" })).toBeVisible();
   await expect(slackActions.getByRole("button", { name: "Slack 연결" })).toHaveCount(0);
 });
+
+test("Google connector cards show OAuth readiness outside primary action rows", async ({ page }) => {
+  await page.goto("/integrations");
+
+  const connectors = [
+    { type: "gmail", label: "Gmail" },
+    { type: "drive", label: "Google Drive" },
+    { type: "calendar", label: "Google Calendar" },
+  ];
+
+  for (const connector of connectors) {
+    await expect(page.getByTestId(`${connector.type}-oauth-status`)).toBeVisible();
+    await expect(
+      page.getByTestId(`${connector.type}-card-actions`).getByRole("button", { name: `${connector.label} 연결` }),
+    ).toHaveCount(0);
+  }
+
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("google-secret");
+  expect(bodyText).not.toContain("refresh-token");
+  expect(bodyText).not.toContain("token_ref");
+});

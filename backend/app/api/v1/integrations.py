@@ -15,10 +15,18 @@ from backend.app.agents.slack_agent import (
     create_slack_agent_review_items,
 )
 from backend.app.connectors.factory import get_sync_connector
+from backend.app.connectors.google_oauth import (
+    GOOGLE_OAUTH_CONNECTOR_TYPES,
+    GoogleOAuthConfigurationError,
+    GoogleOAuthError,
+    build_google_oauth_install_url,
+    complete_google_oauth_callback,
+)
 from backend.app.connectors.mock import CONNECTOR_TYPES
 from backend.app.connectors.registry import list_connector_manifests
 from backend.app.connectors.slack import SlackApiError
 from backend.app.connectors.slack_oauth import (
+    LOCAL_TOKEN_VAULT,
     SlackOAuthConfigurationError,
     build_slack_oauth_install_url,
     complete_slack_oauth_callback,
@@ -127,6 +135,68 @@ def complete_slack_oauth_install(
     except SlackOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SlackApiError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        'connector_type': connection.connector_type,
+        'status': connection.status,
+        'workspace_id': connection.workspace_id,
+        'workspace_name': connection.workspace_name,
+        'masked_bot_token': connection.masked_bot_token,
+        'scopes': connection.scopes,
+    }
+
+
+@router.get('/{connector_type}/oauth/install-url')
+def get_google_oauth_install_url(connector_type: str, settings: AppSettings) -> dict[str, object]:
+    if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
+        raise HTTPException(status_code=404, detail='Connector not found')
+
+    try:
+        install = build_google_oauth_install_url(settings=settings, connector_type=connector_type)
+    except GoogleOAuthConfigurationError:
+        return {
+            'connector_type': connector_type,
+            'configured': False,
+            'install_url': None,
+            'state': None,
+            'required_scopes': [],
+        }
+    except GoogleOAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        'connector_type': install.connector_type,
+        'configured': install.configured,
+        'install_url': install.install_url,
+        'state': install.state,
+        'required_scopes': install.required_scopes,
+    }
+
+
+@router.get('/{connector_type}/oauth/callback')
+def complete_google_oauth_install(
+    connector_type: str,
+    code: str,
+    state: str,
+    db: DbSession,
+    settings: AppSettings,
+) -> dict[str, object]:
+    if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
+        raise HTTPException(status_code=404, detail='Connector not found')
+
+    try:
+        connection = complete_google_oauth_callback(
+            db=db,
+            settings=settings,
+            connector_type=connector_type,
+            code=code,
+            state=state,
+            token_vault=LOCAL_TOKEN_VAULT,
+        )
+    except GoogleOAuthConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except GoogleOAuthError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {

@@ -122,10 +122,18 @@ class LocalTokenVault:
     def __init__(self) -> None:
         self._secrets: dict[str, str] = {}
 
-    def store_bot_token(self, *, connector_type: str, workspace_id: str, token: str) -> str:
-        token_ref = f'local:{connector_type}:{workspace_id}:bot'
+    def store_token(self, *, connector_type: str, workspace_id: str, token: str, token_kind: str) -> str:
+        token_ref = f'local:{connector_type}:{workspace_id}:{token_kind}'
         self._secrets[token_ref] = token
         return token_ref
+
+    def store_bot_token(self, *, connector_type: str, workspace_id: str, token: str) -> str:
+        return self.store_token(
+            connector_type=connector_type,
+            workspace_id=workspace_id,
+            token=token,
+            token_kind='bot',
+        )
 
     def resolve(self, token_ref: str) -> str | None:
         return self._secrets.get(token_ref)

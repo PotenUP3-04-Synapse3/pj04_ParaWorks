@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     slack_client_secret: str | None = None
     slack_oauth_redirect_uri: str = 'http://localhost:3000/integrations/slack/callback'
     slack_oauth_state_secret: str = 'local-development-state-secret'
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_oauth_redirect_uri: str = 'http://localhost:3000/integrations/google/callback'
+    google_oauth_state_secret: str = 'local-development-google-state-secret'
 
 
 @lru_cache

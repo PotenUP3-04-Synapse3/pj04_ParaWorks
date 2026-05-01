@@ -201,13 +201,15 @@ export type IntegrationManifest = {
   cost_policy: string;
 };
 
-export type SlackOAuthInstallUrlResponse = {
+export type OAuthInstallUrlResponse = {
   connector_type: string;
   configured: boolean;
   install_url?: string | null;
   state?: string | null;
   required_scopes: string[];
 };
+
+export type SlackOAuthInstallUrlResponse = OAuthInstallUrlResponse;
 
 export type IntegrationConnection = {
   connector_type: string;

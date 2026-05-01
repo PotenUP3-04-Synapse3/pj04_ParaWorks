@@ -24,8 +24,10 @@ import type {
   IntegrationConnection,
   IntegrationManifest,
   IntegrationSyncResponse,
-  SlackOAuthInstallUrlResponse,
+  OAuthInstallUrlResponse,
 } from "@/lib/api/types";
+
+const GOOGLE_CONNECTOR_TYPES = ["gmail", "drive", "calendar"] as const;
 
 const integrationVisuals = {
   slack: {
@@ -95,7 +97,8 @@ export default function IntegrationsPage() {
   const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
-  const [slackOAuth, setSlackOAuth] = useState<SlackOAuthInstallUrlResponse>();
+  const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
+  const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
   const [agentRunningKey, setAgentRunningKey] = useState<string>();
   const [error, setError] = useState<string>();
@@ -127,7 +130,7 @@ export default function IntegrationsPage() {
         }
       });
 
-    apiGet<SlackOAuthInstallUrlResponse>("/api/v1/integrations/slack/oauth/install-url")
+    apiGet<OAuthInstallUrlResponse>("/api/v1/integrations/slack/oauth/install-url")
       .then((slackOAuthResult) => {
         if (active) {
           setSlackOAuth(slackOAuthResult);
@@ -144,6 +147,32 @@ export default function IntegrationsPage() {
           });
         }
       });
+
+    GOOGLE_CONNECTOR_TYPES.forEach((connectorType) => {
+      apiGet<OAuthInstallUrlResponse>(`/api/v1/integrations/${connectorType}/oauth/install-url`)
+        .then((googleOAuthResult) => {
+          if (active) {
+            setGoogleOAuthByType((current) => ({
+              ...current,
+              [connectorType]: googleOAuthResult,
+            }));
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setGoogleOAuthByType((current) => ({
+              ...current,
+              [connectorType]: {
+                connector_type: connectorType,
+                configured: false,
+                install_url: null,
+                state: null,
+                required_scopes: [],
+              },
+            }));
+          }
+        });
+    });
 
     return () => {
       active = false;
@@ -198,13 +227,13 @@ export default function IntegrationsPage() {
     }
   }
 
-  function startSlackOAuth() {
-    if (!slackOAuth?.install_url) {
-      setError("Slack OAuth 설정이 아직 준비되지 않았습니다. .env의 SLACK_CLIENT_ID와 redirect URI를 확인하세요.");
+  function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
+    if (!oauth?.install_url) {
+      setError(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
       return;
     }
 
-    window.location.assign(slackOAuth.install_url);
+    window.location.assign(oauth.install_url);
   }
 
   return (
@@ -233,7 +262,26 @@ export default function IntegrationsPage() {
             const agentAction = visual.agentAction;
             const agentRunning = agentAction ? agentRunningKey === agentAction.key : false;
             const connection = connections.find((item) => item.connector_type === manifest.type);
-            const showSlackOAuth = manifest.type === "slack";
+            const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
+            const showOAuthStatus = manifest.auth_type === "oauth";
+            const oauthTheme =
+              manifest.type === "slack"
+                ? {
+                    border: "border-[#e8deef]",
+                    bg: "bg-[#fbf8fd]",
+                    icon: "text-[#611f69]",
+                    text: "text-[#21132b]",
+                    pill: "text-[#611f69]",
+                    button: "border-[#611f69] text-[#611f69] hover:bg-[#fbf8fd]",
+                  }
+                : {
+                    border: "border-blue-100",
+                    bg: "bg-blue-50/70",
+                    icon: "text-blue-700",
+                    text: "text-blue-950",
+                    pill: "text-blue-700",
+                    button: "border-blue-600 text-blue-700 hover:bg-blue-50",
+                  };
             return (
               <article
                 key={manifest.type}
@@ -276,30 +324,34 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
 
-                {showSlackOAuth ? (
+                {showOAuthStatus ? (
                   <div
-                    data-testid="slack-oauth-status"
-                    className="mt-4 rounded-lg border border-[#e8deef] bg-[#fbf8fd] p-3 text-sm"
+                    data-testid={`${manifest.type}-oauth-status`}
+                    className={`mt-4 rounded-lg border ${oauthTheme.border} ${oauthTheme.bg} p-3 text-sm`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2">
-                        <LockKeyhole className="h-4 w-4 shrink-0 text-[#611f69]" aria-hidden="true" />
-                        <span className="truncate font-semibold text-[#21132b]">
-                          {connection ? `${connection.workspace_name} 연결됨` : slackOAuth?.configured ? "Slack 연결 필요" : "OAuth 설정 필요"}
+                        <LockKeyhole className={`h-4 w-4 shrink-0 ${oauthTheme.icon}`} aria-hidden="true" />
+                        <span className={`truncate font-semibold ${oauthTheme.text}`}>
+                          {connection
+                            ? `${connection.workspace_name} 연결됨`
+                            : oauthInstall?.configured
+                              ? `${manifest.display_name} 연결 필요`
+                              : "OAuth 설정 필요"}
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[#611f69]">
+                        <span className={`rounded-full bg-white px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
                           {connection?.status ?? "ready"}
                         </span>
-                        {slackOAuth?.configured && !connection ? (
+                        {oauthInstall?.configured && !connection ? (
                           <button
                             type="button"
-                            onClick={startSlackOAuth}
-                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#611f69] bg-white px-2.5 text-xs font-semibold text-[#611f69] shadow-sm hover:bg-[#fbf8fd]"
+                            onClick={() => startOAuth(manifest.display_name, oauthInstall)}
+                            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-2.5 text-xs font-semibold shadow-sm ${oauthTheme.button}`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            Slack 연결
+                            {manifest.display_name} 연결
                           </button>
                         ) : null}
                       </div>
@@ -307,8 +359,8 @@ export default function IntegrationsPage() {
                     <p className="mt-2 text-xs leading-5 text-[var(--ink-muted)]">
                       {connection
                         ? `권한 ${connection.scopes.length.toLocaleString()}개 확인됨 · ${connection.masked_bot_token}`
-                        : slackOAuth?.configured
-                          ? "Slack 워크스페이스 설치 URL이 준비되었습니다. 설치 후에도 동기화는 변경분만 가져옵니다."
+                        : oauthInstall?.configured
+                          ? `${manifest.display_name} 설치 URL이 준비되었습니다. 설치 후에도 동기화는 변경분만 가져옵니다.`
                           : "환경 변수 설정 전까지는 mock 데이터로 안전하게 시연합니다."}
                     </p>
                   </div>
