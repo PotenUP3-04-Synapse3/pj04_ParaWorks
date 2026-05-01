@@ -2500,6 +2500,31 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
   passed with 40/40 executed tests and 2 expected mobile skips.
 
+### Light Deep Purple Theme Tuning
+
+- Replaced the light mode lavender palette with a brighter deep-purple family
+  while keeping the base surface tone in light gray.
+- Updated light-mode shell, primary action, active segment, glass control, card,
+  and row tint gradients so the theme reads closer to Slack-adjacent deep
+  purple rather than soft lavender.
+- Preserved dark mode tokens and the existing Liquid Glass structure.
+
+Portfolio angle:
+
+- Shows iterative product design judgment: visual direction was adjusted from
+  soft lavender to a more confident business-oriented light deep-purple tone
+  after browser review.
+- Keeps the design system tokenized so future UI changes can be made without
+  hardcoding page-by-page color fixes.
+
+Verification evidence:
+
+- `npm run build` passed.
+- `npx eslint src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts`
+  passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 40/40 executed tests and 2 expected mobile skips.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2568,3 +2593,4 @@ Verification evidence:
 - `feat: expose agent budget observability`
 - `feat: activate global search bars`
 - `feat: activate google oauth callback`
+- `style: tune light deep purple palette`
