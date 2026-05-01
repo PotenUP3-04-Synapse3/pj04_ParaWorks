@@ -294,6 +294,39 @@ Portfolio angle:
 - Demonstrates cost-safe AI development by using a deterministic local model
   boundary before enabling paid LLM provider calls.
 
+## UX Update: Agent-Aware Review Inbox
+
+Recorded on 2026-05-01.
+
+Next UI milestone is upgrading `/review` from a generic review list into an
+agent-aware activity inbox:
+
+- AI Agent-generated candidates are visibly labeled.
+- Prompt version, token usage, estimated cost, cache key, permission, and
+  confidence become inspectable from the Review UI.
+- Source Evidence Drawer gets clean Korean copy and clearer evidence links.
+
+Portfolio angle:
+
+- Makes the human-review trust boundary visible to users and interviewers.
+- Connects the token-cost optimization requirement to a concrete product
+  surface instead of keeping it hidden in backend metadata.
+
+Implemented scope:
+
+- Reworked `/review` into an Activity Inbox-style review queue.
+- Replaced corrupted Korean UI copy.
+- Added AI Agent badges for agent-generated Review Items.
+- Exposed prompt version, token count, estimated cost, cache key, confidence,
+  permission, and source evidence in the UI.
+- Cleaned up the Source Evidence Drawer copy and layout.
+
+Verification evidence:
+
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted after build to clear stale Next.js cache.
+- HTTP smoke returned 200 for `/review`, `/integrations`, and `/health`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

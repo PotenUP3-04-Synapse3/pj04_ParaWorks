@@ -1,6 +1,16 @@
 "use client";
 
-import { CheckCircle2, FileSearch, Pencil, RefreshCw, XCircle } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  Coins,
+  FileSearch,
+  Pencil,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
@@ -10,27 +20,49 @@ function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function numberField(value: unknown) {
+  return typeof value === "number" ? value : undefined;
+}
+
+function recordField(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function itemTitle(item: ReviewItem) {
   const title = stringField(item.payload.title);
   return title || `Review item ${item.id}`;
 }
 
 function summaryKey(item: ReviewItem) {
-  if (typeof item.payload.decision_summary === "string") {
-    return "decision_summary";
-  }
-  if (typeof item.payload.reason === "string") {
-    return "reason";
-  }
-  if (typeof item.payload.priority_reason === "string") {
-    return "priority_reason";
-  }
-    return "summary";
+  if (typeof item.payload.summary === "string") return "summary";
+  if (typeof item.payload.decision_summary === "string") return "decision_summary";
+  if (typeof item.payload.reason === "string") return "reason";
+  if (typeof item.payload.priority_reason === "string") return "priority_reason";
+  return "summary";
 }
 
 function itemSummary(item: ReviewItem) {
   const summary = stringField(item.payload[summaryKey(item)]);
-  return summary || "요약이 반환되지 않았습니다.";
+  return summary || "요약을 생성하지 못했습니다. 근거를 확인한 뒤 수정하거나 추가 근거를 요청하세요.";
+}
+
+function itemTypeLabel(itemType: string) {
+  const labels: Record<string, string> = {
+    decision_record: "결정 기록",
+    history_event: "히스토리",
+    timeline_event: "타임라인",
+    todo: "할 일",
+    message_review: "메시지 검토",
+  };
+  return labels[itemType] ?? itemType.replaceAll("_", " ");
+}
+
+function formatCost(value: unknown) {
+  const cost = numberField(value);
+  if (cost === undefined) return undefined;
+  return `$${cost.toFixed(6)}`;
 }
 
 export default function ReviewPage() {
@@ -108,26 +140,37 @@ export default function ReviewPage() {
     }
   }
 
+  const agentItems = items.filter((item) => Boolean(item.payload.agent_name)).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted">승인 대기</p>
+          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Activity Inbox</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-normal">검토 큐</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+            AI Agent와 connector가 만든 후보를 사람이 확인하고 승인해야 공식 지식으로 승격됩니다.
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadItems()}
-          disabled={loading}
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          새로고침
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[var(--ink-muted)] shadow-sm">
+            <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
+            Agent 후보 {agentItems}개
+          </span>
+          <button
+            type="button"
+            onClick={() => void loadItems()}
+            disabled={loading}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            새로고침
+          </button>
+        </div>
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {error}
         </div>
       ) : null}
@@ -136,52 +179,82 @@ export default function ReviewPage() {
         {items.map((item) => {
           const isEditing = editingId === item.id;
           const editPending = pendingAction === `${item.id}:edit`;
+          const agentName = stringField(item.payload.agent_name);
+          const promptVersion = stringField(item.payload.prompt_version);
+          const cacheKey = stringField(item.payload.cache_key);
+          const cost = formatCost(item.payload.estimated_cost_usd);
+          const tokenUsage = recordField(item.payload.token_usage);
+          const totalTokens = numberField(tokenUsage?.total_tokens);
+          const isAgentItem = Boolean(agentName);
+
           return (
-            <article key={item.id} className="rounded-md border border-line bg-white p-4">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <article key={item.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded border border-line px-2 py-1 text-xs font-medium capitalize text-muted">
-                      {item.item_type.replaceAll("_", " ")}
+                    <span className="rounded-full border border-[var(--line-soft)] bg-[#fbfaf8] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                      {itemTypeLabel(item.item_type)}
                     </span>
-                    <span className="rounded border border-line px-2 py-1 text-xs font-medium capitalize text-muted">
+                    <span className="rounded-full border border-[var(--line-soft)] bg-[#fbfaf8] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--ink-muted)]">
                       {item.permission_level}
                     </span>
+                    {isAgentItem ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#21132b] px-2.5 py-1 text-xs font-semibold text-white">
+                        <Sparkles className="h-3 w-3" aria-hidden="true" />
+                        {agentName}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                        Human/Connector
+                      </span>
+                    )}
                   </div>
 
                   {isEditing ? (
                     <div className="mt-3 max-w-3xl space-y-3">
-                      <label className="block text-sm font-medium">
+                      <label className="block text-sm font-semibold">
                         제목
                         <input
                           value={editTitle}
                           onChange={(event) => setEditTitle(event.target.value)}
-                          className="mt-1 h-10 w-full rounded-md border border-line px-3 text-sm font-normal outline-none focus:border-neutral-500"
+                          className="mt-1 h-10 w-full rounded-lg border border-[var(--line-soft)] px-3 text-sm font-normal outline-none focus:border-[#21132b]"
                         />
                       </label>
-                      <label className="block text-sm font-medium">
+                      <label className="block text-sm font-semibold">
                         요약
                         <textarea
                           value={editSummary}
                           onChange={(event) => setEditSummary(event.target.value)}
                           rows={3}
-                          className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-neutral-500"
+                          className="mt-1 w-full rounded-lg border border-[var(--line-soft)] px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-[#21132b]"
                         />
                       </label>
                     </div>
                   ) : (
                     <>
                       <h3 className="mt-3 text-base font-semibold">{itemTitle(item)}</h3>
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink-muted)]">
                         {itemSummary(item)}
                       </p>
                     </>
                   )}
+
+                  {isAgentItem ? (
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <MetadataTile label="Prompt" value={promptVersion || "unknown"} />
+                      <MetadataTile label="Tokens" value={totalTokens?.toLocaleString("ko-KR") ?? "unknown"} />
+                      <MetadataTile label="Cost" value={cost ?? "unknown"} />
+                      <MetadataTile label="Cache" value={cacheKey ? `${cacheKey.slice(0, 10)}...` : "none"} />
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:items-start">
-                  <div className="w-28">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted">신뢰도</p>
+                <div className="flex shrink-0 flex-col gap-3 sm:flex-row xl:items-start">
+                  <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] px-3 py-2">
+                    <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+                      <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                      신뢰도
+                    </p>
                     <p className="mt-1 text-lg font-semibold">
                       {Math.round(item.confidence_score * 100)}%
                     </p>
@@ -190,14 +263,14 @@ export default function ReviewPage() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--line-soft)] pt-4">
                 {isEditing ? (
                   <>
                     <button
                       type="button"
                       onClick={() => void saveEdit(item)}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-neutral-900 bg-neutral-900 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
                     >
                       <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                       {editPending ? "저장 중" : "수정 저장"}
@@ -206,7 +279,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => setEditingId(undefined)}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                       취소
@@ -218,7 +291,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => void runStatusAction(item, "approve")}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-neutral-900 bg-neutral-900 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
                     >
                       <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                       승인
@@ -227,7 +300,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => void runStatusAction(item, "reject")}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                       반려
@@ -236,7 +309,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => startEdit(item)}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                       수정
@@ -245,7 +318,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => void runStatusAction(item, "request-more-evidence")}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <FileSearch className="h-4 w-4" aria-hidden="true" />
                       근거 추가 요청
@@ -258,16 +331,28 @@ export default function ReviewPage() {
         })}
 
         {!loading && items.length === 0 ? (
-          <div className="rounded-md border border-line bg-white p-8 text-sm text-muted">
+          <div className="rounded-lg border border-[var(--line-soft)] bg-white p-8 text-sm text-[var(--ink-muted)] shadow-sm">
             대기 중인 검토 항목이 없습니다.
           </div>
         ) : null}
         {loading ? (
-          <div className="rounded-md border border-line bg-white p-8 text-sm text-muted">
+          <div className="rounded-lg border border-[var(--line-soft)] bg-white p-8 text-sm text-[var(--ink-muted)] shadow-sm">
             검토 항목을 불러오는 중입니다.
           </div>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function MetadataTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] px-3 py-2">
+      <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
+        <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>
   );
 }
