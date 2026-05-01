@@ -6,6 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import PermissionContext
+from backend.app.agents.mail_document_agent import (
+    DeterministicMailDocumentAgentModel,
+    MailDocumentAgent,
+    create_mail_document_agent_review_items,
+)
 from backend.app.agents.slack_agent import (
     DeterministicSlackAgentModel,
     SlackAgent,
@@ -73,6 +78,23 @@ def run_slack_agent_review(db: DbSession) -> dict[str, int | str]:
 
     return {
         'agent_name': 'slack_agent',
+        'status': 'complete',
+        'created_review_items': len(review_items),
+    }
+
+
+@router.post('/mail-docs/agent-review')
+def run_mail_document_agent_review(db: DbSession) -> dict[str, int | str]:
+    agent = MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
+    review_items = create_mail_document_agent_review_items(
+        db=db,
+        agent=agent,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mock-mail-docs:all',
+    )
+
+    return {
+        'agent_name': 'mail_document_agent',
         'status': 'complete',
         'created_review_items': len(review_items),
     }

@@ -357,6 +357,39 @@ Verification evidence:
   passed.
 - `uv run pytest backend/tests -v` passed with 40 backend tests.
 
+## Agent Development Update: Mail/Document Agent Slice
+
+Recorded on 2026-05-01.
+
+Next agent-track milestone is giving Developer B an independently owned agent
+slice for Gmail and Drive evidence while preserving the same shared runtime
+contract used by Slack Agent.
+
+Portfolio angle:
+
+- Demonstrates that ParaWorks is not a single hard-coded Slack demo; it now has
+  a repeatable multi-agent backend pattern across communication and document
+  sources.
+- Shows practical 3-person division of labor: Slack Agent, Mail/Document Agent,
+  and RAG/Orchestrator Agent can evolve with the same `EvidencePacket`,
+  `AgentRunResult`, `AgentRun`, and Review Queue boundaries.
+
+Implemented scope:
+
+- Added `mail_document_agent` with manifest, model protocol, deterministic
+  local model, and `MailDocumentAgent`.
+- Added a bridge that builds evidence packets from Gmail and Drive chunks,
+  excludes Slack chunks, persists `AgentRun`, and links Review Items through
+  `payload.agent_run_id`.
+- Added `POST /api/v1/integrations/mail-docs/agent-review` for deterministic
+  MVP smoke testing without paid LLM calls.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py -v`
+  passed.
+- `uv run pytest backend/tests -v` passed with 44 backend tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -372,3 +405,4 @@ Verification evidence:
 - `39f96c9 feat: connect slack agent to review queue`
 - `7b0a6f5 feat: expose slack agent review action`
 - `924f9d8 feat: improve agent-aware review UI`
+- `e7c6927 feat: persist agent run metadata`
