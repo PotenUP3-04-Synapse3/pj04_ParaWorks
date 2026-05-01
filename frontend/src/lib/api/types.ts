@@ -66,6 +66,19 @@ export type AgentRunSummaryResponse = {
   by_agent: AgentRunAgentSummary[];
 };
 
+export type OrchestrationStatusResponse = {
+  workflow_name: string;
+  backend: string;
+  node_names: string[];
+  graph_mermaid: string;
+  cost_policy: {
+    delta_sync: boolean;
+    source_hash_skip: boolean;
+    evidence_token_budget: boolean;
+    paid_llm_calls_in_status_api: boolean;
+  };
+};
+
 export type RagIndexingJobSummary = {
   job_id: string;
   connector_type: string;

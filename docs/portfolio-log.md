@@ -1793,6 +1793,43 @@ Verification evidence:
 - `uv run pytest backend/tests/test_orchestration_api.py backend/tests/test_agent_orchestration.py backend/tests/test_agent_runs_api.py -v` passed with 9 tests.
 - `uv run ruff check backend/app/api/v1/orchestration.py backend/app/api/v1/router.py backend/tests/test_orchestration_api.py backend/app/agent_runtime/orchestration.py backend/tests/test_agent_orchestration.py` passed.
 
+## 2026-05-02 - Agent Runs LangGraph Operations Card
+
+Connected the new LangGraph orchestration status API to the Agent Runs
+operations page.
+
+Portfolio angle:
+
+- Makes the multi-agent orchestration architecture visible in the product UI:
+  users can see the Company Memory graph backend, execution steps, and cost
+  guardrails from the same page that tracks agent runs and token cost.
+- Shows practical AI cost design in the interface: delta sync, source-hash
+  skipping, evidence token budgeting, and blocked paid calls are presented as
+  operational controls instead of buried implementation notes.
+- Improves interview/demo storytelling by tying backend LangGraph work to a
+  browser-verified admin experience.
+
+Implemented scope:
+
+- Added frontend API typing for `/api/v1/orchestration/company-memory`.
+- Fetched orchestration status on `/agent-runs`.
+- Added a LangGraph operations card with workflow steps and cost guardrails.
+- Rechecked the page with Playwright screenshot verification after restarting
+  the local smoke backend/frontend.
+
+Cost/security note:
+
+- The Agent Runs page only reads the status endpoint. It does not call the
+  dry-run endpoint during render and does not trigger Slack, embeddings, or
+  paid LLM calls.
+
+Verification evidence:
+
+- `npx eslint src/app/agent-runs/page.tsx src/lib/api/types.ts` passed.
+- `npm run build` passed.
+- `npx playwright screenshot --full-page http://127.0.0.1:3000/agent-runs ..\\.tmp\\agent-runs-langgraph-v2.png` completed.
+- `npx playwright test e2e/visual-smoke.spec.ts -g "/agent-runs renders" --project=chromium-desktop` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1838,3 +1875,4 @@ Verification evidence:
 - `feat: add google installed sync boundary`
 - `feat: add langgraph orchestration foundation`
 - `feat: expose langgraph orchestration api`
+- `feat: show langgraph orchestration status`

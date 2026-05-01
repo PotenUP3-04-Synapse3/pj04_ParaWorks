@@ -20,6 +20,7 @@ import type {
   AgentRunAgentSummary,
   AgentRunsResponse,
   AgentRunSummaryResponse,
+  OrchestrationStatusResponse,
   RagIndexingJobSummary,
   RagIndexingSummaryResponse,
 } from "@/lib/api/types";
@@ -62,10 +63,11 @@ const STATUS_META: Record<
 };
 
 export default async function AgentRunsPage() {
-  const [runs, summary, ragIndexing] = await Promise.all([
+  const [runs, summary, ragIndexing, orchestration] = await Promise.all([
     apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
     apiGet<AgentRunSummaryResponse>("/api/v1/agent-runs/summary"),
     apiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary"),
+    apiGet<OrchestrationStatusResponse>("/api/v1/orchestration/company-memory"),
   ]);
   const cacheHitPercent = (summary.totals.cache_hit_rate * 100).toFixed(1);
   const latestRagJob = ragIndexing.latest_jobs[0];
@@ -113,6 +115,8 @@ export default async function AgentRunsPage() {
           detail={`${summary.totals.cache_hits.toLocaleString()} cached runs`}
         />
       </section>
+
+      <OrchestrationStatusCard orchestration={orchestration} />
 
       <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
         <div className="flex flex-col justify-between gap-3 border-b border-[var(--line-soft)] px-4 py-4 lg:flex-row lg:items-center">
@@ -299,6 +303,81 @@ function IndexingMetric({
   );
 }
 
+function OrchestrationStatusCard({ orchestration }: { orchestration: OrchestrationStatusResponse }) {
+  const costPolicyItems = [
+    { label: "Delta sync", enabled: orchestration.cost_policy.delta_sync },
+    { label: "Hash skip", enabled: orchestration.cost_policy.source_hash_skip },
+    { label: "Evidence budget", enabled: orchestration.cost_policy.evidence_token_budget },
+    {
+      label: "Status API paid calls",
+      enabled: orchestration.cost_policy.paid_llm_calls_in_status_api,
+      inverted: true,
+    },
+  ];
+
+  return (
+    <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-lg bg-[#f4f8f6] px-3 py-2 text-xs font-semibold text-[#22513f]">
+              <Bot className="h-4 w-4" aria-hidden="true" />
+              LangGraph
+            </span>
+            <span className="rounded-lg border border-[var(--line-soft)] px-3 py-2 text-xs font-semibold text-[var(--ink-muted)]">
+              {orchestration.backend}
+            </span>
+            <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+              dry-run cost $0
+            </span>
+          </div>
+          <h3 className="mt-4 text-base font-semibold">Company Memory 오케스트레이터</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink-muted)]">
+            Slack, 메일/문서, 승인된 지식, RAG 답변을 하나의 그래프로 묶는 실행 순서입니다. 이 상태 조회는
+            운영 확인용이라 모델 토큰을 쓰지 않습니다.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {orchestration.node_names.map((nodeName, index) => (
+              <div key={nodeName} className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] px-3 py-2">
+                <span className="text-[11px] font-semibold uppercase tracking-normal text-[var(--ink-muted)]">
+                  Step {index + 1}
+                </span>
+                <p className="mt-1 text-xs font-semibold">{formatWorkflowNode(nodeName)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
+            <h4 className="text-sm font-semibold">비용 가드레일</h4>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            {costPolicyItems.map((item) => {
+              const isHealthy = item.inverted ? !item.enabled : item.enabled;
+              return (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-xs"
+                >
+                  <span className="font-medium text-[var(--ink-muted)]">{item.label}</span>
+                  <span
+                    className={`rounded-md px-2 py-1 font-semibold ${
+                      isHealthy ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"
+                    }`}
+                  >
+                    {item.inverted && isHealthy ? "blocked" : isHealthy ? "active" : "check"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LatestIndexingJob({ job }: { job?: RagIndexingJobSummary }) {
   if (!job) {
     return (
@@ -473,4 +552,14 @@ function formatAgentName(agentName: string) {
     return "RAG Orchestrator";
   }
   return agentName;
+}
+
+function formatWorkflowNode(nodeName: string) {
+  const labels: Record<string, string> = {
+    collect_evidence: "Evidence 수집",
+    draft_review_candidates: "Review 후보",
+    retrieve_company_memory: "Memory 검색",
+    answer_with_rag: "RAG 답변",
+  };
+  return labels[nodeName] ?? nodeName;
 }
