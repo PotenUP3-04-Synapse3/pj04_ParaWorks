@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
 from backend.app.agents.slack_agent.agent import SlackAgent
-from backend.app.models import DocumentChunk, ReviewItem, Source
+from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
 
 def create_slack_agent_review_items(
@@ -22,6 +22,27 @@ def create_slack_agent_review_items(
         return []
 
     result = agent.run(packet)
+    agent_run = AgentRun(
+        agent_name=result.agent_name,
+        prompt_version=result.prompt_version,
+        status='complete',
+        source_window=packet.source_window,
+        cache_key=result.cache_key,
+        model_name=result.cost.model_name,
+        input_tokens=result.cost.token_usage.input_tokens,
+        output_tokens=result.cost.token_usage.output_tokens,
+        total_tokens=result.cost.token_usage.total_tokens,
+        estimated_cost_usd=result.cost.estimated_cost_usd,
+        permission_level=packet.strictest_permission,
+        metadata_={
+            'source_type': packet.source_type,
+            'message_count': len(packet.messages),
+            'cache_hit': result.cost.cache_hit,
+        },
+    )
+    db.add(agent_run)
+    db.flush()
+
     review_items: list[ReviewItem] = []
 
     for candidate in result.candidates:
@@ -33,6 +54,7 @@ def create_slack_agent_review_items(
                 'title': candidate.title,
                 'summary': candidate.summary,
                 'agent_name': result.agent_name,
+                'agent_run_id': agent_run.id,
                 'prompt_version': result.prompt_version,
                 'cache_key': result.cache_key,
                 'estimated_cost_usd': result.cost.estimated_cost_usd,

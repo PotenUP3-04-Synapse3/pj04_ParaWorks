@@ -327,6 +327,36 @@ Verification evidence:
 - Smoke server restarted after build to clear stale Next.js cache.
 - HTTP smoke returned 200 for `/review`, `/integrations`, and `/health`.
 
+## Agent Runtime Update: AgentRun Cost Audit Model
+
+Recorded on 2026-05-01.
+
+Next backend milestone is persisting every agent execution as an `AgentRun` row
+so token usage, estimated cost, prompt version, cache key, permission level, and
+run status can be audited beyond the ReviewItem payload.
+
+Portfolio angle:
+
+- Shows that token-cost optimization is backed by durable observability, not
+  only UI labels.
+- Creates the shared audit foundation needed by Slack Agent, Mail/Document
+  Agent, and RAG/Orchestrator Agent.
+
+Implemented scope:
+
+- Added the `agent_runs` table and `AgentRun` model.
+- Persisted one `AgentRun` row for each Slack Agent Review execution.
+- Linked generated Review Items back to the originating agent run through
+  `payload.agent_run_id`.
+- Stored prompt version, cache key, model name, token usage, estimated cost,
+  source window, permission level, and run metadata.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_agent_run_model.py backend/tests/test_db_init.py -v`
+  passed.
+- `uv run pytest backend/tests -v` passed with 40 backend tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -334,3 +364,11 @@ Verification evidence:
 - `b68caaa feat: persist messenger data`
 - `53be213 feat: send messenger items to review`
 - `e90d4f9 feat: prepare Slack connector boundary`
+- `ce5c23e docs: define agentic Slack timeline slice`
+- `1667aba feat: add agent runtime contracts`
+- `8fe0190 feat: add agent registry contract`
+- `e15ad16 feat: refresh workspace UI`
+- `65b36ac feat: add slack agent skeleton`
+- `39f96c9 feat: connect slack agent to review queue`
+- `7b0a6f5 feat: expose slack agent review action`
+- `924f9d8 feat: improve agent-aware review UI`
