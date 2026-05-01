@@ -14,13 +14,16 @@ from backend.app.agents.slack_agent import (
     SlackAgent,
     create_slack_agent_review_items,
 )
-from backend.app.connectors.mock import CONNECTOR_TYPES, get_mock_connector
+from backend.app.connectors.factory import get_configured_connector
+from backend.app.connectors.mock import CONNECTOR_TYPES
 from backend.app.connectors.registry import list_connector_manifests
+from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
 DbSession = Annotated[Session, Depends(get_db)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 @router.get('')
@@ -41,11 +44,11 @@ def list_integrations() -> list[dict[str, object]]:
 
 
 @router.post('/{connector_type}/sync')
-def sync_connector(connector_type: str, db: DbSession) -> dict[str, int | str]:
+def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) -> dict[str, int | str]:
     if connector_type not in CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
-    connector = get_mock_connector(connector_type)
+    connector = get_configured_connector(connector_type, settings)
     result = sync_connector_events(db=db, connector=connector)
 
     return {

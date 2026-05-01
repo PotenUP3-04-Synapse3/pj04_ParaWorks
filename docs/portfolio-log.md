@@ -1260,6 +1260,48 @@ Verification evidence:
 - Playwright initially failed because browser binaries were missing; installing
   Chromium made the check executable for future runs.
 
+## Slack Live API Client Boundary
+
+Recorded on 2026-05-01.
+
+Started the real OAuth connector phase with a Slack Web API client boundary
+while keeping mock mode as the default for demos and tests.
+
+Portfolio angle:
+
+- Shows the transition from mock connector harness to a live API-ready
+  integration without leaking or requiring real workspace tokens.
+- Keeps the connector architecture testable: Slack API behavior is verified
+  with `httpx.MockTransport` and fake clients, never by calling Slack in tests.
+- Preserves the ingestion contract: live Slack payloads still become
+  `SourceEvent` records and flow through the same `sync_connector_events`
+  pipeline as mock data.
+- Reinforces cost and security discipline before LLM work: source deltas are
+  fetched first, duplicates are skipped, and review/RAG boundaries remain
+  evidence-driven.
+
+Implemented scope:
+
+- Added `SlackWebApiClient` for `conversations.history` bearer-token calls.
+- Added cursor pagination and clear `SlackApiError` handling.
+- Added `get_configured_connector` so Slack settings build a live connector
+  only when token and channel ids are present.
+- Updated `/api/v1/integrations/{connector_type}/sync` to use the configured
+  connector factory while preserving mock fallback.
+- Updated the Slack integration runbook with live env settings, scope
+  requirements, no-secret policy, fake-client test policy, and cost/security
+  notes.
+
+Verification evidence:
+
+- Focused Slack connector/factory/mock sync tests passed with 7 tests.
+- Focused Ruff passed for the touched Slack connector, factory, integration
+  endpoint, and tests.
+- Full backend tests passed with 106 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- Playwright visual smoke passed with 10 Chromium desktop/mobile tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1296,3 +1338,4 @@ Verification evidence:
 - `feat: show rag indexing observability`
 - `chore: document pgvector dev path`
 - `feat: queue rag indexing jobs with celery`
+- `feat: add slack live connector boundary`

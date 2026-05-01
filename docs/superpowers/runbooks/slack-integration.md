@@ -1,27 +1,44 @@
-# Slack Integration Preparation Runbook
+# Slack Integration Runbook
 
-This repository currently uses mock Slack data for the MVP harness. The real
-Slack connector skeleton is ready for a future API client, but it does not make
-network calls yet.
+ParaWorks supports mock Slack data by default and has a live Slack Web API
+client boundary for future OAuth-connected workspaces.
 
-## Current Connector Boundary
+## Current Boundary
 
 Code:
 
 - `backend/app/connectors/slack.py`
+- `backend/app/connectors/factory.py`
+- `backend/app/ingestion/sync.py`
 
-The connector maps Slack `conversations.history` message payloads into
-ParaWorks `SourceEvent` records.
+Responsibilities:
+
+- `SlackWebApiClient` calls Slack `conversations.history` with bearer-token
+  auth and cursor pagination.
+- `SlackConnector` maps Slack message payloads into `SourceEvent`.
+- `get_configured_connector` uses live Slack only when both token and channel
+  ids are configured. Otherwise it falls back to mock mode.
+- `sync_connector_events` handles `SyncJob`, duplicate skips, ingestion, and
+  failure status.
 
 ## Required Environment
 
+Keep these unset for demo and tests:
+
 ```dotenv
 SLACK_BOT_TOKEN=
-SLACK_CHANNEL_IDS=C123,C456
+SLACK_CHANNEL_IDS=
 SLACK_WORKSPACE_URL=https://your-workspace.slack.com
 ```
 
-Keep these values unset in demo mode.
+Use comma-separated channel ids:
+
+```dotenv
+SLACK_CHANNEL_IDS=C123,C456
+```
+
+Never commit `.env`, Slack tokens, OAuth tokens, or exported API responses that
+contain private workspace content.
 
 ## Required Slack History Scopes
 
@@ -35,18 +52,23 @@ The connector records these required history scopes in `raw_metadata`:
 These correspond to public channels, private channels, direct messages, and
 multi-party direct messages.
 
-## Next Implementation Step
+## Test Policy
 
-Add a real Slack Web API client behind the `SlackApiClient` protocol:
+Automated tests must never call Slack.
 
-```python
-class RealSlackApiClient:
-    def __init__(self, bot_token: str) -> None:
-        self.bot_token = bot_token
+Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 
-    def conversation_history(self, channel_id: str) -> list[dict]:
-        ...
-```
+- bearer-token headers are attached;
+- `conversations.history` receives the channel id and page limit;
+- cursor pagination continues until `next_cursor` is empty;
+- Slack API errors raise `SlackApiError`;
+- payload mapping preserves source id, permalink, timestamp, permission level,
+  required scopes, and channel metadata.
 
-The client should call Slack `conversations.history`, handle cursor pagination,
-and respect rate limits before handing payloads to `SlackConnector`.
+## Cost And Security Notes
+
+- Fetch source deltas before any LLM or embedding work.
+- Preserve Slack timestamp and channel id as stable source identifiers.
+- Keep raw private message text out of logs.
+- The connector only creates source-backed review candidates; approved knowledge
+  and RAG indexing still require the Review Queue boundary.

@@ -1,9 +1,14 @@
 from datetime import UTC, datetime
 
+import httpx
+import pytest
+
 from backend.app.connectors.slack import (
     SLACK_REQUIRED_HISTORY_SCOPES,
+    SlackApiError,
     SlackConnector,
     SlackConnectorConfig,
+    SlackWebApiClient,
 )
 
 
@@ -53,3 +58,59 @@ def test_slack_connector_maps_history_messages_to_source_events() -> None:
     assert event.timestamp == datetime.fromtimestamp(1777600800.000100, tz=UTC)
     assert event.permission_level == 'internal'
     assert event.raw_metadata['required_scopes'] == list(SLACK_REQUIRED_HISTORY_SCOPES)
+
+
+def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.headers['authorization'] == 'Bearer xoxb-test'
+        cursor = request.url.params.get('cursor')
+        if cursor:
+            return httpx.Response(
+                200,
+                json={
+                    'ok': True,
+                    'messages': [
+                        {'type': 'message', 'user': 'U2', 'text': 'second page', 'ts': '2.000100'}
+                    ],
+                    'response_metadata': {},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                'ok': True,
+                'messages': [
+                    {'type': 'message', 'user': 'U1', 'text': 'first page', 'ts': '1.000100'}
+                ],
+                'response_metadata': {'next_cursor': 'cursor-2'},
+            },
+        )
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    messages = client.conversation_history('C123')
+
+    assert [message['text'] for message in messages] == ['first page', 'second page']
+    assert requests[0].url.path == '/api/conversations.history'
+    assert requests[0].url.params['channel'] == 'C123'
+    assert requests[0].url.params['limit'] == '200'
+    assert requests[1].url.params['cursor'] == 'cursor-2'
+
+
+def test_slack_web_api_client_raises_clear_error_for_slack_api_failure() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={'ok': False, 'error': 'missing_scope'})
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(SlackApiError, match='missing_scope'):
+        client.conversation_history('C123')
