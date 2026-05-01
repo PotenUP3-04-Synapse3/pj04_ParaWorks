@@ -14,10 +14,25 @@ def test_connector_factory_uses_mock_when_slack_credentials_are_missing() -> Non
     assert connector.source_type == 'slack'
 
 
+def test_connector_factory_keeps_mock_in_demo_mode_even_with_slack_credentials() -> None:
+    connector = get_configured_connector(
+        'slack',
+        Settings(
+            paraworks_demo_mode=True,
+            slack_bot_token='xoxb-test',
+            slack_channel_ids='C123',
+        ),
+    )
+
+    assert isinstance(connector, MockConnector)
+    assert connector.source_type == 'slack'
+
+
 def test_connector_factory_builds_live_slack_connector_from_settings() -> None:
     connector = get_configured_connector(
         'slack',
         Settings(
+            paraworks_demo_mode=False,
             slack_bot_token='xoxb-test',
             slack_channel_ids=' C123, C456 ',
             slack_workspace_url='https://example.slack.com',

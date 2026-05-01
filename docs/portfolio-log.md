@@ -1302,6 +1302,52 @@ Verification evidence:
 - Frontend production build passed.
 - Playwright visual smoke passed with 10 Chromium desktop/mobile tests.
 
+## Slack OAuth Installation Boundary
+
+Recorded on 2026-05-01.
+
+Added the first OAuth installation boundary for Slack while keeping real
+workspace access opt-in and mock/demo behavior safe by default.
+
+Portfolio angle:
+
+- Demonstrates secure integration design beyond mock data: install URLs use
+  signed state, OAuth code exchange is isolated behind a client boundary, and
+  database records never store raw bot tokens.
+- Shows production-minded defaults: `PARAWORKS_DEMO_MODE=true` keeps mock sync
+  active even when local Slack credentials exist, preventing accidental API
+  usage, private data ingestion, and surprise downstream indexing costs.
+- Keeps the implementation testable without external services through
+  `httpx.MockTransport`, fake access payloads, and a local token vault boundary.
+- Creates a clean handoff point for the next developer slice: replacing the
+  local vault with a managed secret store and wiring installed connections into
+  sync.
+
+Implemented scope:
+
+- Added Slack OAuth settings and `.env.example` placeholders.
+- Added `IntegrationConnection` to persist workspace metadata, scopes,
+  `token_ref`, masked token, status, and non-sensitive metadata.
+- Added `SlackOAuthStateSigner`, `SlackOAuthClient`, `LocalTokenVault`, install
+  URL builder, and callback completion service.
+- Added `/api/v1/integrations/slack/oauth/install-url` and callback endpoint.
+- Updated connector factory so live Slack sync requires demo mode to be
+  disabled as well as token/channel configuration.
+- Updated Slack runbook with OAuth env, testing, cost, and security rules.
+
+Verification evidence:
+
+- RED test first: `backend/tests/test_slack_oauth.py` initially failed because
+  `backend.app.connectors.slack_oauth` did not exist.
+- Focused OAuth tests passed with 5 tests.
+- Focused connector factory/mock/review/OAuth regression tests passed with 14
+  tests.
+- Focused Ruff passed for touched backend files and tests.
+- Full backend tests passed with 112 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- Playwright visual smoke passed with 10 Chromium desktop/mobile tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1339,3 +1385,4 @@ Verification evidence:
 - `chore: document pgvector dev path`
 - `feat: queue rag indexing jobs with celery`
 - `feat: add slack live connector boundary`
+- `feat: add slack oauth installation boundary`

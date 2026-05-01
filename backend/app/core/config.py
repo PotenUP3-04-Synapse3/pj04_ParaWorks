@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     slack_bot_token: str | None = None
     slack_channel_ids: str = ''
     slack_workspace_url: str = 'https://slack.com'
+    slack_client_id: str | None = None
+    slack_client_secret: str | None = None
+    slack_oauth_redirect_uri: str = 'http://localhost:3000/integrations/slack/callback'
+    slack_oauth_state_secret: str = 'local-development-state-secret'
 
 
 @lru_cache

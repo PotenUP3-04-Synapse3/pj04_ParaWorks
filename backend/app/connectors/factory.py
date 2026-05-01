@@ -9,7 +9,12 @@ from backend.app.core.config import Settings
 
 
 def get_configured_connector(connector_type: str, settings: Settings) -> Connector:
-    if connector_type == 'slack' and settings.slack_bot_token and settings.slack_channel_ids.strip():
+    if (
+        connector_type == 'slack'
+        and not settings.paraworks_demo_mode
+        and settings.slack_bot_token
+        and settings.slack_channel_ids.strip()
+    ):
         channel_ids = _parse_csv(settings.slack_channel_ids)
         return SlackConnector(
             config=SlackConnectorConfig(

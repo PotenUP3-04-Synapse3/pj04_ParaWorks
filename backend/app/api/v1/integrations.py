@@ -17,6 +17,12 @@ from backend.app.agents.slack_agent import (
 from backend.app.connectors.factory import get_configured_connector
 from backend.app.connectors.mock import CONNECTOR_TYPES
 from backend.app.connectors.registry import list_connector_manifests
+from backend.app.connectors.slack import SlackApiError
+from backend.app.connectors.slack_oauth import (
+    SlackOAuthConfigurationError,
+    build_slack_oauth_install_url,
+    complete_slack_oauth_callback,
+)
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
@@ -58,6 +64,57 @@ def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) ->
         'created_review_items': result.created_review_items,
         'fetched_events': result.fetched_events,
         'skipped_events': result.skipped_events,
+    }
+
+
+@router.get('/slack/oauth/install-url')
+def get_slack_oauth_install_url(settings: AppSettings) -> dict[str, object]:
+    try:
+        install = build_slack_oauth_install_url(settings=settings)
+    except SlackOAuthConfigurationError:
+        return {
+            'connector_type': 'slack',
+            'configured': False,
+            'install_url': None,
+            'state': None,
+            'required_scopes': [],
+        }
+
+    return {
+        'connector_type': install.connector_type,
+        'configured': install.configured,
+        'install_url': install.install_url,
+        'state': install.state,
+        'required_scopes': install.required_scopes,
+    }
+
+
+@router.get('/slack/oauth/callback')
+def complete_slack_oauth_install(
+    code: str,
+    state: str,
+    db: DbSession,
+    settings: AppSettings,
+) -> dict[str, object]:
+    try:
+        connection = complete_slack_oauth_callback(
+            db=db,
+            settings=settings,
+            code=code,
+            state=state,
+        )
+    except SlackOAuthConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SlackApiError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        'connector_type': connection.connector_type,
+        'status': connection.status,
+        'workspace_id': connection.workspace_id,
+        'workspace_name': connection.workspace_name,
+        'masked_bot_token': connection.masked_bot_token,
+        'scopes': connection.scopes,
     }
 
 
