@@ -939,6 +939,57 @@ Verification evidence:
   `saved_embedding_calls=0` on a fresh index.
 - HTTP smoke returned 200 for `/dashboard`, `/review`, and `/search`.
 
+## RAG Infrastructure Update: Embedding Provider, pgvector Writes, Jobs, and Vector Retrieval
+
+Recorded on 2026-05-01.
+
+Completed the next RAG slice in the agreed order: provider boundary, pgvector
+write mode, indexing job contract, and vector-capable retrieval.
+
+Portfolio angle:
+
+- Shows the expensive OpenAI embedding boundary is isolated, batch-oriented,
+  usage-aware, and tested without live API calls.
+- Demonstrates production safety: SQLite smoke mode cannot accidentally perform
+  pgvector writes, while PostgreSQL mode requires an API key and explicit
+  `dry_run=false`.
+- Adds an operator-friendly job contract so indexing can move to Celery/Redis
+  later without changing the product API.
+- Makes the RAG answer path vector-ready while keeping local demos stable.
+
+Implemented scope:
+
+- Added `OpenAIEmbeddingModel` and `OpenAIEmbeddingConfig` using batched
+  `/v1/embeddings` requests, `encoding_format=float`, optional dimensions, and
+  usage tracking.
+- Updated incremental indexing to batch only changed documents after content
+  hash skip checks.
+- Added OpenAI embedding settings and pgvector production write mode for
+  `/api/v1/rag/reindex?dry_run=false`.
+- Added `POST /api/v1/rag/reindex/jobs` backed by `SyncJob` for indexing job
+  status and cost counters.
+- Added optional vector-store retrieval in `answer_question_with_rag` and a
+  guarded pgvector search adapter for Ask API.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_embedding_provider.py backend/tests/test_rag_indexing.py -v`
+  passed with provider and batch indexing tests.
+- `uv run pytest backend/tests/test_rag_indexing.py::test_reindex_job_endpoint_records_indexing_job -v`
+  passed.
+- `uv run pytest backend/tests/test_rag_orchestrator_service.py::test_rag_service_can_answer_from_vector_store_matches -v`
+  passed.
+- `uv run pytest backend/tests -v` passed with 87 backend tests.
+- `uv run ruff check backend/app/rag/embeddings.py backend/app/rag/indexing.py backend/app/api/v1/rag.py backend/app/api/v1/ask.py backend/app/agents/rag_orchestrator_agent/service.py backend/tests/test_embedding_provider.py backend/tests/test_rag_indexing.py backend/tests/test_rag_orchestrator_service.py`
+  passed after Ruff import cleanup.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with
+  `.tmp/paraworks-embedding-pgvector-job-retrieval.db`.
+- Slack and Gmail mock sync created 3 source chunks; `POST /api/v1/rag/reindex/jobs`
+  returned a `rag-index-*` job with `status=complete`, `indexed_count=3`,
+  `embedding_request_count=1`, and `storage_backend=preview`.
+- HTTP smoke returned 200 for `/dashboard`, `/review`, and `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -971,3 +1022,4 @@ Verification evidence:
 - `9e397f4 feat: add pgvector rag adapter`
 - `feat: add rag vector indexing pipeline`
 - `feat: add incremental vector indexing`
+- `feat: add embedding provider and vector retrieval path`

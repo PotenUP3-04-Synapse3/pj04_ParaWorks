@@ -2,7 +2,16 @@ from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
 from backend.app.core.demo_auth import USERS
-from backend.app.models import AgentRun, DecisionRecord, Document, DocumentChunk, DocumentVersion, Source, Todo
+from backend.app.models import (
+    AgentRun,
+    DecisionRecord,
+    Document,
+    DocumentChunk,
+    DocumentVersion,
+    Source,
+    Todo,
+)
+from backend.app.rag.vector_store import InMemoryVectorStore, VectorDocument
 
 
 def seed_chunk(db: Session, source_type: str, source_id: str, text: str, permission_level: str) -> None:
@@ -146,3 +155,29 @@ def test_rag_service_hides_restricted_approved_knowledge_for_viewer(db_session: 
     assert answer.source_links == []
     assert answer.hidden_match_count == 1
     assert answer.permission_notice == 'Some sources may be hidden by permissions.'
+
+
+def test_rag_service_can_answer_from_vector_store_matches(db_session: Session) -> None:
+    vector_store = InMemoryVectorStore()
+    vector_store.upsert(
+        VectorDocument(
+            document_id='chunk:vector-alpha',
+            text='Project Alpha launch history came from the indexed company memory vector store.',
+            source_url='https://vector.mock/project-alpha',
+            source_snippet='Project Alpha launch history',
+            permission_level='internal',
+            metadata={'source_type': 'vector_test'},
+        )
+    )
+
+    answer = answer_question_with_rag(
+        db=db_session,
+        user=USERS['viewer'],
+        question='Project Alpha launch history',
+        vector_store=vector_store,
+    )
+
+    assert answer.answer
+    assert answer.source_links == ['https://vector.mock/project-alpha']
+    assert answer.source_snippets == ['Project Alpha launch history']
+    assert answer.hidden_match_count == 0

@@ -15,7 +15,7 @@ from backend.app.models import (
     Todo,
     VectorIndexState,
 )
-from backend.app.rag.embeddings import EmbeddingModel
+from backend.app.rag.embeddings import EmbeddingBatchResult, EmbeddingModel
 from backend.app.rag.vector_store import VectorDocument
 
 
@@ -32,6 +32,9 @@ class VectorIndexResult:
     skipped_count: int = 0
     skipped_document_ids: list[str] | None = None
     saved_embedding_calls: int = 0
+    embedding_request_count: int = 0
+    embedding_prompt_tokens: int = 0
+    embedding_total_tokens: int = 0
 
 
 class PreviewVectorIndexWriter:
@@ -73,7 +76,7 @@ def index_changed_vector_documents(
     embedding_model_name: str,
     persist_state: bool = True,
 ) -> VectorIndexResult:
-    indexed_document_ids: list[str] = []
+    changed_documents: list[tuple[VectorDocument, str, VectorIndexState | None]] = []
     skipped_document_ids: list[str] = []
     embedding_dimensions = _model_dimensions(embedding_model)
 
@@ -88,7 +91,11 @@ def index_changed_vector_documents(
             skipped_document_ids.append(document.document_id)
             continue
 
-        embedding = embedding_model.embed(document.text)
+        changed_documents.append((document, content_hash, state))
+
+    batch = _embed_many(embedding_model, [document.text for document, _, _ in changed_documents])
+    indexed_document_ids: list[str] = []
+    for (document, content_hash, state), embedding in zip(changed_documents, batch.embeddings, strict=True):
         embedding_dimensions = len(embedding)
         writer.upsert_with_embedding(document, embedding)
         indexed_document_ids.append(document.document_id)
@@ -112,6 +119,9 @@ def index_changed_vector_documents(
         skipped_count=len(skipped_document_ids),
         skipped_document_ids=skipped_document_ids,
         saved_embedding_calls=len(skipped_document_ids),
+        embedding_request_count=batch.request_count,
+        embedding_prompt_tokens=batch.prompt_tokens,
+        embedding_total_tokens=batch.total_tokens,
     )
 
 
@@ -259,6 +269,15 @@ def _knowledge_document(
 
 def _model_dimensions(embedding_model: EmbeddingModel) -> int:
     return int(getattr(embedding_model, 'dimensions', 0))
+
+
+def _embed_many(embedding_model: EmbeddingModel, texts: list[str]) -> EmbeddingBatchResult:
+    if hasattr(embedding_model, 'embed_many'):
+        return embedding_model.embed_many(texts)
+    return EmbeddingBatchResult(
+        embeddings=[embedding_model.embed(text) for text in texts],
+        request_count=len(texts),
+    )
 
 
 def _get_index_state(

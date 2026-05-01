@@ -10,9 +10,16 @@ from backend.app.agents.rag_orchestrator_agent.agent import (
     RagOrchestratorAgent,
 )
 from backend.app.core.demo_auth import DemoUser
-from backend.app.models import AgentRun, DecisionRecord, DocumentChunk, HistoryEvent, Source, Todo
+from backend.app.models import (
+    AgentRun,
+    DecisionRecord,
+    DocumentChunk,
+    HistoryEvent,
+    Source,
+    Todo,
+)
 from backend.app.permissions.service import can_access_permission
-from backend.app.rag.vector_store import VectorDocument
+from backend.app.rag.vector_store import VectorDocument, VectorStore
 
 
 @dataclass(frozen=True)
@@ -33,15 +40,21 @@ def answer_question_with_rag(
     user: DemoUser,
     question: str,
     agent: RagOrchestratorAgent | None = None,
+    vector_store: VectorStore | None = None,
 ) -> RagAnswer:
     selected_agent = agent or RagOrchestratorAgent(model=DeterministicRagOrchestratorModel())
-    matching_candidates = retrieve_matching_evidence_candidates(db=db, question=question)
-    visible_candidates = [
-        candidate
-        for candidate in matching_candidates
-        if can_access_permission(user, candidate.permission_level)
-    ]
-    hidden_match_count = len(matching_candidates) - len(visible_candidates)
+    if vector_store is None:
+        matching_candidates = retrieve_matching_evidence_candidates(db=db, question=question)
+        visible_candidates = [
+            candidate
+            for candidate in matching_candidates
+            if can_access_permission(user, candidate.permission_level)
+        ]
+        hidden_match_count = len(matching_candidates) - len(visible_candidates)
+    else:
+        vector_result = vector_store.search(query=question, user=user)
+        visible_candidates = candidates_from_vector_matches(vector_result.matches)
+        hidden_match_count = vector_result.hidden_match_count
     packet = build_rag_evidence_packet(
         candidates=visible_candidates,
         question=question,
@@ -101,6 +114,25 @@ def vector_documents_from_candidates(candidates: list[RagEvidenceCandidate]) -> 
             },
         )
         for candidate in candidates
+    ]
+
+
+def candidates_from_vector_matches(matches) -> list[RagEvidenceCandidate]:
+    return [
+        RagEvidenceCandidate(
+            source_id=match.document.document_id,
+            source_url=match.document.source_url,
+            text=match.document.text,
+            source_snippet=match.document.source_snippet,
+            author=match.document.metadata.get('author'),
+            timestamp=str(match.document.metadata.get('timestamp') or ''),
+            permission_level=match.document.permission_level,
+            metadata={
+                **match.document.metadata,
+                'vector_score': match.score,
+            },
+        )
+        for match in matches
     ]
 
 

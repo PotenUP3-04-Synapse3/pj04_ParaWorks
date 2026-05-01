@@ -1,4 +1,9 @@
-from backend.app.rag.embeddings import DeterministicHashEmbeddingModel
+from backend.app.rag.embeddings import (
+    DeterministicHashEmbeddingModel,
+    EmbeddingBatchResult,
+    OpenAIEmbeddingConfig,
+    OpenAIEmbeddingModel,
+)
 from backend.app.rag.indexing import (
     VectorIndexResult,
     build_rag_index_documents,
@@ -15,7 +20,10 @@ from backend.app.rag.vector_store import (
 
 __all__ = [
     'DeterministicHashEmbeddingModel',
+    'EmbeddingBatchResult',
     'InMemoryVectorStore',
+    'OpenAIEmbeddingConfig',
+    'OpenAIEmbeddingModel',
     'PgVectorConfig',
     'PgVectorStore',
     'VectorIndexResult',

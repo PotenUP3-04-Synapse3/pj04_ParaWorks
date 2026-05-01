@@ -9,10 +9,14 @@ from backend.app.models import (
     DocumentChunk,
     DocumentVersion,
     Source,
+    SyncJob,
     Todo,
     VectorIndexState,
 )
-from backend.app.rag.embeddings import DeterministicHashEmbeddingModel
+from backend.app.rag.embeddings import (
+    DeterministicHashEmbeddingModel,
+    EmbeddingBatchResult,
+)
 from backend.app.rag.indexing import (
     build_rag_index_documents,
     compute_vector_document_hash,
@@ -28,6 +32,25 @@ class RecordingVectorWriter:
 
     def upsert_with_embedding(self, document: VectorDocument, embedding: list[float]) -> None:
         self.upserts.append((document, embedding))
+
+
+class RecordingBatchEmbeddingModel:
+    dimensions = 2
+
+    def __init__(self) -> None:
+        self.batches: list[list[str]] = []
+
+    def embed(self, text: str) -> list[float]:
+        raise AssertionError('index_changed_vector_documents should call embed_many')
+
+    def embed_many(self, texts: list[str]) -> EmbeddingBatchResult:
+        self.batches.append(texts)
+        return EmbeddingBatchResult(
+            embeddings=[[float(index), float(index + 1)] for index, _ in enumerate(texts)],
+            prompt_tokens=10 * len(texts),
+            total_tokens=10 * len(texts),
+            request_count=1 if texts else 0,
+        )
 
 
 def seed_chunk(db: Session, text: str, source_id: str = 'gmail-index-source') -> int:
@@ -201,6 +224,50 @@ def test_incremental_indexing_reindexes_changed_documents(db_session: Session) -
     assert state.content_hash == compute_vector_document_hash(changed)
 
 
+def test_incremental_indexing_batches_only_changed_documents(db_session: Session) -> None:
+    unchanged = VectorDocument(
+        document_id='chunk:1',
+        text='Already indexed document',
+        source_url='https://gmail.mock/chunk-1',
+        source_snippet='Already indexed document',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+    changed = VectorDocument(
+        document_id='chunk:2',
+        text='New document needs embedding',
+        source_url='https://gmail.mock/chunk-2',
+        source_snippet='New document needs embedding',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+    index_changed_vector_documents(
+        db=db_session,
+        documents=[unchanged],
+        writer=RecordingVectorWriter(),
+        embedding_model=DeterministicHashEmbeddingModel(dimensions=2),
+        embedding_model_name='deterministic-hash:test',
+    )
+    embedding_model = RecordingBatchEmbeddingModel()
+    writer = RecordingVectorWriter()
+
+    result = index_changed_vector_documents(
+        db=db_session,
+        documents=[unchanged, changed],
+        writer=writer,
+        embedding_model=embedding_model,
+        embedding_model_name='deterministic-hash:test',
+    )
+
+    assert embedding_model.batches == [['New document needs embedding']]
+    assert result.indexed_count == 1
+    assert result.skipped_count == 1
+    assert result.saved_embedding_calls == 1
+    assert result.embedding_request_count == 1
+    assert result.embedding_prompt_tokens == 10
+    assert [document.document_id for document, _ in writer.upserts] == ['chunk:2']
+
+
 def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_session: Session) -> None:
     chunk_id = seed_chunk(db_session, 'Redis queue state should be indexed for RAG.')
     approved = DecisionRecord(
@@ -246,6 +313,9 @@ def test_reindex_endpoint_returns_dry_run_index_summary(client: TestClient, db_s
         'indexed_count': 1,
         'skipped_count': 0,
         'saved_embedding_calls': 0,
+        'embedding_request_count': 1,
+        'embedding_prompt_tokens': 0,
+        'embedding_total_tokens': 0,
         'embedding_dimensions': 16,
         'document_ids': ['chunk:1'],
         'skipped_document_ids': [],
@@ -274,3 +344,33 @@ def test_reindex_endpoint_reports_skipped_documents_from_index_state(
     assert response.json()['indexed_count'] == 0
     assert response.json()['skipped_count'] == 1
     assert response.json()['saved_embedding_calls'] == 1
+
+
+def test_reindex_endpoint_rejects_pgvector_write_without_postgres(client: TestClient) -> None:
+    response = client.post('/api/v1/rag/reindex?dry_run=false')
+
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'pgvector writes require a PostgreSQL database.'
+
+
+def test_reindex_job_endpoint_records_indexing_job(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-job-index')
+
+    response = client.post('/api/v1/rag/reindex/jobs')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['job_id'].startswith('rag-index-')
+    assert body['status'] == 'complete'
+    assert body['indexed_count'] == 1
+    assert body['skipped_count'] == 0
+    assert body['saved_embedding_calls'] == 0
+    job = db_session.query(SyncJob).one()
+    assert job.job_id == body['job_id']
+    assert job.connector_type == 'rag-index'
+    assert job.status == 'complete'
+    assert job.progress_pct == 100
+    assert job.message == 'indexed=1 skipped=0 saved_embedding_calls=0'

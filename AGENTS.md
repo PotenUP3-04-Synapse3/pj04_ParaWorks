@@ -185,6 +185,14 @@ PostgreSQL + pgvector is the default production RAG storage path.
 - Use deterministic local embeddings only for tests, smoke checks, and dry-run
   indexing previews. Production embedding providers must stay behind the same
   writer/model interfaces and must preserve token/cost accounting.
+- Live embedding providers must implement `embed_many` and be called only after
+  incremental skip checks. Tests must use fake HTTP clients or deterministic
+  models and must never call live provider APIs.
+- `dry_run=false` reindexing is only valid with PostgreSQL + pgvector and a
+  configured embedding provider key. SQLite smoke mode must reject production
+  writes clearly.
+- Ask/RAG retrieval may use pgvector only behind an explicit feature flag; the
+  default local path must remain deterministic and smoke-friendly.
 - Do not introduce a separate vector database unless the team explicitly
   decides that operational tradeoff is worth it.
 - All vector search adapters must preserve permission filtering and hidden-match
@@ -204,6 +212,7 @@ Every agent design should consider:
 - evidence hash based caching;
 - content-hash based embedding skips before provider calls;
 - batch embedding instead of one provider request per document;
+- indexing jobs that expose skipped/indexed counts to operators;
 - token input/output accounting;
 - estimated cost metadata on every agent run.
 
