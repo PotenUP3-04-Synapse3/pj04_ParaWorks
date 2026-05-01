@@ -1,10 +1,13 @@
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+import backend.app.api.v1.integrations as integrations_api
 from backend.app.connectors.slack_oauth import (
+    LOCAL_TOKEN_VAULT,
     LocalTokenVault,
     SlackOAuthAccess,
     SlackOAuthClient,
@@ -196,3 +199,59 @@ def test_integration_connections_api_hides_token_references(
     ]
     assert 'token_ref' not in str(payload)
     assert 'local:slack:T123:bot' not in str(payload)
+
+
+def test_slack_sync_endpoint_uses_installed_connection_token_without_exposing_it(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    token_ref = LOCAL_TOKEN_VAULT.store_bot_token(
+        connector_type='slack',
+        workspace_id='T123',
+        token='xoxb-installed',
+    )
+    db_session.add(
+        IntegrationConnection(
+            connector_type='slack',
+            workspace_id='T123',
+            workspace_name='ParaWorks',
+            bot_user_id='U999',
+            scopes=['channels:history'],
+            token_ref=token_ref,
+            masked_bot_token='xoxb...lled',
+            status='connected',
+        )
+    )
+    db_session.commit()
+
+    def override_settings() -> Settings:
+        return Settings(
+            paraworks_demo_mode=False,
+            slack_bot_token=None,
+            slack_channel_ids='C123',
+        )
+
+    captured: dict[str, object] = {}
+
+    def fake_sync_connector_events(*, db: Session, connector):
+        captured['bot_token'] = connector.config.bot_token
+        captured['channel_ids'] = connector.config.channel_ids
+        return SimpleNamespace(
+            job_id='sync-test',
+            status='complete',
+            created_review_items=0,
+            fetched_events=0,
+            skipped_events=0,
+        )
+
+    client.app.dependency_overrides[get_settings] = override_settings
+    monkeypatch.setattr(integrations_api, 'sync_connector_events', fake_sync_connector_events)
+
+    response = client.post('/api/v1/integrations/slack/sync')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert captured == {'bot_token': 'xoxb-installed', 'channel_ids': ['C123']}
+    assert 'xoxb-installed' not in str(payload)
+    assert 'token_ref' not in str(payload)

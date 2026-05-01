@@ -1392,6 +1392,49 @@ Verification evidence:
 - Playwright visual smoke passed with 12 Chromium desktop/mobile tests on fresh
   alternate ports.
 
+## Installed Slack Sync Token Boundary
+
+Recorded on 2026-05-01.
+
+Connected installed Slack OAuth records to the sync connector factory without
+putting raw tokens in the database or API responses.
+
+Portfolio angle:
+
+- Shows the handoff from OAuth installation to live ingestion readiness: the
+  sync path can now build a `SlackConnector` from a stored connection record and
+  a vault-resolved bot token.
+- Preserves the cost guardrail: live Slack sync still requires
+  `PARAWORKS_DEMO_MODE=false`, configured channel ids, and a resolvable vault
+  token. Missing vault state falls back to mock instead of making unexpected
+  external calls.
+- Keeps the security story crisp for interviews: DB stores `token_ref` only,
+  the vault resolves the secret at runtime, and sync responses never expose raw
+  tokens or token references.
+
+Implemented scope:
+
+- Added `get_sync_connector` as the sync-time factory that can use installed
+  Slack connections.
+- Kept `get_configured_connector` as the legacy env-token path for local live
+  experiments.
+- Updated `/api/v1/integrations/{connector_type}/sync` to use the sync-time
+  factory with DB context.
+- Added tests for installed connection token resolution, missing-vault fallback,
+  and sync endpoint secret non-exposure.
+- Updated Slack runbook with installed sync selection and cost/security notes.
+
+Verification evidence:
+
+- RED factory test first failed because `get_sync_connector` did not exist.
+- Focused connector/OAuth/mock sync tests passed with 13 tests.
+- Python Ruff passed for touched backend files and tests.
+- Full backend tests passed with 116 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- Playwright visual smoke passed with 12 Chromium desktop/mobile tests on fresh
+  alternate ports.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1431,3 +1474,4 @@ Verification evidence:
 - `feat: add slack live connector boundary`
 - `feat: add slack oauth installation boundary`
 - `feat: show slack oauth connection status`
+- `feat: wire installed slack connection sync`

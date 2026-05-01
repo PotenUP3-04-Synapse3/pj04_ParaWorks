@@ -14,7 +14,7 @@ from backend.app.agents.slack_agent import (
     SlackAgent,
     create_slack_agent_review_items,
 )
-from backend.app.connectors.factory import get_configured_connector
+from backend.app.connectors.factory import get_sync_connector
 from backend.app.connectors.mock import CONNECTOR_TYPES
 from backend.app.connectors.registry import list_connector_manifests
 from backend.app.connectors.slack import SlackApiError
@@ -75,7 +75,7 @@ def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) ->
     if connector_type not in CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
-    connector = get_configured_connector(connector_type, settings)
+    connector = get_sync_connector(connector_type, settings, db=db)
     result = sync_connector_events(db=db, connector=connector)
 
     return {

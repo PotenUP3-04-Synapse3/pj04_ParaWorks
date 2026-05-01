@@ -19,9 +19,11 @@ Responsibilities:
 - `SlackWebApiClient` calls Slack `conversations.history` with bearer-token
   auth and cursor pagination.
 - `SlackConnector` maps Slack message payloads into `SourceEvent`.
-- `get_configured_connector` uses live Slack only when demo mode is disabled
-  and both token and channel ids are configured. Otherwise it falls back to mock
-  mode.
+- `get_sync_connector` uses an installed Slack connection first when demo mode
+  is disabled, channel ids are configured, and the token vault can resolve the
+  connection `token_ref`.
+- `get_configured_connector` keeps the legacy environment-token path for local
+  live sync experiments. Otherwise it falls back to mock mode.
 - `SlackOAuthStateSigner` signs install/callback state so callback payloads are
   not accepted blindly.
 - `SlackOAuthClient` exchanges temporary OAuth codes with Slack
@@ -95,6 +97,8 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 - OAuth callback persistence stores token references and masked tokens, never
   raw bot tokens in database metadata;
 - demo mode keeps mock sync active even if local Slack credentials exist;
+- installed Slack sync resolves bot tokens from the vault and does not expose
+  token refs or raw tokens in sync API responses;
 - the Integrations page renders Slack OAuth status without secrets;
 - payload mapping preserves source id, permalink, timestamp, permission level,
   required scopes, and channel metadata.
@@ -103,6 +107,9 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 
 - Demo mode is the default so local tests do not accidentally call Slack or
   create ingestion churn from real workspace data.
+- Installed Slack sync requires a resolvable vault token and explicit channel
+  ids. If the local vault is empty after a process restart, ParaWorks falls back
+  to mock behavior instead of making partial or surprising external calls.
 - Fetch source deltas before any LLM or embedding work.
 - Preserve Slack timestamp and channel id as stable source identifiers.
 - Keep raw private message text out of logs.
