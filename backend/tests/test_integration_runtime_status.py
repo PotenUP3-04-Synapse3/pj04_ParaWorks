@@ -32,3 +32,43 @@ def test_slack_runtime_status_reports_mode_channels_and_latest_sync(client, db_s
         'status_lookup_triggers_sync': False,
         'status_lookup_triggers_llm': False,
     }
+
+
+def test_google_runtime_status_reports_account_readiness_and_latest_sync(client, db_session) -> None:
+    db_session.add(
+        SyncJob(
+            job_id='gmail-runtime-1',
+            connector_type='gmail',
+            status='failed',
+            message='failed: missing scope',
+            progress_pct=100,
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/integrations/gmail/runtime-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['connector_type'] == 'gmail'
+    assert payload['mode'] == 'mock'
+    assert payload['connection_status'] == 'disconnected'
+    assert payload['credential_status'] == 'missing'
+    assert payload['account_name'] is None
+    assert payload['latest_sync'] == {
+        'job_id': 'gmail-runtime-1',
+        'status': 'failed',
+        'message': 'failed: missing scope',
+        'progress_pct': 100,
+    }
+    assert payload['cost_policy'] == {
+        'status_lookup_triggers_sync': False,
+        'status_lookup_triggers_llm': False,
+    }
+
+
+def test_google_runtime_status_rejects_unknown_connector(client) -> None:
+    response = client.get('/api/v1/integrations/not-google/runtime-status')
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Connector not found'

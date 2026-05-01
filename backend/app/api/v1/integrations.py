@@ -110,6 +110,43 @@ def get_slack_runtime_status(db: DbSession, settings: AppSettings) -> dict[str, 
     }
 
 
+@router.get('/{connector_type}/runtime-status')
+def get_google_runtime_status(
+    connector_type: str,
+    db: DbSession,
+    settings: AppSettings,
+) -> dict[str, object]:
+    if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
+        raise HTTPException(status_code=404, detail='Connector not found')
+
+    connection = db.scalar(
+        select(IntegrationConnection)
+        .where(IntegrationConnection.connector_type == connector_type)
+        .order_by(IntegrationConnection.id.desc())
+    )
+    latest_sync = db.scalar(
+        select(SyncJob).where(SyncJob.connector_type == connector_type).order_by(SyncJob.id.desc())
+    )
+    credential_status = (
+        'available'
+        if connection and LOCAL_TOKEN_VAULT.resolve(connection.token_ref)
+        else 'missing'
+    )
+
+    return {
+        'connector_type': connector_type,
+        'mode': 'mock' if settings.paraworks_demo_mode else 'live',
+        'connection_status': connection.status if connection else 'disconnected',
+        'credential_status': credential_status,
+        'account_name': connection.workspace_name if connection else None,
+        'latest_sync': _sync_job_response(latest_sync),
+        'cost_policy': {
+            'status_lookup_triggers_sync': False,
+            'status_lookup_triggers_llm': False,
+        },
+    }
+
+
 @router.post('/{connector_type}/sync')
 def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) -> dict[str, int | str]:
     if connector_type not in CONNECTOR_TYPES:

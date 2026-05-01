@@ -272,6 +272,24 @@ export type SlackRuntimeStatus = {
   };
 };
 
+export type GoogleRuntimeStatus = {
+  connector_type: "gmail" | "drive" | "calendar";
+  mode: "mock" | "live";
+  connection_status: string;
+  credential_status: "available" | "missing";
+  account_name?: string | null;
+  latest_sync?: {
+    job_id: string;
+    status: string;
+    message: string;
+    progress_pct: number;
+  } | null;
+  cost_policy: {
+    status_lookup_triggers_sync: boolean;
+    status_lookup_triggers_llm: boolean;
+  };
+};
+
 export type MessageChannel = {
   id: string;
   name: string;

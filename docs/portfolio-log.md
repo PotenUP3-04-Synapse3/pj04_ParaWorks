@@ -1981,6 +1981,43 @@ Verification evidence:
 - `npm run build` passed.
 - `npx playwright test e2e/visual-smoke.spec.ts -g "integrations page shows Slack OAuth" --project=chromium-desktop` passed.
 
+## 2026-05-02 - Google Runtime Status Surface
+
+Extended connector runtime observability from Slack to Gmail, Google Drive, and
+Google Calendar.
+
+Portfolio angle:
+
+- Makes Google integration readiness inspectable in the product UI before the
+  team invests in deeper live connector work.
+- Aligns all major connectors around the same operational contract: mode,
+  connection state, credential state, account/channel context, latest sync, and
+  no-cost status lookup.
+- Reduces debugging dependence on terminal logs for OAuth and sync issues.
+
+Implemented scope:
+
+- Added `GET /api/v1/integrations/{gmail|drive|calendar}/runtime-status`.
+- Added backend tests for Google runtime status and unknown connector handling.
+- Added frontend `GoogleRuntimeStatus` typing.
+- Added a Google operations status panel to `/integrations`.
+- Extended Playwright smoke coverage to assert the Google runtime panel is
+  visible.
+
+Cost/security note:
+
+- Google runtime status is read-only. It does not call Google APIs, fetch mail
+  or documents, trigger embeddings, or invoke LLMs. It also avoids exposing raw
+  refresh tokens or token references.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_integration_runtime_status.py -v` passed.
+- `uv run ruff check backend/app/api/v1/integrations.py backend/tests/test_integration_runtime_status.py` passed.
+- `npx eslint src/app/integrations/page.tsx src/lib/api/types.ts e2e/visual-smoke.spec.ts` passed.
+- `npm run build` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts -g "Google connector cards" --project=chromium-desktop` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2031,3 +2068,4 @@ Verification evidence:
 - `feat: run agents through langgraph`
 - `feat: bulk approve agent candidates`
 - `feat: show slack runtime status`
+- `feat: show google runtime status`

@@ -143,6 +143,7 @@ test("Google connector cards show OAuth readiness outside primary action rows", 
       page.getByTestId(`${connector.type}-card-actions`).getByRole("button", { name: `${connector.label} 연결` }),
     ).toHaveCount(0);
   }
+  await expect(page.getByTestId("google-runtime-status")).toBeVisible();
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("google-secret");

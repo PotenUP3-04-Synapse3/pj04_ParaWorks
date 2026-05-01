@@ -21,6 +21,7 @@ import { useJobStatus } from "@/hooks/useJobStatus";
 import { apiGet, apiPost } from "@/lib/api/client";
 import type {
   AgentReviewResponse,
+  GoogleRuntimeStatus,
   IntegrationConnection,
   IntegrationManifest,
   IntegrationSyncResponse,
@@ -99,6 +100,7 @@ export default function IntegrationsPage() {
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
+  const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
@@ -184,6 +186,25 @@ export default function IntegrationsPage() {
                 required_scopes: [],
               },
             }));
+          }
+        });
+
+      apiGet<GoogleRuntimeStatus>(`/api/v1/integrations/${connectorType}/runtime-status`)
+        .then((runtimeStatus) => {
+          if (active) {
+            setGoogleRuntimeByType((current) => ({
+              ...current,
+              [connectorType]: runtimeStatus,
+            }));
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setGoogleRuntimeByType((current) => {
+              const next = { ...current };
+              delete next[connectorType];
+              return next;
+            });
           }
         });
     });
@@ -430,6 +451,7 @@ export default function IntegrationsPage() {
 
           <div className="space-y-3 p-4">
             {slackRuntime ? <SlackRuntimeStatusPanel status={slackRuntime} /> : null}
+            <GoogleRuntimeStatusList statuses={googleRuntimeByType} />
 
             {error ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
@@ -530,6 +552,46 @@ function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
   );
 }
 
+function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, GoogleRuntimeStatus> }) {
+  const rows = GOOGLE_CONNECTOR_TYPES.map((connectorType) => statuses[connectorType]).filter(Boolean);
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div data-testid="google-runtime-status" className="rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold text-blue-950">Google 운영 상태</p>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">Gmail, Drive, Calendar 상태를 한 번에 확인합니다.</p>
+        </div>
+        <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-blue-700">
+          {rows[0]?.mode ?? "mock"}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {rows.map((status) => (
+          <div key={status.connector_type} className="rounded-md bg-white px-2 py-2 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold">{formatConnectorName(status.connector_type)}</span>
+              <span className="font-semibold">{status.connection_status}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-3 text-[var(--ink-muted)]">
+              <span className="max-w-[180px] truncate">{status.account_name ?? "계정 미연결"}</span>
+              <span>{status.credential_status}</span>
+            </div>
+            {status.latest_sync ? (
+              <p className="mt-1 truncate text-[var(--ink-muted)]">
+                최근 sync: {status.latest_sync.status} · {status.latest_sync.message}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function formatScopes(scopes: string[]) {
   if (scopes.length === 0) {
     return "scope 준비 중";
@@ -548,4 +610,17 @@ function formatAgentName(agentName: string) {
     return "Mail/Docs Agent";
   }
   return agentName;
+}
+
+function formatConnectorName(connectorType: string) {
+  if (connectorType === "gmail") {
+    return "Gmail";
+  }
+  if (connectorType === "drive") {
+    return "Google Drive";
+  }
+  if (connectorType === "calendar") {
+    return "Google Calendar";
+  }
+  return connectorType;
 }
