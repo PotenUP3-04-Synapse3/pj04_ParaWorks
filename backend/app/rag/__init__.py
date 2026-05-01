@@ -2,6 +2,8 @@ from backend.app.rag.embeddings import DeterministicHashEmbeddingModel
 from backend.app.rag.indexing import (
     VectorIndexResult,
     build_rag_index_documents,
+    compute_vector_document_hash,
+    index_changed_vector_documents,
     index_vector_documents,
 )
 from backend.app.rag.pgvector_store import PgVectorConfig, PgVectorStore
@@ -20,5 +22,7 @@ __all__ = [
     'VectorDocument',
     'VectorSearchResult',
     'build_rag_index_documents',
+    'compute_vector_document_hash',
+    'index_changed_vector_documents',
     'index_vector_documents',
 ]

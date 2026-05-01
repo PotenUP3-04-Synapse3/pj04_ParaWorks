@@ -897,6 +897,48 @@ Verification evidence:
   `storage_backend=preview`.
 - HTTP smoke returned 200 for `/dashboard`, `/review`, and `/search`.
 
+## RAG Cost Optimization Update: Incremental Vector Indexing
+
+Recorded on 2026-05-01.
+
+Added the first explicit cost-control layer for paid embedding providers before
+connecting OpenAI embeddings.
+
+Portfolio angle:
+
+- Shows product-aware AI engineering: the system avoids repeated embedding
+  calls when Slack/Gmail/Drive sync runs over unchanged content.
+- Makes cost savings observable through `skipped_count` and
+  `saved_embedding_calls`, not just an internal implementation detail.
+- Keeps future provider integration safer because the expensive boundary is
+  already guarded by content hashing and index state.
+
+Implemented scope:
+
+- Added `VectorIndexState` and the `vector_index_states` table to track
+  `document_id + embedding_model + content_hash`.
+- Added stable `VectorDocument` content hashing.
+- Added `index_changed_vector_documents` to skip unchanged documents, reindex
+  changed documents, and persist successful index state.
+- Extended `POST /api/v1/rag/reindex` dry-run responses with incremental cost
+  signals: `skipped_count`, `skipped_document_ids`, and
+  `saved_embedding_calls`.
+- Documented that full-corpus re-embedding must not be the default path.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_indexing.py backend/tests/test_db_init.py -v`
+  passed with 9 focused tests.
+- `uv run pytest backend/tests -v` passed with 82 backend tests.
+- `uv run ruff check backend/app/models/vector_index.py backend/app/rag/indexing.py backend/app/api/v1/rag.py backend/tests/test_rag_indexing.py`
+  passed after Ruff import cleanup.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-incremental-vector-indexing.db`.
+- Slack and Gmail mock sync created 3 source chunks; `POST /api/v1/rag/reindex`
+  returned `incremental=true`, `indexed_count=3`, `skipped_count=0`, and
+  `saved_embedding_calls=0` on a fresh index.
+- HTTP smoke returned 200 for `/dashboard`, `/review`, and `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -928,3 +970,4 @@ Verification evidence:
 - `9f3a7b8 feat: add review vector orchestration foundations`
 - `9e397f4 feat: add pgvector rag adapter`
 - `feat: add rag vector indexing pipeline`
+- `feat: add incremental vector indexing`

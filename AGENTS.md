@@ -175,6 +175,11 @@ PostgreSQL + pgvector is the default production RAG storage path.
 - Build serving documents through `backend/app/rag/indexing.py` so chunks,
   approved knowledge, permissions, source snippets, and timestamps share one
   indexing path.
+- Never re-embed the full corpus by default. Compute a stable content hash for
+  each `VectorDocument` and skip embedding when `document_id`, model, and hash
+  already match `vector_index_states`.
+- Any reindex API or job must report `indexed_count`, `skipped_count`, and
+  `saved_embedding_calls` so cost reduction is visible in demos and logs.
 - Keep SQLite smoke mode working by using deterministic and in-memory retrieval
   when Postgres is not running.
 - Use deterministic local embeddings only for tests, smoke checks, and dry-run
@@ -197,6 +202,8 @@ Every agent design should consider:
 - structured output to reduce retries;
 - prompt versioning;
 - evidence hash based caching;
+- content-hash based embedding skips before provider calls;
+- batch embedding instead of one provider request per document;
 - token input/output accounting;
 - estimated cost metadata on every agent run.
 

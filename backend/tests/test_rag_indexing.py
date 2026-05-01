@@ -10,9 +10,15 @@ from backend.app.models import (
     DocumentVersion,
     Source,
     Todo,
+    VectorIndexState,
 )
 from backend.app.rag.embeddings import DeterministicHashEmbeddingModel
-from backend.app.rag.indexing import build_rag_index_documents, index_vector_documents
+from backend.app.rag.indexing import (
+    build_rag_index_documents,
+    compute_vector_document_hash,
+    index_changed_vector_documents,
+    index_vector_documents,
+)
 from backend.app.rag.vector_store import VectorDocument
 
 
@@ -96,6 +102,105 @@ def test_index_vector_documents_writes_embeddings() -> None:
     assert len(writer.upserts[0][1]) == 8
 
 
+def test_vector_document_hash_changes_when_serving_content_changes() -> None:
+    original = VectorDocument(
+        document_id='chunk:1',
+        text='Redis queue state',
+        source_url='https://gmail.mock/chunk-1',
+        source_snippet='Redis queue state',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+    changed = VectorDocument(
+        document_id='chunk:1',
+        text='Redis queue state with new approval rule',
+        source_url='https://gmail.mock/chunk-1',
+        source_snippet='Redis queue state',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+
+    assert compute_vector_document_hash(original) != compute_vector_document_hash(changed)
+
+
+def test_incremental_indexing_skips_unchanged_documents_after_success(db_session: Session) -> None:
+    document = VectorDocument(
+        document_id='chunk:1',
+        text='Redis queue state',
+        source_url='https://gmail.mock/chunk-1',
+        source_snippet='Redis queue state',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+    first_writer = RecordingVectorWriter()
+
+    first_result = index_changed_vector_documents(
+        db=db_session,
+        documents=[document],
+        writer=first_writer,
+        embedding_model=DeterministicHashEmbeddingModel(dimensions=8),
+        embedding_model_name='deterministic-hash:test',
+    )
+    second_writer = RecordingVectorWriter()
+    second_result = index_changed_vector_documents(
+        db=db_session,
+        documents=[document],
+        writer=second_writer,
+        embedding_model=DeterministicHashEmbeddingModel(dimensions=8),
+        embedding_model_name='deterministic-hash:test',
+    )
+
+    state = db_session.query(VectorIndexState).one()
+    assert first_result.indexed_count == 1
+    assert second_result.indexed_count == 0
+    assert second_result.skipped_count == 1
+    assert second_result.saved_embedding_calls == 1
+    assert second_writer.upserts == []
+    assert state.status == 'indexed'
+    assert state.content_hash == compute_vector_document_hash(document)
+
+
+def test_incremental_indexing_reindexes_changed_documents(db_session: Session) -> None:
+    original = VectorDocument(
+        document_id='chunk:1',
+        text='Redis queue state',
+        source_url='https://gmail.mock/chunk-1',
+        source_snippet='Redis queue state',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+    changed = VectorDocument(
+        document_id='chunk:1',
+        text='Redis queue state with changed retention policy',
+        source_url='https://gmail.mock/chunk-1',
+        source_snippet='Redis queue state with changed retention policy',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+
+    index_changed_vector_documents(
+        db=db_session,
+        documents=[original],
+        writer=RecordingVectorWriter(),
+        embedding_model=DeterministicHashEmbeddingModel(dimensions=8),
+        embedding_model_name='deterministic-hash:test',
+    )
+    second_writer = RecordingVectorWriter()
+    result = index_changed_vector_documents(
+        db=db_session,
+        documents=[changed],
+        writer=second_writer,
+        embedding_model=DeterministicHashEmbeddingModel(dimensions=8),
+        embedding_model_name='deterministic-hash:test',
+    )
+
+    state = db_session.query(VectorIndexState).one()
+    assert result.indexed_count == 1
+    assert result.skipped_count == 0
+    assert len(second_writer.upserts) == 1
+    assert state.content_hash == compute_vector_document_hash(changed)
+
+
 def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_session: Session) -> None:
     chunk_id = seed_chunk(db_session, 'Redis queue state should be indexed for RAG.')
     approved = DecisionRecord(
@@ -139,7 +244,33 @@ def test_reindex_endpoint_returns_dry_run_index_summary(client: TestClient, db_s
     assert response.json() == {
         'dry_run': True,
         'indexed_count': 1,
+        'skipped_count': 0,
+        'saved_embedding_calls': 0,
         'embedding_dimensions': 16,
         'document_ids': ['chunk:1'],
+        'skipped_document_ids': [],
+        'incremental': True,
         'storage_backend': 'preview',
     }
+
+
+def test_reindex_endpoint_reports_skipped_documents_from_index_state(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-api-index')
+    document = build_rag_index_documents(db_session)[0]
+    index_changed_vector_documents(
+        db=db_session,
+        documents=[document],
+        writer=RecordingVectorWriter(),
+        embedding_model=DeterministicHashEmbeddingModel(dimensions=16),
+        embedding_model_name='deterministic-hash:v1',
+    )
+
+    response = client.post('/api/v1/rag/reindex')
+
+    assert response.status_code == 200
+    assert response.json()['indexed_count'] == 0
+    assert response.json()['skipped_count'] == 1
+    assert response.json()['saved_embedding_calls'] == 1

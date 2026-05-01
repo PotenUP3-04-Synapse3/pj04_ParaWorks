@@ -9,4 +9,4 @@ def test_init_db_creates_expected_tables_on_fresh_engine() -> None:
     init_db(engine_override=engine)
 
     tables = set(inspect(engine).get_table_names())
-    assert {'sources', 'review_items', 'sync_jobs', 'agent_runs'} <= tables
+    assert {'sources', 'review_items', 'sync_jobs', 'agent_runs', 'vector_index_states'} <= tables
