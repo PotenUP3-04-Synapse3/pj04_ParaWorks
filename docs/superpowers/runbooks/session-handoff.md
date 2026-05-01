@@ -8,6 +8,7 @@ Updated: 2026-05-01
 - Plan draft: `C:\Users\hanvv\Downloads\plan-merged.md`
 - Primary spec: `docs/superpowers/specs/2026-04-30-paraworks-harness-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-04-30-paraworks-harness.md`
+- Portfolio log: `docs/portfolio-log.md`
 - Current browser URL during handoff: `http://127.0.0.1:3000/dashboard`
 
 ## Product Alignment
@@ -237,3 +238,10 @@ ParaWorks `SourceEvent` records and records required history scopes in
 
 The next Slack step is to implement a real Web API client behind the
 `SlackApiClient` protocol with cursor pagination and rate-limit handling.
+
+## Portfolio Recording Rule
+
+When future ParaWorks work changes the product story, architecture, UX, testing
+evidence, or demo flow, update `docs/portfolio-log.md` in the same session.
+Write entries so they can later be reused for a portfolio case study: problem,
+implementation, verification evidence, and portfolio angle.
