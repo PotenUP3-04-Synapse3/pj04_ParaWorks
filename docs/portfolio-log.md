@@ -2018,6 +2018,39 @@ Verification evidence:
 - `npm run build` passed.
 - `npx playwright test e2e/visual-smoke.spec.ts -g "Google connector cards" --project=chromium-desktop` passed.
 
+## 2026-05-02 - Execution Cost Plan And Skip Reasons
+
+Why it matters:
+
+- The company-memory graph should not call every agent just because a user
+  pressed run. Slack, mail/document, and RAG agents now receive an execution
+  cost plan before the graph enters the expensive service nodes.
+- The cost plan records each agent's `run` or `skip` decision, the reason, and
+  deterministic input/output token estimates. This keeps the demo portfolio
+  honest about API cost instead of hiding cost behind orchestration language.
+- Empty Slack evidence, empty mail/document evidence, and empty questions now
+  skip their agent calls and avoid creating misleading `AgentRun` records.
+
+Implemented scope:
+
+- Added a company-memory cost plan builder to the LangGraph runtime.
+- Threaded `cost_plan` through graph state and orchestration outputs.
+- Guarded Slack review drafting, mail/document review drafting, and RAG answer
+  generation with per-agent skip decisions.
+- Added regression coverage for both run and skip paths.
+
+Cost/security note:
+
+- This is a local deterministic estimate. It does not call an embedding model,
+  LLM, Slack, Google, or external API.
+- The skip path is intentionally conservative: if there is no evidence or no
+  user question, the runtime spends zero model tokens for that agent.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py backend/tests/test_agent_runs_api.py -v` passed.
+- `uv run ruff check backend/app/agent_runtime/company_memory.py backend/tests/test_company_memory_orchestration_service.py` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2069,3 +2102,4 @@ Verification evidence:
 - `feat: bulk approve agent candidates`
 - `feat: show slack runtime status`
 - `feat: show google runtime status`
+- `feat: add execution cost plan`

@@ -37,12 +37,13 @@ def run_company_memory_agent_orchestration(
     question: str,
 ) -> CompanyMemoryOrchestrationResult:
     permission_context = PermissionContext(user_id=user.id, role=user.role)
+    cost_plan = build_company_memory_cost_plan(db=db, question=question)
     workflow = build_agent_workflow(
         (
-            ('collect_evidence', _collect_evidence_node(db)),
-            ('draft_review_candidates', _draft_review_candidates_node(db, permission_context)),
+            ('collect_evidence', _collect_evidence_node(db, cost_plan)),
+            ('draft_review_candidates', _draft_review_candidates_node(db, permission_context, cost_plan)),
             ('retrieve_company_memory', _retrieve_company_memory_node()),
-            ('answer_with_rag', _answer_with_rag_node(db, user, question)),
+            ('answer_with_rag', _answer_with_rag_node(db, user, question, cost_plan)),
         )
     )
     result = workflow.run(
@@ -59,7 +60,34 @@ def run_company_memory_agent_orchestration(
     )
 
 
-def _collect_evidence_node(db: Session):
+def build_company_memory_cost_plan(*, db: Session, question: str) -> dict[str, dict[str, int | str]]:
+    slack_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('slack',))
+    mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'drive'))
+    question_token_estimate = _estimate_tokens(question)
+
+    return {
+        'slack_agent': _agent_cost_plan(
+            has_input=slack_token_estimate > 0,
+            run_reason='slack_evidence_available',
+            skip_reason='no_slack_evidence',
+            estimated_input_tokens=slack_token_estimate,
+        ),
+        'mail_document_agent': _agent_cost_plan(
+            has_input=mail_document_token_estimate > 0,
+            run_reason='mail_document_evidence_available',
+            skip_reason='no_mail_document_evidence',
+            estimated_input_tokens=mail_document_token_estimate,
+        ),
+        'rag_orchestrator_agent': _agent_cost_plan(
+            has_input=question_token_estimate > 0,
+            run_reason='question_provided',
+            skip_reason='empty_question',
+            estimated_input_tokens=question_token_estimate,
+        ),
+    }
+
+
+def _collect_evidence_node(db: Session, cost_plan: dict[str, dict[str, int | str]]):
     def collect_evidence(state: AgentWorkflowState) -> AgentWorkflowState:
         slack_count = _count_chunks(db=db, source_types=('slack',))
         mail_document_count = _count_chunks(db=db, source_types=('gmail', 'drive'))
@@ -69,25 +97,34 @@ def _collect_evidence_node(db: Session):
             slack_evidence_count=slack_count,
             mail_document_evidence_count=mail_document_count,
             token_budget_policy='delta_sync_hash_skip_evidence_budget',
+            cost_plan=cost_plan,
         )
 
     return collect_evidence
 
 
-def _draft_review_candidates_node(db: Session, permission_context: PermissionContext):
+def _draft_review_candidates_node(
+    db: Session,
+    permission_context: PermissionContext,
+    cost_plan: dict[str, dict[str, int | str]],
+):
     def draft_review_candidates(state: AgentWorkflowState) -> AgentWorkflowState:
-        slack_items = create_slack_agent_review_items(
-            db=db,
-            agent=SlackAgent(model=DeterministicSlackAgentModel()),
-            permission_context=permission_context,
-            source_window='orchestrated-slack:all',
-        )
-        mail_document_items = create_mail_document_agent_review_items(
-            db=db,
-            agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
-            permission_context=permission_context,
-            source_window='orchestrated-mail-docs:all',
-        )
+        slack_items = []
+        if cost_plan['slack_agent']['action'] == 'run':
+            slack_items = create_slack_agent_review_items(
+                db=db,
+                agent=SlackAgent(model=DeterministicSlackAgentModel()),
+                permission_context=permission_context,
+                source_window='orchestrated-slack:all',
+            )
+        mail_document_items = []
+        if cost_plan['mail_document_agent']['action'] == 'run':
+            mail_document_items = create_mail_document_agent_review_items(
+                db=db,
+                agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
+                permission_context=permission_context,
+                source_window='orchestrated-mail-docs:all',
+            )
         return state.complete_node(
             'draft_review_candidates',
             review_boundary='human_approval_required',
@@ -108,8 +145,19 @@ def _retrieve_company_memory_node():
     return retrieve_company_memory
 
 
-def _answer_with_rag_node(db: Session, user: DemoUser, question: str):
+def _answer_with_rag_node(
+    db: Session,
+    user: DemoUser,
+    question: str,
+    cost_plan: dict[str, dict[str, int | str]],
+):
     def answer_with_rag(state: AgentWorkflowState) -> AgentWorkflowState:
+        if cost_plan['rag_orchestrator_agent']['action'] == 'skip':
+            return state.complete_node(
+                'answer_with_rag',
+                orchestrator='rag_orchestrator_agent',
+                rag_agent_run_created=False,
+            )
         answer_question_with_rag(db=db, user=user, question=question)
         return state.complete_node(
             'answer_with_rag',
@@ -129,3 +177,34 @@ def _count_chunks(*, db: Session, source_types: tuple[str, ...]) -> int:
         )
         or 0
     )
+
+
+def _estimate_tokens_for_sources(*, db: Session, source_types: tuple[str, ...]) -> int:
+    rows = db.scalars(
+        select(DocumentChunk.text)
+        .join(Source, DocumentChunk.source_id == Source.id)
+        .where(Source.source_type.in_(source_types))
+    ).all()
+    return sum(_estimate_tokens(text) for text in rows)
+
+
+def _estimate_tokens(text: str) -> int:
+    stripped = text.strip()
+    if not stripped:
+        return 0
+    return max(1, len(stripped) // 4)
+
+
+def _agent_cost_plan(
+    *,
+    has_input: bool,
+    run_reason: str,
+    skip_reason: str,
+    estimated_input_tokens: int,
+) -> dict[str, int | str]:
+    return {
+        'action': 'run' if has_input else 'skip',
+        'reason': run_reason if has_input else skip_reason,
+        'estimated_input_tokens': estimated_input_tokens,
+        'estimated_output_tokens': 32 if has_input else 0,
+    }
