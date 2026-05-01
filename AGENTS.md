@@ -131,6 +131,27 @@ All agents should use shared concepts instead of inventing local payload shapes:
 
 If a shared contract changes, document the impact and update affected tests.
 
+## Connector Ingestion Contracts
+
+Connector work must enter ParaWorks through the shared ingestion boundary.
+
+- Connector adapters expose `SourceEvent` and `ConnectorManifest` from
+  `backend/app/connectors/base.py`.
+- Connector metadata is listed through `backend/app/connectors/registry.py` so
+  the frontend and other agents do not hard-code OAuth scopes or sync strategy.
+- API routes should call `sync_connector_events` from
+  `backend/app/ingestion/sync.py` instead of creating `SyncJob` rows directly.
+- New Slack, Gmail, Drive, Calendar, or internal-doc adapters must preserve
+  `source_id`, `source_url`, `source_snippet`, `permission_level`, participants,
+  timestamps, and raw external ids.
+- Sync jobs must report fetched, created, and skipped counts. Skipped duplicate
+  source events are a cost-control signal because they prevent repeated review
+  extraction and downstream embedding work.
+- Live connector tests must use fake API clients. Do not call Slack, Gmail,
+  Drive, or OAuth provider APIs in automated tests.
+- Adapter ownership can be split by developer, but all adapters must return the
+  same `SourceEvent` shape so RAG and Review Queue integration remains stable.
+
 ## Evidence-First Rule
 
 AI output is not trusted knowledge by default.

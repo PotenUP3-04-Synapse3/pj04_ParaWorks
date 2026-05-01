@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
-from backend.app.connectors.base import SourceEvent
+from backend.app.connectors.base import ConnectorManifest, SourceEvent
 
 SLACK_REQUIRED_HISTORY_SCOPES = (
     'channels:history',
@@ -29,6 +29,18 @@ class SlackConnector:
     config: SlackConnectorConfig
     client: SlackApiClient
     source_type: str = 'slack'
+
+    @property
+    def manifest(self) -> ConnectorManifest:
+        return ConnectorManifest(
+            connector_type='slack',
+            display_name='Slack',
+            mode='live',
+            auth_type='oauth',
+            required_scopes=SLACK_REQUIRED_HISTORY_SCOPES,
+            sync_strategy='incremental',
+            cost_policy='Fetch source deltas first; embed only changed chunks after review approval.',
+        )
 
     def fetch_events(self) -> list[SourceEvent]:
         events: list[SourceEvent] = []

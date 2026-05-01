@@ -183,6 +183,19 @@ export type IntegrationSyncResponse = {
   connector_type: string;
   status: string;
   created_review_items: number;
+  fetched_events: number;
+  skipped_events: number;
+};
+
+export type IntegrationManifest = {
+  type: string;
+  display_name: string;
+  mode: string;
+  status: string;
+  auth_type: string;
+  required_scopes: string[];
+  sync_strategy: string;
+  cost_policy: string;
 };
 
 export type AgentReviewResponse = {

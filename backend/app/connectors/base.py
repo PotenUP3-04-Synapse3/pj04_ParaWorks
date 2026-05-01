@@ -17,8 +17,20 @@ class SourceEvent:
     raw_metadata: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ConnectorManifest:
+    connector_type: str
+    display_name: str
+    mode: str
+    auth_type: str
+    required_scopes: tuple[str, ...]
+    sync_strategy: str
+    cost_policy: str
+
+
 class Connector(Protocol):
     source_type: str
+    manifest: ConnectorManifest
 
     def fetch_events(self) -> list[SourceEvent]:
         raise NotImplementedError

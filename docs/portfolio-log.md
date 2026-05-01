@@ -1169,6 +1169,51 @@ Verification evidence:
 - Real Redis/Celery worker-mode smoke confirmed `queued -> complete` with
   `CELERY_TASK_ALWAYS_EAGER=false`.
 
+## Connector Ingestion Contract
+
+Recorded on 2026-05-01.
+
+Started the real connector ingestion phase by defining the shared contract that
+Slack, Gmail, Drive, Calendar, and future internal-document adapters must use.
+Mock connectors now follow the same metadata shape expected from live OAuth
+adapters.
+
+Portfolio angle:
+
+- Shows integration architecture beyond mock demos: external data sources enter
+  through a stable `SourceEvent` + `ConnectorManifest` boundary.
+- Supports 3-developer parallel work because Slack, Mail/Docs, and RAG workers
+  can rely on one ingestion result shape instead of importing each other's code.
+- Adds operational sync accounting with fetched, created, and skipped counts.
+- Reinforces cost control before LLM/RAG work: duplicate source events are
+  skipped before review extraction and before any downstream embedding.
+
+Implemented scope:
+
+- Added `ConnectorManifest` for connector type, display name, mode, auth type,
+  OAuth scopes, sync strategy, and cost policy.
+- Added a connector registry for integration metadata.
+- Added `sync_connector_events` to centralize `SyncJob` creation, connector
+  fetch, ingestion, duplicate skip counts, completion, and failure handling.
+- Updated the integrations API to list manifest metadata and use the shared
+  sync boundary.
+- Updated `/integrations` to show connector manifest metadata, OAuth scope
+  summaries, sync strategy, cost policy, fetched counts, and skipped counts in
+  Korean.
+- Updated `AGENTS.md` with connector ingestion rules for coding assistants.
+
+Verification evidence:
+
+- Focused connector tests passed with 12 tests.
+- Focused Ruff passed for changed connector, ingestion, API, and test files.
+- Full backend tests passed with 102 tests and 1 skipped pgvector integration
+  test.
+- Frontend production build passed.
+- Smoke confirmed `/api/v1/integrations` returns 4 connector manifests,
+  Slack history scopes, successful Slack sync with fetched/created/skipped
+  counts, and `/integrations` renders Korean copy without replacement
+  characters.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
