@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
-from backend.app.knowledge.promotion import build_promotion_preview, promote_review_item, validate_review_item_for_approval
+from backend.app.knowledge.promotion import (
+    build_promotion_preview,
+    promote_review_item,
+    validate_review_item_for_approval,
+)
 from backend.app.models import ReviewItem
 from backend.app.schemas.review import ReviewItemUpdate
 
@@ -37,6 +41,50 @@ def list_review_items(db: DbSession, status: str = 'pending_review') -> dict[str
     return {'items': [_review_item_response(item) for item in items]}
 
 
+@router.post('/approve-agent-candidates')
+def approve_agent_review_candidates(
+    db: DbSession,
+    user: CurrentUser,
+) -> dict:
+    pending_items = db.scalars(
+        select(ReviewItem).where(ReviewItem.status == 'pending_review').order_by(ReviewItem.id)
+    ).all()
+    approved_item_ids: list[int] = []
+    skipped_count = 0
+
+    for item in pending_items:
+        if not _is_agent_candidate(item):
+            skipped_count += 1
+            continue
+        if not item.source_links or not item.source_snippets:
+            skipped_count += 1
+            continue
+        try:
+            validate_review_item_for_approval(item)
+        except ValueError:
+            skipped_count += 1
+            continue
+
+        item.status = 'approved'
+        item.reviewer_id = user.id
+        item.reviewed_at = datetime.now(UTC)
+        promote_review_item(db, item)
+        approved_item_ids.append(item.id)
+
+    db.commit()
+
+    return {
+        'approved_count': len(approved_item_ids),
+        'skipped_count': skipped_count,
+        'approved_item_ids': approved_item_ids,
+        'cost_policy': {
+            'paid_llm_calls': False,
+            'embedding_calls': False,
+            'requires_human_review_state': True,
+        },
+    }
+
+
 @router.patch('/{item_id}')
 def update_review_item(
     item_id: int,
@@ -53,6 +101,10 @@ def update_review_item(
     db.commit()
     db.refresh(item)
     return _review_item_response(item)
+
+
+def _is_agent_candidate(item: ReviewItem) -> bool:
+    return isinstance(item.payload.get('agent_name'), str)
 
 
 @router.get('/{item_id}/promotion-preview')

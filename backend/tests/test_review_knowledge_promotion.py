@@ -84,3 +84,56 @@ def test_approve_todo_promotes_to_knowledge_table(client, db_session) -> None:
     assert todo.source_links == ['https://slack.mock/source-1']
     assert todo.source_snippets == ['source snippet']
     assert todo.review_status == 'approved'
+
+
+def test_bulk_approve_agent_candidates_promotes_only_agent_items(client, db_session) -> None:
+    agent_history = seed_review_item(
+        db_session,
+        item_type='history_event',
+        payload={
+            'title': 'Redis queue decision captured',
+            'summary': 'Slack evidence indicates Redis should support queue progress.',
+            'agent_name': 'slack_agent',
+        },
+    )
+    agent_decision = seed_review_item(
+        db_session,
+        item_type='decision_record',
+        payload={
+            'title': 'PostgreSQL remains durable store',
+            'decision_summary': 'Mail evidence keeps PostgreSQL as source of record.',
+            'agent_name': 'mail_document_agent',
+        },
+    )
+    manual_item = seed_review_item(
+        db_session,
+        item_type='todo',
+        payload={
+            'title': 'Manual follow-up',
+            'priority': 'medium',
+            'priority_reason': 'This item was written by a person.',
+        },
+    )
+
+    response = client.post('/api/v1/review/approve-agent-candidates')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['approved_count'] == 2
+    assert payload['skipped_count'] == 1
+    assert payload['approved_item_ids'] == [agent_history.id, agent_decision.id]
+    assert payload['cost_policy'] == {
+        'paid_llm_calls': False,
+        'embedding_calls': False,
+        'requires_human_review_state': True,
+    }
+
+    db_session.refresh(agent_history)
+    db_session.refresh(agent_decision)
+    db_session.refresh(manual_item)
+    assert agent_history.status == 'approved'
+    assert agent_decision.status == 'approved'
+    assert manual_item.status == 'pending_review'
+
+    assert db_session.scalars(select(HistoryEvent)).one().title == 'Redis queue decision captured'
+    assert db_session.scalars(select(DecisionRecord)).one().title == 'PostgreSQL remains durable store'

@@ -1908,6 +1908,41 @@ Verification evidence:
 - `uv run pytest backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py backend/tests/test_agent_orchestration.py backend/tests/test_slack_agent.py backend/tests/test_mail_document_agent.py backend/tests/test_rag_orchestrator_service.py -v` passed with 18 tests.
 - `uv run ruff check backend/app/agent_runtime/company_memory.py backend/app/agent_runtime/orchestration.py backend/app/agent_runtime/__init__.py backend/app/api/v1/orchestration.py backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py` passed.
 
+## 2026-05-02 - Agent Candidate Bulk Approval
+
+Added a safe Review Queue operation for approving agent-generated candidates
+into Knowledge records.
+
+Portfolio angle:
+
+- Strengthens the human-in-the-loop company memory workflow: agent outputs do
+  not enter durable Knowledge automatically, but reviewers can now approve
+  agent candidates as a deliberate batch operation.
+- Shows practical orchestration boundary design: Slack/Mail agents draft
+  candidates, Review Queue gates them, and approved items become Knowledge that
+  RAG can use.
+- Demonstrates cost-aware workflow design because approval does not call LLMs
+  or embeddings; it only promotes already-reviewed structured records.
+
+Implemented scope:
+
+- Added `POST /api/v1/review/approve-agent-candidates`.
+- The endpoint only approves pending items that include an agent marker
+  (`payload.agent_name`) and valid source evidence.
+- Manual reviewer-created pending items remain pending.
+- Added cost policy metadata indicating no paid LLM or embedding calls.
+
+Cost/security note:
+
+- The operation requires the human review state (`pending_review`) and skips
+  invalid or manual items. It does not read secrets, call connectors, or trigger
+  embedding/indexing work.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_review_knowledge_promotion.py backend/tests/test_review.py backend/tests/test_knowledge_api.py backend/tests/test_rag_orchestrator_service.py -v` passed with 17 tests.
+- `uv run ruff check backend/app/api/v1/review.py backend/tests/test_review_knowledge_promotion.py` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1956,3 +1991,4 @@ Verification evidence:
 - `feat: show langgraph orchestration status`
 - `feat: add langgraph dry-run operations ux`
 - `feat: run agents through langgraph`
+- `feat: bulk approve agent candidates`
