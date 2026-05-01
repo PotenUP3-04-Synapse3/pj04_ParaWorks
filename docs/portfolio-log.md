@@ -1830,6 +1830,44 @@ Verification evidence:
 - `npx playwright screenshot --full-page http://127.0.0.1:3000/agent-runs ..\\.tmp\\agent-runs-langgraph-v2.png` completed.
 - `npx playwright test e2e/visual-smoke.spec.ts -g "/agent-runs renders" --project=chromium-desktop` passed.
 
+## 2026-05-02 - LangGraph Capture And Dry-Run UX
+
+Captured the Company Memory LangGraph as reusable portfolio documentation and
+added a zero-cost dry-run control to the Agent Runs operations page.
+
+Portfolio angle:
+
+- Adds a concrete architecture visual that can be used in the final portfolio:
+  `docs/assets/company-memory-langgraph.svg` and
+  `docs/assets/company-memory-langgraph.png`.
+- Demonstrates that the LangGraph orchestrator is not only backend plumbing:
+  the admin UI can now execute a deterministic dry-run and show the result.
+- Shows cost discipline in product behavior: dry-run confirms orchestration
+  order without Slack sync, embeddings, or paid LLM calls.
+
+Implemented scope:
+
+- Added a saved SVG graph and a Playwright-captured PNG for the Company Memory
+  workflow.
+- Added `OrchestrationDryRunResponse` frontend typing.
+- Added a client-side `OrchestrationDryRun` control on `/agent-runs`.
+- Added a Playwright regression test for the zero-cost dry-run UX.
+
+Cost/security note:
+
+- The dry-run calls `/api/v1/orchestration/company-memory/dry-run` and returns
+  `token_cost_usd=0`. It does not read Slack message bodies, call embedding
+  providers, or invoke external LLM APIs.
+
+Verification evidence:
+
+- `npx playwright screenshot --viewport-size=1280,720 file:///C:/Users/hanvv/Study/potenup3/pj04_ParaWorks/docs/assets/company-memory-langgraph.svg ..\\docs\\assets\\company-memory-langgraph.png` completed.
+- `npx eslint src/app/agent-runs/page.tsx src/app/agent-runs/OrchestrationDryRun.tsx src/lib/api/types.ts e2e/orchestration.spec.ts` passed.
+- `npm run build` passed.
+- `npx playwright test e2e/orchestration.spec.ts --project=chromium-desktop` passed.
+- `POST /api/v1/orchestration/company-memory/dry-run` returned four completed
+  nodes and `token_cost_usd=0`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1876,3 +1914,4 @@ Verification evidence:
 - `feat: add langgraph orchestration foundation`
 - `feat: expose langgraph orchestration api`
 - `feat: show langgraph orchestration status`
+- `feat: add langgraph dry-run operations ux`

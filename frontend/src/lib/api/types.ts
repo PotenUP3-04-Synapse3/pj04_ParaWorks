@@ -79,6 +79,17 @@ export type OrchestrationStatusResponse = {
   };
 };
 
+export type OrchestrationDryRunResponse = {
+  workflow_name: string;
+  backend: string;
+  objective: string;
+  inputs: Record<string, unknown>;
+  completed_nodes: string[];
+  outputs: Record<string, string>;
+  token_cost_usd: number;
+  cost_policy: OrchestrationStatusResponse["cost_policy"];
+};
+
 export type RagIndexingJobSummary = {
   job_id: string;
   connector_type: string;

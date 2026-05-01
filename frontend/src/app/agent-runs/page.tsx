@@ -24,6 +24,7 @@ import type {
   RagIndexingJobSummary,
   RagIndexingSummaryResponse,
 } from "@/lib/api/types";
+import { OrchestrationDryRun } from "./OrchestrationDryRun";
 
 export const dynamic = "force-dynamic";
 
@@ -372,6 +373,7 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
               );
             })}
           </div>
+          <OrchestrationDryRun />
         </div>
       </div>
     </section>
