@@ -43,11 +43,11 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen text-ink">
-      <aside className="liquid-dark fixed inset-y-3 left-3 hidden w-[272px] rounded-[28px] text-white md:block">
+      <aside className="liquid-dark fixed inset-y-4 left-4 hidden w-[276px] rounded-[34px] text-white md:block">
         <div className="flex h-full flex-col">
           <div className="border-b border-white/[0.12] px-4 py-4">
             <div className="flex items-center gap-3">
-              <div className="liquid-primary grid h-10 w-10 place-items-center rounded-2xl text-base font-black">
+              <div className="liquid-primary grid h-11 w-11 place-items-center rounded-[22px] text-base font-black">
                 P
               </div>
               <div className="min-w-0">
@@ -58,7 +58,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="px-3 py-3">
-            <div className="flex items-center gap-2 rounded-2xl border border-white/[0.16] bg-white/[0.12] px-3 py-2 text-sm text-white/76 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-xl">
+            <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-sm text-white/82">
               <Search className="h-4 w-4" aria-hidden="true" />
               <span className="truncate">검색, 에이전트 실행, 문서 찾기</span>
             </div>
@@ -87,7 +87,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <div className="mx-2 rounded-2xl border border-white/[0.14] bg-white/[0.1] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl">
+            <div className="liquid-control mx-2 rounded-[24px] p-3 text-white">
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
                 <span className="text-sm font-semibold">Agent Inbox</span>
@@ -99,7 +99,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="border-t border-white/10 p-3">
-            <div className="mb-3 rounded-2xl border border-white/[0.14] bg-white/[0.08] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]" aria-label={shell.language}>
+            <div className="liquid-control mb-3 rounded-[24px] p-1" aria-label={shell.language}>
               <div className="grid grid-cols-2 gap-1">
                 <button
                   type="button"
@@ -121,18 +121,19 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 rounded-2xl border border-white/[0.12] bg-black/[0.18] px-3 py-2 text-xs text-white/68 backdrop-blur-xl">
+            <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-xs text-white/72">
               <span className="h-2 w-2 rounded-full bg-[var(--workspace-accent)]" />
               MVP smoke workspace
             </div>
           </div>
         </div>
       </aside>
-      <div className="md:pl-[296px]">
-        <header className="sticky top-0 z-20 border-b border-[var(--line-soft)] bg-white/70 px-4 py-3 backdrop-blur-2xl md:hidden">
+      <div className="md:pl-[312px]">
+        <header className="sticky top-0 z-20 px-3 py-3 md:hidden">
+          <div className="liquid-surface rounded-[28px] px-3 py-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="liquid-primary grid h-8 w-8 place-items-center rounded-2xl text-xs font-black">
+              <span className="liquid-primary grid h-9 w-9 place-items-center rounded-[20px] text-xs font-black">
                 P
               </span>
               <span className="text-sm font-semibold">ParaWorks</span>
@@ -178,16 +179,17 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
               </nav>
             </div>
           </div>
+          </div>
         </header>
         <header className="sticky top-0 z-10 hidden px-8 py-4 md:block">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-            <div className="liquid-control flex min-w-0 flex-1 items-center gap-3 rounded-[24px] px-4 py-2 text-sm text-[var(--ink-muted)]">
+            <div className="liquid-surface flex min-w-0 flex-1 items-center gap-3 rounded-[30px] px-5 py-3 text-sm text-[var(--ink-muted)]">
               <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="truncate">메시지, 검토 항목, 사내 문서를 검색하거나 AI 에이전트에게 질문</span>
             </div>
             <button
               type="button"
-              className="liquid-primary inline-flex h-10 items-center gap-2 rounded-[24px] px-4 text-sm font-semibold transition hover:scale-[1.01] active:scale-[0.99]"
+              className="liquid-primary inline-flex h-12 items-center gap-2 rounded-[28px] px-5 text-sm font-semibold transition hover:scale-[1.01] active:scale-[0.99]"
             >
               <Sparkles className="h-4 w-4" aria-hidden="true" />
               Agent 준비 중
@@ -215,7 +217,7 @@ function ShellLink({
   return (
     <Link
       href={item.href}
-      className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition ${
+      className={`flex h-10 items-center gap-3 rounded-[20px] px-3 text-sm font-medium transition ${
         active
           ? "bg-white/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_rgba(0,0,0,0.12)]"
           : "text-white/70 hover:bg-white/10 hover:text-white"

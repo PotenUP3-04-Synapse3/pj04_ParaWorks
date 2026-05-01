@@ -2163,6 +2163,36 @@ Verification evidence:
 - In-app browser screenshot review checked `/dashboard` and `/integrations` at
   the current viewport.
 
+## 2026-05-02 - Liquid Glass Intensity Pass
+
+Why it matters:
+
+- The first Liquid Glass refresh improved the theme, but still read closer to a
+  soft translucent dashboard than an iOS-style glass system.
+- This pass pushed the material closer to Liquid Glass by adding stronger
+  refraction edges, reflective highlights, deeper blur/saturation, and floating
+  dock-like navigation surfaces.
+
+Implemented scope:
+
+- Intensified global glass tokens, shadows, background light sheets, and
+  refractive edge overlays.
+- Added shared pseudo-element highlights to liquid surfaces, dark rails,
+  controls, and primary stained-glass actions.
+- Upgraded the mobile toolbar into a rounded glass slab and made the desktop
+  sidebar/top search feel more like floating system chrome.
+- Restored `--workspace-rail-active` to a readable text color after visual QA
+  showed page eyebrow labels becoming too faint.
+
+Verification evidence:
+
+- `npx eslint src/components/layout/AppShell.tsx` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 14/14 tests.
+- `npm run build` passed.
+- In-app browser screenshot review checked `/dashboard` after the intensity
+  pass and contrast fix.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2219,3 +2249,4 @@ Verification evidence:
 - `docs: add portfolio case study`
 - `test: harden integration sync smoke selector`
 - `feat: add liquid glass frontend theme`
+- `feat: intensify liquid glass theme`
