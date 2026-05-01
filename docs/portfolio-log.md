@@ -856,6 +856,47 @@ Verification evidence:
 - Browser smoke opened `/search` and confirmed the Company Memory/Search
   surface still rendered under SQLite smoke mode.
 
+## RAG Infrastructure Update: Vector Indexing Pipeline
+
+Recorded on 2026-05-01.
+
+Added the first indexing pipeline that turns current company memory into
+embeddable vector documents while keeping local MVP smoke mode independent from
+live Postgres.
+
+Portfolio angle:
+
+- Shows how ParaWorks bridges Slack/Gmail/Drive evidence and approved company
+  knowledge into a single RAG serving corpus.
+- Demonstrates production-minded design: deterministic test embeddings locally,
+  a writer protocol for pgvector, and permission metadata carried through every
+  indexed document.
+- Keeps token cost under control by making indexing explicit and testable
+  before introducing paid embedding providers.
+
+Implemented scope:
+
+- Added `DeterministicHashEmbeddingModel` for stable local embedding tests and
+  smoke previews.
+- Added `index_vector_documents` and `VectorIndexWriter` so the same pipeline
+  can target the existing `PgVectorStore` adapter.
+- Added `build_rag_index_documents` to collect all source chunks plus approved
+  decision, history, and todo records.
+- Added `POST /api/v1/rag/reindex` dry-run preview for validating indexing
+  coverage without requiring live PostgreSQL in SQLite smoke mode.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_indexing.py -v` passed with 4 tests.
+- `uv run pytest backend/tests -v` passed with 78 backend tests.
+- `uv run ruff check backend/app/rag/embeddings.py backend/app/rag/indexing.py backend/app/api/v1/rag.py backend/tests/test_rag_indexing.py` passed.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-rag-vector-indexing.db`.
+- Slack and Gmail mock sync created 3 source chunks; `POST /api/v1/rag/reindex`
+  returned `dry_run=true`, `indexed_count=3`, `embedding_dimensions=16`, and
+  `storage_backend=preview`.
+- HTTP smoke returned 200 for `/dashboard`, `/review`, and `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -885,3 +926,5 @@ Verification evidence:
 - `9381bb1 fix: isolate smoke frontend cache`
 - `aee1e04 feat: add agent run operations summary`
 - `9f3a7b8 feat: add review vector orchestration foundations`
+- `9e397f4 feat: add pgvector rag adapter`
+- `feat: add rag vector indexing pipeline`

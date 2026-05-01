@@ -172,8 +172,14 @@ PostgreSQL + pgvector is the default production RAG storage path.
 - Keep `DocumentChunk`, approved knowledge tables, permissions, and audit data
   in PostgreSQL.
 - Use pgvector for embedding search through `backend/app/rag/pgvector_store.py`.
+- Build serving documents through `backend/app/rag/indexing.py` so chunks,
+  approved knowledge, permissions, source snippets, and timestamps share one
+  indexing path.
 - Keep SQLite smoke mode working by using deterministic and in-memory retrieval
   when Postgres is not running.
+- Use deterministic local embeddings only for tests, smoke checks, and dry-run
+  indexing previews. Production embedding providers must stay behind the same
+  writer/model interfaces and must preserve token/cost accounting.
 - Do not introduce a separate vector database unless the team explicitly
   decides that operational tradeoff is worth it.
 - All vector search adapters must preserve permission filtering and hidden-match
