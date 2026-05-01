@@ -5,6 +5,12 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.agent_runtime import PermissionContext
+from backend.app.agents.slack_agent import (
+    DeterministicSlackAgentModel,
+    SlackAgent,
+    create_slack_agent_review_items,
+)
 from backend.app.connectors.mock import CONNECTOR_TYPES, get_mock_connector
 from backend.app.db.session import get_db
 from backend.app.ingestion.service import ingest_events
@@ -52,4 +58,21 @@ def sync_connector(connector_type: str, db: DbSession) -> dict[str, int | str]:
         'connector_type': connector_type,
         'status': job.status,
         'created_review_items': created_review_items,
+    }
+
+
+@router.post('/slack/agent-review')
+def run_slack_agent_review(db: DbSession) -> dict[str, int | str]:
+    agent = SlackAgent(model=DeterministicSlackAgentModel())
+    review_items = create_slack_agent_review_items(
+        db=db,
+        agent=agent,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mock-slack:all',
+    )
+
+    return {
+        'agent_name': 'slack_agent',
+        'status': 'complete',
+        'created_review_items': len(review_items),
     }

@@ -62,6 +62,12 @@ export type IntegrationSyncResponse = {
   created_review_items: number;
 };
 
+export type SlackAgentReviewResponse = {
+  agent_name: string;
+  status: string;
+  created_review_items: number;
+};
+
 export type MessageChannel = {
   id: string;
   name: string;

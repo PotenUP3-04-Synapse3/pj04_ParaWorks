@@ -42,6 +42,36 @@ class SlackAgentModel(Protocol):
         raise NotImplementedError
 
 
+class DeterministicSlackAgentModel:
+    def extract(self, packet: EvidencePacket) -> SlackAgentModelResponse:
+        combined_text = '\n'.join(message.text for message in packet.messages)
+        title = 'Slack timeline candidate'
+        summary = 'Slack evidence was summarized into a reviewable company history candidate.'
+
+        if 'Redis' in combined_text or 'redis' in combined_text:
+            title = 'Redis queue decision captured'
+            summary = 'The Slack discussion indicates Redis should support queue and job progress workflows.'
+        elif 'scope' in combined_text.lower():
+            title = 'MVP scope follow-up captured'
+            summary = 'The Slack discussion records an MVP scope follow-up that should be reviewed.'
+        elif packet.messages:
+            first_message = packet.messages[0].source_snippet
+            title = 'Slack history candidate'
+            summary = first_message
+
+        input_tokens = max(1, len(combined_text) // 4)
+        output_tokens = max(32, len(summary) // 4)
+
+        return SlackAgentModelResponse(
+            title=title,
+            summary=summary,
+            item_type='history_event',
+            confidence_score=0.78,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+
+
 @dataclass(frozen=True)
 class SlackAgent:
     model: SlackAgentModel

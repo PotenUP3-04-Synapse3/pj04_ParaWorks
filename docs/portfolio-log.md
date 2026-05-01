@@ -277,6 +277,23 @@ Portfolio angle:
   permission level, prompt version, cache key, and token/cost metadata into the
   Review Queue.
 
+## Agent Development Update: Slack Agent API and UI
+
+Recorded on 2026-05-01.
+
+Next milestone is exposing the Slack Agent Review bridge through the product:
+
+- backend endpoint for Slack Agent Review generation;
+- deterministic demo model instead of live LLM calls;
+- frontend Tools action to run the Slack Agent after mock Slack sync;
+- activity panel result showing how many Review Queue items were created.
+
+Portfolio angle:
+
+- Turns agent architecture into a user-visible workflow.
+- Demonstrates cost-safe AI development by using a deterministic local model
+  boundary before enabling paid LLM provider calls.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

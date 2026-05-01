@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bot,
   Calendar,
   CheckCircle2,
   Database,
@@ -13,7 +14,7 @@ import {
 import { useState } from "react";
 import { useJobStatus } from "@/hooks/useJobStatus";
 import { apiPost } from "@/lib/api/client";
-import type { IntegrationSyncResponse } from "@/lib/api/types";
+import type { IntegrationSyncResponse, SlackAgentReviewResponse } from "@/lib/api/types";
 
 const integrations = [
   {
@@ -53,7 +54,9 @@ const integrations = [
 export default function IntegrationsPage() {
   const [activeJobId, setActiveJobId] = useState<string>();
   const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
+  const [agentResult, setAgentResult] = useState<SlackAgentReviewResponse>();
   const [pendingType, setPendingType] = useState<string>();
+  const [agentRunning, setAgentRunning] = useState(false);
   const [error, setError] = useState<string>();
   const jobStatus = useJobStatus(activeJobId);
 
@@ -69,6 +72,20 @@ export default function IntegrationsPage() {
       setError(caught instanceof Error ? caught.message : "동기화에 실패했습니다.");
     } finally {
       setPendingType(undefined);
+    }
+  }
+
+  async function runSlackAgent() {
+    setAgentRunning(true);
+    setError(undefined);
+
+    try {
+      const result = await apiPost<SlackAgentReviewResponse>("/api/v1/integrations/slack/agent-review");
+      setAgentResult(result);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Slack Agent 실행에 실패했습니다.");
+    } finally {
+      setAgentRunning(false);
     }
   }
 
@@ -127,17 +144,30 @@ export default function IntegrationsPage() {
                   {integration.description}
                 </p>
 
-                <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--line-soft)] pt-4">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)] pt-4">
                   <span className="text-xs text-[var(--ink-muted)]">현재 mock 데이터 사용</span>
-                  <button
-                    type="button"
-                    onClick={() => void startSync(integration.type)}
-                    disabled={Boolean(pendingType)}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-300"
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                    {pending ? "동기화 중" : "동기화"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void startSync(integration.type)}
+                      disabled={Boolean(pendingType)}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-300"
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      {pending ? "동기화 중" : "동기화"}
+                    </button>
+                    {featured ? (
+                      <button
+                        type="button"
+                        onClick={() => void runSlackAgent()}
+                        disabled={agentRunning}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[#21132b] shadow-sm hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-neutral-400"
+                      >
+                        <Bot className="h-4 w-4" aria-hidden="true" />
+                        {agentRunning ? "Agent 실행 중" : "Slack Agent 실행"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             );
@@ -153,10 +183,19 @@ export default function IntegrationsPage() {
             <p className="mt-1 text-xs text-[var(--ink-muted)]">동기화와 Review 후보 생성 상태</p>
           </div>
 
-          <div className="p-4">
+          <div className="space-y-3 p-4">
             {error ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                 {error}
+              </div>
+            ) : null}
+
+            {agentResult ? (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
+                <p className="font-semibold">Slack Agent 완료</p>
+                <p className="mt-1">
+                  Review Queue 후보 {agentResult.created_review_items}개를 생성했습니다.
+                </p>
               </div>
             ) : null}
 
