@@ -33,6 +33,7 @@ from backend.app.connectors.slack_oauth import (
     complete_slack_oauth_callback,
 )
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.redaction import redact_secret_text
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
 from backend.app.models import IntegrationConnection, SyncJob
@@ -325,6 +326,6 @@ def _sync_job_response(job: SyncJob | None) -> dict[str, object] | None:
     return {
         'job_id': job.job_id,
         'status': job.status,
-        'message': job.message,
+        'message': redact_secret_text(job.message),
         'progress_pct': job.progress_pct,
     }

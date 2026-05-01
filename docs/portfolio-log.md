@@ -2051,6 +2051,37 @@ Verification evidence:
 - `uv run pytest backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py backend/tests/test_agent_runs_api.py -v` passed.
 - `uv run ruff check backend/app/agent_runtime/company_memory.py backend/tests/test_company_memory_orchestration_service.py` passed.
 
+## 2026-05-02 - Runtime Status Secret Redaction
+
+Why it matters:
+
+- Integration status pages are useful for debugging live Slack and Google
+  setup, but sync failure messages can accidentally include access tokens,
+  refresh tokens, token references, or OAuth client secrets.
+- Runtime status APIs now redact secret-like strings before returning
+  `latest_sync.message` to the frontend.
+- The original sync record is left intact for server-side diagnosis; redaction
+  happens at the API boundary where user-facing exposure risk exists.
+
+Implemented scope:
+
+- Added `redact_secret_text` for Slack token, token reference, refresh token,
+  and client secret patterns.
+- Applied redaction to integration runtime status sync messages.
+- Added regression tests for Slack and Google runtime status secret leakage.
+
+Cost/security note:
+
+- The redaction path is local string processing. It does not call connector
+  APIs or LLMs.
+- This reduces the risk of leaking sensitive operational values through the
+  Korean-first dashboard during live connector testing.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_integration_runtime_status.py -v` passed.
+- `uv run ruff check backend/app/api/v1/integrations.py backend/app/core/redaction.py backend/tests/test_integration_runtime_status.py` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2103,3 +2134,4 @@ Verification evidence:
 - `feat: show slack runtime status`
 - `feat: show google runtime status`
 - `feat: add execution cost plan`
+- `fix: redact runtime status secrets`
