@@ -55,6 +55,26 @@ export type SearchResponse = {
   permission_notice?: string;
 };
 
+export type AskResponse = {
+  agent_name: string;
+  prompt_version: string;
+  question: string;
+  answer: string;
+  source_links: string[];
+  source_snippets: string[];
+  permission_level: string;
+  hidden_match_count: number;
+  permission_notice?: string | null;
+  cache_key: string;
+  model_name: string;
+  estimated_cost_usd: number;
+  token_usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+};
+
 export type IntegrationSyncResponse = {
   job_id: string;
   connector_type: string;

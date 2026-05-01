@@ -452,6 +452,40 @@ Verification evidence:
   passed.
 - `uv run pytest backend/tests -v` passed with 50 backend tests.
 
+## UX Update: Company Memory Ask Workbench
+
+Recorded on 2026-05-01.
+
+Next product milestone is making the RAG Orchestrator visible to Korean
+business users through the existing Search surface.
+
+Portfolio angle:
+
+- Turns the backend `/api/v1/ask` contract into an inspectable product workflow:
+  question, AI answer, citations, raw matching evidence, permission notice, and
+  cost metadata are visible together.
+- Shows that ParaWorks treats RAG answers as auditable outputs, not opaque chat
+  bubbles.
+- Keeps the demo cost-safe by using the deterministic orchestrator while still
+  exposing token and estimated-cost fields.
+
+Implemented scope:
+
+- Added frontend `AskResponse` type.
+- Reworked `/search` into a Company Memory workbench.
+- One query now calls both `/api/v1/ask` and `/api/v1/search` using viewer
+  permissions.
+- Rendered answer text, source links, token count, estimated cost, hidden
+  match count, permission notice, cache key, model name, and raw evidence.
+
+Verification evidence:
+
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-ask-ui.db`.
+- HTTP smoke returned 200 for `/health`, `/search`, and `/dashboard`.
+- Gmail sync, Drive sync, and `POST /api/v1/ask` returned
+  `agentName=rag_orchestrator_agent`, `sources=2`, `hidden=0`, and `tokens=100`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -470,3 +504,4 @@ Verification evidence:
 - `e7c6927 feat: persist agent run metadata`
 - `e53bec0 feat: add mail document agent slice`
 - `79e7bc7 feat: expose mail docs agent in integrations`
+- `af3c1f0 feat: add rag orchestrator agent`
