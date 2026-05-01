@@ -420,6 +420,38 @@ Verification evidence:
 - Gmail sync, Drive sync, and `POST /api/v1/integrations/mail-docs/agent-review`
   returned `agentName=mail_document_agent` and `created=1`.
 
+## Agent Development Update: RAG Orchestrator Agent
+
+Recorded on 2026-05-01.
+
+Next core-product milestone is giving users a question-answering endpoint over
+the company memory evidence that Slack, Gmail, Drive, and review workflows have
+already collected.
+
+Portfolio angle:
+
+- Completes the three-track agent split: Slack Agent, Mail/Document Agent, and
+  RAG/Orchestrator Agent now each have an independently testable backend slice.
+- Shows a cost-safe RAG migration path: deterministic keyword retrieval now,
+  vector DB and LangGraph orchestration later without changing the public answer
+  contract.
+- Demonstrates permission-aware RAG behavior by hiding restricted sources for
+  viewer users while reporting hidden matches.
+
+Implemented scope:
+
+- Added `rag_orchestrator_agent` with manifest, deterministic model, answer
+  dataclasses, and cost metadata.
+- Added permission-aware retrieval over existing `DocumentChunk` evidence.
+- Added `POST /api/v1/ask` returning answer text, source links, snippets,
+  permission notices, cache key, model name, token usage, and estimated cost.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_orchestrator_agent.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_ask_api.py -v`
+  passed.
+- `uv run pytest backend/tests -v` passed with 50 backend tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -437,3 +469,4 @@ Verification evidence:
 - `924f9d8 feat: improve agent-aware review UI`
 - `e7c6927 feat: persist agent run metadata`
 - `e53bec0 feat: add mail document agent slice`
+- `79e7bc7 feat: expose mail docs agent in integrations`
