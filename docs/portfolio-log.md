@@ -205,6 +205,42 @@ Portfolio angle:
   registry-based integration, and verification gates must exist before the
   merge.
 
+## UX Direction Update: Slack-Like Workspace
+
+Recorded on 2026-05-01.
+
+Started a frontend UX pass to make ParaWorks feel like a Korean-first
+Slack-like business workspace rather than a plain demo harness.
+
+Planned scope:
+
+- darker workspace navigation rail;
+- top command/search entry for future AI/RAG usage;
+- richer Messages channel surface;
+- Tools/Apps-style Integrations page;
+- cleaner Korean-first operational copy.
+
+Implemented scope:
+
+- redesigned the shared app shell into a Slack-like workspace rail;
+- added a top command/search bar and agent readiness affordance;
+- upgraded Messages with denser channel navigation, timeline styling, review
+  actions, and an anchored composer;
+- upgraded Integrations into a Tools/Apps surface with connector readiness and
+  sync activity panel.
+
+Verification evidence:
+
+- `npm.cmd run build` from `frontend` passed without warnings.
+- HTTP smoke returned 200 for `/integrations`, `/messages`, and `/dashboard`
+  on `http://127.0.0.1:3000`.
+
+Portfolio angle:
+
+- Shows product sense and UX architecture, not only backend AI engineering.
+- Prepares the interface for Slack Agent, Review Inbox, and RAG Orchestrator
+  experiences without a later full layout rewrite.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
