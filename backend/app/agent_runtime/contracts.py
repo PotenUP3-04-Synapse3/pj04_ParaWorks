@@ -94,3 +94,14 @@ class AgentRunResult:
     candidates: list[ReviewCandidate]
     cost: AgentRunCost
     cache_key: str
+
+
+@dataclass(frozen=True)
+class AgentManifest:
+    name: str
+    owner: str
+    input_contract: str
+    output_contract: str
+    prompt_versions: tuple[str, ...]
+    supported_permissions: tuple[str, ...]
+    capabilities: tuple[str, ...]

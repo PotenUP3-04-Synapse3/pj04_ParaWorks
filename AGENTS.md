@@ -66,6 +66,56 @@ spec -> implementation plan -> failing test -> implementation -> verification ->
 For behavior changes, use TDD. Watch the test fail before adding production
 code. Do not claim completion without fresh verification output.
 
+## Branching and Integration Pipeline
+
+Do not rely on a coding assistant to "just merge everything later." Assistants
+can resolve conflicts, but they cannot recover missing product contracts after
+three agents diverge.
+
+Use this pipeline for multi-agent work:
+
+```text
+shared contract branch
+  -> feature branch per agent
+  -> integration branch
+  -> end-to-end demo branch or PR
+```
+
+Recommended branch roles:
+
+- `codex/agent-runtime-contracts`
+  - shared contracts, registry, cost policy, permission policy
+- `codex/slack-agent`
+  - Slack Agent only
+- `codex/mail-document-agent`
+  - Mail and Document Agent only
+- `codex/rag-orchestrator-agent`
+  - RAG and Orchestrator Agent only
+- `codex/integration-agent-runtime`
+  - merges the three agents through shared contracts and registry
+
+Integration rules:
+
+- Each feature branch must expose an `AgentManifest`.
+- Each feature branch must register through `AgentRegistry`; no direct imports
+  between feature agents.
+- Shared contract changes require contract tests before implementation.
+- Merge into the integration branch frequently, preferably after each green
+  vertical slice.
+- The integration branch must run backend tests, relevant frontend build/tests,
+  and an end-to-end smoke scenario before it is treated as demo-ready.
+- Codex or another assistant may perform conflict resolution, but it must keep
+  the public contract stable or explicitly update the plan, tests, and docs.
+
+Human decisions required before assistant-driven merging:
+
+- output schema changes;
+- permission policy changes;
+- token budget policy changes;
+- Review Queue trust boundary changes;
+- RAG trusted-knowledge promotion rules;
+- duplicate timeline/history resolution rules.
+
 ## Shared Agent Contracts
 
 All agents should use shared concepts instead of inventing local payload shapes:
@@ -76,6 +126,8 @@ All agents should use shared concepts instead of inventing local payload shapes:
 - `ReviewCandidate`
 - `AgentRunCost`
 - `PermissionContext`
+- `AgentManifest`
+- `AgentRegistry`
 
 If a shared contract changes, document the impact and update affected tests.
 
@@ -171,4 +223,3 @@ Coding assistants must not:
 - commit secrets;
 - claim tests/builds pass without running them in the current session;
 - promote source-less AI output to trusted knowledge.
-

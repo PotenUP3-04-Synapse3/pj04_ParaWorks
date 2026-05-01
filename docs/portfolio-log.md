@@ -183,6 +183,28 @@ Portfolio angle:
 - Makes AI safety, cost optimization, permissions, and human review explicit
   development compliance requirements.
 
+## Integration Pipeline Update: Assistant-Safe Merging
+
+Recorded on 2026-05-01.
+
+Updated `AGENTS.md` with a development pipeline for three independent agent
+tracks and coding assistants:
+
+- shared contract branch first;
+- feature branch per agent;
+- integration branch for frequent green merges;
+- contract tests as the merge gate;
+- human decision points for schema, permission, cost, trust-boundary, and
+  duplicate-resolution policy changes.
+
+Portfolio angle:
+
+- Demonstrates that ParaWorks is designed for AI-assisted team development, not
+  only AI-powered product features.
+- Shows awareness that Codex can help resolve conflicts, but stable contracts,
+  registry-based integration, and verification gates must exist before the
+  merge.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
