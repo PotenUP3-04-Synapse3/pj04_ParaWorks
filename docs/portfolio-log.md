@@ -1682,6 +1682,42 @@ Cost/security note:
   is still the first cost gate; downstream review/RAG processing should only
   run after source access is valid and duplicate checks have completed.
 
+## 2026-05-02 - Slack Live Sync Smoke Success
+
+Completed the first successful live Slack sync path after adding the ParaWorks
+bot to the configured Slack channel.
+
+Portfolio angle:
+
+- Demonstrates a real SaaS integration beyond mock data: OAuth, bot channel
+  membership, Slack Web API access, ingestion, duplicate skipping, and agent
+  review generation now work as one local smoke path.
+- Shows privacy-aware verification: live Slack messages were synced into the
+  local app, but terminal output only reported counts and status metadata, not
+  message bodies.
+- Reinforces cost discipline: source duplicate checks skipped unchanged Slack
+  events before downstream review/agent work.
+
+Verification evidence:
+
+- Backend ran with `PARAWORKS_DEMO_MODE=false`.
+- Slack `conversations.history` access check succeeded for the configured
+  channel.
+- `POST /api/v1/integrations/slack/sync` returned `status=complete`,
+  `fetched_events=194`, `skipped_events=194`, and `created_review_items=0`.
+- `POST /api/v1/integrations/slack/agent-review` returned
+  `created_review_items=1` with the deterministic local Slack Agent.
+- Agent run observability showed `total_runs=3`, `total_tokens=250`, and
+  `estimated_cost_usd=0.000081`.
+
+Next product step:
+
+- Add a live sync readiness/status surface so users can see the active mode,
+  configured channel id, last sync counts, and Slack API errors without opening
+  terminal logs.
+- Then continue with Review Queue promotion and RAG indexing over approved
+  Slack-derived timeline/history candidates.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
