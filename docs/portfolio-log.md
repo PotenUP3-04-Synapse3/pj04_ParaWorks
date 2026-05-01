@@ -2346,6 +2346,27 @@ Verification evidence:
   passed with 32/32 tests.
 - `npm run build` passed.
 
+## 2026-05-02 - Light Purple Palette Adjustment
+
+Implemented scope:
+
+- Shifted the light-mode accent system from deep purple to soft lavender and
+  light purple while keeping the gray glass foundation.
+- Separated active segment behavior so light mode uses dark text on lavender
+  glass and dark mode keeps the existing high-contrast deep purple treatment.
+- Updated light-mode shell, surface, control, card, and row tint gradients to
+  reduce heavy purple saturation and keep the UI calmer.
+
+Verification evidence:
+
+- In-app browser screenshot review checked `/integrations` in light mode.
+- Playwright computed-style audit confirmed light shell `rgba(232, 226, 241, 0.76)`
+  and primary action `rgba(183, 154, 221, 0.9)`.
+- `npx eslint src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 32/32 tests.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2409,3 +2430,4 @@ Verification evidence:
 - `style: unify integration runtime glass`
 - `style: tokenize shell theme chrome`
 - `style: tune light gray purple palette`
+- `style: soften light purple palette`
