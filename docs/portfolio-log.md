@@ -520,6 +520,40 @@ Verification evidence:
   `totalTokens=226`, and `estimatedCost=0.000063`.
 - HTTP smoke returned 200 for `/health`, `/dashboard`, and `/search`.
 
+## Observability Update: RAG AgentRun Persistence
+
+Recorded on 2026-05-01.
+
+Next observability milestone is ensuring the RAG Orchestrator participates in
+the same AgentRun audit trail as Slack Agent and Mail/Docs Agent.
+
+Portfolio angle:
+
+- Completes the shared three-agent audit story: Slack extraction, Mail/Docs
+  extraction, and RAG question answering all create durable cost records.
+- Shows that every user-facing AI answer can be traced to prompt version, model,
+  token usage, estimated cost, cache key, permission level, and source count.
+- Strengthens the token-cost optimization requirement by making RAG asks visible
+  in the same dashboard totals.
+
+Implemented scope:
+
+- Persisted one `AgentRun` for each `answer_question_with_rag` execution.
+- Stored question text, source count, hidden match count, source type, and cache
+  hit metadata.
+- Kept the public `/api/v1/ask` response shape unchanged while allowing
+  `/api/v1/agent-runs` and `/dashboard` to include RAG ask runs.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_rag_orchestrator_service.py -v` passed.
+- `uv run pytest backend/tests -v` passed with 52 backend tests.
+- Smoke server restarted with `.tmp/paraworks-rag-agent-run.db`.
+- Gmail sync, Drive sync, and `POST /api/v1/ask` produced
+  `askAgent=rag_orchestrator_agent`, `askTokens=100`, `totalRuns=1`,
+  `totalTokens=100`, and `latestQuestion=Redis job state`.
+- HTTP smoke returned 200 for `/health`, `/dashboard`, and `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -540,3 +574,4 @@ Verification evidence:
 - `79e7bc7 feat: expose mail docs agent in integrations`
 - `af3c1f0 feat: add rag orchestrator agent`
 - `2b377fb feat: add company memory ask ui`
+- `15e1864 feat: add agent run observability`

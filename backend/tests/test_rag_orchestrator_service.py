@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
 from backend.app.core.demo_auth import USERS
-from backend.app.models import Document, DocumentChunk, DocumentVersion, Source
+from backend.app.models import AgentRun, Document, DocumentChunk, DocumentVersion, Source
 
 
 def seed_chunk(db: Session, source_type: str, source_id: str, text: str, permission_level: str) -> None:
@@ -72,3 +72,31 @@ def test_rag_service_hides_restricted_chunks_for_viewer(db_session: Session) -> 
     assert answer.source_links == []
     assert answer.hidden_match_count == 1
     assert answer.permission_notice == 'Some sources may be hidden by permissions.'
+
+
+def test_rag_service_persists_agent_run_metadata(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'gmail',
+        'gmail-rag-agent-run',
+        'Redis should be used for transient job state while PostgreSQL stores durable records.',
+        'internal',
+    )
+
+    answer = answer_question_with_rag(db=db_session, user=USERS['viewer'], question='Redis job state')
+
+    agent_run = db_session.query(AgentRun).one()
+    assert agent_run.agent_name == 'rag_orchestrator_agent'
+    assert agent_run.prompt_version == 'rag-answer:v1'
+    assert agent_run.status == 'complete'
+    assert agent_run.source_window == 'ask:Redis job state'
+    assert agent_run.model_name == answer.cost.model_name
+    assert agent_run.input_tokens == answer.cost.token_usage.input_tokens
+    assert agent_run.output_tokens == answer.cost.token_usage.output_tokens
+    assert agent_run.total_tokens == answer.cost.token_usage.total_tokens
+    assert agent_run.estimated_cost_usd == answer.cost.estimated_cost_usd
+    assert agent_run.permission_level == 'internal'
+    assert agent_run.cache_key == answer.cache_key
+    assert agent_run.metadata_['question'] == 'Redis job state'
+    assert agent_run.metadata_['source_count'] == 1
+    assert agent_run.metadata_['hidden_match_count'] == 0
