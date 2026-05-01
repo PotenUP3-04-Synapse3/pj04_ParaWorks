@@ -2105,6 +2105,28 @@ Verification evidence:
 - Documentation-only change reviewed against `AGENTS.md` and the current
   implementation history.
 
+## 2026-05-02 - Playwright Sync Metric Selector Hardening
+
+Why it matters:
+
+- The integration smoke test failed because a broad `Fetched` text lookup also
+  matched lower-case `fetched=` text inside recent sync status messages.
+- The page itself rendered correctly, but the test selector was too fragile for
+  a screen that intentionally shows both metric labels and sync log summaries.
+
+Implemented scope:
+
+- Added `data-testid="sync-result-metrics"` to the integration sync result
+  metric grid.
+- Scoped Playwright metric assertions to that grid and used exact text
+  matching for `Fetched`, `Review items`, and `Skipped`.
+
+Verification evidence:
+
+- `npx eslint src/app/integrations/page.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 14/14 tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2159,3 +2181,4 @@ Verification evidence:
 - `feat: add execution cost plan`
 - `fix: redact runtime status secrets`
 - `docs: add portfolio case study`
+- `test: harden integration sync smoke selector`

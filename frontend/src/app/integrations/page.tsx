@@ -470,7 +470,7 @@ export default function IntegrationsPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Job</p>
                   <p className="mt-1 break-all font-medium">{syncResult.job_id}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3" data-testid="sync-result-metrics">
                   <ResultMetric label="Fetched" value={syncResult.fetched_events} />
                   <ResultMetric label="Review items" value={syncResult.created_review_items} />
                   <ResultMetric label="Skipped" value={syncResult.skipped_events} />

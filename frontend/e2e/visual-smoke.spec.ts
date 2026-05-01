@@ -51,9 +51,10 @@ test("integration sync shows connector counts", async ({ page }) => {
   await page.goto("/integrations");
   await page.getByRole("button", { name: "동기화" }).first().click();
 
-  await expect(page.getByText("Fetched")).toBeVisible();
-  await expect(page.getByText("Review items")).toBeVisible();
-  await expect(page.getByText("Skipped")).toBeVisible();
+  const syncMetrics = page.getByTestId("sync-result-metrics");
+  await expect(syncMetrics.getByText("Fetched", { exact: true })).toBeVisible();
+  await expect(syncMetrics.getByText("Review items", { exact: true })).toBeVisible();
+  await expect(syncMetrics.getByText("Skipped", { exact: true })).toBeVisible();
 });
 
 test("integrations page shows Slack OAuth connection status without secrets", async ({ page }) => {
