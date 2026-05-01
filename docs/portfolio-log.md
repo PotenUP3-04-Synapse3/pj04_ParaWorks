@@ -261,6 +261,22 @@ Portfolio angle:
 - Keeps the work merge-friendly because Slack Agent lives in its own owned
   package and integrates only through shared runtime contracts.
 
+## Agent Development Update: Slack Agent Review Bridge
+
+Recorded on 2026-05-01.
+
+Started the bridge that turns persisted Slack source chunks into shared
+`EvidencePacket` input, runs the Slack Agent, and persists agent output as
+`ReviewItem(status="pending_review")`.
+
+Portfolio angle:
+
+- Shows the first real product loop for agentic Slack knowledge extraction:
+  source evidence -> agent runtime -> human review.
+- Preserves the project compliance story by carrying source links, snippets,
+  permission level, prompt version, cache key, and token/cost metadata into the
+  Review Queue.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
