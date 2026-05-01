@@ -1757,6 +1757,42 @@ Verification evidence:
 - `uv run pytest backend/tests/test_agent_orchestration.py -v` passed.
 - `uv run pytest backend/tests/test_agent_runtime_contracts.py backend/tests/test_agent_registry.py backend/tests/test_agent_orchestration.py backend/tests/test_slack_agent.py backend/tests/test_mail_document_agent.py backend/tests/test_rag_orchestrator_agent.py -v` passed with 17 tests.
 
+## 2026-05-02 - LangGraph Orchestration API
+
+Exposed the company memory LangGraph workflow through backend API endpoints so
+the frontend and operations screens can inspect orchestration status without
+calling paid models.
+
+Portfolio angle:
+
+- Turns the orchestration foundation into a product-visible capability:
+  backend clients can now read the active graph backend, node order, Mermaid
+  topology, and cost guardrails.
+- Adds a deterministic dry-run endpoint that proves the orchestration path
+  executes end-to-end without invoking Slack, embeddings, or paid LLM APIs.
+- Makes the architecture easier to explain in interviews: the graph can be
+  shown as an API-backed execution contract instead of only code internals.
+
+Implemented scope:
+
+- Added `GET /api/v1/orchestration/company-memory` for workflow status,
+  `node_names`, `graph_mermaid`, and cost policy flags.
+- Added `POST /api/v1/orchestration/company-memory/dry-run` for deterministic
+  execution over the same LangGraph workflow.
+- Registered the orchestration router in the v1 API router.
+- Added API tests for status and dry-run behavior.
+
+Cost/security note:
+
+- The status and dry-run endpoints report `paid_llm_calls_in_status_api=false`
+  and `token_cost_usd=0`. This keeps operational visibility separate from
+  model execution cost.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_orchestration_api.py backend/tests/test_agent_orchestration.py backend/tests/test_agent_runs_api.py -v` passed with 9 tests.
+- `uv run ruff check backend/app/api/v1/orchestration.py backend/app/api/v1/router.py backend/tests/test_orchestration_api.py backend/app/agent_runtime/orchestration.py backend/tests/test_agent_orchestration.py` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1801,3 +1837,4 @@ Verification evidence:
 - `feat: add google oauth boundary`
 - `feat: add google installed sync boundary`
 - `feat: add langgraph orchestration foundation`
+- `feat: expose langgraph orchestration api`
