@@ -1,32 +1,40 @@
-from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from backend.app.core.demo_auth import DemoUser
+from backend.app.models.messages import Message, MessageChannel
+
+KST = timezone(timedelta(hours=9))
 
 
-CHANNELS = [
+SEED_CHANNELS = [
     {
         'id': 'announcements',
         'name': '전체공지',
         'description': '전사 공지와 운영 변경 사항을 공유합니다.',
         'unread_count': 2,
+        'display_order': 0,
     },
     {
         'id': 'project-alpha',
         'name': '프로젝트-alpha',
         'description': 'Redis 결정, 작업 상태, 출시 준비를 논의합니다.',
         'unread_count': 1,
+        'display_order': 1,
     },
     {
         'id': 'review-queue',
         'name': '검토-큐',
         'description': '출처 검증과 승인 대기 항목을 함께 확인합니다.',
         'unread_count': 0,
+        'display_order': 2,
     },
 ]
 
-MESSAGES = {
+SEED_MESSAGES = {
     'announcements': [
         {
             'id': 'ann-1',
@@ -76,29 +84,84 @@ MESSAGES = {
 }
 
 
-def list_channels() -> list[dict]:
-    return deepcopy(CHANNELS)
-
-
-def get_channel(channel_id: str) -> dict | None:
-    for channel in CHANNELS:
-        if channel['id'] == channel_id:
-            return deepcopy(channel)
-    return None
-
-
-def list_messages(channel_id: str) -> list[dict]:
-    return deepcopy(MESSAGES.get(channel_id, []))
-
-
-def append_message(channel_id: str, body: str, user: DemoUser) -> dict:
-    message = {
-        'id': f'msg-{uuid4().hex}',
-        'channel_id': channel_id,
-        'author_name': '관리자' if user.role == 'admin' else '뷰어',
-        'author_role': user.role,
-        'body': body,
-        'created_at': datetime.now(UTC).isoformat(),
+def serialize_channel(channel: MessageChannel) -> dict:
+    return {
+        'id': channel.id,
+        'name': channel.name,
+        'description': channel.description,
+        'unread_count': channel.unread_count,
     }
-    MESSAGES.setdefault(channel_id, []).append(message)
-    return deepcopy(message)
+
+
+def serialize_message(message: Message) -> dict:
+    return {
+        'id': message.id,
+        'channel_id': message.channel_id,
+        'author_name': message.author_name,
+        'author_role': message.author_role,
+        'body': message.body,
+        'created_at': message.created_at.isoformat(),
+    }
+
+
+def ensure_seed_data(db: Session) -> None:
+    existing = db.scalar(select(MessageChannel.id).limit(1))
+    if existing is not None:
+        return
+
+    for channel in SEED_CHANNELS:
+        db.add(MessageChannel(**channel))
+
+    for messages in SEED_MESSAGES.values():
+        for message in messages:
+            db.add(
+                Message(
+                    id=message['id'],
+                    channel_id=message['channel_id'],
+                    author_name=message['author_name'],
+                    author_role=message['author_role'],
+                    body=message['body'],
+                    created_at=datetime.fromisoformat(message['created_at']),
+                )
+            )
+
+    db.commit()
+
+
+def list_channels(db: Session) -> list[dict]:
+    ensure_seed_data(db)
+    channels = db.scalars(
+        select(MessageChannel).order_by(MessageChannel.display_order)
+    ).all()
+    return [serialize_channel(channel) for channel in channels]
+
+
+def get_channel(db: Session, channel_id: str) -> dict | None:
+    ensure_seed_data(db)
+    channel = db.get(MessageChannel, channel_id)
+    return serialize_channel(channel) if channel else None
+
+
+def list_messages(db: Session, channel_id: str) -> list[dict]:
+    ensure_seed_data(db)
+    messages = db.scalars(
+        select(Message)
+        .where(Message.channel_id == channel_id)
+        .order_by(Message.created_at, Message.id)
+    ).all()
+    return [serialize_message(message) for message in messages]
+
+
+def append_message(db: Session, channel_id: str, body: str, user: DemoUser) -> dict:
+    message = Message(
+        id=f'msg-{uuid4().hex}',
+        channel_id=channel_id,
+        author_name='관리자' if user.role == 'admin' else '뷰어',
+        author_role=user.role,
+        body=body,
+        created_at=datetime.now(KST),
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return serialize_message(message)

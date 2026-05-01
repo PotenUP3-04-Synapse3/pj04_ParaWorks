@@ -159,3 +159,31 @@ Use:
 
 This initializes `.tmp/paraworks-smoke.db`, starts FastAPI on
 `http://127.0.0.1:8000`, and starts Next.js on `http://127.0.0.1:3000`.
+
+## 2026-05-01 Messenger Persistence Update
+
+Moved Messenger from process memory to SQLAlchemy-backed persistence.
+
+- Model: `backend/app/models/messages.py`
+- Service: `backend/app/messages/service.py`
+- Test: `backend/tests/test_messages.py`
+
+Tables:
+
+- `message_channels`
+- `messages`
+
+The message service seeds the three demo channels and their initial messages
+when the first message endpoint is called against an empty database. Posted
+messages are inserted into `messages`, so they survive page reloads and remain
+available while the same SQLite/Postgres database is used.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests -v
+cd frontend
+npm.cmd run build
+```
+
+Result after this update: backend 23 tests passed; frontend build passed.

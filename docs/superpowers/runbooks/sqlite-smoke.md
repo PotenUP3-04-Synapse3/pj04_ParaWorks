@@ -21,8 +21,9 @@ The script:
 1. Creates `.tmp/paraworks-smoke.db` if needed.
 2. Sets `DATABASE_URL=sqlite:///.tmp/paraworks-smoke.db`.
 3. Runs `uv run python -m backend.app.db.init_db`.
-4. Starts FastAPI on `http://127.0.0.1:8000`.
-5. Starts Next.js on `http://127.0.0.1:3000`.
+4. Removes `frontend/.next` so `next dev` does not reuse a stale production build cache.
+5. Starts FastAPI on `http://127.0.0.1:8000`.
+6. Starts Next.js on `http://127.0.0.1:3000`.
 
 Open:
 

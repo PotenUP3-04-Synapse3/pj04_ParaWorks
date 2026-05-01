@@ -1,4 +1,6 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 
 def test_list_message_channels(client: TestClient) -> None:
@@ -38,6 +40,26 @@ def test_post_channel_message_appends_to_channel(client: TestClient) -> None:
     messages_response = client.get('/api/v1/messages/channels/project-alpha/messages')
     messages = messages_response.json()['messages']
     assert messages[-1]['id'] == created['id']
+
+
+def test_post_channel_message_persists_in_database(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    response = client.post(
+        '/api/v1/messages/channels/review-queue/messages',
+        json={'body': 'DB에 남는 메시지인지 확인합니다.'},
+    )
+
+    assert response.status_code == 200
+    created = response.json()
+
+    stored = db_session.execute(
+        text('select body, channel_id from messages where id = :id'),
+        {'id': created['id']},
+    ).one()
+    assert stored.body == 'DB에 남는 메시지인지 확인합니다.'
+    assert stored.channel_id == 'review-queue'
 
 
 def test_unknown_channel_returns_404(client: TestClient) -> None:

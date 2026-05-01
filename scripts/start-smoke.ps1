@@ -27,6 +27,11 @@ try {
     $env:DATABASE_URL = $databaseUrl
     uv run python -m backend.app.db.init_db
 
+    $nextCache = Join-Path $repoRoot "frontend/.next"
+    if (Test-Path $nextCache) {
+        Remove-Item -LiteralPath $nextCache -Recurse -Force
+    }
+
     $backendCommand = "`$env:DATABASE_URL='$databaseUrl'; uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort"
     $frontendCommand = "npm.cmd run dev -- --hostname $HostAddress --port $FrontendPort"
 
