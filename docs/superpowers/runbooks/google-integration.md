@@ -1,14 +1,16 @@
 # Google Integration Runbook
 
 ParaWorks currently supports Gmail, Google Drive, and Google Calendar through a
-mock connector and an OAuth installation boundary. Live Google sync is the next
-step, not part of this boundary.
+mock connector, an OAuth installation boundary, and an installed-connection sync
+skeleton.
 
 ## Current Boundary
 
 Code:
 
 - `backend/app/connectors/google_oauth.py`
+- `backend/app/connectors/google.py`
+- `backend/app/connectors/factory.py`
 - `backend/app/api/v1/integrations.py`
 - `backend/app/models/integrations.py`
 - `frontend/src/app/integrations/page.tsx`
@@ -22,6 +24,10 @@ Responsibilities:
   with bearer-token userinfo calls.
 - `complete_google_oauth_callback` persists installed connections with
   `token_ref`, masked token, account metadata, and scopes.
+- `GoogleConnector` maps provider payloads into `SourceEvent` records for Gmail,
+  Drive, and Calendar.
+- `get_sync_connector` resolves installed Google `token_ref` values through the
+  local token vault when demo mode is disabled.
 - The Integrations UI shows Google OAuth readiness/status from sanitized API
   responses and keeps connect buttons outside primary sync/agent action rows.
 
@@ -68,6 +74,11 @@ Use fake access payloads or `httpx.MockTransport` to verify:
 - install URLs contain signed state and never expose client secrets;
 - callback state rejects malformed signatures and connector mismatches;
 - persisted connections store token references and masked tokens only;
+- installed Google sync resolves tokens through the vault;
+- demo mode keeps Google sync on mock connectors even if local OAuth connections
+  exist;
+- missing vault entries fall back to mock connectors instead of making partial
+  external calls;
 - `/api/v1/integrations/connections` never exposes token references;
 - the Integrations page renders Google OAuth status without secrets.
 
@@ -75,6 +86,9 @@ Use fake access payloads or `httpx.MockTransport` to verify:
 
 - OAuth installation is separate from live sync. Installing a connector should
   not immediately call LLMs or embedding models.
+- The installed sync skeleton is intentionally mock-first in demo mode.
+- Future live sync must add Gmail `historyId`, Drive changes cursors, and
+  Calendar sync tokens before high-volume ingestion.
 - Future live sync must fetch provider deltas first and skip unchanged sources
   before creating review candidates.
 - Drive content should only be embedded after Review Queue approval or changed

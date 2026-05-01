@@ -1,6 +1,12 @@
 from sqlalchemy.orm import Session
 
 from backend.app.connectors.base import Connector
+from backend.app.connectors.google import (
+    GOOGLE_CONNECTOR_TYPES,
+    GoogleConnector,
+    GoogleConnectorConfig,
+    GoogleWebApiClient,
+)
 from backend.app.connectors.mock import CONNECTOR_TYPES, get_mock_connector
 from backend.app.connectors.slack import (
     SlackConnector,
@@ -53,6 +59,14 @@ def get_sync_connector(
         )
         if installed_connector is not None:
             return installed_connector
+    if connector_type in GOOGLE_CONNECTOR_TYPES and not settings.paraworks_demo_mode:
+        installed_connector = _get_installed_google_connector(
+            connector_type=connector_type,
+            db=db,
+            token_vault=token_vault,
+        )
+        if installed_connector is not None:
+            return installed_connector
 
     return get_configured_connector(connector_type, settings)
 
@@ -93,4 +107,40 @@ def _get_installed_slack_connector(
             workspace_url=connection.workspace_url or settings.slack_workspace_url,
         ),
         client=SlackWebApiClient(bot_token=bot_token),
+    )
+
+
+def _get_installed_google_connector(
+    *,
+    connector_type: str,
+    db: Session | None,
+    token_vault: LocalTokenVault,
+) -> GoogleConnector | None:
+    if db is None:
+        return None
+
+    connection = (
+        db.query(IntegrationConnection)
+        .filter(
+            IntegrationConnection.connector_type == connector_type,
+            IntegrationConnection.status == 'connected',
+        )
+        .order_by(IntegrationConnection.updated_at.desc())
+        .first()
+    )
+    if connection is None:
+        return None
+
+    oauth_token = token_vault.resolve(connection.token_ref)
+    if not oauth_token:
+        return None
+
+    return GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type=connector_type,
+            oauth_token=oauth_token,
+            account_id=connection.workspace_id,
+            account_name=connection.workspace_name,
+        ),
+        client=GoogleWebApiClient(oauth_token=oauth_token),
     )

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from backend.app.connectors.factory import get_configured_connector, get_sync_connector
+from backend.app.connectors.google import GoogleConnector, GoogleWebApiClient
 from backend.app.connectors.mock import MockConnector
 from backend.app.connectors.slack import SlackConnector, SlackWebApiClient
 from backend.app.connectors.slack_oauth import LocalTokenVault
@@ -121,3 +122,103 @@ def test_sync_connector_falls_back_to_mock_when_installed_token_is_not_in_vault(
 
     assert isinstance(connector, MockConnector)
     assert connector.source_type == 'slack'
+
+
+def test_sync_connector_uses_installed_google_connection_token_from_vault(
+    db_session: Session,
+) -> None:
+    token_vault = LocalTokenVault()
+    token_vault.store_token(
+        connector_type='gmail',
+        workspace_id='google-user-1',
+        token='google-installed-token',
+        token_kind='oauth',
+    )
+    db_session.add(
+        IntegrationConnection(
+            connector_type='gmail',
+            workspace_id='google-user-1',
+            workspace_name='para@example.com',
+            scopes=['https://www.googleapis.com/auth/gmail.readonly'],
+            token_ref='local:gmail:google-user-1:oauth',
+            masked_bot_token='goog...oken',
+            status='connected',
+        )
+    )
+    db_session.commit()
+
+    connector = get_sync_connector(
+        'gmail',
+        Settings(paraworks_demo_mode=False),
+        db=db_session,
+        token_vault=token_vault,
+    )
+
+    assert isinstance(connector, GoogleConnector)
+    assert connector.config.connector_type == 'gmail'
+    assert connector.config.oauth_token == 'google-installed-token'
+    assert connector.config.account_id == 'google-user-1'
+    assert connector.config.account_name == 'para@example.com'
+    assert isinstance(connector.client, GoogleWebApiClient)
+    assert connector.client.oauth_token == 'google-installed-token'
+
+
+def test_sync_connector_keeps_google_mock_in_demo_mode_even_with_installed_connection(
+    db_session: Session,
+) -> None:
+    token_vault = LocalTokenVault()
+    token_vault.store_token(
+        connector_type='drive',
+        workspace_id='google-user-1',
+        token='google-installed-token',
+        token_kind='oauth',
+    )
+    db_session.add(
+        IntegrationConnection(
+            connector_type='drive',
+            workspace_id='google-user-1',
+            workspace_name='para@example.com',
+            scopes=['https://www.googleapis.com/auth/drive.readonly'],
+            token_ref='local:drive:google-user-1:oauth',
+            masked_bot_token='goog...oken',
+            status='connected',
+        )
+    )
+    db_session.commit()
+
+    connector = get_sync_connector(
+        'drive',
+        Settings(paraworks_demo_mode=True),
+        db=db_session,
+        token_vault=token_vault,
+    )
+
+    assert isinstance(connector, MockConnector)
+    assert connector.source_type == 'drive'
+
+
+def test_sync_connector_falls_back_to_mock_when_installed_google_token_is_not_in_vault(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        IntegrationConnection(
+            connector_type='calendar',
+            workspace_id='google-user-1',
+            workspace_name='para@example.com',
+            scopes=['https://www.googleapis.com/auth/calendar.readonly'],
+            token_ref='local:calendar:google-user-1:oauth',
+            masked_bot_token='goog...oken',
+            status='connected',
+        )
+    )
+    db_session.commit()
+
+    connector = get_sync_connector(
+        'calendar',
+        Settings(paraworks_demo_mode=False),
+        db=db_session,
+        token_vault=LocalTokenVault(),
+    )
+
+    assert isinstance(connector, MockConnector)
+    assert connector.source_type == 'calendar'

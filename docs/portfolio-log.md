@@ -1514,6 +1514,45 @@ Verification evidence:
 - Playwright visual smoke passed with 24 Chromium desktop/mobile tests after
   Google OAuth readiness assertions were added.
 
+## 2026-05-01 - Google Installed Sync Boundary
+
+Connected installed Google OAuth records to the sync connector factory through a
+live connector skeleton.
+
+Portfolio angle:
+
+- Shows the integration handoff after OAuth: installed Gmail, Drive, and Calendar
+  connections can now become provider-specific sync connectors when demo mode is
+  disabled.
+- Demonstrates a merge-friendly split for three developers: each Google provider
+  can now evolve behind the same `GoogleConnector` and `SourceEvent` contract.
+- Keeps cost discipline explicit: demo mode remains mock-first, missing vault
+  tokens fall back to mock, and future provider work must add cursor/hash delta
+  checks before downstream agent or embedding calls.
+
+Implemented scope:
+
+- Added `backend/app/connectors/google.py` with Google API client skeletons and
+  Gmail/Drive/Calendar `SourceEvent` mapping.
+- Extended `get_sync_connector` to resolve installed Google connection tokens
+  from the local vault when `PARAWORKS_DEMO_MODE=false`.
+- Preserved mock fallback for demo mode and missing vault tokens.
+- Added connector and factory tests for provider mapping, bearer-token headers,
+  installed token resolution, demo fallback, and missing-vault fallback.
+- Updated the Google integration runbook and added an implementation plan note.
+
+Verification evidence:
+
+- RED tests first failed because `backend.app.connectors.google` did not exist.
+- Focused Google connector/factory tests passed with 13 tests.
+- Python Ruff passed for the new Google connector, factory, and tests.
+- Full backend tests passed with 129 tests and 1 skipped pgvector integration
+  test.
+- Frontend lint and production build passed.
+- Playwright visual smoke passed with 24 Chromium desktop/mobile tests.
+- The in-app browser showed Slack, Gmail, Drive, Calendar, and Google OAuth
+  status blocks on `http://127.0.0.1:3000/integrations`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1556,3 +1595,4 @@ Verification evidence:
 - `feat: wire installed slack connection sync`
 - `fix: harden frontend route smoke`
 - `feat: add google oauth boundary`
+- `feat: add google installed sync boundary`
