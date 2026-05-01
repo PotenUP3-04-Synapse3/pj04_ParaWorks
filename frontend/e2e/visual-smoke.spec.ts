@@ -76,6 +76,18 @@ test("Slack card keeps OAuth install outside primary action row", async ({ page 
   await expect(slackActions.getByRole("button", { name: "Slack 연결" })).toHaveCount(0);
 });
 
+test("Slack OAuth callback route renders a safe local error without secrets", async ({ page }) => {
+  await page.goto("/integrations/slack/callback");
+
+  await expect(page.getByRole("heading", { name: "Slack 연결 확인" })).toBeVisible();
+  await expect(page.getByText("Slack 연결 정보를 확인할 수 없습니다.")).toBeVisible();
+
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("xoxb-");
+  expect(bodyText).not.toContain("client-secret");
+  expect(bodyText).not.toContain("token_ref");
+});
+
 test("Google connector cards show OAuth readiness outside primary action rows", async ({ page }) => {
   await page.goto("/integrations");
 

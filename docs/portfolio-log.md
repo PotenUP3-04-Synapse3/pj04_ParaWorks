@@ -1553,6 +1553,38 @@ Verification evidence:
 - The in-app browser showed Slack, Gmail, Drive, Calendar, and Google OAuth
   status blocks on `http://127.0.0.1:3000/integrations`.
 
+## 2026-05-01 - Slack OAuth Callback UX And Redirect Audit
+
+Hardened the Slack OAuth install path after a real Slack authorization attempt
+failed with `redirect_uri did not match any configured URIs`.
+
+Portfolio angle:
+
+- Shows practical OAuth troubleshooting beyond mock integrations: local app
+  routes, backend install URL generation, and third-party console settings must
+  align exactly.
+- Adds a safer user-facing callback page so OAuth failures are explained in
+  Korean instead of surfacing a broken route or raw API response.
+- Reinforces the security story: the callback UI shows sanitized workspace
+  metadata only and regression tests block raw token, client secret, and
+  `token_ref` leakage.
+
+Implemented scope:
+
+- Added `/integrations/slack/callback` frontend route.
+- Forwarded Slack `code` and signed `state` to the backend callback endpoint.
+- Rendered safe success, loading, and failure states for Korean business users.
+- Documented that Slack App Redirect URLs must exactly match
+  `SLACK_OAUTH_REDIRECT_URI`, including the `localhost` vs `127.0.0.1`
+  distinction.
+
+Cost/security note:
+
+- OAuth installation itself does not sync Slack history, call an LLM, or create
+  embeddings. Live sync remains gated by demo mode, channel ids, and vault token
+  resolution so accidental installs do not create downstream token or embedding
+  costs.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

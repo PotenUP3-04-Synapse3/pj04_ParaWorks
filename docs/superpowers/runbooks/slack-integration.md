@@ -67,6 +67,24 @@ SLACK_OAUTH_REDIRECT_URI=http://localhost:3000/integrations/slack/callback
 SLACK_OAUTH_STATE_SECRET=replace-with-local-random-state-secret
 ```
 
+Slack App configuration must include the exact same Redirect URL under
+OAuth & Permissions. Slack treats these as different URLs:
+
+- `http://localhost:3000/integrations/slack/callback`
+- `http://127.0.0.1:3000/integrations/slack/callback`
+- `http://localhost:8000/api/v1/...`
+
+If Slack shows `redirect_uri did not match any configured URIs`, compare the
+URL printed in the Slack error with `SLACK_OAUTH_REDIRECT_URI` and the Slack
+App's Redirect URLs. Fix one side so they match exactly, then restart the
+backend process so the install URL is rebuilt from the new environment value.
+
+The frontend callback route is
+`/integrations/slack/callback`. It forwards Slack's `code` and signed `state`
+to `/api/v1/integrations/slack/oauth/callback`, then renders only sanitized
+workspace metadata. Do not expose raw tokens, OAuth secrets, or `token_ref`
+values in callback UI, browser logs, docs, or screenshots.
+
 Never commit `.env`, Slack tokens, OAuth tokens, or exported API responses that
 contain private workspace content.
 
