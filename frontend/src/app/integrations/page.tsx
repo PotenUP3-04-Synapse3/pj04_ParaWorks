@@ -440,7 +440,7 @@ export default function IntegrationsPage() {
           })}
         </div>
 
-        <aside className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <aside className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-[var(--workspace-rail-active)]" aria-hidden="true" />
@@ -500,7 +500,7 @@ export default function IntegrationsPage() {
 
 function ResultMetric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-lg bg-[#fbfaf8] p-3">
+    <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
     </div>
@@ -513,34 +513,37 @@ function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
   const latestSync = status.latest_sync;
 
   return (
-    <div data-testid="slack-runtime-status" className="rounded-lg border border-[#e8deef] bg-[#fbf8fd] p-3 text-sm">
+    <div
+      data-testid="slack-runtime-status"
+      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-white p-3 text-sm"
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-semibold text-[#21132b]">Slack 운영 상태</p>
+          <p className="font-semibold text-[var(--ink-strong)]">Slack 운영 상태</p>
           <p className="mt-1 text-xs text-[var(--ink-muted)]">
             상태 조회는 sync나 LLM 호출을 실행하지 않습니다.
           </p>
         </div>
-        <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#611f69]">
-          {status.mode}
+        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
+          <span>{status.mode}</span>
         </span>
       </div>
       <div className="mt-3 grid gap-2 text-xs">
-        <div className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-2">
+        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
           <span className="text-[var(--ink-muted)]">채널</span>
           <span className="max-w-[210px] truncate font-semibold">{channelLabel}</span>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-2">
+        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
           <span className="text-[var(--ink-muted)]">연결</span>
           <span className="font-semibold">{status.connection_status}</span>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-2">
+        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
           <span className="text-[var(--ink-muted)]">자격 증명</span>
           <span className="font-semibold">{status.credential_status}</span>
         </div>
       </div>
       {latestSync ? (
-        <div className="mt-3 rounded-md bg-white px-2 py-2 text-xs">
+        <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
           <div className="flex items-center justify-between gap-3">
             <span className="font-semibold">최근 sync</span>
             <span className="font-semibold">{latestSync.status}</span>
@@ -559,19 +562,22 @@ function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, Google
   }
 
   return (
-    <div data-testid="google-runtime-status" className="rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-sm">
+    <div
+      data-testid="google-runtime-status"
+      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-white p-3 text-sm"
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-semibold text-blue-950">Google 운영 상태</p>
+          <p className="font-semibold text-[var(--ink-strong)]">Google 운영 상태</p>
           <p className="mt-1 text-xs text-[var(--ink-muted)]">Gmail, Drive, Calendar 상태를 한 번에 확인합니다.</p>
         </div>
-        <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-blue-700">
-          {rows[0]?.mode ?? "mock"}
+        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
+          <span>{rows[0]?.mode ?? "mock"}</span>
         </span>
       </div>
       <div className="mt-3 space-y-2">
         {rows.map((status) => (
-          <div key={status.connector_type} className="rounded-md bg-white px-2 py-2 text-xs">
+          <div key={status.connector_type} className="glass-row rounded-md px-2 py-2 text-xs">
             <div className="flex items-center justify-between gap-3">
               <span className="font-semibold">{formatConnectorName(status.connector_type)}</span>
               <span className="font-semibold">{status.connection_status}</span>

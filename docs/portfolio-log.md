@@ -2278,6 +2278,27 @@ Verification evidence:
   passed with 15/15 tests.
 - `npm run build` passed.
 
+## 2026-05-02 - Integration Runtime Glass Consistency
+
+Implemented scope:
+
+- Unified the `/integrations` task stream panel with the same
+  `integration-glass-card` material used by the connector cards.
+- Replaced Slack/Google runtime status hard-coded text colors with
+  `--ink-strong` so dark-mode contrast follows the Liquid Glass token system.
+- Added a reusable `glass-row` surface for runtime rows and sync metrics,
+  keeping nested glass elements in the same gray-purple material family.
+- Changed runtime mode pills to `liquid-control` so they visually align with
+  the top floating controls and primary dark-mode button treatment.
+
+Verification evidence:
+
+- In-app browser screenshot review checked `/integrations` in dark mode.
+- `npx eslint src/app/integrations/page.tsx src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 15/15 tests.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2338,3 +2359,4 @@ Verification evidence:
 - `feat: add dark liquid glass mode`
 - `style: tune dark glass gray purple palette`
 - `style: refine dark glass consistency`
+- `style: unify integration runtime glass`
