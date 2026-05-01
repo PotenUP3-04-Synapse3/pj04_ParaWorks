@@ -4,6 +4,7 @@ import {
   Activity,
   Bot,
   Database,
+  Library,
   LayoutDashboard,
   MessageSquare,
   Search,
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, section: "workspace" },
   { href: "/messages", labelKey: "messages", icon: MessageSquare, section: "workspace" },
   { href: "/review", labelKey: "review", icon: Activity, section: "workspace" },
+  { href: "/knowledge", labelKey: "knowledge", icon: Library, section: "workspace" },
   { href: "/search", labelKey: "search", icon: Search, section: "workspace" },
   { href: "/integrations", labelKey: "integrations", icon: Database, section: "tools" },
 ] as const;

@@ -37,6 +37,30 @@ export type AgentRunsResponse = {
   recent_runs: AgentRunSummaryItem[];
 };
 
+export type KnowledgeItem = {
+  id: number;
+  title: string;
+  summary: string;
+  priority?: string;
+  source_links: string[];
+  source_snippets: string[];
+  confidence_score: number;
+  permission_level: string;
+  review_status: string;
+  created_at: string;
+};
+
+export type KnowledgeResponse = {
+  counts: {
+    decisions: number;
+    history_events: number;
+    todos: number;
+  };
+  decisions: KnowledgeItem[];
+  history_events: KnowledgeItem[];
+  todos: KnowledgeItem[];
+};
+
 export type ReviewStatus =
   | "pending_review"
   | "approved"

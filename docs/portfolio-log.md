@@ -588,6 +588,41 @@ Verification evidence:
   `approvedStatus=approved` and `approvedType=todo`.
 - HTTP smoke returned 200 for `/health`, `/review`, and `/dashboard`.
 
+## Product Update: Knowledge Library
+
+Recorded on 2026-05-01.
+
+Next user-facing milestone is making approved company memory visible after
+Review Queue approval.
+
+Portfolio angle:
+
+- Turns durable knowledge rows into an inspectable product surface.
+- Shows the completed workflow from Slack evidence to Review approval to
+  approved decisions, history, and todos.
+- Provides a natural next step toward vectorizing approved company memory for
+  production RAG.
+
+Implemented scope:
+
+- Added read-only `GET /api/v1/knowledge`.
+- Returned approved decisions, history events, todos, counts, source evidence,
+  confidence, permission, and review status.
+- Added frontend `KnowledgeResponse` and `KnowledgeItem` types.
+- Added `/knowledge` page with summary cards and evidence-preserving records.
+- Added Knowledge navigation labels in Korean and English.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_knowledge_api.py -v` passed.
+- `uv run pytest backend/tests -v` passed with 56 backend tests.
+- `npm.cmd run build` from `frontend` passed.
+- Smoke server restarted with `.tmp/paraworks-knowledge-library.db`.
+- Slack sync and approving all 3 Review Items produced `decisions=1`,
+  `history=1`, and `todos=1` from `/api/v1/knowledge`.
+- HTTP smoke returned 200 for `/health`, `/knowledge`, `/review`, and
+  `/dashboard`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -610,3 +645,4 @@ Verification evidence:
 - `2b377fb feat: add company memory ask ui`
 - `15e1864 feat: add agent run observability`
 - `b90a709 feat: persist rag agent runs`
+- `870813c feat: promote approved review items`
