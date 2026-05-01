@@ -1615,6 +1615,34 @@ Cost/security note:
   ids, and a resolvable vault token before any downstream review, LLM, or
   embedding work can run.
 
+## 2026-05-02 - Slack OAuth Reconnect UX
+
+Closed the follow-up UX gap after adding credential availability checks: users
+can now recover from local vault token loss directly from the Slack card.
+
+Portfolio angle:
+
+- Shows end-to-end product polish around real integration failure modes, not
+  only the happy OAuth path.
+- Keeps the primary sync/agent actions stable while placing the reconnect CTA
+  inside the OAuth status area where it belongs.
+- Adds desktop/mobile visual coverage for the `token missing -> Slack 재연결`
+  state so long workspace names do not hide the status text or action.
+
+Implemented scope:
+
+- Added a `Slack 재연결` CTA when OAuth metadata exists but
+  `credential_status` is missing.
+- Kept the reconnect CTA out of the primary action row to avoid crowding
+  `동기화` and `Slack Agent 실행`.
+- Changed the OAuth status row to wrap cleanly across desktop and mobile.
+
+Cost/security note:
+
+- Reconnection only refreshes the local credential boundary. It still does not
+  sync Slack history or trigger downstream LLM/embedding work while demo mode is
+  enabled.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`

@@ -88,6 +88,43 @@ test("Slack OAuth callback route renders a safe local error without secrets", as
   expect(bodyText).not.toContain("token_ref");
 });
 
+test("Slack OAuth status shows reconnect CTA when the local credential is missing", async ({ page }) => {
+  await page.route("**/api/v1/integrations/connections", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: [
+        {
+          connector_type: "slack",
+          workspace_id: "T123",
+          workspace_name: "ParaWorks Demo",
+          status: "connected",
+          credential_status: "missing",
+          masked_bot_token: "xoxb...demo",
+          scopes: ["channels:history"],
+        },
+      ],
+    });
+  });
+  await page.route("**/api/v1/integrations/slack/oauth/install-url", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "slack",
+        configured: true,
+        install_url: "https://slack.com/oauth/v2/authorize?client_id=C123",
+        state: "signed-state",
+        required_scopes: ["channels:history"],
+      },
+    });
+  });
+
+  await page.goto("/integrations");
+
+  await expect(page.getByText("ParaWorks Demo 재연결 필요")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Slack 재연결" })).toBeVisible();
+  await expect(page.getByTestId("slack-card-actions").getByRole("button", { name: "Slack 재연결" })).toHaveCount(0);
+});
+
 test("Google connector cards show OAuth readiness outside primary action rows", async ({ page }) => {
   await page.goto("/integrations");
 

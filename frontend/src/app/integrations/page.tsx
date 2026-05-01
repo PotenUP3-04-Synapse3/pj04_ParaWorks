@@ -264,6 +264,7 @@ export default function IntegrationsPage() {
             const connection = connections.find((item) => item.connector_type === manifest.type);
             const credentialAvailable = connection?.credential_status === "available";
             const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
+            const canStartOAuth = Boolean(oauthInstall?.configured && (!connection || !credentialAvailable));
             const showOAuthStatus = manifest.auth_type === "oauth";
             const oauthTheme =
               manifest.type === "slack"
@@ -330,10 +331,10 @@ export default function IntegrationsPage() {
                     data-testid={`${manifest.type}-oauth-status`}
                     className={`mt-4 rounded-lg border ${oauthTheme.border} ${oauthTheme.bg} p-3 text-sm`}
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex min-w-0 items-center gap-2">
                         <LockKeyhole className={`h-4 w-4 shrink-0 ${oauthTheme.icon}`} aria-hidden="true" />
-                        <span className={`truncate font-semibold ${oauthTheme.text}`}>
+                        <span className={`break-words font-semibold ${oauthTheme.text}`}>
                           {connection
                             ? credentialAvailable
                               ? `${connection.workspace_name} 연결됨`
@@ -347,14 +348,14 @@ export default function IntegrationsPage() {
                         <span className={`rounded-full bg-white px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
                           {connection ? (credentialAvailable ? connection.status : "token missing") : "ready"}
                         </span>
-                        {oauthInstall?.configured && !connection ? (
+                        {canStartOAuth ? (
                           <button
                             type="button"
                             onClick={() => startOAuth(manifest.display_name, oauthInstall)}
                             className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-2.5 text-xs font-semibold shadow-sm ${oauthTheme.button}`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            {manifest.display_name} 연결
+                            {connection ? `${manifest.display_name} 재연결` : `${manifest.display_name} 연결`}
                           </button>
                         ) : null}
                       </div>
