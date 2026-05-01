@@ -1718,6 +1718,45 @@ Next product step:
 - Then continue with Review Queue promotion and RAG indexing over approved
   Slack-derived timeline/history candidates.
 
+## 2026-05-02 - LangGraph Orchestrator Foundation
+
+Moved the company memory orchestration foundation from a local sequential
+runner to a real LangGraph `StateGraph` while keeping deterministic tests and
+the existing agent contracts intact.
+
+Portfolio angle:
+
+- Shows the core ParaWorks architecture moving toward a true multi-agent
+  orchestration layer instead of isolated demo agents.
+- Keeps the three-developer split clean: Slack Agent, Mail/Docs Agent, and RAG
+  Orchestrator can continue evolving behind shared `EvidencePacket` and
+  review/RAG contracts.
+- Adds a visible graph topology (`graph_mermaid`) that can later be reused in
+  documentation, operations screens, or portfolio diagrams.
+
+Implemented scope:
+
+- Added `langchain>=1.2.0,<2.0.0` and `langgraph>=1.1.6,<2.0.0` to the backend
+  dependencies. Local resolution installed `langchain==1.2.17` and
+  `langgraph==1.1.10`.
+- Replaced the local `AgentWorkflow.run()` loop with a compiled LangGraph
+  `StateGraph`.
+- Preserved append-only node audit behavior and exposed the graph as Mermaid.
+- Added a workflow output marker for the cost policy:
+  `delta_sync_hash_skip_evidence_budget`.
+
+Cost/security note:
+
+- This foundation still performs no paid LLM calls in tests. The next LLM
+  integration should keep deterministic model doubles for CI, use delta sync
+  and source-hash skips before agent calls, and persist `AgentRun` token/cost
+  metadata for every production model call.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_agent_orchestration.py -v` passed.
+- `uv run pytest backend/tests/test_agent_runtime_contracts.py backend/tests/test_agent_registry.py backend/tests/test_agent_orchestration.py backend/tests/test_slack_agent.py backend/tests/test_mail_document_agent.py backend/tests/test_rag_orchestrator_agent.py -v` passed with 17 tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1761,3 +1800,4 @@ Next product step:
 - `fix: harden frontend route smoke`
 - `feat: add google oauth boundary`
 - `feat: add google installed sync boundary`
+- `feat: add langgraph orchestration foundation`
