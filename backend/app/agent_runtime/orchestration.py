@@ -13,7 +13,7 @@ class AgentWorkflowState:
     outputs: dict = field(default_factory=dict)
     completed_nodes: list[str] = field(default_factory=list)
 
-    def complete_node(self, node_name: str, **outputs: str) -> 'AgentWorkflowState':
+    def complete_node(self, node_name: str, **outputs: Any) -> 'AgentWorkflowState':
         return replace(
             self,
             outputs={**self.outputs, **outputs},
@@ -79,6 +79,22 @@ def build_company_memory_workflow() -> AgentWorkflow:
         current_name = nodes[index][0]
         next_name = nodes[index + 1][0]
         graph_builder.add_edge(current_name, next_name)
+    graph_builder.add_edge(nodes[-1][0], END)
+
+    return AgentWorkflow(
+        nodes=nodes,
+        compiled_graph=graph_builder.compile(),
+    )
+
+
+def build_agent_workflow(nodes: tuple[tuple[str, WorkflowNode], ...]) -> AgentWorkflow:
+    graph_builder = StateGraph(_LangGraphWorkflowState)
+    for node_name, node in nodes:
+        graph_builder.add_node(node_name, _as_langgraph_node(node))
+
+    graph_builder.add_edge(START, nodes[0][0])
+    for index in range(len(nodes) - 1):
+        graph_builder.add_edge(nodes[index][0], nodes[index + 1][0])
     graph_builder.add_edge(nodes[-1][0], END)
 
     return AgentWorkflow(

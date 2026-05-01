@@ -76,6 +76,7 @@ export type OrchestrationStatusResponse = {
     source_hash_skip: boolean;
     evidence_token_budget: boolean;
     paid_llm_calls_in_status_api: boolean;
+    requires_explicit_run: boolean;
   };
 };
 

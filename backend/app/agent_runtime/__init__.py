@@ -12,12 +12,13 @@ from backend.app.agent_runtime.cost_policy import (
     build_evidence_cache_key,
     estimate_agent_run_cost,
 )
-from backend.app.agent_runtime.registry import AgentRegistry
 from backend.app.agent_runtime.orchestration import (
     AgentWorkflow,
     AgentWorkflowState,
+    build_agent_workflow,
     build_company_memory_workflow,
 )
+from backend.app.agent_runtime.registry import AgentRegistry
 
 __all__ = [
     'AgentManifest',
@@ -32,6 +33,7 @@ __all__ = [
     'ReviewCandidate',
     'TokenUsage',
     'build_evidence_cache_key',
+    'build_agent_workflow',
     'build_company_memory_workflow',
     'estimate_agent_run_cost',
 ]

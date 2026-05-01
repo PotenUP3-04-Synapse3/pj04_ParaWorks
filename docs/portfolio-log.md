@@ -1868,6 +1868,46 @@ Verification evidence:
 - `POST /api/v1/orchestration/company-memory/dry-run` returned four completed
   nodes and `token_cost_usd=0`.
 
+## 2026-05-02 - LangGraph Agent Service Execution
+
+Connected the Company Memory LangGraph workflow to the existing Slack,
+Mail/Docs, and RAG agent services.
+
+Portfolio angle:
+
+- Moves the orchestrator from a visible dry-run foundation to a real execution
+  path: LangGraph nodes now call agent services that persist `AgentRun`
+  records and create review candidates.
+- Preserves the three-developer split: Slack Agent and Mail/Docs Agent produce
+  human-reviewable timeline/history candidates, while the RAG Orchestrator
+  answers from company memory evidence.
+- Demonstrates cost-aware orchestration: the real run endpoint is separate from
+  status/dry-run and marked with `requires_explicit_run=true` so UI rendering
+  never triggers hidden agent costs.
+
+Implemented scope:
+
+- Added `backend.app.agent_runtime.company_memory` for service-level Company
+  Memory orchestration.
+- Added reusable LangGraph workflow construction for custom node handlers.
+- Added `POST /api/v1/orchestration/company-memory/run` as the explicit agent
+  execution endpoint.
+- Added tests proving Slack/Mail/RAG agent services run through LangGraph and
+  persist the expected `AgentRun` and `ReviewItem` records.
+
+Cost/security note:
+
+- This run still uses deterministic local model implementations in tests. It
+  creates estimated `AgentRun` token/cost metadata, but does not call external
+  LLM providers unless a future production model adapter is explicitly wired.
+- The endpoint is an explicit POST action, not part of page render/status
+  polling, to avoid accidental token spend.
+
+Verification evidence:
+
+- `uv run pytest backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py backend/tests/test_agent_orchestration.py backend/tests/test_slack_agent.py backend/tests/test_mail_document_agent.py backend/tests/test_rag_orchestrator_service.py -v` passed with 18 tests.
+- `uv run ruff check backend/app/agent_runtime/company_memory.py backend/app/agent_runtime/orchestration.py backend/app/agent_runtime/__init__.py backend/app/api/v1/orchestration.py backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -1915,3 +1955,4 @@ Verification evidence:
 - `feat: expose langgraph orchestration api`
 - `feat: show langgraph orchestration status`
 - `feat: add langgraph dry-run operations ux`
+- `feat: run agents through langgraph`
