@@ -13,8 +13,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+try {
+  var theme = localStorage.getItem('paraworks-theme') || 'dark';
+  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+} catch (_) {
+  document.documentElement.dataset.theme = 'dark';
+}
+`,
+          }}
+        />
         <AppShell>{children}</AppShell>
       </body>
     </html>

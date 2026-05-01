@@ -2193,6 +2193,34 @@ Verification evidence:
 - In-app browser screenshot review checked `/dashboard` after the intensity
   pass and contrast fix.
 
+## 2026-05-02 - Dark Liquid Glass Mode
+
+Why it matters:
+
+- Browser QA showed the light Liquid Glass theme was still too bright for
+  dense business screens, reducing text readability.
+- ParaWorks now defaults to a darker, higher-contrast Liquid Glass experience
+  while preserving a light mode toggle for comparison and future demos.
+
+Implemented scope:
+
+- Added `data-theme` based dark/light glass modes with a pre-hydration script
+  to avoid a bright first paint.
+- Added persistent theme toggles in the sidebar and mobile toolbar.
+- Reworked dark-mode glass tokens, page background, panels, controls, status
+  surfaces, and hard-coded text/background overrides so existing pages remain
+  consistent.
+- Added Playwright coverage for switching between dark and light glass modes.
+
+Verification evidence:
+
+- `npx eslint src/app/layout.tsx src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop`
+  passed with 15/15 tests.
+- `npm run build` passed.
+- In-app browser screenshot review checked `/dashboard` and `/integrations` in
+  dark Liquid Glass mode.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2250,3 +2278,4 @@ Verification evidence:
 - `test: harden integration sync smoke selector`
 - `feat: add liquid glass frontend theme`
 - `feat: intensify liquid glass theme`
+- `feat: add dark liquid glass mode`

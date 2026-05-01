@@ -47,6 +47,16 @@ test("integrations page keeps all connector cards when OAuth status endpoints ar
   await expect(page.getByRole("heading", { name: "Google Calendar" })).toBeVisible();
 });
 
+test("theme toggle switches between dark and light glass modes", async ({ page }) => {
+  await page.goto("/dashboard");
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "라이트 모드" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "다크 모드" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
 test("integration sync shows connector counts", async ({ page }) => {
   await page.goto("/integrations");
   await page.getByRole("button", { name: "동기화" }).first().click();

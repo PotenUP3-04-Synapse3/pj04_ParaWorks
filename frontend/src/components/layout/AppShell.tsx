@@ -8,12 +8,14 @@ import {
   Library,
   LayoutDashboard,
   MessageSquare,
+  Moon,
   Search,
   Sparkles,
+  Sun,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { LanguageProvider, useLanguage } from "@/lib/i18n/LanguageProvider";
 
 const navItems = [
@@ -37,9 +39,27 @@ export function AppShell({ children }: { children: ReactNode }) {
 function LocalizedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { dictionary, locale, setLocale } = useLanguage();
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const shell = dictionary.shell;
   const workspaceItems = navItems.filter((item) => item.section === "workspace");
   const toolItems = navItems.filter((item) => item.section === "tools");
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("paraworks-theme");
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+      document.documentElement.dataset.theme = savedTheme;
+      return;
+    }
+    document.documentElement.dataset.theme = "dark";
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("paraworks-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
   return (
     <div className="min-h-screen text-ink">
@@ -99,6 +119,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="border-t border-white/10 p-3">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="liquid-control mb-3 rounded-[24px] p-1" aria-label={shell.language}>
               <div className="grid grid-cols-2 gap-1">
                 <button
@@ -139,6 +160,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
               <span className="text-sm font-semibold">ParaWorks</span>
             </div>
             <div className="flex items-center gap-2">
+              <ThemeToggle theme={theme} onToggle={toggleTheme} compact />
               <div className="liquid-control flex rounded-2xl p-0.5" aria-label={shell.language}>
                 <button
                   type="button"
@@ -203,6 +225,46 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
 }
 
 type ShellItem = (typeof navItems)[number];
+
+function ThemeToggle({
+  theme,
+  onToggle,
+  compact = false,
+}: {
+  theme: "dark" | "light";
+  onToggle: () => void;
+  compact?: boolean;
+}) {
+  const Icon = theme === "dark" ? Moon : Sun;
+  const nextLabel = theme === "dark" ? "라이트 모드" : "다크 모드";
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="liquid-control grid h-9 w-9 place-items-center rounded-2xl text-[var(--ink-muted)]"
+        aria-label={nextLabel}
+        title={nextLabel}
+      >
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="liquid-control mb-3 flex h-10 w-full items-center justify-between rounded-[24px] px-3 text-xs font-semibold text-white/82"
+      aria-label={nextLabel}
+      title={nextLabel}
+    >
+      <span>{theme === "dark" ? "Dark Glass" : "Light Glass"}</span>
+      <Icon className="h-4 w-4" aria-hidden="true" />
+    </button>
+  );
+}
 
 function ShellLink({
   item,

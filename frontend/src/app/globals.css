@@ -34,6 +34,38 @@
     inset 1px 0 0 rgba(255, 255, 255, 0.42);
 }
 
+[data-theme="dark"] {
+  color-scheme: dark;
+  background: #080b14;
+  --workspace-rail: rgba(5, 8, 18, 0.58);
+  --workspace-rail-soft: rgba(12, 17, 32, 0.58);
+  --workspace-rail-active: #dbe8ff;
+  --workspace-accent: #67ffd6;
+  --workspace-blue: #8fb8ff;
+  --panel: rgba(13, 18, 31, 0.58);
+  --panel-strong: rgba(18, 24, 41, 0.72);
+  --panel-soft: rgba(16, 22, 38, 0.42);
+  --glass-control: rgba(24, 32, 52, 0.34);
+  --glass-control-strong: rgba(44, 58, 88, 0.42);
+  --glass-dark: rgba(6, 9, 19, 0.54);
+  --line-soft: rgba(205, 226, 255, 0.2);
+  --line-strong: rgba(218, 234, 255, 0.34);
+  --ink-strong: #f5f8ff;
+  --ink-muted: #a9b7cc;
+  --glass-shadow:
+    0 20px 54px rgba(0, 0, 0, 0.34),
+    0 2px 10px rgba(140, 185, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 1px 0 0 rgba(255, 255, 255, 0.1);
+  --glass-shadow-strong:
+    0 34px 100px rgba(0, 0, 0, 0.48),
+    0 12px 42px rgba(79, 141, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -51,6 +83,14 @@ body {
     sans-serif;
 }
 
+[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 18% 10%, rgba(103, 255, 214, 0.22), transparent 24rem),
+    radial-gradient(circle at 78% 8%, rgba(143, 184, 255, 0.2), transparent 28rem),
+    radial-gradient(circle at 68% 78%, rgba(190, 142, 255, 0.18), transparent 28rem),
+    linear-gradient(132deg, #080b14, #0d1424 34%, #121827 62%, #08121a);
+}
+
 body::before {
   pointer-events: none;
   content: "";
@@ -61,6 +101,13 @@ body::before {
     conic-gradient(from 222deg at 18% 16%, rgba(94, 231, 195, 0.32), rgba(255, 255, 255, 0.72), rgba(79, 141, 255, 0.3), rgba(246, 196, 255, 0.26), rgba(94, 231, 195, 0.32)),
     linear-gradient(128deg, transparent 5%, rgba(255, 255, 255, 0.84) 32%, transparent 56%, rgba(255, 255, 255, 0.62) 78%, transparent);
   filter: saturate(1.2) contrast(1.02);
+}
+
+[data-theme="dark"] body::before {
+  background:
+    conic-gradient(from 216deg at 15% 13%, rgba(103, 255, 214, 0.22), rgba(255, 255, 255, 0.08), rgba(143, 184, 255, 0.2), rgba(190, 142, 255, 0.14), rgba(103, 255, 214, 0.22)),
+    linear-gradient(128deg, transparent 6%, rgba(255, 255, 255, 0.08) 32%, transparent 55%, rgba(103, 255, 214, 0.08) 76%, transparent);
+  filter: saturate(1.34) contrast(1.08);
 }
 
 body::after {
@@ -78,9 +125,26 @@ body::after {
   mask-image: linear-gradient(to bottom, transparent, black 14%, black 72%, transparent);
 }
 
+[data-theme="dark"] body::after {
+  opacity: 0.38;
+  background-image:
+    linear-gradient(rgba(176, 205, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(176, 205, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(128deg, rgba(103, 255, 214, 0.08) 0 1px, transparent 1px);
+}
+
 button,
 input {
   font: inherit;
+}
+
+.text-ink {
+  color: var(--ink-strong) !important;
+}
+
+.text-muted,
+.text-\[var\(--ink-muted\)\] {
+  color: var(--ink-muted) !important;
 }
 
 button,
@@ -129,6 +193,14 @@ input {
     backdrop-filter: blur(34px) saturate(1.72) contrast(1.03);
   }
 
+  [data-theme="dark"] .liquid-surface {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(18, 27, 45, 0.42) 48%, rgba(255, 255, 255, 0.08)),
+      linear-gradient(305deg, rgba(103, 255, 214, 0.14), transparent 42%, rgba(143, 184, 255, 0.14)),
+      rgba(13, 18, 31, 0.52);
+    border-color: rgba(210, 231, 255, 0.22);
+  }
+
   .liquid-surface::before {
     pointer-events: none;
     content: "";
@@ -139,6 +211,13 @@ input {
       linear-gradient(286deg, transparent 56%, rgba(94, 231, 195, 0.16)),
       linear-gradient(to bottom, rgba(255, 255, 255, 0.5), transparent 36%);
     mix-blend-mode: screen;
+  }
+
+  [data-theme="dark"] .liquid-surface::before {
+    background:
+      linear-gradient(116deg, rgba(255, 255, 255, 0.24), transparent 30%),
+      linear-gradient(286deg, transparent 58%, rgba(103, 255, 214, 0.16)),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.12), transparent 38%);
   }
 
   .liquid-surface::after,
@@ -160,6 +239,20 @@ input {
     opacity: 0.78;
   }
 
+  [data-theme="dark"] .liquid-surface::after,
+  [data-theme="dark"] .liquid-dark::after,
+  [data-theme="dark"] .liquid-control::after,
+  [data-theme="dark"] .liquid-primary::after {
+    box-shadow:
+      inset 0 0 0 1px rgba(230, 244, 255, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      inset 0 -18px 34px rgba(103, 255, 214, 0.06);
+    background:
+      linear-gradient(120deg, rgba(255, 255, 255, 0.24), transparent 26%),
+      linear-gradient(300deg, transparent 64%, rgba(143, 184, 255, 0.14));
+    opacity: 0.86;
+  }
+
   .liquid-dark {
     position: relative;
     overflow: hidden;
@@ -173,6 +266,17 @@ input {
       inset 0 1px 0 rgba(255, 255, 255, 0.28);
     -webkit-backdrop-filter: blur(46px) saturate(1.8) contrast(1.05);
     backdrop-filter: blur(46px) saturate(1.8) contrast(1.05);
+  }
+
+  [data-theme="dark"] .liquid-dark {
+    border-color: rgba(210, 231, 255, 0.2);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(7, 10, 21, 0.48) 52%, rgba(103, 255, 214, 0.08)),
+      rgba(6, 9, 19, 0.58);
+    box-shadow:
+      30px 0 90px rgba(0, 0, 0, 0.44),
+      0 12px 40px rgba(103, 255, 214, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
 
   .liquid-control {
@@ -189,6 +293,18 @@ input {
       inset 0 1px 0 rgba(255, 255, 255, 0.82);
     -webkit-backdrop-filter: blur(30px) saturate(1.72) contrast(1.02);
     backdrop-filter: blur(30px) saturate(1.72) contrast(1.02);
+  }
+
+  [data-theme="dark"] .liquid-control {
+    border-color: rgba(214, 234, 255, 0.22);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(18, 26, 43, 0.34) 54%, rgba(255, 255, 255, 0.08)),
+      linear-gradient(300deg, rgba(103, 255, 214, 0.12), transparent 44%, rgba(143, 184, 255, 0.12)),
+      rgba(20, 28, 47, 0.34);
+    box-shadow:
+      0 14px 36px rgba(0, 0, 0, 0.22),
+      0 2px 8px rgba(143, 184, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
 
   .liquid-primary {
@@ -208,6 +324,26 @@ input {
     backdrop-filter: blur(22px) saturate(1.55);
   }
 
+  [data-theme="dark"] .liquid-primary {
+    color: #061315;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.48), transparent 28%),
+      linear-gradient(132deg, rgba(103, 255, 214, 0.98), rgba(143, 184, 255, 0.82) 58%, rgba(190, 142, 255, 0.7)),
+      rgba(103, 255, 214, 0.92);
+    box-shadow:
+      0 18px 44px rgba(103, 255, 214, 0.18),
+      0 8px 20px rgba(143, 184, 255, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  }
+
+  .liquid-surface > *,
+  .liquid-dark > *,
+  .liquid-control > *,
+  .liquid-primary > * {
+    position: relative;
+    z-index: 1;
+  }
+
   .bg-white {
     background-color: var(--panel) !important;
     background-image:
@@ -217,11 +353,65 @@ input {
     backdrop-filter: blur(28px) saturate(1.5) contrast(1.02);
   }
 
+  [data-theme="dark"] .bg-white {
+    background-color: var(--panel) !important;
+    background-image:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(15, 23, 42, 0.42)),
+      linear-gradient(300deg, rgba(103, 255, 214, 0.1), transparent 44%, rgba(143, 184, 255, 0.1)) !important;
+    border-color: rgba(210, 231, 255, 0.18) !important;
+  }
+
   .bg-\[\#fbfaf8\] {
     background-color: var(--panel-soft) !important;
     background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.16)) !important;
     -webkit-backdrop-filter: blur(24px) saturate(1.36);
     backdrop-filter: blur(24px) saturate(1.36);
+  }
+
+  [data-theme="dark"] .bg-\[\#fbfaf8\] {
+    background-color: var(--panel-soft) !important;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(15, 23, 42, 0.32)) !important;
+  }
+
+  [data-theme="dark"] .bg-\[\#fbf8fd\],
+  [data-theme="dark"] .bg-\[\#f4f8f6\],
+  [data-theme="dark"] .bg-\[\#ecfbf6\],
+  [data-theme="dark"] .bg-\[\#fff7ed\],
+  [data-theme="dark"] .bg-blue-50,
+  [data-theme="dark"] .bg-blue-50\/70,
+  [data-theme="dark"] .bg-emerald-50,
+  [data-theme="dark"] .bg-red-50,
+  [data-theme="dark"] .bg-amber-50,
+  [data-theme="dark"] .bg-neutral-50 {
+    background-color: rgba(17, 25, 42, 0.56) !important;
+    background-image:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(15, 23, 42, 0.32)),
+      linear-gradient(305deg, rgba(103, 255, 214, 0.08), transparent 42%, rgba(143, 184, 255, 0.08)) !important;
+    border-color: rgba(210, 231, 255, 0.18) !important;
+    -webkit-backdrop-filter: blur(26px) saturate(1.42);
+    backdrop-filter: blur(26px) saturate(1.42);
+  }
+
+  [data-theme="dark"] .text-\[\#611f69\],
+  [data-theme="dark"] .text-\[\#21132b\],
+  [data-theme="dark"] .text-\[\#22513f\],
+  [data-theme="dark"] .text-\[\#0f6f58\],
+  [data-theme="dark"] .text-\[\#9a3412\],
+  [data-theme="dark"] .text-blue-700,
+  [data-theme="dark"] .text-blue-900,
+  [data-theme="dark"] .text-emerald-700,
+  [data-theme="dark"] .text-emerald-800,
+  [data-theme="dark"] .text-emerald-900,
+  [data-theme="dark"] .text-red-800,
+  [data-theme="dark"] .text-red-900,
+  [data-theme="dark"] .text-amber-900,
+  [data-theme="dark"] .text-neutral-800 {
+    color: #dce8ff !important;
+  }
+
+  [data-theme="dark"] .border-\[\#611f69\],
+  [data-theme="dark"] .border-\[\#e8deef\] {
+    border-color: rgba(220, 232, 255, 0.24) !important;
   }
 
   .shadow-sm {
