@@ -57,6 +57,45 @@ test("theme toggle switches between dark and light glass modes", async ({ page }
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("shell chrome uses distinct theme tokens across viewport modes", async ({ page }, testInfo) => {
+  const isMobile = testInfo.project.name.includes("mobile");
+  const shellSelector = isMobile ? "header.md\\:hidden .liquid-surface" : "aside.shell-rail";
+
+  await page.addInitScript((theme) => window.localStorage.setItem("paraworks-theme", theme), "dark");
+  await page.goto("/integrations");
+
+  const darkStyle = await page.locator(shellSelector).evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      color: style.color,
+      backgroundColor: style.backgroundColor,
+      borderColor: style.borderColor,
+    };
+  });
+
+  await page.getByRole("button", { name: "라이트 모드" }).click();
+
+  const lightStyle = await page.locator(shellSelector).evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      color: style.color,
+      backgroundColor: style.backgroundColor,
+      borderColor: style.borderColor,
+    };
+  });
+
+  expect(lightStyle.color).not.toBe(darkStyle.color);
+  expect(lightStyle.backgroundColor).not.toBe(darkStyle.backgroundColor);
+  expect(lightStyle.borderColor).not.toBe(darkStyle.borderColor);
+
+  if (!isMobile) {
+    const inactiveLinkColor = await page.locator("aside nav a:not(.liquid-segment-active)").first().evaluate((element) => {
+      return window.getComputedStyle(element).color;
+    });
+    expect(inactiveLinkColor).not.toBe("rgba(255, 255, 255, 0.7)");
+  }
+});
+
 test("integration sync shows connector counts", async ({ page }) => {
   await page.goto("/integrations");
   await page.getByRole("button", { name: "동기화" }).first().click();

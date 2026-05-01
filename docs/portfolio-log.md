@@ -2299,6 +2299,30 @@ Verification evidence:
   passed with 15/15 tests.
 - `npm run build` passed.
 
+## 2026-05-02 - Cross-Viewport Theme Token Audit
+
+Implemented scope:
+
+- Compared `/integrations` across desktop/mobile and dark/light modes with
+  Playwright computed-style checks.
+- Replaced desktop shell hard-coded `text-white/*`, `border-white/*`, and
+  white hover states with `--shell-*` theme tokens.
+- Added a `shell-rail` glass material so the desktop sidebar becomes a light
+  frosted rail in light mode and gray-purple glass in dark mode.
+- Aligned mobile language hover states with `--glass-control-strong` instead
+  of hard-coded white opacity.
+- Added a Playwright regression test that verifies shell chrome changes
+  tokens across desktop and mobile theme modes.
+
+Verification evidence:
+
+- Playwright computed-style audit confirmed desktop sidebar changes from
+  dark `rgba(18, 17, 21, 0.62)` to light `rgba(255, 255, 255, 0.54)`.
+- `npx eslint src/components/layout/AppShell.tsx e2e/visual-smoke.spec.ts` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 32/32 tests.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2360,3 +2384,4 @@ Verification evidence:
 - `style: tune dark glass gray purple palette`
 - `style: refine dark glass consistency`
 - `style: unify integration runtime glass`
+- `style: tokenize shell theme chrome`

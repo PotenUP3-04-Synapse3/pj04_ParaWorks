@@ -63,22 +63,22 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen text-ink">
-      <aside className="liquid-dark fixed inset-y-4 left-4 hidden w-[276px] rounded-[34px] text-white md:block">
+      <aside className="shell-rail fixed inset-y-4 left-4 hidden w-[276px] rounded-[34px] md:block">
         <div className="flex h-full flex-col">
-          <div className="border-b border-white/[0.12] px-4 py-4">
+          <div className="border-b border-[var(--shell-border)] px-4 py-4">
             <div className="flex items-center gap-3">
               <div className="liquid-primary grid h-11 w-11 place-items-center rounded-[22px] text-base font-black">
                 P
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">ParaWorks</p>
-                <p className="truncate text-xs text-white/58">{shell.subtitle}</p>
+                <p className="truncate text-xs text-[var(--shell-faint)]">{shell.subtitle}</p>
               </div>
             </div>
           </div>
 
           <div className="px-3 py-3">
-            <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-sm text-white/82">
+            <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-sm text-[var(--shell-muted)]">
               <Search className="h-4 w-4" aria-hidden="true" />
               <span className="truncate">검색, 에이전트 실행, 문서 찾기</span>
             </div>
@@ -86,7 +86,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
 
           <nav className="flex-1 overflow-y-auto px-2 pb-4">
             <div className="mb-5">
-              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-white/42">
+              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-label)]">
                 Home
               </p>
               <div className="space-y-1">
@@ -97,7 +97,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="mb-5">
-              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-white/42">
+              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--shell-label)]">
                 Tools
               </p>
               <div className="space-y-1">
@@ -107,18 +107,18 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <div className="liquid-control mx-2 rounded-[24px] p-3 text-white">
+            <div className="liquid-control mx-2 rounded-[24px] p-3 text-[var(--shell-ink)]">
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
                 <span className="text-sm font-semibold">Agent Inbox</span>
               </div>
-              <p className="mt-2 text-xs leading-5 text-white/58">
+              <p className="mt-2 text-xs leading-5 text-[var(--shell-faint)]">
                 Slack Agent, Review, RAG 연결을 위한 작업대가 준비 중입니다.
               </p>
             </div>
           </nav>
 
-          <div className="border-t border-white/10 p-3">
+          <div className="border-t border-[var(--shell-border)] p-3">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="liquid-control mb-3 rounded-[24px] p-1" aria-label={shell.language}>
               <div className="grid grid-cols-2 gap-1">
@@ -126,7 +126,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("ko")}
                   className={`h-8 rounded-md text-xs font-semibold ${
-                    locale === "ko" ? "liquid-segment-active" : "text-white/62 hover:bg-white/10"
+                    locale === "ko" ? "liquid-segment-active" : "text-[var(--shell-muted)] hover:bg-[var(--shell-hover)]"
                   }`}
                 >
                   KO
@@ -135,14 +135,14 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("en")}
                   className={`h-8 rounded-md text-xs font-semibold ${
-                    locale === "en" ? "liquid-segment-active" : "text-white/62 hover:bg-white/10"
+                    locale === "en" ? "liquid-segment-active" : "text-[var(--shell-muted)] hover:bg-[var(--shell-hover)]"
                   }`}
                 >
                   EN
                 </button>
               </div>
             </div>
-            <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-xs text-white/72">
+            <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-xs text-[var(--shell-muted)]">
               <span className="h-2 w-2 rounded-full bg-[var(--workspace-accent)]" />
               MVP smoke workspace
             </div>
@@ -166,7 +166,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("ko")}
                   className={`h-8 rounded-md px-2 text-xs font-medium ${
-                    locale === "ko" ? "liquid-segment-active" : "text-muted hover:bg-white/10"
+                    locale === "ko" ? "liquid-segment-active" : "text-muted hover:bg-[var(--glass-control-strong)]"
                   }`}
                 >
                   KO
@@ -175,7 +175,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setLocale("en")}
                   className={`h-8 rounded-md px-2 text-xs font-medium ${
-                    locale === "en" ? "liquid-segment-active" : "text-muted hover:bg-white/10"
+                    locale === "en" ? "liquid-segment-active" : "text-muted hover:bg-[var(--glass-control-strong)]"
                   }`}
                 >
                   EN
@@ -256,7 +256,7 @@ function ThemeToggle({
     <button
       type="button"
       onClick={onToggle}
-      className="liquid-control mb-3 flex h-10 w-full items-center justify-between rounded-[24px] px-3 text-xs font-semibold text-white/82"
+      className="liquid-control mb-3 flex h-10 w-full items-center justify-between rounded-[24px] px-3 text-xs font-semibold text-[var(--shell-muted)]"
       aria-label={nextLabel}
       title={nextLabel}
     >
@@ -282,7 +282,7 @@ function ShellLink({
       className={`flex h-10 items-center gap-3 rounded-[20px] px-3 text-sm font-medium transition ${
         active
           ? "liquid-segment-active"
-          : "text-white/70 hover:bg-white/10 hover:text-white"
+          : "text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-ink)]"
       }`}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
