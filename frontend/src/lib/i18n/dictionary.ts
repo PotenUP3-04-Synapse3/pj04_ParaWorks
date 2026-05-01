@@ -14,6 +14,9 @@ export const dictionaries = {
       language: "언어",
       korean: "한국어",
       english: "English",
+      searchLabel: "회사 메모리 검색",
+      sidebarSearchPlaceholder: "검색, 에이전트 실행, 문서 찾기",
+      topSearchPlaceholder: "메시지, 검토 항목, 사내 문서를 검색하거나 AI 에이전트에게 질문",
     },
     messages: {
       eyebrow: "팀 메신저",
@@ -46,6 +49,9 @@ export const dictionaries = {
       language: "Language",
       korean: "한국어",
       english: "English",
+      searchLabel: "Search company memory",
+      sidebarSearchPlaceholder: "Search agents, runs, and documents",
+      topSearchPlaceholder: "Search messages, review items, documents, or ask an AI agent",
     },
     messages: {
       eyebrow: "Team messenger",

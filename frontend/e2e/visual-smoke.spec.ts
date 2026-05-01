@@ -57,6 +57,28 @@ test("theme toggle switches between dark and light glass modes", async ({ page }
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("sidebar search submits to the company memory search page", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop sidebar search is hidden on mobile");
+
+  await page.goto("/integrations");
+  await page.getByTestId("sidebar-global-search-input").fill("Redis queue state");
+  await page.getByTestId("sidebar-global-search-input").press("Enter");
+
+  await expect(page).toHaveURL(/\/search\?q=Redis\+queue\+state/);
+  await expect(page.locator("#query")).toHaveValue("Redis queue state");
+});
+
+test("top search submits to the company memory search page", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop top search is hidden on mobile");
+
+  await page.goto("/dashboard");
+  await page.getByTestId("top-global-search-input").fill("PostgreSQL durable record");
+  await page.getByTestId("top-global-search-input").press("Enter");
+
+  await expect(page).toHaveURL(/\/search\?q=PostgreSQL\+durable\+record/);
+  await expect(page.locator("#query")).toHaveValue("PostgreSQL durable record");
+});
+
 test("shell chrome uses distinct theme tokens across viewport modes", async ({ page }, testInfo) => {
   const isMobile = testInfo.project.name.includes("mobile");
   const shellSelector = isMobile ? "header.md\\:hidden .liquid-surface" : "aside.shell-rail";

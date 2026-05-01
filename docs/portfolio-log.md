@@ -2429,6 +2429,38 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
   passed with 32/32 tests after adding the fallback.
 
+### Global Search Bar Activation
+
+- Converted the desktop sidebar search and floating top search from static
+  glass UI into real search forms.
+- Both search bars now submit to `/search?q=...`, preserving the Liquid Glass
+  visual treatment while making the controls keyboard-friendly.
+- Updated the Company Memory search page to read the `q` URL parameter, hydrate
+  the input with that query, and immediately run the existing RAG/search flow.
+- Added Korean and English placeholders to the shell dictionary so both locales
+  show natural search copy.
+
+Portfolio angle:
+
+- Turns visible UX affordances into working product paths without adding a new
+  backend surface.
+- Demonstrates integration between shell navigation, URL-driven state, and the
+  existing RAG/search agent flow.
+
+Verification evidence:
+
+- Added Playwright tests first for sidebar and top search submission.
+- Confirmed both new tests failed before implementation because the inputs did
+  not exist.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop -g "search submits"`
+  passed with 2/2 tests.
+- `npx eslint src/components/layout/AppShell.tsx src/app/search/page.tsx src/lib/i18n/dictionary.ts e2e/visual-smoke.spec.ts`
+  passed.
+- `npm run build` passed after wrapping `useSearchParams` usage in a Suspense
+  boundary.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile`
+  passed with 34/34 executed tests and 2 expected mobile skips.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2495,3 +2527,4 @@ Verification evidence:
 - `style: soften light purple palette`
 - `feat: add agent cost budget guardrails`
 - `feat: expose agent budget observability`
+- `feat: activate global search bars`

@@ -12,7 +12,8 @@ import {
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api/client";
 import type {
   AskResponse,
@@ -24,7 +25,17 @@ import type {
 const DEFAULT_QUESTION = "Redis 작업 상태는 어떻게 관리되고 있나요?";
 
 export default function SearchPage() {
-  const [query, setQuery] = useState(DEFAULT_QUESTION);
+  return (
+    <Suspense fallback={<SearchPageFallback />}>
+      <SearchPageContent />
+    </Suspense>
+  );
+}
+
+function SearchPageContent() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q")?.trim() || DEFAULT_QUESTION;
+  const [query, setQuery] = useState(initialQuery);
   const [searchResponse, setSearchResponse] = useState<SearchResponse>();
   const [askResponse, setAskResponse] = useState<AskResponse>();
   const [ragIndexing, setRagIndexing] = useState<RagIndexingSummaryResponse>();
@@ -60,8 +71,9 @@ export default function SearchPage() {
   }
 
   useEffect(() => {
-    void runMemoryQuery(DEFAULT_QUESTION);
-  }, [runMemoryQuery]);
+    setQuery(initialQuery);
+    void runMemoryQuery(initialQuery);
+  }, [initialQuery, runMemoryQuery]);
 
   useEffect(() => {
     let active = true;
@@ -261,6 +273,14 @@ export default function SearchPage() {
           ) : null}
         </section>
       </section>
+    </div>
+  );
+}
+
+function SearchPageFallback() {
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-white p-8 text-sm text-[var(--ink-muted)]">
+      검색 화면을 준비하고 있습니다.
     </div>
   );
 }
