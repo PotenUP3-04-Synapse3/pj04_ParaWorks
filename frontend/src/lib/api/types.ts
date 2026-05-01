@@ -61,3 +61,28 @@ export type IntegrationSyncResponse = {
   status: string;
   created_review_items: number;
 };
+
+export type MessageChannel = {
+  id: string;
+  name: string;
+  description: string;
+  unread_count: number;
+};
+
+export type Message = {
+  id: string;
+  channel_id: string;
+  author_name: string;
+  author_role: string;
+  body: string;
+  created_at: string;
+};
+
+export type MessageChannelsResponse = {
+  channels: MessageChannel[];
+};
+
+export type ChannelMessagesResponse = {
+  channel: MessageChannel;
+  messages: Message[];
+};

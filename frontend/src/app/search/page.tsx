@@ -19,7 +19,7 @@ export default function SearchPage() {
       const result = await apiPost<SearchResponse>("/api/v1/search", { query: nextQuery }, "viewer");
       setResponse(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Search failed");
+      setError(caught instanceof Error ? caught.message : "검색에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -37,13 +37,13 @@ export default function SearchPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-muted">Viewer permissions</p>
-        <h2 className="mt-1 text-2xl font-semibold tracking-normal">Search</h2>
+        <p className="text-sm font-medium text-muted">뷰어 권한</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-normal">검색</h2>
       </div>
 
       <form onSubmit={submit} className="rounded-md border border-line bg-white p-4">
         <label htmlFor="query" className="text-sm font-medium">
-          Query
+          검색어
         </label>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <input
@@ -51,7 +51,7 @@ export default function SearchPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="h-10 min-w-0 flex-1 rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-neutral-500"
-            placeholder="Search indexed source content"
+            placeholder="색인된 출처 내용을 검색하세요"
           />
           <button
             type="submit"
@@ -59,7 +59,7 @@ export default function SearchPage() {
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-line bg-neutral-900 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
           >
             <Search className="h-4 w-4" aria-hidden="true" />
-            {loading ? "Searching" : "Search"}
+            {loading ? "검색 중" : "검색"}
           </button>
         </div>
       </form>
@@ -93,14 +93,14 @@ export default function SearchPage() {
                 rel="noreferrer"
                 className="mt-3 inline-block text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
               >
-                Open source
+                원문 열기
               </a>
             ) : null}
           </article>
         ))}
         {response && response.results.length === 0 ? (
           <div className="rounded-md border border-line bg-white p-8 text-sm text-muted">
-            No visible results matched the query.
+            볼 수 있는 검색 결과가 없습니다.
           </div>
         ) : null}
       </section>

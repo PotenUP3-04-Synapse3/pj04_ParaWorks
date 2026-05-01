@@ -25,12 +25,12 @@ function summaryKey(item: ReviewItem) {
   if (typeof item.payload.priority_reason === "string") {
     return "priority_reason";
   }
-  return "summary";
+    return "summary";
 }
 
 function itemSummary(item: ReviewItem) {
   const summary = stringField(item.payload[summaryKey(item)]);
-  return summary || "No summary was returned.";
+  return summary || "요약이 반환되지 않았습니다.";
 }
 
 export default function ReviewPage() {
@@ -50,7 +50,7 @@ export default function ReviewPage() {
       const review = await apiGet<ReviewResponse>("/api/v1/review?status=pending_review");
       setItems(review.items);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load review items");
+      setError(caught instanceof Error ? caught.message : "검토 항목을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -76,7 +76,7 @@ export default function ReviewPage() {
       const updated = await apiPost<ReviewItem>(`/api/v1/review/${item.id}/${action}`);
       setItems((current) => current.filter((candidate) => candidate.id !== updated.id));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Review action failed");
+      setError(caught instanceof Error ? caught.message : "검토 작업에 실패했습니다.");
     } finally {
       setPendingAction(undefined);
     }
@@ -102,7 +102,7 @@ export default function ReviewPage() {
       );
       setEditingId(undefined);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Review update failed");
+      setError(caught instanceof Error ? caught.message : "검토 항목 수정에 실패했습니다.");
     } finally {
       setPendingAction(undefined);
     }
@@ -112,8 +112,8 @@ export default function ReviewPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted">Pending approval</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">Review Queue</h2>
+          <p className="text-sm font-medium text-muted">승인 대기</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-normal">검토 큐</h2>
         </div>
         <button
           type="button"
@@ -122,7 +122,7 @@ export default function ReviewPage() {
           className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
         >
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Refresh
+          새로고침
         </button>
       </div>
 
@@ -152,7 +152,7 @@ export default function ReviewPage() {
                   {isEditing ? (
                     <div className="mt-3 max-w-3xl space-y-3">
                       <label className="block text-sm font-medium">
-                        Title
+                        제목
                         <input
                           value={editTitle}
                           onChange={(event) => setEditTitle(event.target.value)}
@@ -160,7 +160,7 @@ export default function ReviewPage() {
                         />
                       </label>
                       <label className="block text-sm font-medium">
-                        Summary
+                        요약
                         <textarea
                           value={editSummary}
                           onChange={(event) => setEditSummary(event.target.value)}
@@ -181,7 +181,7 @@ export default function ReviewPage() {
 
                 <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:items-start">
                   <div className="w-28">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Confidence</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">신뢰도</p>
                     <p className="mt-1 text-lg font-semibold">
                       {Math.round(item.confidence_score * 100)}%
                     </p>
@@ -200,7 +200,7 @@ export default function ReviewPage() {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-neutral-900 bg-neutral-900 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
                     >
                       <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                      {editPending ? "Saving" : "Save edit"}
+                      {editPending ? "저장 중" : "수정 저장"}
                     </button>
                     <button
                       type="button"
@@ -209,7 +209,7 @@ export default function ReviewPage() {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
-                      Cancel
+                      취소
                     </button>
                   </>
                 ) : (
@@ -221,7 +221,7 @@ export default function ReviewPage() {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-neutral-900 bg-neutral-900 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
                     >
                       <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                      Approve
+                      승인
                     </button>
                     <button
                       type="button"
@@ -230,7 +230,7 @@ export default function ReviewPage() {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
-                      Reject
+                      반려
                     </button>
                     <button
                       type="button"
@@ -239,7 +239,7 @@ export default function ReviewPage() {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
                     >
                       <Pencil className="h-4 w-4" aria-hidden="true" />
-                      Edit
+                      수정
                     </button>
                     <button
                       type="button"
@@ -248,7 +248,7 @@ export default function ReviewPage() {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-muted"
                     >
                       <FileSearch className="h-4 w-4" aria-hidden="true" />
-                      Request more evidence
+                      근거 추가 요청
                     </button>
                   </>
                 )}
@@ -259,12 +259,12 @@ export default function ReviewPage() {
 
         {!loading && items.length === 0 ? (
           <div className="rounded-md border border-line bg-white p-8 text-sm text-muted">
-            No pending review items were returned.
+            대기 중인 검토 항목이 없습니다.
           </div>
         ) : null}
         {loading ? (
           <div className="rounded-md border border-line bg-white p-8 text-sm text-muted">
-            Loading review items.
+            검토 항목을 불러오는 중입니다.
           </div>
         ) : null}
       </section>

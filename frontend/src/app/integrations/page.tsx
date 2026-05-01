@@ -29,7 +29,7 @@ export default function IntegrationsPage() {
       setSyncResult(result);
       setActiveJobId(result.job_id);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sync failed");
+        setError(caught instanceof Error ? caught.message : "동기화에 실패했습니다.");
     } finally {
       setPendingType(undefined);
     }
@@ -38,8 +38,8 @@ export default function IntegrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-muted">Mock connectors</p>
-        <h2 className="mt-1 text-2xl font-semibold tracking-normal">Integrations</h2>
+        <p className="text-sm font-medium text-muted">Mock 커넥터</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-normal">연동</h2>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -55,7 +55,7 @@ export default function IntegrationsPage() {
                   </span>
                   <div>
                     <h3 className="text-sm font-semibold">{integration.label}</h3>
-                    <p className="text-xs text-muted">mock ready</p>
+                    <p className="text-xs text-muted">mock 준비됨</p>
                   </div>
                 </div>
               </div>
@@ -66,7 +66,7 @@ export default function IntegrationsPage() {
                 className="mt-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-line bg-neutral-900 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
-                {pending ? "Syncing" : "Sync"}
+                {pending ? "동기화 중" : "동기화"}
               </button>
             </div>
           );
@@ -74,27 +74,27 @@ export default function IntegrationsPage() {
       </section>
 
       <section className="rounded-md border border-line bg-white p-4">
-        <h3 className="text-sm font-semibold">Job Status</h3>
+        <h3 className="text-sm font-semibold">작업 상태</h3>
         <div className="mt-3 min-h-24 rounded-md border border-line bg-neutral-50 p-3">
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
           {syncResult ? (
             <div className="space-y-2 text-sm">
               <p>
-                <span className="font-medium">Job:</span> {syncResult.job_id}
+                <span className="font-medium">작업:</span> {syncResult.job_id}
               </p>
               <p>
-                <span className="font-medium">Connector:</span> {syncResult.connector_type}
+                <span className="font-medium">커넥터:</span> {syncResult.connector_type}
               </p>
               <p>
-                <span className="font-medium">Created review items:</span>{" "}
+                <span className="font-medium">생성된 검토 항목:</span>{" "}
                 {syncResult.created_review_items}
               </p>
               <p>
-                <span className="font-medium">Stream:</span> {jobStatus || syncResult.status}
+                <span className="font-medium">스트림:</span> {jobStatus || syncResult.status}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-muted">Run a sync to watch the job stream.</p>
+            <p className="text-sm text-muted">동기화를 실행하면 작업 스트림을 볼 수 있습니다.</p>
           )}
         </div>
       </section>
