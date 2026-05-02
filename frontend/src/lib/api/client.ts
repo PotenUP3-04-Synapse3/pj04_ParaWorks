@@ -37,6 +37,7 @@ export async function apiGet<T>(path: string, demoUser?: string): Promise<T> {
     headers: {
       "X-Demo-User": demoUserHeader(demoUser),
     },
+    credentials: "include",
     cache: "no-store",
   });
 
@@ -55,6 +56,7 @@ export async function apiPost<T>(
       "X-Demo-User": demoUserHeader(demoUser),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    credentials: "include",
     cache: "no-store",
   });
 
@@ -73,6 +75,7 @@ export async function apiPatch<T>(
       "X-Demo-User": demoUserHeader(demoUser),
     },
     body: JSON.stringify(body),
+    credentials: "include",
     cache: "no-store",
   });
 

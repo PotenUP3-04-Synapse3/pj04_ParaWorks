@@ -1,5 +1,6 @@
 from backend.app.models.agent_runs import AgentRun
 from backend.app.models.audit import AuditLog
+from backend.app.models.auth import AuthUser, RefreshToken
 from backend.app.models.integrations import IntegrationConnection
 from backend.app.models.jobs import SyncJob
 from backend.app.models.knowledge import (
@@ -17,6 +18,8 @@ __all__ = [
     'SyncJob',
     'AgentRun',
     'AuditLog',
+    'AuthUser',
+    'RefreshToken',
     'IntegrationConnection',
     'DecisionRecord',
     'HistoryEvent',

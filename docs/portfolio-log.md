@@ -3471,6 +3471,52 @@ Cost/security note:
   Restricted memory nodes keep their restricted permission label, and shared
   evidence nodes use the strictest connected permission level.
 
+## Production Auth Cookie Slice
+
+What changed:
+
+- Added persistent `auth_users` and `refresh_tokens` models.
+- `POST /api/v1/auth/login` now issues httpOnly `paraworks_session` and
+  `paraworks_refresh` cookies while preserving demo account selection.
+- `GET /api/v1/auth/me` now prefers the signed session cookie over
+  `X-Demo-User`; demo headers remain available only as a fallback in demo mode.
+- Added `POST /api/v1/auth/refresh` with refresh-token rotation and
+  `POST /api/v1/auth/logout` with refresh family revocation and cookie clearing.
+- Frontend API calls now include credentials so cookie-authenticated requests
+  work through the Next.js API rewrite.
+
+Portfolio angle:
+
+- Shows the migration path from a demo harness to production-style auth without
+  breaking the MVP flow.
+- Demonstrates security-conscious incremental delivery: httpOnly cookies,
+  hashed refresh tokens, rotation, revocation, and fail-closed production mode.
+
+Cost/security note:
+
+- Auth is a cheap database/session lookup path. It does not call LLMs,
+  embeddings, connector sync, RAG retrieval, or reindex jobs.
+
+## Portfolio Demo Script
+
+What changed:
+
+- Added `docs/superpowers/runbooks/portfolio-demo-script.md`.
+- The script walks through login, integrations, AgentRun observability, Review
+  Queue evidence inspection, approved knowledge pages, Knowledge Map, and
+  permission-aware RAG.
+- Added explicit cost and security talking points for portfolio recording.
+
+Portfolio angle:
+
+- Turns the implementation into a coherent story: evidence-first AI, human
+  review, company memory, permission safety, and cost-aware orchestration.
+
+Cost/security note:
+
+- The script instructs future demos to keep live provider calls behind
+  preflight and explicit confirmation, and to avoid exposing secrets.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3630,3 +3676,7 @@ Cost/security note:
   - Added derived Review Queue and AgentRun notifications with a product page and route regression coverage.
 - `feat: add knowledge map`
   - Added a zero-paid-call approved-memory graph endpoint and `/knowledge-map` product page.
+- `feat: add cookie auth session slice`
+  - Added httpOnly session/refresh cookies, refresh rotation, logout revoke, and frontend credentialed fetches.
+- `docs: add portfolio demo script`
+  - Added a recording-ready product walkthrough with cost and security talking points.

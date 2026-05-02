@@ -592,6 +592,52 @@ Next recommended step from `plan.md`:
 2. Production auth implementation from `docs/superpowers/runbooks/production-auth.md`.
 3. Final demo script and portfolio evidence capture.
 
+## 2026-05-03 Production Auth Cookie Slice
+
+Aligned with the current root `plan.md` Milestone 8.
+
+- Added `AuthUser` and `RefreshToken` models.
+- Login now upserts the selected demo account into `auth_users`, stores only a
+  hashed refresh token, and sets httpOnly `paraworks_session` and
+  `paraworks_refresh` cookies.
+- `/api/v1/auth/me` now prefers the signed session cookie over `X-Demo-User`.
+- Demo mode still falls back to `X-Demo-User`; production mode rejects requests
+  without a valid session cookie.
+- Added `/api/v1/auth/refresh` for refresh-token rotation and
+  `/api/v1/auth/logout` for refresh-family revocation and cookie clearing.
+- Frontend `apiGet`, `apiPost`, and `apiPatch` now send
+  `credentials: "include"`.
+
+Cost note:
+
+- Auth remains isolated from paid model, embedding, sync, and reindex paths.
+
+Next recommended step from `plan.md`:
+
+1. Continue frontend global consistency polish where pages still use legacy
+   fixed-color alert/card classes.
+2. Run final screenshot capture for the portfolio case study.
+3. Add Alembic migrations, CSRF, and rate limiting if moving auth closer to
+   production deployment.
+
+## 2026-05-03 Portfolio Demo Script Update
+
+Aligned with the current root `plan.md` Milestone 8.
+
+- Added `docs/superpowers/runbooks/portfolio-demo-script.md`.
+- The script covers login, integrations, AgentRun observability, Review Queue,
+  approved knowledge pages, Knowledge Map, permission-aware RAG, and final
+  portfolio close.
+- It includes cost and security language for recording or presenting the
+  project.
+
+Next recommended step from `plan.md`:
+
+1. Capture final portfolio screenshots or short clips.
+2. Add production hardening details that remain outside the current harness:
+   Alembic migrations, CSRF, rate limiting, and real identity verification.
+3. Keep whole-app Playwright regression green after any frontend polish.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

@@ -113,7 +113,7 @@ export default async function KnowledgePage() {
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-base font-semibold">최근 승인된 메모리</h3>
           <Link href="/review" className="text-xs font-semibold text-[var(--workspace-accent)] hover:underline">
-            검토 큐 보기
+            검토함 보기
           </Link>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">

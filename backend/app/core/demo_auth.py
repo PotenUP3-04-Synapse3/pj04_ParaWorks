@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy.orm import Session
+
+from backend.app.core.config import get_settings
+from backend.app.core.session_auth import authenticate_session_cookie, serialize_auth_user
+from backend.app.db.session import get_db
 
 
 @dataclass(frozen=True)
@@ -54,7 +59,17 @@ USERS = {
 }
 
 
-def get_demo_user(x_demo_user: str = Header(default='admin')) -> DemoUser:
+def get_demo_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_demo_user: str = Header(default='admin'),
+) -> DemoUser:
+    settings = get_settings()
+    session_user = authenticate_session_cookie(request.cookies.get(settings.auth_session_cookie_name), db, settings)
+    if session_user is not None:
+        return demo_user_from_serialized(serialize_auth_user(session_user))
+    if not settings.paraworks_demo_mode:
+        raise HTTPException(status_code=401, detail='Authentication required.')
     return find_demo_user(x_demo_user) or USERS['viewer']
 
 
@@ -91,6 +106,18 @@ def serialize_demo_user(user: DemoUser) -> dict:
         'title': user.title,
         'department': user.department,
     }
+
+
+def demo_user_from_serialized(payload: dict) -> DemoUser:
+    return DemoUser(
+        id=payload['id'],
+        email=payload['email'],
+        role=payload['role'],
+        permission_levels=set(payload['permission_levels']),
+        name=payload['name'],
+        title=payload['title'],
+        department=payload['department'],
+    )
 
 
 def list_demo_users() -> list[dict]:

@@ -4,7 +4,7 @@ Updated: 2026-05-02
 
 ## Current State
 
-ParaWorks currently uses demo authentication:
+ParaWorks previously used only demo authentication:
 
 - Frontend stores the selected demo user id in localStorage.
 - API requests send `X-Demo-User`.
@@ -12,6 +12,25 @@ ParaWorks currently uses demo authentication:
 - Admin and employee permissions are already modeled at the demo-user level.
 
 This is useful for MVP demos, but it must not be used as production auth.
+
+Implementation status as of 2026-05-03:
+
+- Persistent `auth_users` and `refresh_tokens` tables exist.
+- Login issues httpOnly session and refresh cookies.
+- Refresh tokens are hashed at rest and rotated on `/api/v1/auth/refresh`.
+- Logout revokes the refresh-token family and clears cookies.
+- Cookie sessions are preferred over `X-Demo-User`.
+- `X-Demo-User` remains available only as a demo-mode fallback.
+- Production mode rejects missing/invalid session cookies.
+
+Still remaining:
+
+- Password/OAuth identity verification beyond demo account selection.
+- Alembic migration files for production databases.
+- CSRF protection for cookie-authenticated unsafe methods.
+- Rate limiting for login/refresh.
+- Admin role-management UI backed by production auth tables.
+- Playwright auth redirect/logout scenarios.
 
 ## Target Architecture
 

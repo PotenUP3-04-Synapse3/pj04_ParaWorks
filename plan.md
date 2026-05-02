@@ -286,6 +286,12 @@ Completed harness slices include:
   new paid model or embedding paths
 - Knowledge Map now visualizes approved company memory records and their source
   evidence links through a read-only, zero-paid-call graph endpoint and page
+- Production auth implementation has started with persistent auth users,
+  hashed refresh-token records, httpOnly session/refresh cookies, refresh
+  rotation, logout revocation, and demo-mode header fallback
+- Portfolio demo script now covers login, integrations, agent runs, Review
+  Queue, approved knowledge, Knowledge Map, permission-aware RAG, cost controls,
+  and security talking points
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -398,11 +404,12 @@ Recommended order:
 
 1. Frontend global consistency and final Liquid Glass polish across all pages.
 2. Production auth implementation based on the documented httpOnly cookie and
-   refresh-token plan.
+   refresh-token plan. Initial cookie/session slice done.
 3. End-to-end demo script covering Slack/Gmail/Drive evidence, Review Queue,
-   approved knowledge, Knowledge Map, and permission-aware RAG.
+   approved knowledge, Knowledge Map, and permission-aware RAG. Done.
 4. Final whole-app Playwright, backend suite, frontend build, and portfolio
-   case-study evidence capture.
+   case-study evidence capture. Current regression pass done; final screenshot
+   capture remains.
 
 ## 9. Cost Policy
 

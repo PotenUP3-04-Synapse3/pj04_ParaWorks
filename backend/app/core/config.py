@@ -8,6 +8,12 @@ class Settings(BaseSettings):
 
     paraworks_env: str = 'local'
     paraworks_demo_mode: bool = True
+    auth_session_cookie_name: str = 'paraworks_session'
+    auth_refresh_cookie_name: str = 'paraworks_refresh'
+    auth_session_secret: str = 'local-development-session-secret'
+    auth_session_ttl_seconds: int = 900
+    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 14
+    auth_cookie_secure: bool = False
     database_url: str = 'postgresql+psycopg://paraworks:paraworks@localhost:5432/paraworks'
     redis_url: str = 'redis://localhost:6379/0'
     celery_task_always_eager: bool = True
