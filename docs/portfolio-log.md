@@ -3217,6 +3217,32 @@ Cost/security note:
 - Domain metadata enables safer future filtering while keeping raw content
   behind the existing Review/RAG permission checks.
 
+## Drive Parser Status And Version Metadata
+
+What changed:
+
+- Google Drive SourceEvents now preserve `parser_name`, `parser_status`,
+  `parser_status_reason`, `document_version`, `revision_id`, and
+  `content_signature`.
+- Drive API collection now requests `version` and `headRevisionId` so future
+  parser/indexing work can decide whether content actually changed.
+- The current parser status is explicit as `metadata_only`, matching the
+  harness stage before full file export/parsing is enabled.
+
+Portfolio angle:
+
+- Shows product-quality ingestion design: document evidence carries parser and
+  version provenance instead of appearing as anonymous text.
+- Supports later incremental parsing, embedding skip decisions, and reviewer
+  trust signals without changing agent contracts.
+
+Cost/security note:
+
+- This adds metadata fields to the existing Drive files list request; it does
+  not export document bodies, call LLMs, or call embedding APIs.
+- `content_signature` gives the future indexer a cheap guardrail for skipping
+  unchanged Drive files before paid embedding work.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3356,3 +3382,5 @@ Cost/security note:
   - Slack reply chunks now include parent message context and thread metadata for better Review/RAG evidence quality.
 - `feat: enrich gmail thread domain metadata`
   - Gmail events now preserve thread context keys, participants, participant domains, and external-domain flags.
+- `feat: add drive parser version metadata`
+  - Drive events now preserve parser status, document version, revision id, and content signatures for safer parsing/indexing.

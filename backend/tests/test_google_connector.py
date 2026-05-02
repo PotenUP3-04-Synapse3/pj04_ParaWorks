@@ -63,6 +63,8 @@ class FakeGoogleClient:
                 'webViewLink': 'https://drive.google.com/file/d/file-1/view',
                 'modifiedTime': '2026-05-01T09:00:00Z',
                 'createdTime': '2026-04-30T09:00:00Z',
+                'version': '42',
+                'headRevisionId': 'rev-42',
                 'owners': [{'emailAddress': 'owner@example.com'}],
                 'lastModifyingUser': {'emailAddress': 'editor@example.com'},
             }
@@ -154,6 +156,12 @@ def test_google_connector_maps_drive_files_to_source_events() -> None:
     assert event.raw_metadata['description'] == '2026년 상반기 매출 목표와 채용 계획'
     assert event.raw_metadata['created_time'] == '2026-04-30T09:00:00Z'
     assert event.raw_metadata['last_modifying_user_email'] == 'editor@example.com'
+    assert event.raw_metadata['parser_name'] == 'google_drive_metadata'
+    assert event.raw_metadata['parser_status'] == 'metadata_only'
+    assert event.raw_metadata['parser_status_reason'] == 'content_export_not_enabled'
+    assert event.raw_metadata['document_version'] == '42'
+    assert event.raw_metadata['revision_id'] == 'rev-42'
+    assert event.raw_metadata['content_signature'] == 'drive:file-1:42:rev-42'
 
 
 def test_google_connector_fetches_gmail_events_since_latest_cursor() -> None:
@@ -338,6 +346,8 @@ def test_google_web_api_client_paginates_drive_files() -> None:
     assert requests[0].url.path == '/drive/v3/files'
     assert 'description' in requests[0].url.params['fields']
     assert 'lastModifyingUser' in requests[0].url.params['fields']
+    assert 'version' in requests[0].url.params['fields']
+    assert 'headRevisionId' in requests[0].url.params['fields']
     assert requests[1].url.params['pageToken'] == 'drive-page-2'
 
 

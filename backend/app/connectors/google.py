@@ -85,7 +85,7 @@ class GoogleWebApiClient:
             'fields': (
                 'nextPageToken,'
                 'files(id,name,description,mimeType,webViewLink,createdTime,modifiedTime,owners,'
-                'lastModifyingUser(emailAddress,displayName))'
+                'lastModifyingUser(emailAddress,displayName),version,headRevisionId)'
             ),
         }
         if modified_after:
@@ -255,6 +255,7 @@ class GoogleConnector:
         modified_time = str(file.get('modifiedTime') or '')
         description = str(file.get('description') or '')
         last_modifying_user_email = str((file.get('lastModifyingUser') or {}).get('emailAddress') or '')
+        parser_metadata = _drive_parser_metadata(file_id=file_id, file=file, modified_time=modified_time)
         body_lines = [
             f'Google Drive file changed: {title}',
             f'Mime type: {file.get("mimeType")}' if file.get('mimeType') else '',
@@ -283,6 +284,7 @@ class GoogleConnector:
                 'account_id': self.config.account_id,
                 'sync_partition': 'drive',
                 'sync_cursor': modified_time,
+                **parser_metadata,
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['drive']),
             },
         )
@@ -416,6 +418,21 @@ def _email_domain(value: str) -> str:
     if not addresses:
         return ''
     return addresses[0].split('@', 1)[1]
+
+
+def _drive_parser_metadata(*, file_id: str, file: dict, modified_time: str) -> dict[str, str]:
+    version = str(file.get('version') or '')
+    revision_id = str(file.get('headRevisionId') or '')
+    document_version = version or revision_id or modified_time
+    signature_parts = [part for part in [f'drive:{file_id}', document_version, revision_id] if part]
+    return {
+        'parser_name': 'google_drive_metadata',
+        'parser_status': 'metadata_only',
+        'parser_status_reason': 'content_export_not_enabled',
+        'document_version': document_version,
+        'revision_id': revision_id,
+        'content_signature': ':'.join(signature_parts),
+    }
 
 
 def _gmail_text_body(message: dict) -> str:

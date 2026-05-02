@@ -101,12 +101,14 @@ Current state:
 - pgvector adapter and incremental vector indexing exist.
 - RAG indexing observability and reindex approval UX exist.
 - Embedding calls are guarded by delta/hash skip logic.
+- Drive events now preserve metadata-only parser status, document version,
+  revision id, and content signature for future parser/index decisions.
 
 Next priorities:
 
 1. Harden Google Drive file parsing by type.
 2. Add parser run records and parse status.
-3. Improve document metadata: document version, parser name, page/paragraph.
+3. Improve document metadata: page/paragraph-level parser provenance.
 4. Prepare HWP/HWPX parser adapter decision.
 5. Add document golden dataset cases.
 
@@ -142,7 +144,7 @@ Current state:
 
 Next priorities:
 
-1. Harden Drive and Calendar connector quality metadata.
+1. Harden Calendar connector quality metadata.
 2. Add golden dataset fixtures for connector-specific extraction quality.
 3. Prepare structured LangChain output adapters behind deterministic contracts.
 
@@ -264,6 +266,8 @@ Completed harness slices include:
   metadata for better agent/RAG evidence quality
 - Gmail connector now preserves thread context keys, participants, participant
   domains, and external-domain flags for better review/RAG filtering
+- Drive connector now preserves metadata-only parser status, document version,
+  revision id, and content signature for safer parser/index decisions
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -336,7 +340,7 @@ Tasks:
 
 - Slack thread context-aware chunking. Done.
 - Gmail thread metadata and domain filtering. Done.
-- Drive file parser status and version metadata.
+- Drive file parser status and version metadata. Done.
 - Calendar ingestion boundary.
 
 ### Milestone 6. Evaluation and Regression Suite

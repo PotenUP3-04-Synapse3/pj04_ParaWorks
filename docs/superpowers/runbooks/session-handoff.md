@@ -376,6 +376,24 @@ Next recommended step from `plan.md`:
 2. Add connector-specific golden dataset fixtures.
 3. Prepare structured LangChain output adapters behind deterministic contracts.
 
+## 2026-05-02 Drive Parser Version Metadata Update
+
+Aligned with the current root `plan.md` Milestone 5.
+
+- Drive files list collection now requests `version` and `headRevisionId`.
+- Drive SourceEvents now record `parser_name=google_drive_metadata`,
+  `parser_status=metadata_only`,
+  `parser_status_reason=content_export_not_enabled`, `document_version`,
+  `revision_id`, and `content_signature`.
+- This is a low-cost metadata hardening step before full Drive file export and
+  parser-specific chunking are added.
+
+Next recommended step from `plan.md`:
+
+1. Harden Calendar connector quality metadata.
+2. Add connector-specific golden dataset fixtures.
+3. Prepare structured LangChain output adapters behind deterministic contracts.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing
