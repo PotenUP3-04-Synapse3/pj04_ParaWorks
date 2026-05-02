@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     agent_llm_output_cost_per_1m_tokens: float = 0.60
     agent_llm_max_estimated_cost_usd: float | None = 0.001
     agent_llm_max_input_chars: int = 12000
+    agent_llm_max_evidence_messages: int = 12
     agent_llm_max_output_tokens: int = 512
     agent_llm_temperature: float = 0.2
     agent_llm_timeout_seconds: float = 30.0

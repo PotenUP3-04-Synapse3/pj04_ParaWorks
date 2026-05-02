@@ -353,6 +353,8 @@ export type SlackLlmPreflight = {
   estimated_total_tokens: number;
   estimated_cost_usd: number;
   budget_limit_usd?: number | null;
+  evidence_message_count: number;
+  max_evidence_messages: number;
   requires_paid_confirmation: boolean;
 };
 

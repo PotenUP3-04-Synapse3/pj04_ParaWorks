@@ -5,9 +5,16 @@ from backend.app.agent_runtime import EvidencePacket, PermissionContext
 from backend.app.agents.slack_agent import (
     SlackAgent,
     SlackAgentModelResponse,
+    build_slack_evidence_packet,
     create_slack_agent_review_items,
 )
-from backend.app.models import Document, DocumentChunk, DocumentVersion, ReviewItem, Source
+from backend.app.models import (
+    Document,
+    DocumentChunk,
+    DocumentVersion,
+    ReviewItem,
+    Source,
+)
 
 
 class FakeSlackModel:
@@ -59,6 +66,40 @@ def seed_slack_chunk(db: Session, permission_level: str = 'restricted') -> None:
     db.commit()
 
 
+def seed_slack_chunk_with_ts(db: Session, source_id: str, ts: str, body: str) -> None:
+    source = Source(
+        source_type='slack',
+        source_id=source_id,
+        source_url=f'https://example.slack.com/archives/C123/p{ts.replace(".", "")}',
+        title='Slack message in C123',
+        author='U123',
+        permission_level='internal',
+        raw_metadata={'ts': ts, 'channel_id': 'C123'},
+    )
+    db.add(source)
+    db.flush()
+
+    document = Document(source_id=source.id, title=source.title, current_version='v1')
+    db.add(document)
+    db.flush()
+
+    version = DocumentVersion(document_id=document.id, version='v1', body=body)
+    db.add(version)
+    db.flush()
+
+    db.add(
+        DocumentChunk(
+            version_id=version.id,
+            source_id=source.id,
+            chunk_index=0,
+            text=body,
+            source_snippet=body,
+            permission_level='internal',
+            metadata_={'source_url': source.source_url, 'source_type': 'slack'},
+        )
+    )
+
+
 def test_slack_agent_bridge_persists_review_item(db_session: Session) -> None:
     seed_slack_chunk(db_session)
     agent = SlackAgent(model=FakeSlackModel())
@@ -82,3 +123,20 @@ def test_slack_agent_bridge_persists_review_item(db_session: Session) -> None:
     assert stored.payload['estimated_cost_usd'] > 0
     assert stored.permission_level == 'restricted'
     assert stored.source_links == ['https://example.slack.com/archives/C123/p1777600800000100']
+
+
+def test_slack_evidence_packet_can_select_recent_bounded_window(db_session: Session) -> None:
+    seed_slack_chunk_with_ts(db_session, 'C123:1.000100', '1.000100', 'oldest')
+    seed_slack_chunk_with_ts(db_session, 'C123:3.000100', '3.000100', 'newest')
+    seed_slack_chunk_with_ts(db_session, 'C123:2.000100', '2.000100', 'middle')
+    db_session.commit()
+
+    packet = build_slack_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='slack:live:recent:2',
+        max_messages=2,
+        newest_first=True,
+    )
+
+    assert [message.source_id for message in packet.messages] == ['C123:3.000100', 'C123:2.000100']

@@ -195,6 +195,26 @@ def test_slack_llm_preflight_estimates_tokens_conservatively_for_capped_prompt()
     assert preflight['estimated_input_tokens'] >= len(prompt)
 
 
+def test_slack_llm_preflight_caps_input_to_budget_affordable_window() -> None:
+    packet = build_packet()
+    settings = SlackLlmSettings(
+        enabled=True,
+        provider_order=('openai', 'gemini'),
+        openai_api_key='openai-key',
+        gemini_api_key='gemini-key',
+        max_estimated_cost_usd=0.001,
+        max_input_chars=12000,
+        max_output_tokens=512,
+        input_cost_per_1m=0.15,
+        output_cost_per_1m=0.60,
+    )
+
+    preflight = build_slack_llm_preflight(packet=packet, settings=settings)
+
+    assert preflight['estimated_input_tokens'] <= 4618
+    assert preflight['estimated_cost_usd'] <= preflight['budget_limit_usd']
+
+
 def test_langchain_slack_agent_model_uses_configured_prompt_cap() -> None:
     chat_model = FakeLangChainChatModel()
     model = LangChainSlackAgentModel(

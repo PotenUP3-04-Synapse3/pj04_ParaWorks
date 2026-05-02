@@ -12,11 +12,15 @@ def create_slack_agent_review_items(
     agent: SlackAgent,
     permission_context: PermissionContext,
     source_window: str,
+    max_messages: int | None = None,
+    newest_first: bool = False,
 ) -> list[ReviewItem]:
     packet = build_slack_evidence_packet(
         db=db,
         permission_context=permission_context,
         source_window=source_window,
+        max_messages=max_messages,
+        newest_first=newest_first,
     )
     if not packet.messages:
         return []
@@ -85,6 +89,8 @@ def build_slack_evidence_packet(
     db: Session,
     permission_context: PermissionContext,
     source_window: str,
+    max_messages: int | None = None,
+    newest_first: bool = False,
 ) -> EvidencePacket:
     rows = db.execute(
         select(DocumentChunk, Source)
@@ -92,6 +98,10 @@ def build_slack_evidence_packet(
         .where(Source.source_type == 'slack')
         .order_by(DocumentChunk.id)
     ).all()
+    if newest_first:
+        rows = sorted(rows, key=lambda row: _source_sort_timestamp(row[1]), reverse=True)
+    if max_messages is not None:
+        rows = rows[:max(max_messages, 0)]
 
     messages = [
         EvidenceMessage(
@@ -116,3 +126,11 @@ def build_slack_evidence_packet(
         messages=messages,
         permission_context=permission_context,
     )
+
+
+def _source_sort_timestamp(source: Source) -> float:
+    raw_ts = source.raw_metadata.get('ts') if source.raw_metadata else None
+    try:
+        return float(raw_ts)
+    except (TypeError, ValueError):
+        return source.created_at.timestamp()

@@ -33,6 +33,7 @@ class SlackLlmSettings:
     output_cost_per_1m: float = DEFAULT_OUTPUT_COST_PER_1M
     max_estimated_cost_usd: float | None = 0.001
     max_input_chars: int = DEFAULT_MAX_INPUT_CHARS
+    max_evidence_messages: int = 12
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     temperature: float = 0.2
     timeout_seconds: float = 30.0
@@ -151,6 +152,8 @@ def build_slack_llm_preflight(*, packet: EvidencePacket, settings: SlackLlmSetti
         'estimated_total_tokens': decision.token_usage.total_tokens,
         'estimated_cost_usd': round(decision.estimated_cost_usd, 6),
         'budget_limit_usd': decision.budget_limit_usd,
+        'evidence_message_count': len(packet.messages),
+        'max_evidence_messages': settings.max_evidence_messages,
         'requires_paid_confirmation': True,
     }
 
@@ -214,7 +217,7 @@ def _build_openai_model(settings: SlackLlmSettings) -> LangChainSlackAgentModel:
     return LangChainSlackAgentModel(
         provider='openai',
         model_name=settings.openai_model,
-        max_input_chars=settings.max_input_chars,
+        max_input_chars=_effective_max_input_chars(settings),
         chat_model=ChatOpenAI(
             model=settings.openai_model,
             api_key=settings.openai_api_key,
@@ -233,7 +236,7 @@ def _build_gemini_model(settings: SlackLlmSettings) -> LangChainSlackAgentModel:
     return LangChainSlackAgentModel(
         provider='gemini',
         model_name=settings.gemini_model,
-        max_input_chars=settings.max_input_chars,
+        max_input_chars=_effective_max_input_chars(settings),
         chat_model=ChatGoogleGenerativeAI(
             model=settings.gemini_model,
             google_api_key=settings.gemini_api_key,
@@ -267,16 +270,30 @@ def _preflight_response(
         'estimated_total_tokens': token_usage.total_tokens,
         'estimated_cost_usd': 0.0,
         'budget_limit_usd': settings.max_estimated_cost_usd,
+        'evidence_message_count': len(packet.messages),
+        'max_evidence_messages': settings.max_evidence_messages,
         'requires_paid_confirmation': True,
     }
 
 
 def _estimated_token_usage(packet: EvidencePacket, settings: SlackLlmSettings) -> TokenUsage:
-    prompt = render_slack_llm_prompt(packet, max_input_chars=settings.max_input_chars)
+    prompt = render_slack_llm_prompt(packet, max_input_chars=_effective_max_input_chars(settings))
     return TokenUsage(
         input_tokens=max(1, len(prompt)),
         output_tokens=settings.max_output_tokens,
     )
+
+
+def _effective_max_input_chars(settings: SlackLlmSettings) -> int:
+    if settings.max_estimated_cost_usd is None:
+        return settings.max_input_chars
+    total_budget_units = settings.max_estimated_cost_usd * 1_000_000
+    reserved_output_units = settings.max_output_tokens * settings.output_cost_per_1m
+    remaining_input_units = total_budget_units - reserved_output_units
+    if remaining_input_units <= 0:
+        return 0
+    affordable_input_chars = int(remaining_input_units // settings.input_cost_per_1m)
+    return max(0, min(settings.max_input_chars, affordable_input_chars))
 
 
 def _available_providers(provider_order: tuple[str, ...], settings: SlackLlmSettings) -> list[str]:

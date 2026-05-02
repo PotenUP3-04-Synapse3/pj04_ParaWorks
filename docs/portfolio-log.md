@@ -3122,3 +3122,8 @@ Cost/security note:
   - Found the first preflight underestimated Korean/Slack JSON token usage, then tightened prompt caps and changed input-token estimation to a conservative character-count floor.
   - After the fix, the same live Slack evidence window is blocked as `over_budget` instead of allowing another paid run under an optimistic estimate.
   - Verification: backend suite `193 passed, 1 skipped` with demo-mode override; frontend lint passed; Playwright integrations desktop dark/light regression passed.
+- `feat: bound slack llm evidence window`
+  - Limited paid Slack LLM runs to a recent evidence window instead of sending every synced Slack message to the model.
+  - Added shared windowing for preflight and paid execution so the estimated input and actual prompt use the same bounded packet.
+  - Added UI visibility for evidence message count and kept the conservative budget cap, enabling a live run over 12 recent Slack messages within the configured budget.
+  - Verification: backend suite `195 passed, 1 skipped` with demo-mode override; frontend lint/build passed; Playwright integrations desktop dark/light regression passed.

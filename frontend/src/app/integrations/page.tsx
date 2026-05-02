@@ -692,6 +692,10 @@ function SlackRuntimeStatusPanel({
             {llmPreflight.estimated_cost_usd.toFixed(6)}
             {llmPreflight.budget_limit_usd ? ` / $${llmPreflight.budget_limit_usd}` : ""}
           </p>
+          <p className="mt-1 text-[var(--ink-muted)]">
+            최근 evidence {llmPreflight.evidence_message_count.toLocaleString()} /{" "}
+            {llmPreflight.max_evidence_messages.toLocaleString()}개 사용
+          </p>
           <button
             type="button"
             onClick={() => onRunLlmAgent()}

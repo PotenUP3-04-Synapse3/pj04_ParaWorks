@@ -406,14 +406,17 @@ def get_slack_llm_agent_preflight(
     settings: AppSettings,
     user: CurrentUser,
 ) -> dict[str, object]:
+    llm_settings = _slack_llm_settings(settings)
     packet = build_slack_evidence_packet(
         db=db,
         permission_context=PermissionContext(user_id=user.id, role=user.role),
-        source_window='slack:live:all',
+        source_window=_slack_llm_source_window(llm_settings),
+        max_messages=llm_settings.max_evidence_messages,
+        newest_first=True,
     )
     return build_slack_llm_preflight(
         packet=packet,
-        settings=_slack_llm_settings(settings),
+        settings=llm_settings,
     )
 
 
@@ -424,12 +427,14 @@ def run_slack_llm_agent_review(
     settings: AppSettings,
     user: CurrentUser,
 ) -> dict[str, int | str | float | dict[str, object]]:
+    llm_settings = _slack_llm_settings(settings)
     packet = build_slack_evidence_packet(
         db=db,
         permission_context=PermissionContext(user_id=user.id, role=user.role),
-        source_window='slack:live:all',
+        source_window=_slack_llm_source_window(llm_settings),
+        max_messages=llm_settings.max_evidence_messages,
+        newest_first=True,
     )
-    llm_settings = _slack_llm_settings(settings)
     preflight = build_slack_llm_preflight(packet=packet, settings=llm_settings)
     if preflight['action'] != 'run':
         raise HTTPException(status_code=400, detail=preflight)
@@ -446,7 +451,9 @@ def run_slack_llm_agent_review(
             db=db,
             agent=agent,
             permission_context=PermissionContext(user_id=user.id, role=user.role),
-            source_window='slack:live:all',
+            source_window=_slack_llm_source_window(llm_settings),
+            max_messages=llm_settings.max_evidence_messages,
+            newest_first=True,
         )
     except SlackLlmProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -514,10 +521,15 @@ def _slack_llm_settings(settings: Settings) -> SlackLlmSettings:
         output_cost_per_1m=settings.agent_llm_output_cost_per_1m_tokens,
         max_estimated_cost_usd=settings.agent_llm_max_estimated_cost_usd,
         max_input_chars=settings.agent_llm_max_input_chars,
+        max_evidence_messages=settings.agent_llm_max_evidence_messages,
         max_output_tokens=settings.agent_llm_max_output_tokens,
         temperature=settings.agent_llm_temperature,
         timeout_seconds=settings.agent_llm_timeout_seconds,
     )
+
+
+def _slack_llm_source_window(settings: SlackLlmSettings) -> str:
+    return f'slack:live:recent:{settings.max_evidence_messages}'
 
 
 def _clean_channel_ids(channel_ids: list[str] | None) -> list[str]:
