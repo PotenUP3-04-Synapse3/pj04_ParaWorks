@@ -10,7 +10,7 @@ from backend.app.connectors.registry import (
     list_connector_manifests,
 )
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.models import DocumentChunk, SyncJob
+from backend.app.models import DocumentChunk, Source, SyncJob
 
 
 def source_event(source_id: str = 'contract-event-1') -> SourceEvent:
@@ -141,6 +141,39 @@ def test_sync_connector_events_passes_latest_slack_timestamp_cursor(db_session: 
     result = sync_connector_events(db=db_session, connector=connector)
 
     assert connector.observed_cursor == {'C123': '1777600800.000100'}
+    assert result.fetched_events == 1
+    assert result.created_review_items == 1
+
+
+def test_sync_connector_events_passes_latest_generic_sync_cursor(db_session: Session) -> None:
+    db_session.add(
+        Source(
+            source_type='gmail',
+            source_id='gmail:older',
+            source_url='https://mail.google.com/mail/u/0/#all/older',
+            title='Older message',
+            author='min@example.com',
+            permission_level='internal',
+            raw_metadata={'sync_partition': 'gmail', 'sync_cursor': '1777600800000'},
+        )
+    )
+    db_session.add(
+        Source(
+            source_type='gmail',
+            source_id='gmail:newer',
+            source_url='https://mail.google.com/mail/u/0/#all/newer',
+            title='Newer message',
+            author='min@example.com',
+            permission_level='internal',
+            raw_metadata={'sync_partition': 'gmail', 'sync_cursor': '1777600900000'},
+        )
+    )
+    db_session.commit()
+    connector = IncrementalContractConnector(source_type='gmail')
+
+    result = sync_connector_events(db=db_session, connector=connector)
+
+    assert connector.observed_cursor == {'gmail': '1777600900000'}
     assert result.fetched_events == 1
     assert result.created_review_items == 1
 

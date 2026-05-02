@@ -1,3 +1,5 @@
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -17,10 +19,10 @@ GOOGLE_CONNECTOR_TYPES = frozenset(GOOGLE_CONNECTOR_SCOPES)
 
 
 class GoogleApiClient(Protocol):
-    def gmail_messages(self) -> list[dict]:
+    def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
         raise NotImplementedError
 
-    def drive_files(self) -> list[dict]:
+    def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         raise NotImplementedError
 
     def calendar_events(self) -> list[dict]:
@@ -41,6 +43,8 @@ class GoogleWebApiClient:
         drive_base_url: str = 'https://www.googleapis.com',
         calendar_base_url: str = 'https://www.googleapis.com',
         page_limit: int = 100,
+        max_retries: int = 2,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.oauth_token = oauth_token
         self.http_client = http_client or httpx.Client(timeout=30.0)
@@ -48,13 +52,18 @@ class GoogleWebApiClient:
         self.drive_base_url = drive_base_url.rstrip('/')
         self.calendar_base_url = calendar_base_url.rstrip('/')
         self.page_limit = page_limit
+        self.max_retries = max_retries
+        self.sleep = sleep
 
-    def gmail_messages(self) -> list[dict]:
+    def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
         messages: list[dict] = []
+        params: GoogleQueryParams = {'maxResults': str(self.page_limit)}
+        if after_internal_date:
+            params['q'] = _gmail_after_query(after_internal_date)
         for message_ref in self._get_paged_items(
             f'{self.gmail_base_url}/gmail/v1/users/me/messages',
             item_key='messages',
-            params={'maxResults': str(self.page_limit)},
+            params=params,
         ):
             message_id = str(message_ref['id'])
             messages.append(
@@ -68,14 +77,17 @@ class GoogleWebApiClient:
             )
         return messages
 
-    def drive_files(self) -> list[dict]:
+    def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
+        params: GoogleQueryParams = {
+            'pageSize': str(self.page_limit),
+            'fields': 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,owners)',
+        }
+        if modified_after:
+            params['q'] = f"modifiedTime > '{modified_after}'"
         return self._get_paged_items(
             f'{self.drive_base_url}/drive/v3/files',
             item_key='files',
-            params={
-                'pageSize': str(self.page_limit),
-                'fields': 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,owners)',
-            },
+            params=params,
         )
 
     def calendar_events(self) -> list[dict]:
@@ -90,14 +102,22 @@ class GoogleWebApiClient:
         return list(payload.get('items', []))
 
     def _get_json(self, url: str, *, params: GoogleQueryParams) -> dict:
-        response = self.http_client.get(
-            url,
-            headers={'Authorization': f'Bearer {self.oauth_token}'},
-            params=params,
-        )
-        if response.status_code >= 400:
-            raise GoogleApiError(_google_error_message(response))
-        return response.json()
+        for attempt in range(self.max_retries + 1):
+            response = self.http_client.get(
+                url,
+                headers={'Authorization': f'Bearer {self.oauth_token}'},
+                params=params,
+            )
+            if response.status_code < 400:
+                return response.json()
+            if not _should_retry(response.status_code):
+                raise GoogleApiError(_google_error_message(response))
+            if attempt >= self.max_retries:
+                if response.status_code == 429:
+                    raise GoogleApiError('Google API request failed: rate_limited')
+                raise GoogleApiError(f'Google API request failed: http_{response.status_code}')
+            self.sleep(_retry_after_seconds(response))
+        raise GoogleApiError('Google API request failed')
 
     def _get_paged_items(self, url: str, *, item_key: str, params: GoogleQueryParams) -> list[dict]:
         items: list[dict] = []
@@ -151,6 +171,21 @@ class GoogleConnector:
             return [self._calendar_event_to_source_event(event) for event in self.client.calendar_events()]
         raise GoogleApiError(f'Unsupported Google connector: {self.config.connector_type}')
 
+    def fetch_events_since(self, latest_cursors_by_partition: dict[str, str]) -> list[SourceEvent]:
+        if self.config.connector_type == 'gmail':
+            return [
+                self._gmail_message_to_source_event(message)
+                for message in self.client.gmail_messages(
+                    after_internal_date=latest_cursors_by_partition.get('gmail')
+                )
+            ]
+        if self.config.connector_type == 'drive':
+            return [
+                self._drive_file_to_source_event(file)
+                for file in self.client.drive_files(modified_after=latest_cursors_by_partition.get('drive'))
+            ]
+        return self.fetch_events()
+
     def _gmail_message_to_source_event(self, message: dict) -> SourceEvent:
         message_id = str(message['id'])
         subject = _header_value(message, 'Subject') or f'Gmail message {message_id}'
@@ -169,6 +204,8 @@ class GoogleConnector:
             raw_metadata={
                 'message_id': message_id,
                 'account_id': self.config.account_id,
+                'sync_partition': 'gmail',
+                'sync_cursor': str(message.get('internalDate') or ''),
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
             },
         )
@@ -177,6 +214,7 @@ class GoogleConnector:
         file_id = str(file['id'])
         title = str(file.get('name') or f'Drive file {file_id}')
         author = _first_owner_email(file) or self.config.account_name
+        modified_time = str(file.get('modifiedTime') or '')
         return SourceEvent(
             source_type='drive',
             source_id=f'drive:{file_id}',
@@ -185,12 +223,14 @@ class GoogleConnector:
             body=f'Google Drive file changed: {title}',
             author=author,
             participants=[author] if author else [],
-            timestamp=_timestamp_from_iso(file.get('modifiedTime')),
+            timestamp=_timestamp_from_iso(modified_time),
             permission_level='restricted',
             raw_metadata={
                 'file_id': file_id,
                 'mime_type': file.get('mimeType'),
                 'account_id': self.config.account_id,
+                'sync_partition': 'drive',
+                'sync_cursor': modified_time,
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['drive']),
             },
         )
@@ -233,6 +273,24 @@ def _google_error_message(response: httpx.Response) -> str:
     if isinstance(error, dict):
         return str(error.get('message') or f'Google API request failed with {response.status_code}')
     return str(error)
+
+
+def _gmail_after_query(after_internal_date: str) -> str:
+    return f'after:{int(int(after_internal_date) / 1000)}'
+
+
+def _should_retry(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    retry_after = response.headers.get('Retry-After')
+    if not retry_after:
+        return 1.0
+    try:
+        return max(float(retry_after), 0.0)
+    except ValueError:
+        return 1.0
 
 
 def _display_name(connector_type: str) -> str:

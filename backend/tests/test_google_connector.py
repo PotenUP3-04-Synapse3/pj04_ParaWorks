@@ -13,7 +13,12 @@ from backend.app.connectors.google import (
 
 
 class FakeGoogleClient:
-    def gmail_messages(self) -> list[dict]:
+    def __init__(self) -> None:
+        self.gmail_after_internal_date: str | None = None
+        self.drive_modified_after: str | None = None
+
+    def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
+        self.gmail_after_internal_date = after_internal_date
         return [
             {
                 'id': 'msg-1',
@@ -28,7 +33,8 @@ class FakeGoogleClient:
             }
         ]
 
-    def drive_files(self) -> list[dict]:
+    def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
+        self.drive_modified_after = modified_after
         return [
             {
                 'id': 'file-1',
@@ -79,6 +85,8 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     assert event.timestamp == datetime.fromtimestamp(1777600800, tz=UTC)
     assert event.permission_level == 'internal'
     assert event.raw_metadata['required_scopes'] == list(GOOGLE_CONNECTOR_SCOPES['gmail'])
+    assert event.raw_metadata['sync_partition'] == 'gmail'
+    assert event.raw_metadata['sync_cursor'] == '1777600800000'
 
 
 def test_google_connector_maps_drive_files_to_source_events() -> None:
@@ -104,6 +112,44 @@ def test_google_connector_maps_drive_files_to_source_events() -> None:
     assert event.author == 'owner@example.com'
     assert event.timestamp == datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
     assert event.raw_metadata['mime_type'] == 'application/vnd.google-apps.document'
+    assert event.raw_metadata['sync_partition'] == 'drive'
+    assert event.raw_metadata['sync_cursor'] == '2026-05-01T09:00:00Z'
+
+
+def test_google_connector_fetches_gmail_events_since_latest_cursor() -> None:
+    client = FakeGoogleClient()
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='gmail',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    events = connector.fetch_events_since({'gmail': '1777600800000'})
+
+    assert len(events) == 1
+    assert client.gmail_after_internal_date == '1777600800000'
+
+
+def test_google_connector_fetches_drive_events_since_latest_cursor() -> None:
+    client = FakeGoogleClient()
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    events = connector.fetch_events_since({'drive': '2026-05-01T09:00:00Z'})
+
+    assert len(events) == 1
+    assert client.drive_modified_after == '2026-05-01T09:00:00Z'
 
 
 def test_google_connector_maps_calendar_events_to_source_events() -> None:
@@ -226,6 +272,71 @@ def test_google_web_api_client_paginates_drive_files() -> None:
     assert [file['id'] for file in files] == ['file-1', 'file-2']
     assert requests[0].url.path == '/drive/v3/files'
     assert requests[1].url.params['pageToken'] == 'drive-page-2'
+
+
+def test_google_web_api_client_sends_delta_params_for_gmail_and_drive() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == '/gmail/v1/users/me/messages':
+            return httpx.Response(200, json={'messages': []})
+        if request.url.path == '/drive/v3/files':
+            return httpx.Response(200, json={'files': []})
+        raise AssertionError(f'unexpected request: {request.url}')
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert client.gmail_messages(after_internal_date='1777600800000') == []
+    assert client.drive_files(modified_after='2026-05-01T09:00:00Z') == []
+
+    gmail_request = next(request for request in requests if request.url.path == '/gmail/v1/users/me/messages')
+    drive_request = next(request for request in requests if request.url.path == '/drive/v3/files')
+    assert gmail_request.url.params['q'] == 'after:1777600800'
+    assert drive_request.url.params['q'] == "modifiedTime > '2026-05-01T09:00:00Z'"
+
+
+def test_google_web_api_client_retries_rate_limited_requests_with_retry_after() -> None:
+    requests: list[httpx.Request] = []
+    sleep_calls: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(429, headers={'Retry-After': '2'}, json={'error': {'message': 'rate limit'}})
+        return httpx.Response(200, json={'files': []})
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        sleep=sleep_calls.append,
+    )
+
+    assert client.drive_files() == []
+    assert len(requests) == 2
+    assert sleep_calls == [2.0]
+
+
+def test_google_web_api_client_stops_retrying_rate_limited_requests_after_limit() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(429, json={'error': {'message': 'rate limit'}})
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        max_retries=1,
+        sleep=lambda seconds: None,
+    )
+
+    with pytest.raises(GoogleApiError, match='rate_limited'):
+        client.drive_files()
+    assert len(requests) == 2
 
 
 def test_google_web_api_client_raises_clear_error() -> None:

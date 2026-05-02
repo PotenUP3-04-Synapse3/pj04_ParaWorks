@@ -35,7 +35,7 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
 
     try:
         if hasattr(connector, 'fetch_events_since'):
-            events = connector.fetch_events_since(_latest_timestamps_by_partition(db, connector.source_type))
+            events = connector.fetch_events_since(_latest_cursors_by_partition(db, connector.source_type))
         else:
             events = connector.fetch_events()
         existing_source_ids = set(
@@ -73,20 +73,32 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
     )
 
 
-def _latest_timestamps_by_partition(db: Session, source_type: str) -> dict[str, str]:
-    latest: dict[str, tuple[Decimal, str]] = {}
+def _latest_cursors_by_partition(db: Session, source_type: str) -> dict[str, str]:
+    latest: dict[str, tuple[tuple[int, object], str]] = {}
     sources = db.scalars(select(Source).where(Source.source_type == source_type)).all()
     for source in sources:
         raw_metadata = source.raw_metadata or {}
-        partition = raw_metadata.get('channel_id')
-        timestamp = raw_metadata.get('ts')
-        if not isinstance(partition, str) or not isinstance(timestamp, str):
+        partition = raw_metadata.get('sync_partition')
+        cursor = raw_metadata.get('sync_cursor')
+        if not isinstance(partition, str) or not isinstance(cursor, str) or not cursor:
+            partition = raw_metadata.get('channel_id')
+            cursor = raw_metadata.get('ts')
+        if not isinstance(partition, str) or not isinstance(cursor, str) or not cursor:
             continue
-        try:
-            timestamp_value = Decimal(timestamp)
-        except InvalidOperation:
-            continue
+        cursor_value = _cursor_sort_key(cursor)
         previous = latest.get(partition)
-        if previous is None or timestamp_value > previous[0]:
-            latest[partition] = (timestamp_value, timestamp)
-    return {partition: timestamp for partition, (_, timestamp) in latest.items()}
+        if previous is None or cursor_value > previous[0]:
+            latest[partition] = (cursor_value, cursor)
+    return {partition: cursor for partition, (_, cursor) in latest.items()}
+
+
+def _cursor_sort_key(cursor: str) -> tuple[int, object]:
+    try:
+        return (0, Decimal(cursor))
+    except InvalidOperation:
+        pass
+    try:
+        normalized = cursor.replace('Z', '+00:00')
+        return (1, datetime.fromisoformat(normalized).astimezone(UTC))
+    except ValueError:
+        return (2, cursor)

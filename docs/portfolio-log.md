@@ -2924,6 +2924,37 @@ Verification evidence:
 - `npx eslint src/app/search/page.tsx src/lib/api/types.ts` passed.
 - `npm run build` passed and included `/search`.
 
+## Google Live Delta And Retry Guardrails
+
+What changed:
+
+- Added Gmail and Google Drive incremental cursor support to the live Google
+  connector.
+- Gmail collection now sends an `after:<unix_seconds>` query from the last
+  stored message `internalDate`.
+- Drive collection now sends a `modifiedTime > '<timestamp>'` query from the
+  last stored file modification time.
+- Google source events now persist common `sync_partition` and `sync_cursor`
+  metadata so ingestion can resume without connector-specific database logic.
+- Added bounded retry handling for Google API 429 and 5xx responses, including
+  `Retry-After` support.
+
+Portfolio angle:
+
+- Shows the project is moving from demo integration buttons toward production
+  ingestion behavior: delta fetch, retry, and observable failure boundaries.
+- Makes the Google track easier for another developer to own because the
+  ingestion cursor contract is shared with Slack rather than hidden in one
+  connector.
+
+Cost/security note:
+
+- The connector fetches only source deltas before review, agent execution, or
+  embedding work. This prevents every sync from reprocessing unchanged Gmail
+  and Drive content.
+- Retry is bounded, so rate limit or server-side failures do not create runaway
+  API usage.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3004,3 +3035,4 @@ Verification evidence:
 - `feat: reuse cached langgraph evidence`
 - `feat: add admin audit logs`
 - `feat: improve rag citation ranking`
+- `feat: harden google live sync deltas`
