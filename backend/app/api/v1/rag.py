@@ -68,7 +68,7 @@ def get_reindex_job(job_id: str, db: DbSession) -> dict:
 
 
 @router.get('/indexing/summary')
-def get_rag_indexing_summary(db: DbSession) -> dict:
+def get_rag_indexing_summary(db: DbSession, settings: AppSettings) -> dict:
     state_counts = dict(
         db.execute(
             select(VectorIndexState.status, func.count(VectorIndexState.id))
@@ -85,6 +85,13 @@ def get_rag_indexing_summary(db: DbSession) -> dict:
     return {
         'state_counts': state_counts,
         'latest_jobs': [_job_summary(job) for job in latest_jobs],
+        'cost_policy': {
+            'embedding_model': settings.openai_embedding_model,
+            'embedding_input_cost_per_1m_tokens': settings.openai_embedding_input_cost_per_1m_tokens,
+            'max_estimated_embedding_cost_usd': settings.rag_embedding_max_estimated_cost_usd,
+            'preflight_budget_gate': settings.rag_embedding_max_estimated_cost_usd is not None,
+            'incremental_hash_skip': True,
+        },
     }
 
 

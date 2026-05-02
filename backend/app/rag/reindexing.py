@@ -7,6 +7,7 @@ from backend.app.rag.embeddings import (
     OpenAIEmbeddingModel,
 )
 from backend.app.rag.indexing import (
+    EmbeddingBudgetExceededError,
     PreviewVectorIndexWriter,
     VectorIndexWriter,
     build_rag_index_documents,
@@ -25,14 +26,26 @@ def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
         settings=settings,
         dry_run=dry_run,
     )
-    result = index_changed_vector_documents(
-        db=db,
-        documents=build_rag_index_documents(db),
-        writer=writer,
-        embedding_model=embedding_model,
-        embedding_model_name=embedding_model_name,
-        persist_state=persist_state,
-    )
+    try:
+        result = index_changed_vector_documents(
+            db=db,
+            documents=build_rag_index_documents(db),
+            writer=writer,
+            embedding_model=embedding_model,
+            embedding_model_name=embedding_model_name,
+            persist_state=persist_state,
+            embedding_cost_per_1m_tokens=0.0
+            if dry_run
+            else settings.openai_embedding_input_cost_per_1m_tokens,
+            max_embedding_cost_usd=None if dry_run else settings.rag_embedding_max_estimated_cost_usd,
+        )
+    except EmbeddingBudgetExceededError as exc:
+        decision = exc.decision
+        raise ReindexConfigurationError(
+            'embedding budget exceeded: '
+            f"estimated=${float(decision['estimated_cost_usd']):.6f} "
+            f"> budget=${float(decision['budget_limit_usd'] or 0):.6f}"
+        ) from exc
     return {
         'dry_run': dry_run,
         'indexed_count': result.indexed_count,

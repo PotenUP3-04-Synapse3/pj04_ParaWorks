@@ -19,6 +19,7 @@ from backend.app.rag.embeddings import (
     EmbeddingBatchResult,
 )
 from backend.app.rag.indexing import (
+    EmbeddingBudgetExceededError,
     build_rag_index_documents,
     compute_vector_document_hash,
     index_changed_vector_documents,
@@ -52,6 +53,16 @@ class RecordingBatchEmbeddingModel:
             total_tokens=10 * len(texts),
             request_count=1 if texts else 0,
         )
+
+
+class FailingEmbeddingModel:
+    dimensions = 2
+
+    def embed(self, text: str) -> list[float]:
+        raise AssertionError('embedding call should be blocked by the budget gate')
+
+    def embed_many(self, texts: list[str]) -> EmbeddingBatchResult:
+        raise AssertionError('embedding call should be blocked by the budget gate')
 
 
 def seed_chunk(db: Session, text: str, source_id: str = 'gmail-index-source') -> int:
@@ -269,6 +280,40 @@ def test_incremental_indexing_batches_only_changed_documents(db_session: Session
     assert [document.document_id for document, _ in writer.upserts] == ['chunk:2']
 
 
+def test_incremental_indexing_blocks_paid_embedding_when_estimated_budget_is_exceeded(
+    db_session: Session,
+) -> None:
+    document = VectorDocument(
+        document_id='chunk:expensive',
+        text='Budget pressure from repeated company history. ' * 2_000,
+        source_url='https://gmail.mock/expensive',
+        source_snippet='Budget pressure from repeated company history.',
+        permission_level='internal',
+        metadata={'source_type': 'gmail'},
+    )
+    writer = RecordingVectorWriter()
+
+    try:
+        index_changed_vector_documents(
+            db=db_session,
+            documents=[document],
+            writer=writer,
+            embedding_model=FailingEmbeddingModel(),
+            embedding_model_name='text-embedding-3-small',
+            embedding_cost_per_1m_tokens=0.02,
+            max_embedding_cost_usd=0.000001,
+        )
+    except EmbeddingBudgetExceededError as exc:
+        assert exc.decision['budget_status'] == 'over_budget'
+        assert exc.decision['estimated_cost_usd'] > exc.decision['budget_limit_usd']
+        assert exc.decision['changed_document_count'] == 1
+    else:
+        raise AssertionError('expected embedding budget gate to block the run')
+
+    assert writer.upserts == []
+    assert db_session.query(VectorIndexState).count() == 0
+
+
 def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_session: Session) -> None:
     chunk_id = seed_chunk(db_session, 'Redis queue state should be indexed for RAG.')
     approved = DecisionRecord(
@@ -477,3 +522,10 @@ def test_rag_indexing_summary_returns_latest_jobs_and_state_counts(
     assert body['latest_jobs'][0]['indexed_count'] == 1
     assert body['latest_jobs'][0]['skipped_count'] == 0
     assert body['latest_jobs'][0]['saved_embedding_calls'] == 0
+    assert body['cost_policy'] == {
+        'embedding_model': 'text-embedding-3-small',
+        'embedding_input_cost_per_1m_tokens': 0.02,
+        'max_estimated_embedding_cost_usd': 0.001,
+        'preflight_budget_gate': True,
+        'incremental_hash_skip': True,
+    }

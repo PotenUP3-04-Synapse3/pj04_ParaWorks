@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from hashlib import sha256
 from typing import Protocol
 
@@ -22,6 +23,12 @@ from backend.app.rag.vector_store import VectorDocument
 class VectorIndexWriter(Protocol):
     def upsert_with_embedding(self, document: VectorDocument, embedding: list[float]) -> None:
         raise NotImplementedError
+
+
+class EmbeddingBudgetExceededError(ValueError):
+    def __init__(self, decision: dict[str, float | int | str | None]) -> None:
+        self.decision = decision
+        super().__init__('embedding budget exceeded')
 
 
 @dataclass(frozen=True)
@@ -75,6 +82,8 @@ def index_changed_vector_documents(
     embedding_model: EmbeddingModel,
     embedding_model_name: str,
     persist_state: bool = True,
+    embedding_cost_per_1m_tokens: float = 0.0,
+    max_embedding_cost_usd: float | None = None,
 ) -> VectorIndexResult:
     changed_documents: list[tuple[VectorDocument, str, VectorIndexState | None]] = []
     skipped_document_ids: list[str] = []
@@ -93,7 +102,17 @@ def index_changed_vector_documents(
 
         changed_documents.append((document, content_hash, state))
 
-    batch = _embed_many(embedding_model, [document.text for document, _, _ in changed_documents])
+    changed_texts = [document.text for document, _, _ in changed_documents]
+    budget_decision = estimate_embedding_budget(
+        texts=changed_texts,
+        embedding_model_name=embedding_model_name,
+        cost_per_1m_tokens=embedding_cost_per_1m_tokens,
+        max_cost_usd=max_embedding_cost_usd,
+    )
+    if budget_decision['action'] == 'block':
+        raise EmbeddingBudgetExceededError(budget_decision)
+
+    batch = _embed_many(embedding_model, changed_texts)
     indexed_document_ids: list[str] = []
     for (document, content_hash, state), embedding in zip(changed_documents, batch.embeddings, strict=True):
         embedding_dimensions = len(embedding)
@@ -136,6 +155,55 @@ def compute_vector_document_hash(document: VectorDocument) -> str:
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode('utf-8')
     return sha256(encoded).hexdigest()
+
+
+def estimate_embedding_budget(
+    *,
+    texts: list[str],
+    embedding_model_name: str,
+    cost_per_1m_tokens: float,
+    max_cost_usd: float | None,
+) -> dict[str, float | int | str | None]:
+    estimated_input_tokens = sum(_estimate_embedding_tokens(text) for text in texts)
+    estimated_cost = (
+        Decimal(estimated_input_tokens) * Decimal(str(cost_per_1m_tokens)) / Decimal(1_000_000)
+    )
+    estimated_cost_usd = float(estimated_cost)
+
+    if not texts:
+        return {
+            'embedding_model': embedding_model_name,
+            'changed_document_count': 0,
+            'estimated_input_tokens': 0,
+            'estimated_cost_usd': 0.0,
+            'budget_limit_usd': max_cost_usd,
+            'budget_status': 'no_input',
+            'action': 'skip',
+            'reason': 'no_changed_documents',
+        }
+
+    if max_cost_usd is not None and estimated_cost_usd > max_cost_usd:
+        return {
+            'embedding_model': embedding_model_name,
+            'changed_document_count': len(texts),
+            'estimated_input_tokens': estimated_input_tokens,
+            'estimated_cost_usd': estimated_cost_usd,
+            'budget_limit_usd': max_cost_usd,
+            'budget_status': 'over_budget',
+            'action': 'block',
+            'reason': 'estimated_embedding_cost_exceeds_budget',
+        }
+
+    return {
+        'embedding_model': embedding_model_name,
+        'changed_document_count': len(texts),
+        'estimated_input_tokens': estimated_input_tokens,
+        'estimated_cost_usd': estimated_cost_usd,
+        'budget_limit_usd': max_cost_usd,
+        'budget_status': 'within_budget' if max_cost_usd is not None else 'not_limited',
+        'action': 'run',
+        'reason': 'within_embedding_budget',
+    }
 
 
 def build_rag_index_documents(db: Session) -> list[VectorDocument]:
@@ -269,6 +337,14 @@ def _knowledge_document(
 
 def _model_dimensions(embedding_model: EmbeddingModel) -> int:
     return int(getattr(embedding_model, 'dimensions', 0))
+
+
+def _estimate_embedding_tokens(text: str) -> int:
+    if not text:
+        return 0
+    # Conservative preflight estimate: UTF-8 bytes / 4 tracks English reasonably
+    # and errs high for Korean before any paid embedding call is made.
+    return max(1, (len(text.encode('utf-8')) + 3) // 4)
 
 
 def _embed_many(embedding_model: EmbeddingModel, texts: list[str]) -> EmbeddingBatchResult:

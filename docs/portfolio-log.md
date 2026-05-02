@@ -2607,6 +2607,44 @@ Verification evidence:
 - `uv run ruff check backend/app/rag/pgvector_store.py scripts/check_pgvector_dev.py backend/tests/test_pgvector_store.py backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py backend/tests/test_rag_indexing_tasks.py`
   passed.
 
+## Embedding Cost Preflight Guard
+
+What changed:
+
+- Added a preflight embedding budget gate before paid OpenAI embedding calls in
+  the RAG indexing path.
+- Added environment-controlled pricing and budget settings:
+  `OPENAI_EMBEDDING_INPUT_COST_PER_1M_TOKENS` and
+  `RAG_EMBEDDING_MAX_ESTIMATED_COST_USD`.
+- Exposed the active RAG indexing cost policy through
+  `/api/v1/rag/indexing/summary` and surfaced it in the company memory search
+  freshness panel.
+- Preserved incremental hash skip behavior so unchanged documents continue to
+  avoid embedding requests entirely.
+
+Portfolio angle:
+
+- Shows cost-aware AI engineering: ParaWorks estimates changed-document
+  embedding cost before a provider request can spend money.
+- Makes the system easier to operate in a three-developer workflow because the
+  active budget policy is visible through the API and frontend instead of living
+  only in `.env`.
+- Strengthens the product story that RAG quality and token-cost discipline are
+  designed together, not treated as separate cleanup work.
+
+Verification evidence:
+
+- Added a RED test that failed because the embedding budget exception did not
+  exist, then implemented the gate until the test passed.
+- Added a RED test for the missing indexing summary `cost_policy`, then exposed
+  the API field until the test passed.
+- `uv run pytest backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py backend/tests/test_pgvector_store.py backend/tests/test_rag_indexing.py backend/tests/test_rag_indexing_tasks.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_vector_retriever.py backend/tests/test_embedding_provider.py -v`
+  passed with 39 tests.
+- `uv run ruff check backend/app/rag/indexing.py backend/app/rag/reindexing.py backend/app/api/v1/rag.py backend/app/core/config.py backend/tests/test_rag_indexing.py`
+  passed.
+- `npx eslint src/app/search/page.tsx src/lib/api/types.ts` passed.
+- `npm run build` passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2679,3 +2717,4 @@ Verification evidence:
 - `feat: add demo login and admin console`
 - `style: unify workspace glass cards`
 - `chore: harden pgvector dev path`
+- `feat: gate paid embedding reindex cost`

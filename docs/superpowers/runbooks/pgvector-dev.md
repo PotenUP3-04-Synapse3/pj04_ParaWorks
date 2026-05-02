@@ -190,5 +190,12 @@ uv run pytest backend/tests/test_pgvector_integration.py -v
 - Never run full-corpus paid re-embedding by default.
 - Confirm `skipped_count` and `saved_embedding_calls` before repeated runs.
 - Use batch embedding through `embed_many`.
+- Keep `OPENAI_EMBEDDING_INPUT_COST_PER_1M_TOKENS` aligned with current provider
+  pricing. As of the 2026-05-02 check, OpenAI lists `text-embedding-3-small` at
+  `$0.02 / 1M tokens`.
+- Keep `RAG_EMBEDDING_MAX_ESTIMATED_COST_USD` low in local/dev environments.
+  ParaWorks estimates changed-document embedding input before any paid provider
+  call and blocks `dry_run=false` when the estimate exceeds the configured
+  budget.
 - Keep live provider calls out of tests.
 - Record notable cost-related changes in `docs/portfolio-log.md`.

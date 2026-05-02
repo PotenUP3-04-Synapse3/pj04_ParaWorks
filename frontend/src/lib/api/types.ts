@@ -127,6 +127,13 @@ export type RagIndexingJobSummary = {
 export type RagIndexingSummaryResponse = {
   state_counts: Record<string, number>;
   latest_jobs: RagIndexingJobSummary[];
+  cost_policy: {
+    embedding_model: string;
+    embedding_input_cost_per_1m_tokens: number;
+    max_estimated_embedding_cost_usd?: number | null;
+    preflight_budget_gate: boolean;
+    incremental_hash_skip: boolean;
+  };
 };
 
 export type KnowledgeItem = {

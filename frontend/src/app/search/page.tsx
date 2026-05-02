@@ -3,6 +3,7 @@
 import {
   Bot,
   CheckCircle2,
+  CircleDollarSign,
   Clock3,
   Database,
   FileText,
@@ -312,6 +313,7 @@ function MemoryFreshnessPanel({ summary }: { summary?: RagIndexingSummaryRespons
   const indexedCount = summary?.state_counts.indexed ?? 0;
   const state = getFreshnessState(latestJob, indexedCount);
   const Icon = state.icon;
+  const costPolicy = summary?.cost_policy;
 
   return (
     <section className={`rounded-lg border p-4 shadow-sm ${state.tone}`}>
@@ -328,6 +330,24 @@ function MemoryFreshnessPanel({ summary }: { summary?: RagIndexingSummaryRespons
           {indexedCount.toLocaleString()}개 기억 사용 가능
         </span>
       </div>
+      {costPolicy ? (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <span className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 font-semibold">
+            <CircleDollarSign className="h-4 w-4" aria-hidden="true" />
+            임베딩 예산{" "}
+            {costPolicy.max_estimated_embedding_cost_usd === null ||
+            costPolicy.max_estimated_embedding_cost_usd === undefined
+              ? "unlimited"
+              : `$${costPolicy.max_estimated_embedding_cost_usd.toFixed(3)}`}
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 font-semibold">
+            {costPolicy.embedding_model} · ${costPolicy.embedding_input_cost_per_1m_tokens.toFixed(2)}/1M tokens
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 font-semibold">
+            {costPolicy.incremental_hash_skip ? "Hash skip active" : "Hash skip check"}
+          </span>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     openai_embedding_model: str = 'text-embedding-3-small'
     openai_embedding_dimensions: int = 1536
     openai_embedding_timeout_seconds: float = 30.0
+    openai_embedding_input_cost_per_1m_tokens: float = 0.02
+    rag_embedding_max_estimated_cost_usd: float | None = 0.001
     rag_use_pgvector_search: bool = False
     slack_bot_token: str | None = None
     slack_channel_ids: str = ''
