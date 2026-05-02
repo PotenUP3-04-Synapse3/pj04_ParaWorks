@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from time import sleep as default_sleep
 from typing import Protocol
 
 import httpx
@@ -31,11 +33,15 @@ class SlackWebApiClient:
         http_client: httpx.Client | None = None,
         base_url: str = 'https://slack.com/api',
         page_limit: int = 200,
+        max_retries: int = 2,
+        sleep: Callable[[float], None] = default_sleep,
     ) -> None:
         self.bot_token = bot_token
         self.http_client = http_client or httpx.Client(timeout=30.0)
         self.base_url = base_url.rstrip('/')
         self.page_limit = page_limit
+        self.max_retries = max_retries
+        self.sleep = sleep
 
     def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
         messages: list[dict] = []
@@ -60,16 +66,33 @@ class SlackWebApiClient:
         if cursor:
             params['cursor'] = cursor
 
-        response = self.http_client.get(
-            f'{self.base_url}/conversations.history',
-            headers={'Authorization': f'Bearer {self.bot_token}'},
-            params=params,
-        )
-        response.raise_for_status()
+        response = self._get_with_retries(params)
         payload = response.json()
         if not payload.get('ok'):
             raise SlackApiError(f"Slack conversations.history failed: {payload.get('error', 'unknown_error')}")
         return payload
+
+    def _get_with_retries(self, params: dict[str, str]) -> httpx.Response:
+        for attempt in range(self.max_retries + 1):
+            response = self.http_client.get(
+                f'{self.base_url}/conversations.history',
+                headers={'Authorization': f'Bearer {self.bot_token}'},
+                params=params,
+            )
+            if response.status_code == 429:
+                if attempt >= self.max_retries:
+                    raise SlackApiError('Slack conversations.history failed: rate_limited')
+                self.sleep(_retry_after_seconds(response))
+                continue
+            if response.status_code >= 500:
+                if attempt >= self.max_retries:
+                    raise SlackApiError(f'Slack conversations.history failed: http_{response.status_code}')
+                self.sleep(_retry_after_seconds(response))
+                continue
+            if response.status_code >= 400:
+                raise SlackApiError(f'Slack conversations.history failed: http_{response.status_code}')
+            return response
+        raise SlackApiError('Slack conversations.history failed: retry_exhausted')
 
 
 @dataclass(frozen=True)
@@ -135,3 +158,10 @@ def _slack_permalink(workspace_url: str, channel_id: str, timestamp: str) -> str
     normalized_workspace = workspace_url.rstrip('/')
     permalink_ts = timestamp.replace('.', '').ljust(16, '0')
     return f'{normalized_workspace}/archives/{channel_id}/p{permalink_ts}'
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    try:
+        return max(float(response.headers.get('Retry-After', '1')), 0.0)
+    except ValueError:
+        return 1.0

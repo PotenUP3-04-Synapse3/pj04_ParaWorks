@@ -2761,6 +2761,44 @@ Verification evidence:
 - `uv run ruff check backend/app/connectors/slack.py backend/app/ingestion/sync.py backend/tests/test_slack_connector.py backend/tests/test_connector_ingestion_contract.py`
   passed.
 
+## Slack Live Sync Retry Guardrails
+
+What changed:
+
+- Added bounded retry handling to `SlackWebApiClient` for Slack `429`
+  rate-limit responses and transient `5xx` history API failures.
+- Honored Slack `Retry-After` headers when present, with a safe default delay
+  for transient errors that do not include the header.
+- Converted exhausted retry paths into clear `SlackApiError` messages so sync
+  endpoints can keep returning controlled failure states.
+- Updated Slack runbook guidance and tests for retry behavior.
+
+Portfolio angle:
+
+- Makes the live Slack integration more production-like: API rate limits and
+  temporary provider failures are expected operating conditions, not demo-only
+  surprises.
+- Strengthens the three-developer integration contract because Slack connector
+  resilience stays behind the connector boundary and does not leak into agent
+  or frontend code.
+
+Cost/security note:
+
+- Retries are intentionally bounded. ParaWorks can recover from transient Slack
+  failures without creating unlimited provider calls or cascading into repeated
+  review/LLM/embedding work.
+- Retry handling does not log message bodies or expose bot tokens.
+
+Verification evidence:
+
+- Added RED tests for Slack rate-limit retry, retry exhaustion, and transient
+  server-error recovery.
+- Focused retry tests passed after implementation.
+- `uv run pytest backend/tests/test_slack_connector.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_connector_factory.py backend/tests/test_integration_runtime_status.py -v`
+  passed with 27 tests.
+- `uv run ruff check backend/app/connectors/slack.py backend/tests/test_slack_connector.py`
+  passed after Ruff applied import/format cleanup.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2837,3 +2875,4 @@ Verification evidence:
 - `feat: add rag reindex approval ux`
 - `feat: harden google live collection`
 - `feat: add slack incremental sync cursor`
+- `feat: add slack live sync retry guardrails`

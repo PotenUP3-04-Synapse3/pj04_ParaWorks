@@ -18,7 +18,8 @@ Responsibilities:
 
 - `SlackWebApiClient` calls Slack `conversations.history` with bearer-token
   auth, cursor pagination, and optional `oldest` timestamps for incremental
-  history windows.
+  history windows. It retries Slack `429` and transient `5xx` responses within
+  a bounded retry budget and honors `Retry-After` when Slack provides it.
 - `SlackConnector` maps Slack message payloads into `SourceEvent`.
 - `get_sync_connector` uses an installed Slack connection first when demo mode
   is disabled, channel ids are configured, and the token vault can resolve the
@@ -137,6 +138,8 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 - cursor pagination continues until `next_cursor` is empty;
 - incremental Slack sync sends the latest stored channel timestamp as
   `oldest`;
+- Slack `429` and transient `5xx` responses are retried only within the
+  configured retry limit;
 - Slack API errors raise `SlackApiError`;
 - OAuth install URLs contain signed state and never expose client secrets;
 - OAuth code exchange is tested with fake Slack responses only;
@@ -160,6 +163,9 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 - For Slack, source deltas use the latest stored `raw_metadata.channel_id` and
   `raw_metadata.ts` values as channel-level cursors, then Slack receives that
   timestamp as `oldest`.
+- Keep Slack API retries bounded. Retry policies should reduce flaky sync
+  failures without creating unbounded provider calls or repeated downstream
+  review/agent work.
 - Preserve Slack timestamp and channel id as stable source identifiers.
 - Keep raw private message text out of logs.
 - Store only `token_ref` plus a masked token in the database. The current local

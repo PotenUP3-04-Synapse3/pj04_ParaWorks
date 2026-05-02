@@ -159,6 +159,88 @@ def test_slack_web_api_client_sends_oldest_for_incremental_history() -> None:
     assert requests[0].url.params['oldest'] == '1.000100'
 
 
+def test_slack_web_api_client_retries_rate_limited_history_with_retry_after() -> None:
+    requests: list[httpx.Request] = []
+    sleep_calls: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(429, headers={'Retry-After': '2'})
+        return httpx.Response(
+            200,
+            json={
+                'ok': True,
+                'messages': [{'type': 'message', 'user': 'U1', 'text': 'after retry', 'ts': '2.000100'}],
+                'response_metadata': {},
+            },
+        )
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        sleep=sleep_calls.append,
+    )
+
+    messages = client.conversation_history('C123')
+
+    assert [message['text'] for message in messages] == ['after retry']
+    assert len(requests) == 2
+    assert sleep_calls == [2.0]
+
+
+def test_slack_web_api_client_stops_retrying_rate_limited_history_after_limit() -> None:
+    requests: list[httpx.Request] = []
+    sleep_calls: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(429, headers={'Retry-After': '1'})
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        max_retries=1,
+        sleep=sleep_calls.append,
+    )
+
+    with pytest.raises(SlackApiError, match='rate_limited'):
+        client.conversation_history('C123')
+
+    assert len(requests) == 2
+    assert sleep_calls == [1.0]
+
+
+def test_slack_web_api_client_retries_transient_server_history_errors() -> None:
+    requests: list[httpx.Request] = []
+    sleep_calls: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(503)
+        return httpx.Response(
+            200,
+            json={
+                'ok': True,
+                'messages': [{'type': 'message', 'user': 'U1', 'text': 'server recovered', 'ts': '3.000100'}],
+                'response_metadata': {},
+            },
+        )
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        sleep=sleep_calls.append,
+    )
+
+    messages = client.conversation_history('C123')
+
+    assert [message['text'] for message in messages] == ['server recovered']
+    assert len(requests) == 2
+    assert sleep_calls == [1.0]
+
+
 def test_slack_web_api_client_raises_clear_error_for_slack_api_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={'ok': False, 'error': 'missing_scope'})
