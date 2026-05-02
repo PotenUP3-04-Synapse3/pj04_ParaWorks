@@ -62,6 +62,27 @@ def test_review_candidate_requires_evidence() -> None:
         raise AssertionError('candidate without evidence should be rejected')
 
 
+def test_review_candidate_preserves_structured_payload_fields() -> None:
+    candidate = ReviewCandidate(
+        item_type='todo',
+        title='Verify Slack OAuth permissions',
+        summary='Slack OAuth permissions need verification before launch.',
+        source_links=['https://slack.mock/source'],
+        source_snippets=['TODO: verify Slack OAuth permissions before launch.'],
+        confidence_score=0.86,
+        permission_level='internal',
+        payload_fields={
+            'priority': 'high',
+            'priority_reason': 'Launch readiness depends on permission validation.',
+        },
+    )
+
+    candidate.validate_evidence()
+
+    assert candidate.payload_fields['priority'] == 'high'
+    assert candidate.payload_fields['priority_reason'].startswith('Launch readiness')
+
+
 def test_evidence_cache_key_is_stable_and_prompt_versioned() -> None:
     packet = EvidencePacket(
         source_type='slack',

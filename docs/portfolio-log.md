@@ -3137,3 +3137,8 @@ Cost/security note:
   - AgentRun records now store a compact ranked evidence summary, and the detail API/UI promote rank, score, source, permission, and snippet for review/debugging.
   - LangGraph company-memory orchestration now uses the same ranked Slack evidence window and exposes source window, selection strategy, evidence count, and cost plan metadata.
   - Verification: backend suite `199 passed, 1 skipped`; frontend build passed; AgentRun desktop/mobile Playwright regression passed; local orchestration API returned `orchestrated-slack:ranked:12` at `$0.000104 / $0.001`.
+- `feat: add track c extraction boundaries`
+  - Added deterministic Track C agents for Timeline, History, Decision Record, and Todo extraction plus a Validation gate before Review Queue persistence.
+  - Extended `ReviewCandidate` with structured payload fields so each candidate can preserve type-specific fields such as `decision_summary`, `result_summary`, `reason`, `priority`, and `priority_reason`.
+  - LangGraph company-memory orchestration now runs Track C extraction after source-specific agents create fresh review candidates, while cache-hit runs avoid duplicate candidate generation.
+  - Verification: backend suite `203 passed, 1 skipped`; Ruff passed; local orchestration API returned cache-safe `memory_review_items_created=0` when source agents reused cached evidence.

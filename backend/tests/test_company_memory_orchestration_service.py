@@ -78,6 +78,7 @@ def test_company_memory_orchestration_runs_real_agent_services(db_session: Sessi
     ]
     assert result.outputs['slack_review_items_created'] == 1
     assert result.outputs['mail_document_review_items_created'] == 1
+    assert result.outputs['memory_review_items_created'] == 4
     assert result.outputs['rag_agent_run_created'] is True
     assert result.outputs['token_budget_policy'] == 'delta_sync_hash_skip_evidence_budget'
     cost_plan = result.outputs['cost_plan']
@@ -98,15 +99,30 @@ def test_company_memory_orchestration_runs_real_agent_services(db_session: Sessi
     assert cost_plan['rag_orchestrator_agent']['budget_status'] == 'within_budget'
 
     agent_names = [run.agent_name for run in db_session.query(AgentRun).order_by(AgentRun.id).all()]
-    assert agent_names == ['slack_agent', 'mail_document_agent', 'rag_orchestrator_agent']
+    assert agent_names == [
+        'slack_agent',
+        'mail_document_agent',
+        'timeline_agent',
+        'history_agent',
+        'decision_record_agent',
+        'todo_agent',
+        'rag_orchestrator_agent',
+    ]
     slack_run = db_session.query(AgentRun).filter(AgentRun.agent_name == 'slack_agent').one()
     assert slack_run.source_window == 'orchestrated-slack:ranked:12'
     assert slack_run.metadata_['selection_strategy'] == 'ranked'
     assert slack_run.metadata_['evidence_summary'][0]['rank'] == 1
 
     review_items = db_session.query(ReviewItem).order_by(ReviewItem.id).all()
-    assert len(review_items) == 2
-    assert {item.payload['agent_name'] for item in review_items} == {'slack_agent', 'mail_document_agent'}
+    assert len(review_items) == 6
+    assert {item.payload['agent_name'] for item in review_items} == {
+        'slack_agent',
+        'mail_document_agent',
+        'timeline_agent',
+        'history_agent',
+        'decision_record_agent',
+        'todo_agent',
+    }
 
 
 def test_company_memory_orchestration_marks_missing_evidence_as_cost_skips(db_session: Session) -> None:
@@ -118,6 +134,7 @@ def test_company_memory_orchestration_marks_missing_evidence_as_cost_skips(db_se
 
     assert result.outputs['slack_review_items_created'] == 0
     assert result.outputs['mail_document_review_items_created'] == 0
+    assert result.outputs['memory_review_items_created'] == 0
     assert result.outputs['rag_agent_run_created'] is False
     assert result.outputs['cost_plan']['slack_agent']['action'] == 'skip'
     assert result.outputs['cost_plan']['slack_agent']['reason'] == 'no_slack_evidence'
@@ -190,6 +207,7 @@ def test_company_memory_orchestration_uses_cache_when_evidence_is_unchanged(db_s
     assert second.outputs['cost_plan']['rag_orchestrator_agent']['reason'] == 'cache_hit'
     assert second.outputs['slack_review_items_created'] == 0
     assert second.outputs['mail_document_review_items_created'] == 0
+    assert second.outputs['memory_review_items_created'] == 0
     assert second.outputs['rag_agent_run_created'] is False
-    assert db_session.query(AgentRun).count() == 3
-    assert db_session.query(ReviewItem).count() == 2
+    assert db_session.query(AgentRun).count() == 7
+    assert db_session.query(ReviewItem).count() == 6

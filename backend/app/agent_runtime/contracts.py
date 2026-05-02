@@ -69,6 +69,7 @@ class ReviewCandidate:
     confidence_score: float
     permission_level: str
     uncertainty_reason: str | None = None
+    payload_fields: dict[str, str] = field(default_factory=dict)
 
     def validate_evidence(self) -> None:
         if not self.source_links or not self.source_snippets:

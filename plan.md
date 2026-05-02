@@ -133,14 +133,14 @@ Current state:
 - Review Queue approval promotes reviewed candidates into knowledge tables.
 - AgentRun cost summary and detail views exist.
 - Ranked Slack evidence is visible in orchestration and AgentRun detail.
+- Track C extraction boundaries now exist for Timeline, History, Decision
+  Record, Todo, and Validation in deterministic harness mode.
 
 Next priorities:
 
-1. Split candidate extraction into explicit Timeline, History, Decision, Todo,
-   and Validation boundaries under Track C.
-2. Add Source Evidence Drawer and "request more evidence" UX.
-3. Add LangGraph HITL checkpoint strategy.
-4. Add quality and permission regression suite.
+1. Add Source Evidence Drawer and "request more evidence" UX.
+2. Add LangGraph HITL checkpoint strategy.
+3. Add quality and permission regression suite.
 
 ## 4. Shared Runtime Contracts
 
@@ -246,6 +246,8 @@ Completed harness slices include:
 - OpenAI primary and Gemini fallback for Slack LLM runs
 - ranked Slack LLM evidence selection with dedupe and cost caps
 - AgentRun ranked evidence detail UI
+- Track C deterministic extraction boundaries for Timeline, History, Decision
+  Record, Todo, and Validation
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -266,14 +268,18 @@ Tasks:
 Goal: Make the original Phase 4 agents real, but owned under the orchestration
 track.
 
+Status: deterministic harness slice implemented.
+
 Tasks:
 
-- Add deterministic Timeline extraction boundary.
-- Add deterministic History extraction boundary.
-- Add deterministic Decision Record extraction boundary.
-- Add deterministic Todo extraction boundary.
-- Add Validation gate before Review Queue persistence.
-- Wire them into LangGraph after source-specific agents.
+- Add deterministic Timeline extraction boundary. Done.
+- Add deterministic History extraction boundary. Done.
+- Add deterministic Decision Record extraction boundary. Done.
+- Add deterministic Todo extraction boundary. Done.
+- Add Validation gate before Review Queue persistence. Done.
+- Wire them into LangGraph after source-specific agents. Done.
+- Next: replace deterministic extractors with structured LangChain outputs
+  behind the same contracts when quality tests are ready.
 
 Why next:
 
@@ -380,4 +386,3 @@ Coding assistants must:
 
 If the old merged plan and this file conflict, follow this file unless the user
 explicitly says to return to the old plan.
-

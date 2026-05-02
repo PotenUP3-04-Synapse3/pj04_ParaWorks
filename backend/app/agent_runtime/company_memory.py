@@ -20,6 +20,10 @@ from backend.app.agents.mail_document_agent import (
     build_mail_document_evidence_packet,
     create_mail_document_agent_review_items,
 )
+from backend.app.agents.memory_extraction_agent import (
+    build_memory_extraction_evidence_packet,
+    create_memory_extraction_review_items,
+)
 from backend.app.agents.rag_orchestrator_agent import (
     RAG_ORCHESTRATOR_AGENT_NAME,
     RAG_ORCHESTRATOR_AGENT_PROMPT_VERSION,
@@ -182,11 +186,20 @@ def _draft_review_candidates_node(
                 permission_context=permission_context,
                 source_window='orchestrated-mail-docs:all',
             )
+        memory_items = []
+        if slack_items or mail_document_items:
+            memory_packet = build_memory_extraction_evidence_packet(
+                db=db,
+                permission_context=permission_context,
+                source_window='orchestrated-memory:source-agent-output',
+            )
+            memory_items = create_memory_extraction_review_items(db=db, packet=memory_packet)
         return state.complete_node(
             'draft_review_candidates',
             review_boundary='human_approval_required',
             slack_review_items_created=len(slack_items),
             mail_document_review_items_created=len(mail_document_items),
+            memory_review_items_created=len(memory_items),
         )
 
     return draft_review_candidates
