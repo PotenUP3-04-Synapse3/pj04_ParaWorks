@@ -172,8 +172,15 @@ def test_slack_connector_collects_thread_replies_with_parent_context() -> None:
     assert events[0].raw_metadata['is_thread_parent'] is True
     assert events[0].raw_metadata['reply_count'] == 2
     assert events[1].title == 'Slack thread reply in C123'
+    assert events[1].body == (
+        'Thread parent: 결정: 벡터 DB는 pgvector로 갑니다.\n'
+        'Thread reply: 동의합니다. embedding 비용은 hash skip으로 줄이죠.'
+    )
     assert events[1].raw_metadata['is_thread_reply'] is True
     assert events[1].raw_metadata['thread_ts'] == '1777600800.000100'
+    assert events[1].raw_metadata['thread_parent_text'] == '결정: 벡터 DB는 pgvector로 갑니다.'
+    assert events[1].raw_metadata['thread_reply_index'] == 1
+    assert events[1].raw_metadata['thread_context_window'] == 'parent_plus_reply'
 
 
 def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:

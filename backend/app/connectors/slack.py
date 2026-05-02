@@ -163,12 +163,23 @@ class SlackConnector:
                 thread_ts = str(message.get('thread_ts') or message.get('ts') or '')
                 if not thread_ts or int(message.get('reply_count') or 0) <= 0:
                     continue
+                reply_index = 0
+                parent_text = str(message.get('text') or '')
                 for reply in self.client.conversation_replies(channel_id, thread_ts, oldest=oldest):
                     if reply.get('ts') == message.get('ts'):
                         continue
                     if reply.get('type') != 'message' or not reply.get('text'):
                         continue
-                    events.append(self._message_to_source_event(channel_id, reply, parent_ts=thread_ts))
+                    reply_index += 1
+                    events.append(
+                        self._message_to_source_event(
+                            channel_id,
+                            reply,
+                            parent_ts=thread_ts,
+                            parent_text=parent_text,
+                            reply_index=reply_index,
+                        )
+                    )
         return events
 
     def _message_to_source_event(
@@ -177,18 +188,21 @@ class SlackConnector:
         message: dict,
         *,
         parent_ts: str | None = None,
+        parent_text: str | None = None,
+        reply_index: int | None = None,
     ) -> SourceEvent:
         timestamp = str(message['ts'])
         author = message.get('user') or message.get('username')
         thread_ts = str(message.get('thread_ts') or parent_ts or timestamp)
         is_thread_reply = parent_ts is not None and timestamp != parent_ts
         reply_count = int(message.get('reply_count') or 0)
+        body = _thread_context_body(message_text=str(message['text']), parent_text=parent_text)
         return SourceEvent(
             source_type='slack',
             source_id=f'{channel_id}:{timestamp}',
             source_url=_slack_permalink(self.config.workspace_url, channel_id, timestamp),
             title=f'Slack thread reply in {channel_id}' if is_thread_reply else f'Slack message in {channel_id}',
-            body=str(message['text']),
+            body=body,
             author=author,
             participants=[author] if author else [],
             timestamp=datetime.fromtimestamp(float(timestamp), tz=UTC),
@@ -200,6 +214,9 @@ class SlackConnector:
                 'is_thread_parent': reply_count > 0 and thread_ts == timestamp,
                 'is_thread_reply': is_thread_reply,
                 'reply_count': reply_count,
+                'thread_parent_text': parent_text,
+                'thread_reply_index': reply_index,
+                'thread_context_window': 'parent_plus_reply' if parent_text else 'single_message',
                 'required_scopes': list(SLACK_REQUIRED_HISTORY_SCOPES),
             },
         )
@@ -209,6 +226,12 @@ def _slack_permalink(workspace_url: str, channel_id: str, timestamp: str) -> str
     normalized_workspace = workspace_url.rstrip('/')
     permalink_ts = timestamp.replace('.', '').ljust(16, '0')
     return f'{normalized_workspace}/archives/{channel_id}/p{permalink_ts}'
+
+
+def _thread_context_body(*, message_text: str, parent_text: str | None) -> str:
+    if not parent_text:
+        return message_text
+    return f'Thread parent: {parent_text}\nThread reply: {message_text}'
 
 
 def _retry_after_seconds(response: httpx.Response) -> float:

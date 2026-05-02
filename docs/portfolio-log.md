@@ -3164,6 +3164,34 @@ Cost/security note:
 - Permission filtering and hidden-match accounting remain enforced in both
   retrieval paths.
 
+## Slack Thread Context-Aware Chunking
+
+What changed:
+
+- Slack thread replies now preserve parent-message context in the SourceEvent
+  body before ingestion creates the document chunk.
+- Reply metadata now records `thread_parent_text`, `thread_reply_index`, and
+  `thread_context_window=parent_plus_reply`.
+- The connector still fetches thread replies incrementally from the channel
+  cursor, so this quality improvement does not require re-fetching entire
+  channel history by default.
+
+Portfolio angle:
+
+- Improves evidence quality for real collaboration data: short replies such as
+  "동의합니다" or "좋아요" become useful to agents/RAG because the parent
+  decision context travels with the reply chunk.
+- Strengthens Track A ownership by making Slack ingestion more agent-ready,
+  not just API-connected.
+
+Cost/security note:
+
+- This is deterministic preprocessing over already fetched Slack events. It
+  does not call Slack more than the existing reply fetch, and it does not call
+  LLMs or embeddings.
+- Parent context is bounded to one parent message plus one reply, avoiding
+  whole-thread prompt inflation.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3299,3 +3327,5 @@ Cost/security note:
   - Mail/Docs and Track C memory extraction AgentRuns now persist source evidence summary metadata for richer Review Drawer inspection.
 - `feat: align search retrieval backend`
   - `/api/v1/search` now reports its retrieval backend and can use the same pgvector feature-flag path as `/api/v1/ask`.
+- `feat: add slack thread context chunks`
+  - Slack reply chunks now include parent message context and thread metadata for better Review/RAG evidence quality.

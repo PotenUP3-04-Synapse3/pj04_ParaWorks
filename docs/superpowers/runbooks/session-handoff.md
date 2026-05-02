@@ -342,6 +342,24 @@ Next recommended step from `plan.md`:
 3. Prepare structured LangChain output adapters behind the deterministic agent
    contracts.
 
+## 2026-05-02 Slack Thread Context Chunking Update
+
+Aligned with the current root `plan.md` Milestone 5.
+
+- Slack connector reply SourceEvents now set body to:
+  `Thread parent: <parent text>\nThread reply: <reply text>`.
+- Reply metadata now includes `thread_parent_text`, `thread_reply_index`, and
+  `thread_context_window=parent_plus_reply`.
+- Parent messages remain single-message chunks.
+- This improves downstream Review/RAG quality without extra LLM or embedding
+  calls.
+
+Next recommended step from `plan.md`:
+
+1. Add Gmail thread collection quality checks.
+2. Harden Drive parser/version metadata.
+3. Add connector-specific golden dataset fixtures.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing
