@@ -32,6 +32,19 @@ Optional components:
 - background scheduler for recurring sync;
 - observability stack for logs, traces, and metrics.
 
+## Azure Target Mapping
+
+The recommended Azure staging target is:
+
+- Azure Container Apps: `frontend`, `backend`, and `worker`.
+- Azure Database for PostgreSQL Flexible Server with pgvector.
+- Azure Cache for Redis.
+- Azure Key Vault for all OAuth, provider, database, and session secrets.
+- Managed Identity so Container Apps can read Key Vault secret references.
+
+Do not create resources from this runbook without first confirming budget,
+region, resource group, and staging domain.
+
 ## Environment Variables
 
 Core:
@@ -64,13 +77,21 @@ Google:
 LLM and embedding:
 
 - `OPENAI_API_KEY`
+- `AGENT_LLM_PROVIDER_ORDER=azure_openai,openai,gemini` for the current
+  OpenAI-compatible Azure alias path.
 - `GEMINI_API_KEY`
-- `AGENT_LLM_PROVIDER_ORDER=openai,gemini`
 - `RAG_USE_PGVECTOR_SEARCH=true`
 - `RAG_EMBEDDING_MAX_ESTIMATED_COST_USD`
 - `AGENT_LLM_MAX_ESTIMATED_COST_USD`
 
 Never commit real secrets.
+
+Current Azure OpenAI-compatible note:
+
+- The first `azure_openai` provider alias intentionally uses the existing
+  `OPENAI_API_KEY` path so a key swap works without code changes.
+- True Azure OpenAI endpoint/deployment mode still needs future variables such
+  as endpoint, API version, and deployment names.
 
 ## Database Setup
 

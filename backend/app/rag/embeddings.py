@@ -58,6 +58,27 @@ class OpenAIEmbeddingConfig:
     timeout_seconds: float = 30.0
 
 
+def openai_compatible_embedding_config(
+    *,
+    provider: str,
+    api_key: str,
+    model: str = 'text-embedding-3-small',
+    dimensions: int | None = 1536,
+    base_url: str | None = None,
+    timeout_seconds: float = 30.0,
+) -> OpenAIEmbeddingConfig:
+    normalized_provider = provider.strip().lower()
+    if normalized_provider not in {'openai', 'azure_openai'}:
+        raise ValueError(f'Unsupported OpenAI-compatible embedding provider: {provider}')
+    return OpenAIEmbeddingConfig(
+        api_key=api_key,
+        model=model,
+        dimensions=dimensions,
+        base_url=base_url or 'https://api.openai.com/v1',
+        timeout_seconds=timeout_seconds,
+    )
+
+
 class OpenAIEmbeddingModel:
     def __init__(
         self,

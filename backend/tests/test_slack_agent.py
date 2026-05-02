@@ -178,6 +178,24 @@ def test_slack_llm_preflight_reports_missing_credentials_for_all_providers() -> 
     assert preflight['available_providers'] == []
 
 
+def test_slack_llm_preflight_treats_azure_openai_as_openai_key_swap_alias() -> None:
+    packet = build_packet()
+    settings = SlackLlmSettings(
+        enabled=True,
+        provider_order=('azure_openai', 'openai', 'gemini'),
+        openai_api_key='openai-compatible-key',
+        gemini_api_key=None,
+        openai_model='gpt-4.1-mini',
+    )
+
+    preflight = build_slack_llm_preflight(packet=packet, settings=settings)
+
+    assert preflight['action'] == 'run'
+    assert preflight['provider_order'] == ['azure_openai', 'openai', 'gemini']
+    assert preflight['available_providers'] == ['azure_openai', 'openai']
+    assert preflight['model_name'] == 'gpt-4.1-mini'
+
+
 def test_slack_llm_preflight_estimates_tokens_conservatively_for_capped_prompt() -> None:
     packet = build_packet()
     settings = SlackLlmSettings(

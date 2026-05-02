@@ -3517,6 +3517,34 @@ Cost/security note:
 - The script instructs future demos to keep live provider calls behind
   preflight and explicit confirmation, and to avoid exposing secrets.
 
+## Azure OpenAI-Compatible Provider Alias
+
+What changed:
+
+- Added an Azure integration design spec for Azure Container Apps,
+  PostgreSQL pgvector, Redis, Key Vault, Managed Identity, and provider rollout.
+- Added `azure_openai` as a valid Slack LLM provider-order alias.
+- The first `azure_openai` slice intentionally reuses the existing
+  `OPENAI_API_KEY` and OpenAI-compatible chat path so the user can swap keys
+  without code changes.
+- Added an OpenAI-compatible embedding config helper that also accepts the
+  `azure_openai` alias.
+- Updated the deployment runbook with the Azure target mapping and current
+  alias boundary.
+
+Portfolio angle:
+
+- Shows cloud-readiness without prematurely spending Azure budget or committing
+  secrets.
+- Keeps the model-provider boundary testable and replaceable before real Azure
+  endpoint/deployment variables are introduced.
+
+Cost/security note:
+
+- The Azure alias does not call providers during status/preflight checks.
+  Actual paid LLM runs still require preflight and explicit confirmation.
+  No Azure, OpenAI, Slack, Google, or database secrets are committed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3680,3 +3708,5 @@ Cost/security note:
   - Added httpOnly session/refresh cookies, refresh rotation, logout revoke, and frontend credentialed fetches.
 - `docs: add portfolio demo script`
   - Added a recording-ready product walkthrough with cost and security talking points.
+- `feat: add azure openai compatible alias`
+  - Added `azure_openai` provider-order support backed by the existing OpenAI API key path.

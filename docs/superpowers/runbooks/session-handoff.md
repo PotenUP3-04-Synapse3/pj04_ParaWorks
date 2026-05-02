@@ -638,6 +638,35 @@ Next recommended step from `plan.md`:
    Alembic migrations, CSRF, rate limiting, and real identity verification.
 3. Keep whole-app Playwright regression green after any frontend polish.
 
+## 2026-05-03 Azure OpenAI-Compatible Alias Update
+
+Aligned with the current root `plan.md` Milestone 8 Azure staging preparation.
+
+- Added `docs/superpowers/specs/2026-05-03-azure-integration-design.md`.
+- Added `azure_openai` as a valid Slack LLM provider alias.
+- The current alias intentionally uses `OPENAI_API_KEY`,
+  `AGENT_LLM_OPENAI_MODEL`, and the existing OpenAI-compatible ChatOpenAI path.
+- Added `openai_compatible_embedding_config`, which accepts `azure_openai` but
+  still defaults to `https://api.openai.com/v1` for this first key-swap slice.
+- Updated `docs/superpowers/runbooks/deployment.md` with Azure Container Apps,
+  PostgreSQL pgvector, Redis, Key Vault, Managed Identity, and the alias
+  boundary.
+
+Usage:
+
+```text
+AGENT_LLM_PROVIDER_ORDER=azure_openai,openai,gemini
+OPENAI_API_KEY=<openai-compatible-key>
+```
+
+Important:
+
+- This is not yet true Azure OpenAI endpoint/deployment mode. Future work should
+  add endpoint, API version, and deployment-name settings behind the same
+  `azure_openai` provider name.
+- Do not create Azure resources or commit keys without user confirmation on
+  budget, region, resource group, and staging domain.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

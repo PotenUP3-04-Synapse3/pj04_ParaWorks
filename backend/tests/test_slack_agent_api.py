@@ -64,3 +64,26 @@ def test_slack_llm_agent_review_requires_paid_confirmation(client) -> None:
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Paid LLM run requires confirm_paid_run=true'
+
+
+def test_slack_llm_preflight_exposes_azure_openai_alias_with_openai_key(client) -> None:
+    def override_settings() -> Settings:
+        return Settings(
+            agent_llm_enabled=True,
+            agent_llm_provider_order='azure_openai,openai,gemini',
+            openai_api_key='openai-compatible-key',
+            gemini_api_key=None,
+            google_api_key=None,
+            agent_llm_max_estimated_cost_usd=1.0,
+        )
+
+    client.app.dependency_overrides[get_settings] = override_settings
+    client.post('/api/v1/integrations/slack/sync')
+
+    response = client.get('/api/v1/integrations/slack/agent-review/llm/preflight')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['provider_order'] == ['azure_openai', 'openai', 'gemini']
+    assert payload['available_providers'] == ['azure_openai', 'openai']
+    assert payload['action'] == 'run'

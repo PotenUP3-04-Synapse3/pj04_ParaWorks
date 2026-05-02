@@ -292,6 +292,9 @@ Completed harness slices include:
 - Portfolio demo script now covers login, integrations, agent runs, Review
   Queue, approved knowledge, Knowledge Map, permission-aware RAG, cost controls,
   and security talking points
+- Azure integration design now defines Container Apps, PostgreSQL pgvector,
+  Redis, Key Vault, and a first-stage `azure_openai` provider alias that reuses
+  the existing `OPENAI_API_KEY` path for key-swap compatibility
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -410,6 +413,11 @@ Recommended order:
 4. Final whole-app Playwright, backend suite, frontend build, and portfolio
    case-study evidence capture. Current regression pass done; final screenshot
    capture remains.
+5. Azure staging preparation:
+   - Azure design spec. Done.
+   - `azure_openai` OpenAI-compatible provider alias. Done.
+   - IaC/resource creation. Not started; requires budget, region, resource
+     group, and staging domain confirmation.
 
 ## 9. Cost Policy
 

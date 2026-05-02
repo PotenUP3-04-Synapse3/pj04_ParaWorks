@@ -16,6 +16,7 @@ DEFAULT_OUTPUT_COST_PER_1M = 0.60
 DEFAULT_MAX_OUTPUT_TOKENS = 512
 DEFAULT_MAX_INPUT_CHARS = 12_000
 DEFAULT_PROMPT_OVERHEAD_CHARS = 1_500
+OPENAI_COMPATIBLE_PROVIDERS = {'openai', 'azure_openai'}
 
 
 class SlackLlmProviderError(RuntimeError):
@@ -162,8 +163,8 @@ def build_slack_llm_preflight(*, packet: EvidencePacket, settings: SlackLlmSetti
 def build_langchain_slack_agent_model(settings: SlackLlmSettings) -> FallbackSlackAgentModel:
     providers = []
     for provider in _available_providers(_clean_provider_order(settings.provider_order), settings):
-        if provider == 'openai':
-            providers.append(_build_openai_model(settings))
+        if provider in OPENAI_COMPATIBLE_PROVIDERS:
+            providers.append(_build_openai_model(settings, provider=provider))
         elif provider == 'gemini':
             providers.append(_build_gemini_model(settings))
     if not providers:
@@ -210,13 +211,13 @@ def render_slack_llm_prompt(
     )
 
 
-def _build_openai_model(settings: SlackLlmSettings) -> LangChainSlackAgentModel:
+def _build_openai_model(settings: SlackLlmSettings, *, provider: str = 'openai') -> LangChainSlackAgentModel:
     try:
         from langchain_openai import ChatOpenAI
     except ImportError as exc:  # pragma: no cover - depends on optional package
         raise SlackLlmProviderError('langchain-openai is not installed') from exc
     return LangChainSlackAgentModel(
-        provider='openai',
+        provider=provider,
         model_name=settings.openai_model,
         max_input_chars=_effective_max_input_chars(settings),
         chat_model=ChatOpenAI(
@@ -315,7 +316,7 @@ def _affordable_prompt_chars(settings: SlackLlmSettings) -> int | None:
 def _available_providers(provider_order: tuple[str, ...], settings: SlackLlmSettings) -> list[str]:
     available = []
     for provider in provider_order:
-        if provider == 'openai' and settings.openai_api_key:
+        if provider in OPENAI_COMPATIBLE_PROVIDERS and settings.openai_api_key:
             available.append(provider)
         if provider == 'gemini' and settings.gemini_api_key:
             available.append(provider)
@@ -327,7 +328,7 @@ def _clean_provider_order(provider_order: tuple[str, ...]) -> tuple[str, ...]:
     cleaned = []
     for provider in provider_order:
         normalized = provider.strip().lower()
-        if normalized in {'openai', 'gemini'} and normalized not in seen:
+        if normalized in {*OPENAI_COMPATIBLE_PROVIDERS, 'gemini'} and normalized not in seen:
             cleaned.append(normalized)
             seen.add(normalized)
     return tuple(cleaned) or ('openai', 'gemini')

@@ -1,4 +1,4 @@
-from backend.app.rag.embeddings import OpenAIEmbeddingConfig, OpenAIEmbeddingModel
+from backend.app.rag.embeddings import OpenAIEmbeddingConfig, OpenAIEmbeddingModel, openai_compatible_embedding_config
 
 
 class FakeEmbeddingResponse:
@@ -71,3 +71,16 @@ def test_openai_embedding_model_batches_inputs_and_tracks_usage() -> None:
             'timeout': 7.0,
         }
     ]
+
+
+def test_openai_compatible_embedding_config_accepts_azure_openai_alias_with_openai_key() -> None:
+    config = openai_compatible_embedding_config(
+        provider='azure_openai',
+        api_key='openai-compatible-key',
+        model='text-embedding-3-small',
+        dimensions=1536,
+    )
+
+    assert config.api_key == 'openai-compatible-key'
+    assert config.model == 'text-embedding-3-small'
+    assert config.base_url == 'https://api.openai.com/v1'
