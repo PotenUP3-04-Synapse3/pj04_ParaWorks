@@ -224,6 +224,46 @@ export type KnowledgeResponse = {
   todos: KnowledgeItem[];
 };
 
+export type KnowledgeMapNode = {
+  id: string;
+  type: "decision" | "history_event" | "timeline_event" | "todo" | "evidence_source" | string;
+  label: string;
+  summary?: string;
+  source_url?: string;
+  permission_level: string;
+  confidence_score?: number;
+  review_status?: string;
+  created_at?: string;
+  source_count?: number;
+  href?: string;
+  connected_memory_count?: number;
+  snippet_count?: number;
+};
+
+export type KnowledgeMapEdge = {
+  source: string;
+  target: string;
+  relationship: string;
+  permission_level: string;
+};
+
+export type KnowledgeMapResponse = {
+  counts: {
+    memory_nodes: number;
+    evidence_nodes: number;
+    edges: number;
+    permission_levels: Record<string, number>;
+  };
+  nodes: KnowledgeMapNode[];
+  edges: KnowledgeMapEdge[];
+  cost_policy: {
+    paid_llm_calls: boolean;
+    embedding_calls: boolean;
+    sync_jobs_triggered: boolean;
+    strategy: string;
+  };
+};
+
 export type NotificationItem = {
   id: string;
   category: "review" | "agent_run" | string;

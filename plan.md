@@ -284,6 +284,8 @@ Completed harness slices include:
   pgvector, Redis, Celery, OAuth, verification, cost, and rollback boundaries
 - Notifications now surface Review Queue and AgentRun alerts without creating
   new paid model or embedding paths
+- Knowledge Map now visualizes approved company memory records and their source
+  evidence links through a read-only, zero-paid-call graph endpoint and page
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -383,9 +385,24 @@ Tasks:
 - Decisions page. Done.
 - Timeline and History views. Done.
 - Notifications. Done for Review Queue and AgentRun visibility.
-- Knowledge Map, if time allows.
+- Knowledge Map. Done.
 - Production auth plan: httpOnly cookie + refresh token. Done.
 - Deployment runbook. Done.
+
+### Milestone 8. Final Product Hardening
+
+Goal: Move the harness toward a portfolio-ready, product-like demo without
+weakening the 3-track ownership model.
+
+Recommended order:
+
+1. Frontend global consistency and final Liquid Glass polish across all pages.
+2. Production auth implementation based on the documented httpOnly cookie and
+   refresh-token plan.
+3. End-to-end demo script covering Slack/Gmail/Drive evidence, Review Queue,
+   approved knowledge, Knowledge Map, and permission-aware RAG.
+4. Final whole-app Playwright, backend suite, frontend build, and portfolio
+   case-study evidence capture.
 
 ## 9. Cost Policy
 

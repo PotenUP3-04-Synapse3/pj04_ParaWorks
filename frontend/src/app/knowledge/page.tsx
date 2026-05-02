@@ -1,4 +1,4 @@
-import { ClipboardList, GitBranch, History, Library, Route } from "lucide-react";
+import { ClipboardList, GitBranch, History, Library, Network, Route } from "lucide-react";
 import Link from "next/link";
 import { MemoryCard } from "@/components/knowledge/MemoryCollection";
 import { apiGet } from "@/lib/api/client";
@@ -91,6 +91,23 @@ export default async function KnowledgePage() {
           );
         })}
       </section>
+
+      <Link
+        href="/knowledge-map"
+        className="liquid-surface flex flex-col justify-between gap-4 rounded-[30px] p-5 transition hover:scale-[1.01] md:flex-row md:items-center"
+      >
+        <div>
+          <p className="text-sm font-semibold text-[var(--workspace-accent)]">Knowledge Map</p>
+          <h3 className="mt-1 text-lg font-semibold">승인된 기억과 근거 연결 보기</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+            결정, 타임라인, 히스토리, 할 일이 어떤 source evidence에 의해 지지되는지 확인합니다.
+          </p>
+        </div>
+        <div className="liquid-control inline-flex h-12 w-fit items-center gap-2 rounded-[24px] px-4 text-sm font-semibold text-[var(--ink-strong)]">
+          <Network className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
+          Open map
+        </div>
+      </Link>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">

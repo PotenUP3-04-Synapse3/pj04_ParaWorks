@@ -62,3 +62,58 @@ def test_knowledge_api_returns_approved_company_memory(client, db_session) -> No
     assert payload['todos'][0]['summary'] == 'Evidence must be checked before launch readiness review.'
     assert payload['todos'][0]['permission_level'] == 'restricted'
     assert payload['todos'][0]['review_status'] == 'approved'
+
+
+def test_knowledge_map_returns_memory_to_evidence_graph(client, db_session) -> None:
+    shared_source = 'https://slack.mock/project-alpha/decision'
+    decision = DecisionRecord(
+        title='Keep Project Alpha in MVP',
+        decision_summary='Project Alpha stays in scope because customer demos depend on it.',
+        source_links=[shared_source],
+        source_snippets=['Alpha decision source snippet'],
+        confidence_score=0.92,
+        permission_level='internal',
+        review_status='approved',
+    )
+    timeline = TimelineEvent(
+        title='Project Alpha demo confirmed',
+        result_summary='Demo date was confirmed after the scope decision.',
+        source_links=[shared_source],
+        source_snippets=['Alpha timeline source snippet'],
+        confidence_score=0.87,
+        permission_level='restricted',
+        review_status='approved',
+    )
+    db_session.add_all([decision, timeline])
+    db_session.commit()
+
+    response = client.get('/api/v1/knowledge/map')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['counts'] == {
+        'memory_nodes': 2,
+        'evidence_nodes': 1,
+        'edges': 2,
+        'permission_levels': {'internal': 1, 'restricted': 1},
+    }
+    assert payload['cost_policy'] == {
+        'paid_llm_calls': False,
+        'embedding_calls': False,
+        'sync_jobs_triggered': False,
+        'strategy': 'approved_memory_source_link_graph',
+    }
+
+    node_ids = {node['id'] for node in payload['nodes']}
+    assert {'decision:1', 'timeline_event:1', 'evidence_source:https://slack.mock/project-alpha/decision'} <= node_ids
+    evidence_node = next(node for node in payload['nodes'] if node['type'] == 'evidence_source')
+    assert evidence_node['label'] == 'slack.mock/project-alpha/decision'
+    assert evidence_node['connected_memory_count'] == 2
+    assert evidence_node['permission_level'] == 'restricted'
+
+    assert {
+        (edge['source'], edge['target'], edge['relationship'], edge['permission_level']) for edge in payload['edges']
+    } == {
+        ('decision:1', 'evidence_source:https://slack.mock/project-alpha/decision', 'supported_by', 'internal'),
+        ('timeline_event:1', 'evidence_source:https://slack.mock/project-alpha/decision', 'supported_by', 'restricted'),
+    }

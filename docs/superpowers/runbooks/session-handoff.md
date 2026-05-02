@@ -568,6 +568,30 @@ Next recommended step from `plan.md`:
 2. Otherwise spend the next pass on frontend consistency and final portfolio
    polish.
 
+## 2026-05-03 Knowledge Map Update
+
+Aligned with the current root `plan.md` Milestone 7.
+
+- Added `/api/v1/knowledge/map`.
+- The endpoint derives memory nodes from approved Decision, Timeline, History,
+  and Todo records, then connects them to source-evidence nodes through stored
+  source links.
+- Evidence source nodes inherit the strictest connected permission level so the
+  map does not make restricted evidence look broadly shareable.
+- Added `/knowledge-map`, sidebar navigation, Knowledge Library cross-link, and
+  Playwright route inventory coverage.
+
+Cost note:
+
+- Knowledge Map is read-only database aggregation. It does not call LLMs,
+  embeddings, connector sync, or reindex jobs.
+
+Next recommended step from `plan.md`:
+
+1. Frontend global consistency and final Liquid Glass polish across all pages.
+2. Production auth implementation from `docs/superpowers/runbooks/production-auth.md`.
+3. Final demo script and portfolio evidence capture.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

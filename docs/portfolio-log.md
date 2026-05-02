@@ -3444,6 +3444,33 @@ Cost/security note:
 - Notifications are read-only database summaries and do not call LLMs,
   embeddings, Slack, Google, sync jobs, or reindex jobs.
 
+## Knowledge Map
+
+What changed:
+
+- Added `/api/v1/knowledge/map` as a read-only graph endpoint over approved
+  Decisions, Timeline, History, and Todo records.
+- The map creates memory nodes, source-evidence nodes, and `supported_by`
+  edges from stored source links.
+- Added `/knowledge-map` frontend page, sidebar navigation, and route
+  regression coverage.
+- The Knowledge Library now links to the map as a product-facing memory view.
+
+Portfolio angle:
+
+- Shows the core ParaWorks story visually: AI-generated memory is only useful
+  when users can inspect which evidence supports each decision, timeline, or
+  history record.
+- Reinforces the 3-track architecture because Track C can render trusted
+  company memory without importing source-specific agent internals.
+
+Cost/security note:
+
+- Knowledge Map only reads approved database records and source-link metadata.
+  It does not call LLMs, embeddings, Slack, Google, sync jobs, or reindex jobs.
+  Restricted memory nodes keep their restricted permission label, and shared
+  evidence nodes use the strictest connected permission level.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3601,3 +3628,5 @@ Cost/security note:
   - Documented production runtime components, verification, cost gates, monitoring, and rollback.
 - `feat: add review agent notifications`
   - Added derived Review Queue and AgentRun notifications with a product page and route regression coverage.
+- `feat: add knowledge map`
+  - Added a zero-paid-call approved-memory graph endpoint and `/knowledge-map` product page.
