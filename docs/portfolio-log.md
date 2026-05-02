@@ -2799,6 +2799,48 @@ Verification evidence:
 - `uv run ruff check backend/app/connectors/slack.py backend/tests/test_slack_connector.py`
   passed after Ruff applied import/format cleanup.
 
+## LangGraph Evidence Cache Reuse
+
+What changed:
+
+- Added evidence cache planning to the Company Memory LangGraph orchestration
+  path.
+- The orchestration cost plan now builds Slack, Mail/Docs, and RAG evidence
+  packets before execution, computes their evidence cache keys, and checks for
+  completed matching `AgentRun` records.
+- Unchanged evidence now produces `use_cache` decisions and avoids creating
+  duplicate Slack/Mail review candidates or repeated RAG agent runs.
+- Exposed `evidence_cache_reuse=true` in the orchestration cost policy API.
+
+Portfolio angle:
+
+- Shows a realistic multi-agent orchestration concern: merging multiple agent
+  tracks safely means the orchestrator must decide when not to run agents.
+- Strengthens the cost-optimization story because repeated user clicks over
+  unchanged Slack/Gmail/Drive/RAG evidence no longer create duplicate agent
+  spend or noisy review work.
+- Keeps the split between three developers clean: each agent owns its packet
+  and cache key contract, while LangGraph owns the run/skip/cache decision.
+
+Cost/security note:
+
+- Cache planning is local database lookup plus deterministic evidence hashing.
+  It does not call Slack, Google, embeddings, or paid LLM APIs.
+- Cached decisions still preserve the explicit POST execution boundary; status
+  and dry-run endpoints remain zero-cost.
+
+Verification evidence:
+
+- Added a RED test proving a second identical Company Memory run should use
+  cache and create no new `AgentRun`/`ReviewItem` records.
+- Added a RED API test for `evidence_cache_reuse` in orchestration cost policy.
+- `uv run pytest backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py backend/tests/test_agent_runs_api.py -v`
+  passed with 11 tests.
+- `uv run pytest backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py -v`
+  passed with 7 tests after Ruff cleanup.
+- `uv run ruff check backend/app/agent_runtime/company_memory.py backend/app/api/v1/orchestration.py backend/app/agents/slack_agent/__init__.py backend/app/agents/rag_orchestrator_agent/__init__.py backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py`
+  passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2876,3 +2918,4 @@ Verification evidence:
 - `feat: harden google live collection`
 - `feat: add slack incremental sync cursor`
 - `feat: add slack live sync retry guardrails`
+- `feat: reuse cached langgraph evidence`

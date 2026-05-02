@@ -5,24 +5,39 @@ from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import (
     AgentWorkflowState,
+    EvidencePacket,
     PermissionContext,
     TokenUsage,
     build_agent_workflow,
+    build_evidence_cache_key,
     evaluate_agent_cost_budget,
 )
 from backend.app.agents.mail_document_agent import (
+    MAIL_DOCUMENT_AGENT_NAME,
+    MAIL_DOCUMENT_AGENT_PROMPT_VERSION,
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
+    build_mail_document_evidence_packet,
     create_mail_document_agent_review_items,
 )
-from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
+from backend.app.agents.rag_orchestrator_agent import (
+    RAG_ORCHESTRATOR_AGENT_NAME,
+    RAG_ORCHESTRATOR_AGENT_PROMPT_VERSION,
+    answer_question_with_rag,
+    build_rag_evidence_packet,
+    retrieve_matching_evidence_candidates,
+)
 from backend.app.agents.slack_agent import (
+    SLACK_AGENT_NAME,
+    SLACK_AGENT_PROMPT_VERSION,
     DeterministicSlackAgentModel,
     SlackAgent,
+    build_slack_evidence_packet,
     create_slack_agent_review_items,
 )
 from backend.app.core.demo_auth import DemoUser
-from backend.app.models import DocumentChunk, Source
+from backend.app.models import AgentRun, DocumentChunk, Source
+from backend.app.permissions.service import can_access_permission
 
 DEFAULT_AGENT_RUN_BUDGET_USD = 0.001
 DEFAULT_INPUT_COST_PER_1M = 0.15
@@ -44,7 +59,7 @@ def run_company_memory_agent_orchestration(
     question: str,
 ) -> CompanyMemoryOrchestrationResult:
     permission_context = PermissionContext(user_id=user.id, role=user.role)
-    cost_plan = build_company_memory_cost_plan(db=db, question=question)
+    cost_plan = build_company_memory_cost_plan(db=db, question=question, user=user)
     workflow = build_agent_workflow(
         (
             ('collect_evidence', _collect_evidence_node(db, cost_plan)),
@@ -67,25 +82,54 @@ def run_company_memory_agent_orchestration(
     )
 
 
-def build_company_memory_cost_plan(*, db: Session, question: str) -> dict[str, dict[str, float | int | str | None]]:
+def build_company_memory_cost_plan(
+    *,
+    db: Session,
+    question: str,
+    user: DemoUser,
+) -> dict[str, dict[str, float | int | str | None]]:
+    permission_context = PermissionContext(user_id=user.id, role=user.role)
+    slack_packet = build_slack_evidence_packet(
+        db=db,
+        permission_context=permission_context,
+        source_window='orchestrated-slack:all',
+    )
+    mail_document_packet = build_mail_document_evidence_packet(
+        db=db,
+        permission_context=permission_context,
+        source_window='orchestrated-mail-docs:all',
+    )
+    rag_packet = _build_planning_rag_packet(db=db, user=user, question=question, permission_context=permission_context)
     slack_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('slack',))
     mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'drive'))
     question_token_estimate = _estimate_tokens(question)
 
     return {
         'slack_agent': _agent_cost_plan(
-            has_input=slack_token_estimate > 0,
+            agent_name=SLACK_AGENT_NAME,
+            prompt_version=SLACK_AGENT_PROMPT_VERSION,
+            packet=slack_packet,
+            db=db,
+            has_input=bool(slack_packet.messages),
             run_reason='slack_evidence_available',
             skip_reason='no_slack_evidence',
             estimated_input_tokens=slack_token_estimate,
         ),
         'mail_document_agent': _agent_cost_plan(
-            has_input=mail_document_token_estimate > 0,
+            agent_name=MAIL_DOCUMENT_AGENT_NAME,
+            prompt_version=MAIL_DOCUMENT_AGENT_PROMPT_VERSION,
+            packet=mail_document_packet,
+            db=db,
+            has_input=bool(mail_document_packet.messages),
             run_reason='mail_document_evidence_available',
             skip_reason='no_mail_document_evidence',
             estimated_input_tokens=mail_document_token_estimate,
         ),
         'rag_orchestrator_agent': _agent_cost_plan(
+            agent_name=RAG_ORCHESTRATOR_AGENT_NAME,
+            prompt_version=RAG_ORCHESTRATOR_AGENT_PROMPT_VERSION,
+            packet=rag_packet,
+            db=db,
             has_input=question_token_estimate > 0,
             run_reason='question_provided',
             skip_reason='empty_question',
@@ -159,7 +203,7 @@ def _answer_with_rag_node(
     cost_plan: dict[str, dict[str, float | int | str | None]],
 ):
     def answer_with_rag(state: AgentWorkflowState) -> AgentWorkflowState:
-        if cost_plan['rag_orchestrator_agent']['action'] == 'skip':
+        if cost_plan['rag_orchestrator_agent']['action'] != 'run':
             return state.complete_node(
                 'answer_with_rag',
                 orchestrator='rag_orchestrator_agent',
@@ -204,6 +248,10 @@ def _estimate_tokens(text: str) -> int:
 
 def _agent_cost_plan(
     *,
+    agent_name: str,
+    prompt_version: str,
+    packet: EvidencePacket,
+    db: Session,
     has_input: bool,
     run_reason: str,
     skip_reason: str,
@@ -218,6 +266,22 @@ def _agent_cost_plan(
             'estimated_cost_usd': 0.0,
             'budget_limit_usd': DEFAULT_AGENT_RUN_BUDGET_USD,
             'budget_status': 'no_input',
+            'cache_hit': False,
+            'cache_key': None,
+        }
+
+    cache_key = build_evidence_cache_key(packet, prompt_version)
+    if _has_completed_cache_hit(db=db, agent_name=agent_name, prompt_version=prompt_version, cache_key=cache_key):
+        return {
+            'action': 'use_cache',
+            'reason': 'cache_hit',
+            'estimated_input_tokens': estimated_input_tokens,
+            'estimated_output_tokens': 0,
+            'estimated_cost_usd': 0.0,
+            'budget_limit_usd': DEFAULT_AGENT_RUN_BUDGET_USD,
+            'budget_status': 'cached',
+            'cache_hit': True,
+            'cache_key': cache_key,
         }
 
     decision = evaluate_agent_cost_budget(
@@ -240,4 +304,38 @@ def _agent_cost_plan(
         'estimated_cost_usd': round(decision.estimated_cost_usd, 6),
         'budget_limit_usd': decision.budget_limit_usd,
         'budget_status': decision.budget_status,
+        'cache_hit': decision.cache_hit,
+        'cache_key': cache_key,
     }
+
+
+def _has_completed_cache_hit(*, db: Session, agent_name: str, prompt_version: str, cache_key: str) -> bool:
+    return (
+        db.scalar(
+            select(func.count(AgentRun.id)).where(
+                AgentRun.agent_name == agent_name,
+                AgentRun.prompt_version == prompt_version,
+                AgentRun.cache_key == cache_key,
+                AgentRun.status == 'complete',
+            )
+        )
+        or 0
+    ) > 0
+
+
+def _build_planning_rag_packet(
+    *,
+    db: Session,
+    user: DemoUser,
+    question: str,
+    permission_context: PermissionContext,
+) -> EvidencePacket:
+    matching_candidates = retrieve_matching_evidence_candidates(db=db, question=question)
+    visible_candidates = [
+        candidate for candidate in matching_candidates if can_access_permission(user, candidate.permission_level)
+    ]
+    return build_rag_evidence_packet(
+        candidates=visible_candidates,
+        question=question,
+        permission_context=permission_context,
+    )

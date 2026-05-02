@@ -13,6 +13,7 @@ from backend.app.agents.rag_orchestrator_agent.service import (
     answer_question_with_rag,
     build_rag_evidence_packet,
     retrieve_matching_chunks,
+    retrieve_matching_evidence_candidates,
 )
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     'RagOrchestratorModel',
     'answer_question_with_rag',
     'build_rag_evidence_packet',
+    'retrieve_matching_evidence_candidates',
     'retrieve_matching_chunks',
 ]

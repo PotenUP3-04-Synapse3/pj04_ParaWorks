@@ -145,3 +145,44 @@ def test_company_memory_orchestration_skips_agents_that_exceed_cost_budget(db_se
 
     agent_names = [run.agent_name for run in db_session.query(AgentRun).order_by(AgentRun.id).all()]
     assert agent_names == ['rag_orchestrator_agent']
+
+
+def test_company_memory_orchestration_uses_cache_when_evidence_is_unchanged(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'slack',
+        'slack-cache-redis',
+        'Redis should support queue and job progress workflows.',
+    )
+    seed_chunk(
+        db_session,
+        'gmail',
+        'gmail-cache-redis',
+        'PostgreSQL remains durable while Redis handles transient job state.',
+    )
+
+    first = run_company_memory_agent_orchestration(
+        db=db_session,
+        user=USERS['admin'],
+        question='Redis job state',
+    )
+    second = run_company_memory_agent_orchestration(
+        db=db_session,
+        user=USERS['admin'],
+        question='Redis job state',
+    )
+
+    assert first.outputs['cost_plan']['slack_agent']['action'] == 'run'
+    assert first.outputs['cost_plan']['mail_document_agent']['action'] == 'run'
+    assert first.outputs['cost_plan']['rag_orchestrator_agent']['action'] == 'run'
+    assert second.outputs['cost_plan']['slack_agent']['action'] == 'use_cache'
+    assert second.outputs['cost_plan']['slack_agent']['reason'] == 'cache_hit'
+    assert second.outputs['cost_plan']['mail_document_agent']['action'] == 'use_cache'
+    assert second.outputs['cost_plan']['mail_document_agent']['reason'] == 'cache_hit'
+    assert second.outputs['cost_plan']['rag_orchestrator_agent']['action'] == 'use_cache'
+    assert second.outputs['cost_plan']['rag_orchestrator_agent']['reason'] == 'cache_hit'
+    assert second.outputs['slack_review_items_created'] == 0
+    assert second.outputs['mail_document_review_items_created'] == 0
+    assert second.outputs['rag_agent_run_created'] is False
+    assert db_session.query(AgentRun).count() == 3
+    assert db_session.query(ReviewItem).count() == 2

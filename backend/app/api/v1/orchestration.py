@@ -30,6 +30,7 @@ def _cost_policy_response() -> dict:
     return {
         'delta_sync': True,
         'source_hash_skip': True,
+        'evidence_cache_reuse': True,
         'evidence_token_budget': True,
         'per_run_budget_usd': DEFAULT_AGENT_RUN_BUDGET_USD,
         'budget_actions': ['run', 'skip', 'use_cache'],

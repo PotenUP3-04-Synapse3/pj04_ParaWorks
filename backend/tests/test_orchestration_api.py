@@ -55,6 +55,7 @@ def test_company_memory_orchestration_api_exposes_langgraph_status(client) -> No
     assert payload['cost_policy'] == {
         'delta_sync': True,
         'source_hash_skip': True,
+        'evidence_cache_reuse': True,
         'evidence_token_budget': True,
         'per_run_budget_usd': 0.001,
         'budget_actions': ['run', 'skip', 'use_cache'],

@@ -1,6 +1,8 @@
 from backend.app.agents.slack_agent.agent import (
-    DeterministicSlackAgentModel,
     SLACK_AGENT_MANIFEST,
+    SLACK_AGENT_NAME,
+    SLACK_AGENT_PROMPT_VERSION,
+    DeterministicSlackAgentModel,
     SlackAgent,
     SlackAgentModel,
     SlackAgentModelResponse,
@@ -13,6 +15,8 @@ from backend.app.agents.slack_agent.service import (
 __all__ = [
     'DeterministicSlackAgentModel',
     'SLACK_AGENT_MANIFEST',
+    'SLACK_AGENT_NAME',
+    'SLACK_AGENT_PROMPT_VERSION',
     'SlackAgent',
     'SlackAgentModel',
     'SlackAgentModelResponse',
