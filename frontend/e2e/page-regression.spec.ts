@@ -10,6 +10,8 @@ const expectedAppRoutes = [
   "/agent-runs",
   "/agent-runs/[id]",
   "/dashboard",
+  "/decisions",
+  "/history",
   "/integrations",
   "/integrations/google/callback",
   "/integrations/slack/callback",
@@ -18,6 +20,7 @@ const expectedAppRoutes = [
   "/messages",
   "/review",
   "/search",
+  "/timeline",
 ];
 
 const staticPageTargets = [
@@ -26,6 +29,9 @@ const staticPageTargets = [
   { name: "messages", path: "/messages" },
   { name: "review", path: "/review" },
   { name: "knowledge", path: "/knowledge" },
+  { name: "decisions", path: "/decisions" },
+  { name: "timeline", path: "/timeline" },
+  { name: "history", path: "/history" },
   { name: "search", path: "/search" },
   { name: "agent runs", path: "/agent-runs" },
   { name: "integrations", path: "/integrations" },

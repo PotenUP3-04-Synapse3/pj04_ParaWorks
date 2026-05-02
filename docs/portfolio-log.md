@@ -3348,6 +3348,34 @@ Cost/security note:
 - Evidence rendering is bounded by `max_input_chars`, preserving the project
   rule that full source sync does not mean full LLM input.
 
+## Product Memory Pages
+
+What changed:
+
+- Expanded `/api/v1/knowledge` to include approved Timeline records alongside
+  Decisions, History, and Todos.
+- Rebuilt `/knowledge` as an approved company-memory overview with collection
+  cards and latest approved records.
+- Added `/decisions`, `/timeline`, and `/history` pages backed by the same
+  Knowledge API and shared glass-card memory component.
+- Extended Playwright route inventory and clean-render checks to include the
+  new pages.
+
+Portfolio angle:
+
+- Makes the multi-agent result visible as a product, not only as backend
+  Review Queue rows: approved decisions, timelines, and history now have
+  browsable surfaces.
+- Shows the Review Queue trust boundary end-to-end: candidate -> approval ->
+  trusted knowledge -> product memory page -> RAG/search evidence.
+
+Cost/security note:
+
+- These pages are read-only API views and do not trigger LLMs, embeddings, or
+  sync jobs.
+- They reuse reviewed records and preserve permission/confidence/source
+  metadata for every card.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3497,3 +3525,5 @@ Cost/security note:
   - Added local precision/recall/hit-rate evaluation for deterministic RAG retrieval fixtures.
 - `feat: add structured memory extraction adapter`
   - Added a LangChain structured-output adapter behind the existing Track C memory extraction contract.
+- `feat: add product memory pages`
+  - Added Decisions, Timeline, and History pages backed by approved Knowledge API records.

@@ -1,4 +1,4 @@
-from backend.app.models import DecisionRecord, HistoryEvent, Todo
+from backend.app.models import DecisionRecord, HistoryEvent, TimelineEvent, Todo
 
 
 def test_knowledge_api_returns_approved_company_memory(client, db_session) -> None:
@@ -20,6 +20,15 @@ def test_knowledge_api_returns_approved_company_memory(client, db_session) -> No
         permission_level='internal',
         review_status='approved',
     )
+    timeline = TimelineEvent(
+        title='Launch QA completed',
+        result_summary='QA passed and launch preparation moved to review.',
+        source_links=['https://calendar.mock/launch'],
+        source_snippets=['Timeline source snippet'],
+        confidence_score=0.86,
+        permission_level='internal',
+        review_status='approved',
+    )
     todo = Todo(
         title='Verify evidence inspection before launch',
         priority='high',
@@ -30,7 +39,7 @@ def test_knowledge_api_returns_approved_company_memory(client, db_session) -> No
         permission_level='restricted',
         review_status='approved',
     )
-    db_session.add_all([decision, history, todo])
+    db_session.add_all([decision, history, timeline, todo])
     db_session.commit()
 
     response = client.get('/api/v1/knowledge')
@@ -40,6 +49,7 @@ def test_knowledge_api_returns_approved_company_memory(client, db_session) -> No
     assert payload['counts'] == {
         'decisions': 1,
         'history_events': 1,
+        'timeline_events': 1,
         'todos': 1,
     }
     assert payload['decisions'][0]['title'] == 'Use Redis for queues'
@@ -47,6 +57,8 @@ def test_knowledge_api_returns_approved_company_memory(client, db_session) -> No
     assert payload['decisions'][0]['source_links'] == ['https://slack.mock/redis']
     assert payload['decisions'][0]['confidence_score'] == 0.91
     assert payload['history_events'][0]['summary'] == 'Advanced diff UI moved out of MVP.'
+    assert payload['timeline_events'][0]['title'] == 'Launch QA completed'
+    assert payload['timeline_events'][0]['summary'] == 'QA passed and launch preparation moved to review.'
     assert payload['todos'][0]['summary'] == 'Evidence must be checked before launch readiness review.'
     assert payload['todos'][0]['permission_level'] == 'restricted'
     assert payload['todos'][0]['review_status'] == 'approved'

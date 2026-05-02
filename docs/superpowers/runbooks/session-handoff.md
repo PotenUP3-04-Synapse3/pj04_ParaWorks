@@ -479,6 +479,31 @@ Next recommended step from `plan.md`:
 2. Add production auth plan after product surfaces stabilize.
 3. Keep expanding golden fixtures as new real-data failures appear.
 
+## 2026-05-02 Product Memory Pages Update
+
+Aligned with the current root `plan.md` Milestone 7.
+
+- `/api/v1/knowledge` now includes `timeline_events` and a
+  `counts.timeline_events` value.
+- `/knowledge` is now an approved company-memory overview.
+- Added `/decisions`, `/timeline`, and `/history` pages.
+- Added `frontend/src/components/knowledge/MemoryCollection.tsx` for shared
+  glass-card memory rendering.
+- Extended frontend route inventory and clean-render Playwright coverage for
+  the new pages.
+
+Cost note:
+
+- These pages are read-only and do not trigger paid LLM calls, embedding calls,
+  provider sync, or reindex jobs.
+
+Next recommended step from `plan.md`:
+
+1. Add production auth plan: httpOnly cookie + refresh token.
+2. Add deployment runbook.
+3. Consider Notifications/Knowledge Map only after auth/deploy boundaries are
+   documented.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

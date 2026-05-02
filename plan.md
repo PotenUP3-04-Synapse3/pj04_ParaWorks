@@ -144,8 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Add product completion pages for decisions/timeline/history.
-2. Add production auth plan after product surfaces stabilize.
+1. Add production auth plan after product surfaces stabilize.
+2. Add notifications and Knowledge Map only after core memory surfaces are stable.
 
 ## 4. Shared Runtime Contracts
 
@@ -276,6 +276,8 @@ Completed harness slices include:
 - Track C memory extraction now has a LangChain `with_structured_output`
   adapter boundary behind the same deterministic `MemoryExtractionModel`
   contract
+- Product memory pages now expose approved Decisions, Timeline, and History
+  records from the shared Knowledge API
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -372,8 +374,8 @@ Goal: Move from harness to product-like MVP.
 
 Tasks:
 
-- Projects and Decisions pages.
-- Timeline and History views.
+- Decisions page. Done.
+- Timeline and History views. Done.
 - Notifications.
 - Knowledge Map, if time allows.
 - Production auth plan: httpOnly cookie + refresh token.

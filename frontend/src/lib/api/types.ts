@@ -215,10 +215,12 @@ export type KnowledgeResponse = {
   counts: {
     decisions: number;
     history_events: number;
+    timeline_events: number;
     todos: number;
   };
   decisions: KnowledgeItem[];
   history_events: KnowledgeItem[];
+  timeline_events: KnowledgeItem[];
   todos: KnowledgeItem[];
 };
 
