@@ -1,7 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
+from backend.app.agent_runtime import (
+    EvidenceMessage,
+    EvidencePacket,
+    PermissionContext,
+    build_evidence_summary,
+)
 from backend.app.agents.mail_document_agent.agent import MailDocumentAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
@@ -41,13 +46,14 @@ def create_mail_document_agent_review_items(
         total_tokens=result.cost.token_usage.total_tokens,
         estimated_cost_usd=result.cost.estimated_cost_usd,
         permission_level=packet.strictest_permission,
-        metadata_={
-            'source_type': packet.source_type,
-            'included_source_types': included_source_types,
-            'message_count': len(packet.messages),
-            'cache_hit': result.cost.cache_hit,
-        },
-    )
+            metadata_={
+                'source_type': packet.source_type,
+                'included_source_types': included_source_types,
+                'message_count': len(packet.messages),
+                'cache_hit': result.cost.cache_hit,
+                'evidence_summary': build_evidence_summary(packet),
+            },
+        )
     db.add(agent_run)
     db.flush()
 

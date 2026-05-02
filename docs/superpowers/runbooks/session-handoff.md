@@ -294,10 +294,26 @@ Aligned with the current root `plan.md` Milestone 6.
 
 Next recommended step from `plan.md`:
 
-1. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
-   author, timestamp, and source ids.
-2. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
-3. Add connector-specific golden dataset fixtures.
+1. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
+2. Add connector-specific golden dataset fixtures.
+
+## 2026-05-02 Cross-Agent Evidence Summary Update
+
+Aligned with the current root `plan.md` Track C next-priority cleanup.
+
+- Added `backend/app/agent_runtime/evidence_summary.py`.
+- Mail/Document Agent bridge now stores `evidence_summary` in AgentRun metadata.
+- Track C Timeline/History/Decision/Todo extraction runs now store
+  `evidence_summary` in AgentRun metadata.
+- The metadata includes rank, source id, source URL, source type, timestamp,
+  author, permission level, importance score, and snippet.
+
+Next recommended step from `plan.md`:
+
+1. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
+2. Add connector-specific golden dataset fixtures.
+3. Prepare structured LangChain output adapters behind the deterministic agent
+   contracts.
 
 ## Portfolio Recording Rule
 

@@ -90,6 +90,18 @@ def test_memory_extraction_agents_persist_review_items_and_agent_runs(db_session
         'todo_agent',
     ]
     assert all(run.metadata_['validation_status'] == 'accepted' for run in agent_runs)
+    assert all(len(run.metadata_['evidence_summary']) == 2 for run in agent_runs)
+    assert agent_runs[0].metadata_['evidence_summary'][0] == {
+        'rank': 1,
+        'source_id': 'slack-decision',
+        'source_url': 'https://slack.mock/slack-decision',
+        'source_type': 'slack',
+        'timestamp': '2026-05-02T09:00:00+09:00',
+        'author': 'owner@example.com',
+        'permission_level': 'internal',
+        'importance_score': 0,
+        'snippet': '결정: Redis를 작업 상태 공유에 사용합니다. TODO: 런칭 전에 권한 테스트를 마칩니다.',
+    }
 
     stored_items = db_session.scalars(select(ReviewItem).order_by(ReviewItem.id)).all()
     assert [item.id for item in stored_items] == [item.id for item in created]

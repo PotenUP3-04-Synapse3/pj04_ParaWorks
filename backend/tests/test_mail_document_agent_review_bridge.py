@@ -7,7 +7,14 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgentModelResponse,
     create_mail_document_agent_review_items,
 )
-from backend.app.models import AgentRun, Document, DocumentChunk, DocumentVersion, ReviewItem, Source
+from backend.app.models import (
+    AgentRun,
+    Document,
+    DocumentChunk,
+    DocumentVersion,
+    ReviewItem,
+    Source,
+)
 
 
 class FakeMailDocumentModel:
@@ -84,6 +91,30 @@ def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session:
     assert agent_run.total_tokens == 1180
     assert agent_run.permission_level == 'restricted'
     assert agent_run.metadata_['included_source_types'] == ['drive', 'gmail']
+    assert agent_run.metadata_['evidence_summary'] == [
+        {
+            'rank': 1,
+            'source_id': 'gmail-agent-test',
+            'source_url': 'https://gmail.mock/gmail-agent-test',
+            'source_type': 'gmail',
+            'timestamp': '2026-04-30T10:00:00+00:00',
+            'author': 'owner@example.com',
+            'permission_level': 'internal',
+            'importance_score': 0,
+            'snippet': 'gmail body',
+        },
+        {
+            'rank': 2,
+            'source_id': 'drive-agent-test',
+            'source_url': 'https://drive.mock/drive-agent-test',
+            'source_type': 'drive',
+            'timestamp': '2026-04-30T10:00:00+00:00',
+            'author': 'owner@example.com',
+            'permission_level': 'restricted',
+            'importance_score': 0,
+            'snippet': 'drive body',
+        },
+    ]
     assert review_item.payload['agent_run_id'] == agent_run.id
     assert review_item.payload['agent_name'] == 'mail_document_agent'
     assert review_item.source_links == [

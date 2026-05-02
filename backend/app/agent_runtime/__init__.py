@@ -14,6 +14,7 @@ from backend.app.agent_runtime.cost_policy import (
     estimate_agent_run_cost,
     evaluate_agent_cost_budget,
 )
+from backend.app.agent_runtime.evidence_summary import build_evidence_summary
 from backend.app.agent_runtime.orchestration import (
     AgentWorkflow,
     AgentWorkflowState,
@@ -36,6 +37,7 @@ __all__ = [
     'ReviewCandidate',
     'TokenUsage',
     'build_evidence_cache_key',
+    'build_evidence_summary',
     'build_agent_workflow',
     'build_company_memory_workflow',
     'evaluate_agent_cost_budget',

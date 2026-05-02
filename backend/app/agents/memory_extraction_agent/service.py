@@ -1,7 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
+from backend.app.agent_runtime import (
+    EvidenceMessage,
+    EvidencePacket,
+    PermissionContext,
+    build_evidence_summary,
+)
 from backend.app.agents.memory_extraction_agent.agent import (
     DecisionRecordAgent,
     DeterministicDecisionRecordModel,
@@ -96,6 +101,7 @@ def create_memory_extraction_review_items(
                 'cache_hit': result.cost.cache_hit,
                 'validation_status': 'accepted' if accepted_candidates else 'rejected',
                 'validation_min_confidence': validation_agent.min_confidence,
+                'evidence_summary': build_evidence_summary(packet),
             },
         )
         db.add(agent_run)

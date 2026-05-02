@@ -3105,6 +3105,34 @@ Cost/security note:
 - The tests make cost control observable by asserting cache reuse and no
   duplicate review/agent records on unchanged evidence.
 
+## Cross-Agent Evidence Summary Metadata
+
+What changed:
+
+- Added a shared `build_evidence_summary` helper for turning `EvidencePacket`
+  messages into AgentRun evidence summary rows.
+- Mail/Document Agent runs now persist source id, URL, source type, timestamp,
+  author, permission, rank, importance score, and snippet metadata.
+- Track C Timeline/History/Decision/Todo extraction runs now persist the same
+  evidence summary metadata, so Review Drawer rows can become richer beyond
+  Slack-only candidates.
+
+Portfolio angle:
+
+- Strengthens the three-track architecture because Drawer evidence is no
+  longer a Slack-specific affordance; Mail/Docs and orchestration-owned memory
+  agents now expose the same review/debug metadata.
+- Makes future LangChain structured-output replacement safer because the
+  Review UI depends on shared EvidencePacket-derived metadata rather than each
+  agent inventing local evidence shapes.
+
+Cost/security note:
+
+- Evidence summaries are derived from already-selected evidence packets and
+  stored with AgentRun metadata. They do not trigger extra provider calls.
+- Permission labels remain attached to each evidence row for reviewer and RAG
+  safety checks.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3236,3 +3264,5 @@ Cost/security note:
   - Orchestration status APIs expose HITL checkpointing as part of the cost/trust policy.
 - `test: add quality permission regression suite`
   - Added focused guardrails for evidence-first approval, restricted RAG hiding, HITL checkpoint metadata, and cache dedupe.
+- `feat: add cross-agent evidence summaries`
+  - Mail/Docs and Track C memory extraction AgentRuns now persist source evidence summary metadata for richer Review Drawer inspection.

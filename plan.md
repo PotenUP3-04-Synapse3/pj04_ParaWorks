@@ -144,9 +144,9 @@ Current state:
 
 Next priorities:
 
-1. Expand review evidence quality signals from Track A and Track B agents.
-2. Harden connector quality metadata for Slack, Gmail, Drive, and Calendar.
-3. Add golden dataset fixtures for connector-specific extraction quality.
+1. Harden connector quality metadata for Slack, Gmail, Drive, and Calendar.
+2. Add golden dataset fixtures for connector-specific extraction quality.
+3. Prepare structured LangChain output adapters behind deterministic contracts.
 
 ## 4. Shared Runtime Contracts
 
@@ -259,6 +259,8 @@ Completed harness slices include:
   orchestration API
 - Focused quality and permission regression suite covering source-less review
   rejection, restricted RAG hiding, HITL checkpoints, and cache dedupe
+- Mail/Docs and Track C memory extraction AgentRuns now store evidence summary
+  metadata for richer Review Drawer rows
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
