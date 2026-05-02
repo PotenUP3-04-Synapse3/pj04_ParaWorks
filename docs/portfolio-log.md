@@ -3192,6 +3192,31 @@ Cost/security note:
 - Parent context is bounded to one parent message plus one reply, avoiding
   whole-thread prompt inflation.
 
+## Gmail Thread And Domain Metadata Quality
+
+What changed:
+
+- Gmail SourceEvents now parse participants from From, To, and Cc headers.
+- Gmail metadata now records `thread_context_key`, `from_domain`,
+  `participant_domains`, `external_domains`, and
+  `has_external_participants`.
+- Existing body extraction, truncation, label ids, thread id, and delta cursor
+  behavior remain intact.
+
+Portfolio angle:
+
+- Makes Gmail evidence more useful for business review: agents can distinguish
+  internal-only messages from customer/vendor-involved threads.
+- Supports future permission and routing policies without hard-coding Gmail
+  parsing logic inside agent implementations.
+
+Cost/security note:
+
+- This is local header parsing over already fetched Gmail message payloads.
+  It does not add Google API calls, LLM calls, or embedding calls.
+- Domain metadata enables safer future filtering while keeping raw content
+  behind the existing Review/RAG permission checks.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3329,3 +3354,5 @@ Cost/security note:
   - `/api/v1/search` now reports its retrieval backend and can use the same pgvector feature-flag path as `/api/v1/ask`.
 - `feat: add slack thread context chunks`
   - Slack reply chunks now include parent message context and thread metadata for better Review/RAG evidence quality.
+- `feat: enrich gmail thread domain metadata`
+  - Gmail events now preserve thread context keys, participants, participant domains, and external-domain flags.

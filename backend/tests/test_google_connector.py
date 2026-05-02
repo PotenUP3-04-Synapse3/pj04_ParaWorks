@@ -32,6 +32,8 @@ class FakeGoogleClient:
                     'headers': [
                         {'name': 'Subject', 'value': '계약 검토 일정'},
                         {'name': 'From', 'value': 'min@example.com'},
+                        {'name': 'To', 'value': 'para@example.com'},
+                        {'name': 'Cc', 'value': 'partner@client.co.kr'},
                         {'name': 'Date', 'value': 'Fri, 1 May 2026 10:00:00 +0900'},
                     ],
                     'parts': [
@@ -105,14 +107,19 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     assert event.title == '계약 검토 일정'
     assert event.body == '계약 검토 일정\n\nFrom: min@example.com\nDate: Fri, 1 May 2026 10:00:00 +0900\n\n계약 검토 일정은 금요일까지 확정합니다.'
     assert event.author == 'min@example.com'
-    assert event.participants == ['min@example.com']
+    assert event.participants == ['min@example.com', 'para@example.com', 'partner@client.co.kr']
     assert event.timestamp == datetime.fromtimestamp(1777600800, tz=UTC)
     assert event.permission_level == 'internal'
     assert event.raw_metadata['required_scopes'] == list(GOOGLE_CONNECTOR_SCOPES['gmail'])
     assert event.raw_metadata['sync_partition'] == 'gmail'
     assert event.raw_metadata['sync_cursor'] == '1777600800000'
     assert event.raw_metadata['thread_id'] == 'thread-1'
+    assert event.raw_metadata['thread_context_key'] == 'thread-1:msg-1'
     assert event.raw_metadata['label_ids'] == ['INBOX', 'IMPORTANT']
+    assert event.raw_metadata['from_domain'] == 'example.com'
+    assert event.raw_metadata['participant_domains'] == ['client.co.kr', 'example.com']
+    assert event.raw_metadata['external_domains'] == ['client.co.kr']
+    assert event.raw_metadata['has_external_participants'] is True
     assert event.raw_metadata['body_source'] == 'payload'
     assert event.raw_metadata['body_truncated'] is False
 

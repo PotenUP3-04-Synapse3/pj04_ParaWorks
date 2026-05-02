@@ -76,9 +76,8 @@ Current state:
 
 Next priorities:
 
-1. Add Gmail thread collection quality checks.
-2. Expand communication-specific extraction prompts/schemas.
-3. Add communication golden dataset cases.
+1. Expand communication-specific extraction prompts/schemas.
+2. Add communication golden dataset cases.
 
 ### Track B. Document and Knowledge Pipeline
 
@@ -143,7 +142,7 @@ Current state:
 
 Next priorities:
 
-1. Harden Gmail, Drive, and Calendar connector quality metadata.
+1. Harden Drive and Calendar connector quality metadata.
 2. Add golden dataset fixtures for connector-specific extraction quality.
 3. Prepare structured LangChain output adapters behind deterministic contracts.
 
@@ -263,6 +262,8 @@ Completed harness slices include:
   metadata for richer Review Drawer rows
 - Slack connector thread replies now preserve parent context in chunk text and
   metadata for better agent/RAG evidence quality
+- Gmail connector now preserves thread context keys, participants, participant
+  domains, and external-domain flags for better review/RAG filtering
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -334,7 +335,7 @@ Goal: Improve real data quality before adding more shiny features.
 Tasks:
 
 - Slack thread context-aware chunking. Done.
-- Gmail thread metadata and domain filtering.
+- Gmail thread metadata and domain filtering. Done.
 - Drive file parser status and version metadata.
 - Calendar ingestion boundary.
 

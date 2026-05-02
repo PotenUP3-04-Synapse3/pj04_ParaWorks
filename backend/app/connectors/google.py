@@ -204,12 +204,21 @@ class GoogleConnector:
         message_id = str(message['id'])
         subject = _header_value(message, 'Subject') or f'Gmail message {message_id}'
         author = _header_value(message, 'From') or self.config.account_name
+        to_header = _header_value(message, 'To') or ''
+        cc_header = _header_value(message, 'Cc') or ''
         date_header = _header_value(message, 'Date')
         snippet = str(message.get('snippet') or '')
         extracted_body = _gmail_text_body(message)
         source_body = extracted_body or snippet
         body_text, body_truncated = _bounded_text(source_body)
         body_source = 'payload' if extracted_body else 'snippet'
+        participants = _gmail_participants(author=author, to_header=to_header, cc_header=cc_header)
+        domain_metadata = _gmail_domain_metadata(
+            author=author,
+            participants=participants,
+            account_name=self.config.account_name,
+        )
+        thread_id = str(message.get('threadId') or '')
         header_lines = [f'From: {author}'] if author else []
         if date_header:
             header_lines.append(f'Date: {date_header}')
@@ -220,12 +229,13 @@ class GoogleConnector:
             title=subject,
             body='\n\n'.join(part for part in [subject, '\n'.join(header_lines), body_text] if part).strip(),
             author=author,
-            participants=[author] if author else [],
+            participants=participants,
             timestamp=_timestamp_from_google_millis(message.get('internalDate')),
             permission_level='internal',
             raw_metadata={
                 'message_id': message_id,
-                'thread_id': message.get('threadId'),
+                'thread_id': thread_id or None,
+                'thread_context_key': f'{thread_id}:{message_id}' if thread_id else message_id,
                 'label_ids': message.get('labelIds') or [],
                 'date_header': date_header,
                 'account_id': self.config.account_id,
@@ -233,6 +243,7 @@ class GoogleConnector:
                 'sync_cursor': str(message.get('internalDate') or ''),
                 'body_source': body_source,
                 'body_truncated': body_truncated,
+                **domain_metadata,
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
             },
         )
@@ -369,6 +380,42 @@ def _header_value(message: dict, name: str) -> str | None:
         if str(header.get('name', '')).lower() == name.lower():
             return str(header.get('value') or '')
     return None
+
+
+def _gmail_participants(*, author: str | None, to_header: str, cc_header: str) -> list[str]:
+    addresses: list[str] = []
+    for value in [author or '', to_header, cc_header]:
+        for address in _email_addresses(value):
+            if address not in addresses:
+                addresses.append(address)
+    return addresses
+
+
+def _gmail_domain_metadata(*, author: str | None, participants: list[str], account_name: str) -> dict[str, object]:
+    account_domain = _email_domain(account_name)
+    participant_domains = sorted({
+        domain
+        for participant in participants
+        if (domain := _email_domain(participant))
+    })
+    external_domains = [domain for domain in participant_domains if account_domain and domain != account_domain]
+    return {
+        'from_domain': _email_domain(author or ''),
+        'participant_domains': participant_domains,
+        'external_domains': external_domains,
+        'has_external_participants': bool(external_domains),
+    }
+
+
+def _email_addresses(value: str) -> list[str]:
+    return [match.group(0).lower() for match in re.finditer(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}', value)]
+
+
+def _email_domain(value: str) -> str:
+    addresses = _email_addresses(value)
+    if not addresses:
+        return ''
+    return addresses[0].split('@', 1)[1]
 
 
 def _gmail_text_body(message: dict) -> str:

@@ -356,9 +356,25 @@ Aligned with the current root `plan.md` Milestone 5.
 
 Next recommended step from `plan.md`:
 
-1. Add Gmail thread collection quality checks.
-2. Harden Drive parser/version metadata.
-3. Add connector-specific golden dataset fixtures.
+1. Harden Drive parser/version metadata.
+2. Add connector-specific golden dataset fixtures.
+
+## 2026-05-02 Gmail Thread Domain Metadata Update
+
+Aligned with the current root `plan.md` Milestone 5.
+
+- Gmail SourceEvents now parse From, To, and Cc header addresses into
+  participants.
+- Gmail raw metadata now includes `thread_context_key`, `from_domain`,
+  `participant_domains`, `external_domains`, and
+  `has_external_participants`.
+- This is zero-cost local preprocessing over already fetched Gmail payloads.
+
+Next recommended step from `plan.md`:
+
+1. Harden Drive parser/version metadata.
+2. Add connector-specific golden dataset fixtures.
+3. Prepare structured LangChain output adapters behind deterministic contracts.
 
 ## Portfolio Recording Rule
 
