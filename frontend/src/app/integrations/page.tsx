@@ -100,6 +100,7 @@ export default function IntegrationsPage() {
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
+  const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
   const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
@@ -156,6 +157,7 @@ export default function IntegrationsPage() {
       .then((status) => {
         if (active) {
           setSlackRuntime(status);
+          setSelectedSlackChannels(status.selected_channel_ids);
         }
       })
       .catch(() => {
@@ -238,14 +240,33 @@ export default function IntegrationsPage() {
     setError(undefined);
 
     try {
-      const result = await apiPost<IntegrationSyncResponse>(`/api/v1/integrations/${type}/sync`);
+      const result = await apiPost<IntegrationSyncResponse>(
+        `/api/v1/integrations/${type}/sync`,
+        type === "slack" ? { selected_channel_ids: selectedSlackChannels } : undefined,
+      );
       setSyncResult(result);
       setActiveJobId(result.job_id);
+      if (type === "slack") {
+        apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
+          .then((status) => {
+            setSlackRuntime(status);
+          })
+          .catch(() => undefined);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "동기화에 실패했습니다.");
     } finally {
       setPendingType(undefined);
     }
+  }
+
+  function toggleSlackChannel(channelId: string) {
+    setSelectedSlackChannels((current) => {
+      if (current.includes(channelId)) {
+        return current.filter((selectedChannelId) => selectedChannelId !== channelId);
+      }
+      return [...current, channelId];
+    });
   }
 
   async function runAgent(agentKey: string, path: string) {
@@ -450,7 +471,13 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="space-y-3 p-4">
-            {slackRuntime ? <SlackRuntimeStatusPanel status={slackRuntime} /> : null}
+            {slackRuntime ? (
+              <SlackRuntimeStatusPanel
+                status={slackRuntime}
+                selectedChannelIds={selectedSlackChannels}
+                onToggleChannel={toggleSlackChannel}
+              />
+            ) : null}
             <GoogleRuntimeStatusList statuses={googleRuntimeByType} />
 
             {error ? (
@@ -507,10 +534,27 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
   );
 }
 
-function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
-  const channelLabel =
-    status.configured_channel_ids.length > 0 ? status.configured_channel_ids.join(", ") : "채널 미설정";
+function SlackRuntimeStatusPanel({
+  status,
+  selectedChannelIds,
+  onToggleChannel,
+}: {
+  status: SlackRuntimeStatus;
+  selectedChannelIds: string[];
+  onToggleChannel: (channelId: string) => void;
+}) {
+  const channelOptions =
+    status.channel_options.length > 0
+      ? status.channel_options
+      : status.configured_channel_ids.map((channelId) => ({
+          id: channelId,
+          name: channelId,
+          is_selected: true,
+          is_configured: true,
+        }));
+  const channelLabel = selectedChannelIds.length > 0 ? selectedChannelIds.join(", ") : "선택 채널 없음";
   const latestSync = status.latest_sync;
+  const syncSummary = status.latest_sync_summary;
 
   return (
     <div
@@ -530,7 +574,7 @@ function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
       </div>
       <div className="mt-3 grid gap-2 text-xs">
         <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">채널</span>
+          <span className="text-[var(--ink-muted)]">Sync 대상</span>
           <span className="max-w-[210px] truncate font-semibold">{channelLabel}</span>
         </div>
         <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
@@ -542,6 +586,67 @@ function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
           <span className="font-semibold">{status.credential_status}</span>
         </div>
       </div>
+
+      {channelOptions.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="font-semibold text-[var(--ink-strong)]">채널 선택</span>
+            <span className="text-[var(--ink-muted)]">{selectedChannelIds.length.toLocaleString()}개 선택</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {channelOptions.map((channel) => {
+              const selected = selectedChannelIds.includes(channel.id);
+              return (
+                <button
+                  key={channel.id}
+                  type="button"
+                  onClick={() => onToggleChannel(channel.id)}
+                  className={`liquid-control inline-flex h-8 items-center gap-2 rounded-[18px] px-3 text-xs font-semibold ${
+                    selected ? "text-[var(--ink-strong)]" : "text-[var(--ink-muted)] opacity-80"
+                  }`}
+                  aria-pressed={selected}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      selected ? "bg-[var(--workspace-rail-active)]" : "bg-[var(--line-strong)]"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  {channel.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 rounded-md border border-dashed border-[var(--line-soft)] px-3 py-2 text-xs text-[var(--ink-muted)]">
+          Slack 채널 ID를 설정하면 여기서 sync 대상을 선택할 수 있습니다.
+        </p>
+      )}
+
+      <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-semibold">Agent 연결</span>
+          <span className="font-semibold">
+            {status.agent_bridge.ready_for_agent_test ? "테스트 가능" : "sync 필요"}
+          </span>
+        </div>
+        <p className="mt-1 text-[var(--ink-muted)]">
+          Slack source {status.agent_bridge.slack_source_count.toLocaleString()}개 · 대기 review{" "}
+          {status.agent_bridge.pending_review_count.toLocaleString()}개
+        </p>
+      </div>
+
+      {status.last_error ? (
+        <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <div className="flex items-center justify-between gap-3 font-semibold">
+            <span>Slack 오류</span>
+            <span>{status.last_error.code}</span>
+          </div>
+          <p className="mt-1">{status.last_error.action_hint}</p>
+        </div>
+      ) : null}
+
       {latestSync ? (
         <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
           <div className="flex items-center justify-between gap-3">
@@ -549,6 +654,13 @@ function SlackRuntimeStatusPanel({ status }: { status: SlackRuntimeStatus }) {
             <span className="font-semibold">{latestSync.status}</span>
           </div>
           <p className="mt-1 truncate text-[var(--ink-muted)]">{latestSync.message}</p>
+          {syncSummary ? (
+            <p className="mt-1 text-[var(--ink-muted)]">
+              수집 {syncSummary.fetched_events.toLocaleString()} · 후보{" "}
+              {syncSummary.created_review_items.toLocaleString()} · 중복{" "}
+              {syncSummary.skipped_events.toLocaleString()}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

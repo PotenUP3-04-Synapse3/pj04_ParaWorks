@@ -92,6 +92,45 @@ def test_sync_connector_uses_installed_slack_connection_token_from_vault(
     assert connector.client.bot_token == 'xoxb-installed'
 
 
+def test_sync_connector_allows_slack_channel_override_for_selected_sync(
+    db_session: Session,
+) -> None:
+    token_vault = LocalTokenVault()
+    token_vault.store_bot_token(
+        connector_type='slack',
+        workspace_id='T123',
+        token='xoxb-installed',
+    )
+    db_session.add(
+        IntegrationConnection(
+            connector_type='slack',
+            workspace_id='T123',
+            workspace_name='ParaWorks',
+            bot_user_id='U999',
+            scopes=['channels:history'],
+            token_ref='local:slack:T123:bot',
+            masked_bot_token='xoxb...lled',
+            status='connected',
+        )
+    )
+    db_session.commit()
+
+    connector = get_sync_connector(
+        'slack',
+        Settings(
+            paraworks_demo_mode=False,
+            slack_bot_token=None,
+            slack_channel_ids=' C123, C456 ',
+        ),
+        db=db_session,
+        token_vault=token_vault,
+        slack_channel_ids_override=['C456'],
+    )
+
+    assert isinstance(connector, SlackConnector)
+    assert connector.config.channel_ids == ['C456']
+
+
 def test_sync_connector_falls_back_to_mock_when_installed_token_is_not_in_vault(
     db_session: Session,
 ) -> None:

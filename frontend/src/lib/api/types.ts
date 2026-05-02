@@ -344,6 +344,13 @@ export type SlackRuntimeStatus = {
   connector_type: "slack";
   mode: "mock" | "live";
   configured_channel_ids: string[];
+  selected_channel_ids: string[];
+  channel_options: {
+    id: string;
+    name: string;
+    is_selected: boolean;
+    is_configured: boolean;
+  }[];
   connection_status: string;
   credential_status: "available" | "missing";
   latest_sync?: {
@@ -352,9 +359,25 @@ export type SlackRuntimeStatus = {
     message: string;
     progress_pct: number;
   } | null;
+  latest_sync_summary?: {
+    fetched_events: number;
+    created_review_items: number;
+    skipped_events: number;
+  } | null;
+  last_error?: {
+    code: string;
+    message: string;
+    action_hint: string;
+  } | null;
+  agent_bridge: {
+    slack_source_count: number;
+    pending_review_count: number;
+    ready_for_agent_test: boolean;
+  };
   cost_policy: {
     status_lookup_triggers_sync: boolean;
     status_lookup_triggers_llm: boolean;
+    thread_reply_fetch_is_incremental: boolean;
   };
 };
 

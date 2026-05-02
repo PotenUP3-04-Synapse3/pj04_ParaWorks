@@ -20,6 +20,12 @@ class SlackApiClient(Protocol):
     def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
         raise NotImplementedError
 
+    def conversation_replies(self, channel_id: str, thread_ts: str, *, oldest: str | None = None) -> list[dict]:
+        raise NotImplementedError
+
+    def conversations_list(self) -> list[dict]:
+        raise NotImplementedError
+
 
 class SlackApiError(RuntimeError):
     pass
@@ -44,55 +50,78 @@ class SlackWebApiClient:
         self.sleep = sleep
 
     def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
-        messages: list[dict] = []
-        cursor: str | None = None
-
-        while True:
-            payload = self._get_history_page(channel_id=channel_id, cursor=cursor, oldest=oldest)
-            messages.extend(payload.get('messages', []))
-            cursor = str(payload.get('response_metadata', {}).get('next_cursor') or '')
-            if not cursor:
-                break
-
-        return messages
-
-    def _get_history_page(self, *, channel_id: str, cursor: str | None, oldest: str | None) -> dict:
         params = {
             'channel': channel_id,
             'limit': str(self.page_limit),
         }
         if oldest:
             params['oldest'] = oldest
-        if cursor:
-            params['cursor'] = cursor
 
-        response = self._get_with_retries(params)
-        payload = response.json()
-        if not payload.get('ok'):
-            raise SlackApiError(f"Slack conversations.history failed: {payload.get('error', 'unknown_error')}")
-        return payload
+        return self._get_paginated_items('conversations.history', 'messages', params)
 
-    def _get_with_retries(self, params: dict[str, str]) -> httpx.Response:
+    def conversation_replies(self, channel_id: str, thread_ts: str, *, oldest: str | None = None) -> list[dict]:
+        params = {
+            'channel': channel_id,
+            'ts': thread_ts,
+            'limit': str(self.page_limit),
+        }
+        if oldest:
+            params['oldest'] = oldest
+
+        return self._get_paginated_items('conversations.replies', 'messages', params)
+
+    def conversations_list(self) -> list[dict]:
+        return self._get_paginated_items(
+            'conversations.list',
+            'channels',
+            {
+                'types': 'public_channel,private_channel',
+                'exclude_archived': 'true',
+                'limit': str(self.page_limit),
+            },
+        )
+
+    def _get_paginated_items(self, method: str, item_key: str, params: dict[str, str]) -> list[dict]:
+        items: list[dict] = []
+        cursor: str | None = None
+
+        while True:
+            page_params = dict(params)
+            if cursor:
+                page_params['cursor'] = cursor
+
+            response = self._get_with_retries(method, page_params)
+            payload = response.json()
+            if not payload.get('ok'):
+                raise SlackApiError(f"Slack {method} failed: {payload.get('error', 'unknown_error')}")
+            items.extend(payload.get(item_key, []))
+            cursor = str(payload.get('response_metadata', {}).get('next_cursor') or '')
+            if not cursor:
+                break
+
+        return items
+
+    def _get_with_retries(self, method: str, params: dict[str, str]) -> httpx.Response:
         for attempt in range(self.max_retries + 1):
             response = self.http_client.get(
-                f'{self.base_url}/conversations.history',
+                f'{self.base_url}/{method}',
                 headers={'Authorization': f'Bearer {self.bot_token}'},
                 params=params,
             )
             if response.status_code == 429:
                 if attempt >= self.max_retries:
-                    raise SlackApiError('Slack conversations.history failed: rate_limited')
+                    raise SlackApiError(f'Slack {method} failed: rate_limited')
                 self.sleep(_retry_after_seconds(response))
                 continue
             if response.status_code >= 500:
                 if attempt >= self.max_retries:
-                    raise SlackApiError(f'Slack conversations.history failed: http_{response.status_code}')
+                    raise SlackApiError(f'Slack {method} failed: http_{response.status_code}')
                 self.sleep(_retry_after_seconds(response))
                 continue
             if response.status_code >= 400:
-                raise SlackApiError(f'Slack conversations.history failed: http_{response.status_code}')
+                raise SlackApiError(f'Slack {method} failed: http_{response.status_code}')
             return response
-        raise SlackApiError('Slack conversations.history failed: retry_exhausted')
+        raise SlackApiError(f'Slack {method} failed: retry_exhausted')
 
 
 @dataclass(frozen=True)
@@ -131,16 +160,34 @@ class SlackConnector:
                 if message.get('type') != 'message' or not message.get('text'):
                     continue
                 events.append(self._message_to_source_event(channel_id, message))
+                thread_ts = str(message.get('thread_ts') or message.get('ts') or '')
+                if not thread_ts or int(message.get('reply_count') or 0) <= 0:
+                    continue
+                for reply in self.client.conversation_replies(channel_id, thread_ts, oldest=oldest):
+                    if reply.get('ts') == message.get('ts'):
+                        continue
+                    if reply.get('type') != 'message' or not reply.get('text'):
+                        continue
+                    events.append(self._message_to_source_event(channel_id, reply, parent_ts=thread_ts))
         return events
 
-    def _message_to_source_event(self, channel_id: str, message: dict) -> SourceEvent:
+    def _message_to_source_event(
+        self,
+        channel_id: str,
+        message: dict,
+        *,
+        parent_ts: str | None = None,
+    ) -> SourceEvent:
         timestamp = str(message['ts'])
         author = message.get('user') or message.get('username')
+        thread_ts = str(message.get('thread_ts') or parent_ts or timestamp)
+        is_thread_reply = parent_ts is not None and timestamp != parent_ts
+        reply_count = int(message.get('reply_count') or 0)
         return SourceEvent(
             source_type='slack',
             source_id=f'{channel_id}:{timestamp}',
             source_url=_slack_permalink(self.config.workspace_url, channel_id, timestamp),
-            title=f'Slack message in {channel_id}',
+            title=f'Slack thread reply in {channel_id}' if is_thread_reply else f'Slack message in {channel_id}',
             body=str(message['text']),
             author=author,
             participants=[author] if author else [],
@@ -149,6 +196,10 @@ class SlackConnector:
             raw_metadata={
                 'channel_id': channel_id,
                 'ts': timestamp,
+                'thread_ts': thread_ts,
+                'is_thread_parent': reply_count > 0 and thread_ts == timestamp,
+                'is_thread_reply': is_thread_reply,
+                'reply_count': reply_count,
                 'required_scopes': list(SLACK_REQUIRED_HISTORY_SCOPES),
             },
         )

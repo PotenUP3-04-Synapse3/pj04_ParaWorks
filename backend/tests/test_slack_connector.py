@@ -25,6 +25,15 @@ class FakeSlackClient:
             }
         ]
 
+    def conversation_replies(
+        self,
+        channel_id: str,
+        thread_ts: str,
+        *,
+        oldest: str | None = None,
+    ) -> list[dict]:
+        return []
+
 
 def test_slack_required_history_scopes_cover_channel_types() -> None:
     assert SLACK_REQUIRED_HISTORY_SCOPES == (
@@ -77,6 +86,15 @@ def test_slack_connector_fetches_incremental_history_after_channel_cursor() -> N
                 }
             ]
 
+        def conversation_replies(
+            self,
+            channel_id: str,
+            thread_ts: str,
+            *,
+            oldest: str | None = None,
+        ) -> list[dict]:
+            return []
+
     connector = SlackConnector(
         config=SlackConnectorConfig(
             bot_token='xoxb-test',
@@ -90,6 +108,72 @@ def test_slack_connector_fetches_incremental_history_after_channel_cursor() -> N
 
     assert observed_oldest == ['1777600800.000100']
     assert [event.source_id for event in events] == ['C123:1777600900.000100']
+
+
+def test_slack_connector_collects_thread_replies_with_parent_context() -> None:
+    observed_replies: list[tuple[str, str, str | None]] = []
+
+    class ThreadFakeSlackClient:
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            assert channel_id == 'C123'
+            assert oldest == '1777600700.000100'
+            return [
+                {
+                    'type': 'message',
+                    'user': 'U123',
+                    'text': '결정: 벡터 DB는 pgvector로 갑니다.',
+                    'ts': '1777600800.000100',
+                    'thread_ts': '1777600800.000100',
+                    'reply_count': 2,
+                }
+            ]
+
+        def conversation_replies(
+            self,
+            channel_id: str,
+            thread_ts: str,
+            *,
+            oldest: str | None = None,
+        ) -> list[dict]:
+            observed_replies.append((channel_id, thread_ts, oldest))
+            return [
+                {
+                    'type': 'message',
+                    'user': 'U123',
+                    'text': '결정: 벡터 DB는 pgvector로 갑니다.',
+                    'ts': '1777600800.000100',
+                    'thread_ts': '1777600800.000100',
+                },
+                {
+                    'type': 'message',
+                    'user': 'U456',
+                    'text': '동의합니다. embedding 비용은 hash skip으로 줄이죠.',
+                    'ts': '1777600810.000200',
+                    'thread_ts': '1777600800.000100',
+                },
+            ]
+
+    connector = SlackConnector(
+        config=SlackConnectorConfig(
+            bot_token='xoxb-test',
+            channel_ids=['C123'],
+            workspace_url='https://example.slack.com',
+        ),
+        client=ThreadFakeSlackClient(),
+    )
+
+    events = connector.fetch_events_since({'C123': '1777600700.000100'})
+
+    assert observed_replies == [('C123', '1777600800.000100', '1777600700.000100')]
+    assert [event.source_id for event in events] == [
+        'C123:1777600800.000100',
+        'C123:1777600810.000200',
+    ]
+    assert events[0].raw_metadata['is_thread_parent'] is True
+    assert events[0].raw_metadata['reply_count'] == 2
+    assert events[1].title == 'Slack thread reply in C123'
+    assert events[1].raw_metadata['is_thread_reply'] is True
+    assert events[1].raw_metadata['thread_ts'] == '1777600800.000100'
 
 
 def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:
@@ -157,6 +241,84 @@ def test_slack_web_api_client_sends_oldest_for_incremental_history() -> None:
     client.conversation_history('C123', oldest='1.000100')
 
     assert requests[0].url.params['oldest'] == '1.000100'
+
+
+def test_slack_web_api_client_fetches_paginated_replies_with_oldest() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        cursor = request.url.params.get('cursor')
+        if cursor:
+            return httpx.Response(
+                200,
+                json={
+                    'ok': True,
+                    'messages': [
+                        {'type': 'message', 'user': 'U2', 'text': 'reply second page', 'ts': '2.000200'}
+                    ],
+                    'response_metadata': {},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                'ok': True,
+                'messages': [{'type': 'message', 'user': 'U1', 'text': 'reply first page', 'ts': '1.000100'}],
+                'response_metadata': {'next_cursor': 'cursor-2'},
+            },
+        )
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    replies = client.conversation_replies('C123', '1.000100', oldest='0.000100')
+
+    assert [reply['text'] for reply in replies] == ['reply first page', 'reply second page']
+    assert requests[0].url.path == '/api/conversations.replies'
+    assert requests[0].url.params['channel'] == 'C123'
+    assert requests[0].url.params['ts'] == '1.000100'
+    assert requests[0].url.params['oldest'] == '0.000100'
+    assert requests[1].url.params['cursor'] == 'cursor-2'
+
+
+def test_slack_web_api_client_fetches_paginated_channel_list() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        cursor = request.url.params.get('cursor')
+        if cursor:
+            return httpx.Response(
+                200,
+                json={
+                    'ok': True,
+                    'channels': [{'id': 'C456', 'name': 'dev', 'is_member': True}],
+                    'response_metadata': {},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                'ok': True,
+                'channels': [{'id': 'C123', 'name': 'general', 'is_member': True}],
+                'response_metadata': {'next_cursor': 'cursor-2'},
+            },
+        )
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    channels = client.conversations_list()
+
+    assert [channel['id'] for channel in channels] == ['C123', 'C456']
+    assert requests[0].url.path == '/api/conversations.list'
+    assert requests[0].url.params['types'] == 'public_channel,private_channel'
+    assert requests[0].url.params['exclude_archived'] == 'true'
 
 
 def test_slack_web_api_client_retries_rate_limited_history_with_retry_after() -> None:

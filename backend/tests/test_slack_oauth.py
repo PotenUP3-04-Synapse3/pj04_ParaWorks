@@ -299,11 +299,14 @@ def test_slack_sync_endpoint_uses_installed_connection_token_without_exposing_it
     client.app.dependency_overrides[get_settings] = override_settings
     monkeypatch.setattr(integrations_api, 'sync_connector_events', fake_sync_connector_events)
 
-    response = client.post('/api/v1/integrations/slack/sync')
+    response = client.post(
+        '/api/v1/integrations/slack/sync',
+        json={'selected_channel_ids': ['C456']},
+    )
 
     assert response.status_code == 200
     payload = response.json()
-    assert captured == {'bot_token': 'xoxb-installed', 'channel_ids': ['C123']}
+    assert captured == {'bot_token': 'xoxb-installed', 'channel_ids': ['C456']}
     assert 'xoxb-installed' not in str(payload)
     assert 'token_ref' not in str(payload)
 
@@ -312,7 +315,13 @@ def test_slack_sync_endpoint_returns_clear_error_for_slack_api_failure(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    def fake_get_sync_connector(connector_type: str, settings: Settings, *, db: Session | None = None):
+    def fake_get_sync_connector(
+        connector_type: str,
+        settings: Settings,
+        *,
+        db: Session | None = None,
+        slack_channel_ids_override: list[str] | None = None,
+    ):
         return FailingSlackConnector()
 
     monkeypatch.setattr(integrations_api, 'get_sync_connector', fake_get_sync_connector)

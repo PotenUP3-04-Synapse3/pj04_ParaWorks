@@ -46,6 +46,7 @@ def get_sync_connector(
     *,
     db: Session | None = None,
     token_vault: LocalTokenVault = LOCAL_TOKEN_VAULT,
+    slack_channel_ids_override: list[str] | None = None,
 ) -> Connector:
     if (
         connector_type == 'slack'
@@ -56,9 +57,25 @@ def get_sync_connector(
             settings=settings,
             db=db,
             token_vault=token_vault,
+            channel_ids_override=slack_channel_ids_override,
         )
         if installed_connector is not None:
             return installed_connector
+    if (
+        connector_type == 'slack'
+        and not settings.paraworks_demo_mode
+        and settings.slack_bot_token
+        and settings.slack_channel_ids.strip()
+        and slack_channel_ids_override is not None
+    ):
+        return SlackConnector(
+            config=SlackConnectorConfig(
+                bot_token=settings.slack_bot_token,
+                channel_ids=_clean_channel_ids(slack_channel_ids_override),
+                workspace_url=settings.slack_workspace_url,
+            ),
+            client=SlackWebApiClient(bot_token=settings.slack_bot_token),
+        )
     if connector_type in GOOGLE_CONNECTOR_TYPES and not settings.paraworks_demo_mode:
         installed_connector = _get_installed_google_connector(
             connector_type=connector_type,
@@ -75,11 +92,23 @@ def _parse_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
+def _clean_channel_ids(channel_ids: list[str]) -> list[str]:
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for channel_id in channel_ids:
+        normalized = channel_id.strip()
+        if normalized and normalized not in seen:
+            cleaned.append(normalized)
+            seen.add(normalized)
+    return cleaned
+
+
 def _get_installed_slack_connector(
     *,
     settings: Settings,
     db: Session | None,
     token_vault: LocalTokenVault,
+    channel_ids_override: list[str] | None = None,
 ) -> SlackConnector | None:
     if db is None:
         return None
@@ -103,7 +132,11 @@ def _get_installed_slack_connector(
     return SlackConnector(
         config=SlackConnectorConfig(
             bot_token=bot_token,
-            channel_ids=_parse_csv(settings.slack_channel_ids),
+            channel_ids=(
+                _clean_channel_ids(channel_ids_override)
+                if channel_ids_override is not None
+                else _parse_csv(settings.slack_channel_ids)
+            ),
             workspace_url=connection.workspace_url or settings.slack_workspace_url,
         ),
         client=SlackWebApiClient(bot_token=bot_token),

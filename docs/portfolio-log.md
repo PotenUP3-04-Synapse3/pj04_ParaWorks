@@ -3102,3 +3102,8 @@ Cost/security note:
 - `feat: harden google live sync deltas`
 - `test: expand whole-app playwright regression`
 - `feat: enrich google live source quality`
+- `feat: strengthen slack live agent handoff`
+  - Slack sync can now receive selected channel IDs from the integrations UI while keeping `.env` channel IDs as the default safe fallback.
+  - Slack live collection now follows thread replies incrementally from the same channel cursor, avoiding full-thread re-vectorization/reprocessing on every sync.
+  - Slack runtime status exposes channel options, latest sync counts, actionable Slack error hints, and whether synced Slack sources are ready for agent testing.
+  - Verification: backend suite `185 passed, 1 skipped`; frontend lint/build passed; Playwright integrations desktop dark/light regression passed.

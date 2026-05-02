@@ -1,7 +1,9 @@
+import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Body, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import PermissionContext
@@ -38,13 +40,20 @@ from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.core.redaction import redact_secret_text
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.models import IntegrationConnection, SyncJob
+from backend.app.models import IntegrationConnection, ReviewItem, Source, SyncJob
 from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
+
+
+class IntegrationSyncRequest(BaseModel):
+    selected_channel_ids: list[str] | None = None
+
+
+SYNC_REQUEST_BODY = Body(default=None)
 
 
 @router.get('')
@@ -105,12 +114,18 @@ def get_slack_runtime_status(db: DbSession, settings: AppSettings) -> dict[str, 
         'connector_type': 'slack',
         'mode': 'mock' if settings.paraworks_demo_mode else 'live',
         'configured_channel_ids': _configured_channel_ids(settings.slack_channel_ids),
+        'selected_channel_ids': _configured_channel_ids(settings.slack_channel_ids),
+        'channel_options': _slack_channel_options(settings.slack_channel_ids),
         'connection_status': connection.status if connection else 'disconnected',
         'credential_status': credential_status,
         'latest_sync': _sync_job_response(latest_sync),
+        'latest_sync_summary': _sync_job_summary(latest_sync),
+        'last_error': _sync_error_response(latest_sync),
+        'agent_bridge': _slack_agent_bridge(db),
         'cost_policy': {
             'status_lookup_triggers_sync': False,
             'status_lookup_triggers_llm': False,
+            'thread_reply_fetch_is_incremental': True,
         },
     }
 
@@ -153,11 +168,27 @@ def get_google_runtime_status(
 
 
 @router.post('/{connector_type}/sync')
-def sync_connector(connector_type: str, db: DbSession, settings: AppSettings, user: CurrentUser) -> dict[str, int | str]:
+def sync_connector(
+    connector_type: str,
+    db: DbSession,
+    settings: AppSettings,
+    user: CurrentUser,
+    request: IntegrationSyncRequest | None = SYNC_REQUEST_BODY,
+) -> dict[str, int | str]:
     if connector_type not in CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
-    connector = get_sync_connector(connector_type, settings, db=db)
+    selected_channel_ids = (
+        _clean_channel_ids(request.selected_channel_ids)
+        if request is not None and request.selected_channel_ids is not None and connector_type == 'slack'
+        else None
+    )
+    connector = get_sync_connector(
+        connector_type,
+        settings,
+        db=db,
+        slack_channel_ids_override=selected_channel_ids,
+    )
     try:
         result = sync_connector_events(db=db, connector=connector)
     except SlackApiError as exc:
@@ -174,6 +205,7 @@ def sync_connector(connector_type: str, db: DbSession, settings: AppSettings, us
             'fetched_events': result.fetched_events,
             'created_review_items': result.created_review_items,
             'skipped_events': result.skipped_events,
+            'selected_channel_ids': selected_channel_ids,
         },
     )
     db.commit()
@@ -389,6 +421,31 @@ def _configured_channel_ids(raw_channel_ids: str) -> list[str]:
     return [channel_id.strip() for channel_id in raw_channel_ids.split(',') if channel_id.strip()]
 
 
+def _clean_channel_ids(channel_ids: list[str] | None) -> list[str]:
+    if not channel_ids:
+        return []
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for channel_id in channel_ids:
+        normalized = channel_id.strip()
+        if normalized and normalized not in seen:
+            cleaned.append(normalized)
+            seen.add(normalized)
+    return cleaned
+
+
+def _slack_channel_options(raw_channel_ids: str) -> list[dict[str, object]]:
+    return [
+        {
+            'id': channel_id,
+            'name': channel_id,
+            'is_selected': True,
+            'is_configured': True,
+        }
+        for channel_id in _configured_channel_ids(raw_channel_ids)
+    ]
+
+
 def _sync_job_response(job: SyncJob | None) -> dict[str, object] | None:
     if job is None:
         return None
@@ -398,3 +455,53 @@ def _sync_job_response(job: SyncJob | None) -> dict[str, object] | None:
         'message': redact_secret_text(job.message),
         'progress_pct': job.progress_pct,
     }
+
+
+def _sync_job_summary(job: SyncJob | None) -> dict[str, int] | None:
+    if job is None:
+        return None
+    message = job.message or ''
+    return {
+        'fetched_events': _extract_count(message, 'fetched'),
+        'created_review_items': _extract_count(message, 'created_review_items'),
+        'skipped_events': _extract_count(message, 'skipped_events'),
+    }
+
+
+def _sync_error_response(job: SyncJob | None) -> dict[str, str] | None:
+    if job is None or job.status != 'failed':
+        return None
+    message = redact_secret_text(job.message)
+    code = message.rsplit(':', maxsplit=1)[-1].strip() if ':' in message else 'unknown_error'
+    return {
+        'code': code,
+        'message': message,
+        'action_hint': _slack_error_action_hint(code),
+    }
+
+
+def _slack_agent_bridge(db: Session) -> dict[str, int | bool]:
+    slack_source_count = db.scalar(select(func.count()).select_from(Source).where(Source.source_type == 'slack')) or 0
+    pending_review_count = (
+        db.scalar(select(func.count()).select_from(ReviewItem).where(ReviewItem.status == 'pending_review')) or 0
+    )
+    return {
+        'slack_source_count': slack_source_count,
+        'pending_review_count': pending_review_count,
+        'ready_for_agent_test': slack_source_count > 0,
+    }
+
+
+def _extract_count(message: str, key: str) -> int:
+    match = re.search(rf'{re.escape(key)}=(\d+)', message)
+    return int(match.group(1)) if match else 0
+
+
+def _slack_error_action_hint(code: str) -> str:
+    if code in {'not_in_channel', 'channel_not_found'}:
+        return 'Slack 앱을 선택한 채널에 추가한 뒤 다시 동기화하세요.'
+    if code == 'missing_scope':
+        return 'Slack OAuth scope를 확인하고 앱을 다시 설치하세요.'
+    if code == 'rate_limited':
+        return 'Slack API rate limit이 풀린 뒤 다시 시도하세요.'
+    return 'Slack 연결, 채널 권한, 토큰 상태를 확인한 뒤 다시 동기화하세요.'
