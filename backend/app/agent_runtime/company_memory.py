@@ -200,6 +200,9 @@ def _draft_review_candidates_node(
             slack_review_items_created=len(slack_items),
             mail_document_review_items_created=len(mail_document_items),
             memory_review_items_created=len(memory_items),
+            hitl_checkpoint=_build_review_queue_hitl_checkpoint(
+                review_items=[*slack_items, *mail_document_items, *memory_items],
+            ),
         )
 
     return draft_review_candidates
@@ -379,3 +382,18 @@ def _build_planning_rag_packet(
         question=question,
         permission_context=permission_context,
     )
+
+
+def _build_review_queue_hitl_checkpoint(*, review_items: list) -> dict:
+    review_item_ids = [item.id for item in review_items if item.id is not None]
+    return {
+        'checkpoint_type': 'review_queue',
+        'node_name': 'draft_review_candidates',
+        'status': 'awaiting_human_review' if review_item_ids else 'no_review_items',
+        'review_item_ids': review_item_ids,
+        'resume_from_node': 'retrieve_company_memory',
+        'resume_policy': 'resume_after_review_queue_resolution',
+        'required_review_statuses': ['approved', 'rejected', 'needs_more_evidence'],
+        'trusted_knowledge_requires_approval': True,
+        'paid_llm_calls': False,
+    }

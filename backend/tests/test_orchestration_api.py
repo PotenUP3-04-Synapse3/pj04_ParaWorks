@@ -61,6 +61,9 @@ def test_company_memory_orchestration_api_exposes_langgraph_status(client) -> No
         'budget_actions': ['run', 'skip', 'use_cache'],
         'paid_llm_calls_in_status_api': False,
         'requires_explicit_run': True,
+        'hitl_checkpointing': True,
+        'checkpoint_store': 'review_queue',
+        'trusted_knowledge_requires_approval': True,
     }
 
 
@@ -115,6 +118,10 @@ def test_company_memory_orchestration_api_runs_agent_services(client, db_session
     ]
     assert payload['outputs']['slack_review_items_created'] == 1
     assert payload['outputs']['mail_document_review_items_created'] == 1
+    assert payload['outputs']['hitl_checkpoint']['status'] == 'awaiting_human_review'
+    assert payload['outputs']['hitl_checkpoint']['checkpoint_type'] == 'review_queue'
+    assert len(payload['outputs']['hitl_checkpoint']['review_item_ids']) == 6
     assert payload['outputs']['rag_agent_run_created'] is True
     assert payload['cost_policy']['requires_explicit_run'] is True
+    assert payload['cost_policy']['hitl_checkpointing'] is True
     assert payload['cost_policy']['per_run_budget_usd'] == 0.001

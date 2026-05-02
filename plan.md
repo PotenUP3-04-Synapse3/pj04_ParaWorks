@@ -138,12 +138,15 @@ Current state:
 - Review Queue items now expose structured source evidence for reviewer
   inspection, including source URL, snippet, permission, confidence, rank, and
   originating AgentRun where available.
+- Company Memory orchestration now emits a Review Queue HITL checkpoint
+  strategy with target ReviewItem ids, resume policy, required statuses, and
+  trusted-knowledge approval boundary.
 
 Next priorities:
 
-1. Add LangGraph HITL checkpoint strategy.
-2. Add quality and permission regression suite.
-3. Expand review evidence quality signals from Track A and Track B agents.
+1. Add quality and permission regression suite.
+2. Expand review evidence quality signals from Track A and Track B agents.
+3. Harden connector quality metadata for Slack, Gmail, Drive, and Calendar.
 
 ## 4. Shared Runtime Contracts
 
@@ -252,6 +255,8 @@ Completed harness slices include:
 - Track C deterministic extraction boundaries for Timeline, History, Decision
   Record, Todo, and Validation
 - Source Evidence Drawer and reviewer "request more evidence" note workflow
+- LangGraph HITL checkpoint strategy surfaced through the Company Memory
+  orchestration API
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -302,7 +307,21 @@ Tasks:
 - Improve `needs_more_evidence` workflow. Done.
 - Add reviewer notes. Done.
 
-### Milestone 4. Connector Quality Hardening
+### Milestone 4. LangGraph HITL Checkpoint Strategy
+
+Goal: Make the human review interrupt/resume boundary explicit before adding
+full checkpoint persistence.
+
+Tasks:
+
+- Emit Review Queue checkpoint metadata from Company Memory orchestration. Done.
+- Include target ReviewItem ids, required statuses, resume node, and resume
+  policy. Done.
+- Expose checkpoint policy through orchestration status APIs. Done.
+- Next: add persisted checkpoint/resume records when the product needs
+  long-running graph continuation beyond the current harness run.
+
+### Milestone 5. Connector Quality Hardening
 
 Goal: Improve real data quality before adding more shiny features.
 
@@ -313,7 +332,7 @@ Tasks:
 - Drive file parser status and version metadata.
 - Calendar ingestion boundary.
 
-### Milestone 5. Evaluation and Regression Suite
+### Milestone 6. Evaluation and Regression Suite
 
 Goal: Make quality measurable.
 
@@ -325,7 +344,7 @@ Tasks:
 - RAG precision/recall smoke metrics.
 - Cost regression tests.
 
-### Milestone 6. Product Completion Layer
+### Milestone 7. Product Completion Layer
 
 Goal: Move from harness to product-like MVP.
 

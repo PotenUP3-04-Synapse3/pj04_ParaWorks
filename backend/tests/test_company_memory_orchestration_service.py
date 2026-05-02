@@ -80,6 +80,17 @@ def test_company_memory_orchestration_runs_real_agent_services(db_session: Sessi
     assert result.outputs['mail_document_review_items_created'] == 1
     assert result.outputs['memory_review_items_created'] == 4
     assert result.outputs['rag_agent_run_created'] is True
+    assert result.outputs['hitl_checkpoint'] == {
+        'checkpoint_type': 'review_queue',
+        'node_name': 'draft_review_candidates',
+        'status': 'awaiting_human_review',
+        'review_item_ids': [1, 2, 3, 4, 5, 6],
+        'resume_from_node': 'retrieve_company_memory',
+        'resume_policy': 'resume_after_review_queue_resolution',
+        'required_review_statuses': ['approved', 'rejected', 'needs_more_evidence'],
+        'trusted_knowledge_requires_approval': True,
+        'paid_llm_calls': False,
+    }
     assert result.outputs['token_budget_policy'] == 'delta_sync_hash_skip_evidence_budget'
     cost_plan = result.outputs['cost_plan']
     assert cost_plan['slack_agent']['action'] == 'run'
@@ -136,6 +147,8 @@ def test_company_memory_orchestration_marks_missing_evidence_as_cost_skips(db_se
     assert result.outputs['mail_document_review_items_created'] == 0
     assert result.outputs['memory_review_items_created'] == 0
     assert result.outputs['rag_agent_run_created'] is False
+    assert result.outputs['hitl_checkpoint']['status'] == 'no_review_items'
+    assert result.outputs['hitl_checkpoint']['review_item_ids'] == []
     assert result.outputs['cost_plan']['slack_agent']['action'] == 'skip'
     assert result.outputs['cost_plan']['slack_agent']['reason'] == 'no_slack_evidence'
     assert result.outputs['cost_plan']['mail_document_agent']['action'] == 'skip'

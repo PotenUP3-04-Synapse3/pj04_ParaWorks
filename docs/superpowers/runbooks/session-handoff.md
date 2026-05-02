@@ -257,11 +257,31 @@ Aligned with the current root `plan.md` Milestone 3.
 
 Next recommended step from `plan.md`:
 
-1. Add the LangGraph HITL checkpoint strategy.
-2. Add quality and permission regression coverage for Review Queue, RAG, and
+1. Add quality and permission regression coverage for Review Queue, RAG, and
    connector evidence.
-3. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
+2. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
    author, timestamp, and source ids.
+
+## 2026-05-02 LangGraph HITL Checkpoint Strategy Update
+
+Aligned with the current root `plan.md` Milestone 4.
+
+- Company Memory orchestration now emits `hitl_checkpoint` from
+  `draft_review_candidates`.
+- The checkpoint records `checkpoint_type=review_queue`, target ReviewItem ids,
+  required statuses, `resume_from_node=retrieve_company_memory`, and
+  `resume_policy=resume_after_review_queue_resolution`.
+- Orchestration status APIs now expose `hitl_checkpointing`,
+  `checkpoint_store=review_queue`, and
+  `trusted_knowledge_requires_approval` in the cost/trust policy.
+
+Next recommended step from `plan.md`:
+
+1. Add quality and permission regression coverage for Review Queue, RAG, and
+   connector evidence.
+2. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
+   author, timestamp, and source ids.
+3. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
 
 ## Portfolio Recording Rule
 

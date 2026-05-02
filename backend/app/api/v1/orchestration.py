@@ -37,6 +37,9 @@ def _cost_policy_response() -> dict:
         'budget_actions': ['run', 'skip', 'use_cache'],
         'paid_llm_calls_in_status_api': False,
         'requires_explicit_run': True,
+        'hitl_checkpointing': True,
+        'checkpoint_store': 'review_queue',
+        'trusted_knowledge_requires_approval': True,
     }
 
 
@@ -98,6 +101,10 @@ def run_company_memory_orchestration(
             'slack_review_items_created': result.outputs.get('slack_review_items_created', 0),
             'mail_document_review_items_created': result.outputs.get('mail_document_review_items_created', 0),
             'rag_agent_run_created': result.outputs.get('rag_agent_run_created', False),
+            'hitl_checkpoint_status': (result.outputs.get('hitl_checkpoint') or {}).get('status'),
+            'hitl_checkpoint_review_item_count': len(
+                (result.outputs.get('hitl_checkpoint') or {}).get('review_item_ids') or []
+            ),
         },
     )
     db.commit()

@@ -129,6 +129,9 @@ export type OrchestrationStatusResponse = {
     budget_actions?: string[];
     paid_llm_calls_in_status_api: boolean;
     requires_explicit_run: boolean;
+    hitl_checkpointing?: boolean;
+    checkpoint_store?: string;
+    trusted_knowledge_requires_approval?: boolean;
   };
 };
 

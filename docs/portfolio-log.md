@@ -3048,6 +3048,35 @@ Cost/security note:
   reject or request more evidence before any candidate becomes trusted
   knowledge.
 
+## LangGraph HITL Checkpoint Strategy
+
+What changed:
+
+- Company Memory orchestration now emits a structured `hitl_checkpoint` output
+  from the `draft_review_candidates` node.
+- The checkpoint records the Review Queue as the current HITL store, the target
+  ReviewItem ids, required statuses, resume node, resume policy, and whether
+  trusted knowledge requires human approval.
+- The orchestration status cost policy now explicitly reports
+  `hitl_checkpointing`, `checkpoint_store=review_queue`, and
+  `trusted_knowledge_requires_approval`.
+
+Portfolio angle:
+
+- Shows that ParaWorks' LangGraph flow is not a black-box automation pipeline:
+  it has an explicit human review stop before generated memory becomes trusted
+  organizational knowledge.
+- Gives the three-developer team a stable integration contract for future
+  long-running checkpoint/resume work without changing each agent's local
+  implementation.
+
+Cost/security note:
+
+- HITL checkpoint metadata is generated from local ReviewItem ids and
+  orchestration state. It does not call paid LLMs, embeddings, Slack, or Google.
+- The checkpoint keeps the trust boundary visible: generated outputs can be
+  reviewed, rejected, or marked as needing more evidence before promotion.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3174,3 +3203,6 @@ Cost/security note:
 - `feat: add review source evidence drawer`
   - Review Queue API exposes structured source evidence and originating AgentRun metadata for Drawer rendering.
   - Reviewers can request more evidence with a note, preserving why the candidate was not ready for approval.
+- `feat: add orchestration hitl checkpoint policy`
+  - Company Memory orchestration now emits Review Queue checkpoint metadata with resume policy and required review statuses.
+  - Orchestration status APIs expose HITL checkpointing as part of the cost/trust policy.
