@@ -9,6 +9,7 @@ from backend.app.agents.slack_agent import (
     create_slack_agent_review_items,
 )
 from backend.app.models import (
+    AgentRun,
     Document,
     DocumentChunk,
     DocumentVersion,
@@ -28,6 +29,20 @@ class FakeSlackModel:
             confidence_score=0.88,
             input_tokens=700,
             output_tokens=140,
+        )
+
+
+class InternalSlackModel:
+    def extract(self, packet: EvidencePacket) -> SlackAgentModelResponse:
+        assert packet.source_type == 'slack'
+        assert packet.strictest_permission == 'internal'
+        return SlackAgentModelResponse(
+            title='Ranked evidence decision',
+            summary='Ranked Slack evidence was selected for review.',
+            item_type='history_event',
+            confidence_score=0.86,
+            input_tokens=600,
+            output_tokens=120,
         )
 
 
@@ -161,3 +176,27 @@ def test_slack_evidence_packet_can_select_ranked_deduped_window(db_session: Sess
     assert packet.messages[0].metadata['selection_strategy'] == 'ranked'
     assert packet.messages[0].metadata['evidence_rank'] == 1
     assert packet.messages[0].metadata['importance_score'] > packet.messages[1].metadata['importance_score']
+
+
+def test_slack_agent_run_stores_ranked_evidence_summary(db_session: Session) -> None:
+    seed_slack_chunk_with_ts(db_session, 'C123:1.000100', '1.000100', '결정: Postgres와 pgvector를 사용합니다. 비용 상한을 둡니다.')
+    seed_slack_chunk_with_ts(db_session, 'C123:2.000100', '2.000100', 'TODO: Slack API 권한을 확인하고 배포 전 테스트합니다.')
+    db_session.commit()
+    agent = SlackAgent(model=InternalSlackModel())
+
+    create_slack_agent_review_items(
+        db=db_session,
+        agent=agent,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='slack:live:ranked:2',
+        max_messages=2,
+        selection_strategy='ranked',
+    )
+
+    agent_run = db_session.scalars(select(AgentRun)).one()
+    evidence_summary = agent_run.metadata_['evidence_summary']
+    assert agent_run.metadata_['selection_strategy'] == 'ranked'
+    assert evidence_summary[0]['rank'] == 1
+    assert evidence_summary[0]['source_id'] == 'C123:1.000100'
+    assert evidence_summary[0]['importance_score'] > 0
+    assert 'Postgres' in evidence_summary[0]['snippet']

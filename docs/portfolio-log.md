@@ -3132,3 +3132,8 @@ Cost/security note:
   - Ranking now prioritizes decision, action, cost, technical, thread, and recency signals; duplicate message bodies collapse before top-k selection.
   - Preflight and paid execution use the same ranked source window, and prompt rendering dynamically shrinks evidence text to stay inside the configured per-run cost budget.
   - Verification: backend suite `197 passed, 1 skipped`; frontend build passed; Playwright integrations desktop dark/light regression passed; live preflight returned `slack:live:ranked:12` at `$0.000966 / $0.001`.
+- `feat: expose ranked evidence in orchestration`
+  - Ran a confirmed live ranked Slack LLM test; the persisted AgentRun used `slack:live:ranked:12` and actual usage was 2,525 tokens at about `$0.000435`.
+  - AgentRun records now store a compact ranked evidence summary, and the detail API/UI promote rank, score, source, permission, and snippet for review/debugging.
+  - LangGraph company-memory orchestration now uses the same ranked Slack evidence window and exposes source window, selection strategy, evidence count, and cost plan metadata.
+  - Verification: backend suite `199 passed, 1 skipped`; frontend build passed; AgentRun desktop/mobile Playwright regression passed; local orchestration API returned `orchestrated-slack:ranked:12` at `$0.000104 / $0.001`.

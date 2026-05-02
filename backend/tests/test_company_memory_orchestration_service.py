@@ -83,6 +83,9 @@ def test_company_memory_orchestration_runs_real_agent_services(db_session: Sessi
     cost_plan = result.outputs['cost_plan']
     assert cost_plan['slack_agent']['action'] == 'run'
     assert cost_plan['slack_agent']['reason'] == 'slack_evidence_available'
+    assert cost_plan['slack_agent']['source_window'] == 'orchestrated-slack:ranked:12'
+    assert cost_plan['slack_agent']['selection_strategy'] == 'ranked'
+    assert cost_plan['slack_agent']['evidence_message_count'] == 1
     assert cost_plan['slack_agent']['estimated_input_tokens'] == 13
     assert cost_plan['slack_agent']['budget_status'] == 'within_budget'
     assert cost_plan['mail_document_agent']['action'] == 'run'
@@ -96,6 +99,10 @@ def test_company_memory_orchestration_runs_real_agent_services(db_session: Sessi
 
     agent_names = [run.agent_name for run in db_session.query(AgentRun).order_by(AgentRun.id).all()]
     assert agent_names == ['slack_agent', 'mail_document_agent', 'rag_orchestrator_agent']
+    slack_run = db_session.query(AgentRun).filter(AgentRun.agent_name == 'slack_agent').one()
+    assert slack_run.source_window == 'orchestrated-slack:ranked:12'
+    assert slack_run.metadata_['selection_strategy'] == 'ranked'
+    assert slack_run.metadata_['evidence_summary'][0]['rank'] == 1
 
     review_items = db_session.query(ReviewItem).order_by(ReviewItem.id).all()
     assert len(review_items) == 2

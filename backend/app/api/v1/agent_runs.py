@@ -12,6 +12,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 def _agent_run_response(run: AgentRun) -> dict:
+    metadata = run.metadata_ or {}
     return {
         'id': run.id,
         'agent_name': run.agent_name,
@@ -30,7 +31,9 @@ def _agent_run_response(run: AgentRun) -> dict:
         },
         'estimated_cost_usd': round(run.estimated_cost_usd, 6),
         'permission_level': run.permission_level,
-        'metadata': run.metadata_,
+        'metadata': metadata,
+        'selection_strategy': metadata.get('selection_strategy'),
+        'evidence_summary': metadata.get('evidence_summary', []),
         'started_at': run.started_at.isoformat(),
         'completed_at': run.completed_at.isoformat() if run.completed_at else None,
     }

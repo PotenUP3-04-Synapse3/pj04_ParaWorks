@@ -85,6 +85,8 @@ def create_slack_agent_review_items(
             'source_type': packet.source_type,
             'message_count': len(packet.messages),
             'cache_hit': result.cost.cache_hit,
+            'selection_strategy': selection_strategy,
+            'evidence_summary': _evidence_summary(packet),
         },
     )
     db.add(agent_run)
@@ -265,3 +267,23 @@ def _slack_message_metadata(
             }
         )
     return metadata
+
+
+def _evidence_summary(packet: EvidencePacket) -> list[dict[str, object]]:
+    summary: list[dict[str, object]] = []
+    for index, message in enumerate(packet.messages, start=1):
+        rank = message.metadata.get('evidence_rank') or index
+        summary.append(
+            {
+                'rank': rank,
+                'source_id': message.source_id,
+                'source_url': message.source_url,
+                'timestamp': message.timestamp,
+                'author': message.author,
+                'permission_level': message.permission_level,
+                'channel_id': message.metadata.get('channel_id'),
+                'importance_score': message.metadata.get('importance_score', 0),
+                'snippet': message.text[:240],
+            }
+        )
+    return summary

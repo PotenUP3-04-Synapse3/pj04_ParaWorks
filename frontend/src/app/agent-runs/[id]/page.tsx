@@ -17,6 +17,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
     output_tokens: run.output_tokens,
     total_tokens: run.total_tokens,
   };
+  const evidenceSummary = run.evidence_summary ?? [];
 
   return (
     <div className="space-y-5">
@@ -58,6 +59,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
             <Meta label="Prompt version" value={run.prompt_version} />
             <Meta label="Model" value={run.model_name} />
             <Meta label="Source window" value={run.source_window} />
+            <Meta label="Selection" value={run.selection_strategy ?? "standard"} />
             <Meta label="Started" value={formatDate(run.started_at)} />
             <Meta label="Completed" value={run.completed_at ? formatDate(run.completed_at) : "not recorded"} />
           </dl>
@@ -80,6 +82,42 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
           </div>
         </article>
       </section>
+
+      {evidenceSummary.length ? (
+        <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+          <div className="flex flex-col gap-1 border-b border-[var(--line-soft)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-sm font-semibold">Ranked evidence</h3>
+            <p className="text-xs text-[var(--ink-muted)]">{evidenceSummary.length.toLocaleString()} selected messages</p>
+          </div>
+          <div className="divide-y divide-[var(--line-soft)]">
+            {evidenceSummary.map((evidence) => (
+              <article key={`${evidence.rank}-${evidence.source_id}`} className="grid gap-3 px-4 py-3 lg:grid-cols-[120px_minmax(0,1fr)]">
+                <div className="text-xs text-[var(--ink-muted)]">
+                  <p className="font-semibold text-[var(--ink-strong)]">Rank {evidence.rank}</p>
+                  <p>score {evidence.importance_score ?? 0}</p>
+                  {evidence.channel_id ? <p>{evidence.channel_id}</p> : null}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--ink-muted)]">
+                    <span className="font-medium text-[var(--ink-strong)]">{evidence.source_id}</span>
+                    {evidence.permission_level ? <span>{evidence.permission_level}</span> : null}
+                    {evidence.timestamp ? <span>{evidence.timestamp}</span> : null}
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-[var(--ink-muted)]">{evidence.snippet}</p>
+                  {evidence.source_url ? (
+                    <Link
+                      href={evidence.source_url}
+                      className="mt-2 inline-flex text-xs font-semibold text-[var(--workspace-rail-active)]"
+                    >
+                      Open source
+                    </Link>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
         <div className="border-b border-[var(--line-soft)] px-4 py-4">

@@ -85,6 +85,47 @@ def test_agent_run_detail_api_returns_single_run(client, db_session) -> None:
     assert payload['estimated_cost_usd'] == 0.000031
 
 
+def test_agent_run_detail_api_promotes_evidence_summary(client, db_session) -> None:
+    agent_run = AgentRun(
+        agent_name='slack_agent',
+        prompt_version='slack-timeline:v1',
+        status='complete',
+        source_window='slack:live:ranked:12',
+        cache_key='slack-cache-key',
+        model_name='gpt-5.4-mini',
+        input_tokens=2400,
+        output_tokens=125,
+        total_tokens=2525,
+        estimated_cost_usd=0.000435,
+        permission_level='internal',
+        metadata_={
+            'source_type': 'slack',
+            'selection_strategy': 'ranked',
+            'evidence_summary': [
+                {
+                    'rank': 1,
+                    'source_id': 'C123:1.000100',
+                    'source_url': 'https://example.slack.com/archives/C123/p1000100',
+                    'timestamp': '1.000100',
+                    'importance_score': 80,
+                    'snippet': '결정: pgvector를 사용합니다.',
+                }
+            ],
+        },
+    )
+    db_session.add(agent_run)
+    db_session.commit()
+    db_session.refresh(agent_run)
+
+    response = client.get(f'/api/v1/agent-runs/{agent_run.id}')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['selection_strategy'] == 'ranked'
+    assert payload['evidence_summary'][0]['rank'] == 1
+    assert payload['evidence_summary'][0]['importance_score'] == 80
+
+
 def test_agent_run_detail_api_returns_404_for_missing_run(client) -> None:
     response = client.get('/api/v1/agent-runs/404')
 

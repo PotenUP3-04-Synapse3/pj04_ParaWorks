@@ -66,8 +66,22 @@ export type AgentRunSummaryItem = {
   estimated_cost_usd: number;
   permission_level: string;
   metadata: Record<string, unknown>;
+  selection_strategy?: string | null;
+  evidence_summary?: AgentRunEvidenceSummaryItem[];
   started_at: string;
   completed_at?: string | null;
+};
+
+export type AgentRunEvidenceSummaryItem = {
+  rank: number;
+  source_id: string;
+  source_url?: string | null;
+  timestamp?: string | null;
+  author?: string | null;
+  permission_level?: string | null;
+  channel_id?: string | null;
+  importance_score?: number;
+  snippet: string;
 };
 
 export type AgentRunsResponse = {

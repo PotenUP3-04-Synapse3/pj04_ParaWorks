@@ -43,6 +43,8 @@ DEFAULT_AGENT_RUN_BUDGET_USD = 0.001
 DEFAULT_INPUT_COST_PER_1M = 0.15
 DEFAULT_OUTPUT_COST_PER_1M = 0.60
 DEFAULT_ESTIMATED_OUTPUT_TOKENS = 32
+ORCHESTRATED_SLACK_MAX_EVIDENCE_MESSAGES = 12
+ORCHESTRATED_SLACK_SOURCE_WINDOW = f'orchestrated-slack:ranked:{ORCHESTRATED_SLACK_MAX_EVIDENCE_MESSAGES}'
 
 
 @dataclass(frozen=True)
@@ -92,7 +94,9 @@ def build_company_memory_cost_plan(
     slack_packet = build_slack_evidence_packet(
         db=db,
         permission_context=permission_context,
-        source_window='orchestrated-slack:all',
+        source_window=ORCHESTRATED_SLACK_SOURCE_WINDOW,
+        max_messages=ORCHESTRATED_SLACK_MAX_EVIDENCE_MESSAGES,
+        selection_strategy='ranked',
     )
     mail_document_packet = build_mail_document_evidence_packet(
         db=db,
@@ -100,7 +104,7 @@ def build_company_memory_cost_plan(
         source_window='orchestrated-mail-docs:all',
     )
     rag_packet = _build_planning_rag_packet(db=db, user=user, question=question, permission_context=permission_context)
-    slack_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('slack',))
+    slack_token_estimate = _estimate_tokens_for_packet(slack_packet)
     mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'drive'))
     question_token_estimate = _estimate_tokens(question)
 
@@ -166,7 +170,9 @@ def _draft_review_candidates_node(
                 db=db,
                 agent=SlackAgent(model=DeterministicSlackAgentModel()),
                 permission_context=permission_context,
-                source_window='orchestrated-slack:all',
+                source_window=ORCHESTRATED_SLACK_SOURCE_WINDOW,
+                max_messages=ORCHESTRATED_SLACK_MAX_EVIDENCE_MESSAGES,
+                selection_strategy='ranked',
             )
         mail_document_items = []
         if cost_plan['mail_document_agent']['action'] == 'run':
@@ -239,6 +245,10 @@ def _estimate_tokens_for_sources(*, db: Session, source_types: tuple[str, ...]) 
     return sum(_estimate_tokens(text) for text in rows)
 
 
+def _estimate_tokens_for_packet(packet: EvidencePacket) -> int:
+    return sum(_estimate_tokens(message.text) for message in packet.messages)
+
+
 def _estimate_tokens(text: str) -> int:
     stripped = text.strip()
     if not stripped:
@@ -261,6 +271,9 @@ def _agent_cost_plan(
         return {
             'action': 'skip',
             'reason': skip_reason,
+            'source_window': packet.source_window,
+            'selection_strategy': _selection_strategy(packet),
+            'evidence_message_count': len(packet.messages),
             'estimated_input_tokens': estimated_input_tokens,
             'estimated_output_tokens': 0,
             'estimated_cost_usd': 0.0,
@@ -275,6 +288,9 @@ def _agent_cost_plan(
         return {
             'action': 'use_cache',
             'reason': 'cache_hit',
+            'source_window': packet.source_window,
+            'selection_strategy': _selection_strategy(packet),
+            'evidence_message_count': len(packet.messages),
             'estimated_input_tokens': estimated_input_tokens,
             'estimated_output_tokens': 0,
             'estimated_cost_usd': 0.0,
@@ -299,6 +315,9 @@ def _agent_cost_plan(
     return {
         'action': decision.action,
         'reason': run_reason if decision.action == 'run' else decision.reason,
+        'source_window': packet.source_window,
+        'selection_strategy': _selection_strategy(packet),
+        'evidence_message_count': len(packet.messages),
         'estimated_input_tokens': estimated_input_tokens,
         'estimated_output_tokens': DEFAULT_ESTIMATED_OUTPUT_TOKENS,
         'estimated_cost_usd': round(decision.estimated_cost_usd, 6),
@@ -307,6 +326,14 @@ def _agent_cost_plan(
         'cache_hit': decision.cache_hit,
         'cache_key': cache_key,
     }
+
+
+def _selection_strategy(packet: EvidencePacket) -> str:
+    if packet.messages:
+        return str(packet.messages[0].metadata.get('selection_strategy') or 'standard')
+    if ':ranked:' in packet.source_window:
+        return 'ranked'
+    return 'standard'
 
 
 def _has_completed_cache_hit(*, db: Session, agent_name: str, prompt_version: str, cache_key: str) -> bool:
