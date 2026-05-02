@@ -240,6 +240,29 @@ ParaWorks `SourceEvent` records and records required history scopes in
 The next Slack step is to implement a real Web API client behind the
 `SlackApiClient` protocol with cursor pagination and rate-limit handling.
 
+## 2026-05-02 Source Evidence Review Drawer Update
+
+Aligned with the current root `plan.md` Milestone 3.
+
+- Review API responses now include `source_evidence` rows for each ReviewItem.
+- Evidence rows expose source URL, snippet, permission level, confidence,
+  rank, importance score, source id, author/timestamp when available, and
+  originating AgentRun id.
+- `/review` now passes structured evidence into the shared
+  `SourceEvidenceDrawer`.
+- The Drawer shows reviewer-ready evidence cards and links to the originating
+  AgentRun when available.
+- The "request more evidence" action now opens a reviewer note field and sends
+  the note to the backend before moving the item to `needs_more_evidence`.
+
+Next recommended step from `plan.md`:
+
+1. Add the LangGraph HITL checkpoint strategy.
+2. Add quality and permission regression coverage for Review Queue, RAG, and
+   connector evidence.
+3. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
+   author, timestamp, and source ids.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

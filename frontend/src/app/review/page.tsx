@@ -16,6 +16,7 @@ import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import type {
   ReviewItem,
+  ReviewEvidenceRequest,
   ReviewItemUpdate,
   ReviewPromotionPreview,
   ReviewResponse,
@@ -75,6 +76,8 @@ export default function ReviewPage() {
   const [editingId, setEditingId] = useState<number>();
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
+  const [evidenceRequestId, setEvidenceRequestId] = useState<number>();
+  const [evidenceRequestNote, setEvidenceRequestNote] = useState("");
   const [previews, setPreviews] = useState<Record<number, ReviewPromotionPreview>>({});
   const [pendingAction, setPendingAction] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -112,14 +115,22 @@ export default function ReviewPage() {
     setError(undefined);
   }
 
-  async function runStatusAction(item: ReviewItem, action: "approve" | "reject" | "request-more-evidence") {
+  async function runStatusAction(
+    item: ReviewItem,
+    action: "approve" | "reject" | "request-more-evidence",
+    body?: ReviewEvidenceRequest,
+  ) {
     const actionKey = `${item.id}:${action}`;
     setPendingAction(actionKey);
     setError(undefined);
 
     try {
-      const updated = await apiPost<ReviewItem>(`/api/v1/review/${item.id}/${action}`);
+      const updated = await apiPost<ReviewItem>(`/api/v1/review/${item.id}/${action}`, body);
       setItems((current) => current.filter((candidate) => candidate.id !== updated.id));
+      if (action === "request-more-evidence") {
+        setEvidenceRequestId(undefined);
+        setEvidenceRequestNote("");
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "검토 작업에 실패했습니다.");
     } finally {
@@ -203,6 +214,9 @@ export default function ReviewPage() {
           const isAgentItem = Boolean(agentName);
           const preview = previews[item.id];
           const canApprove = preview?.can_approve ?? true;
+          const evidenceRows = item.source_evidence ?? [];
+          const isEvidenceRequestOpen = evidenceRequestId === item.id;
+          const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
 
           return (
             <article key={item.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
@@ -310,7 +324,13 @@ export default function ReviewPage() {
                       {Math.round(item.confidence_score * 100)}%
                     </p>
                   </div>
-                  <SourceEvidenceDrawer links={item.source_links} snippets={item.source_snippets} />
+                  <SourceEvidenceDrawer
+                    evidence={evidenceRows}
+                    links={item.source_links}
+                    snippets={item.source_snippets}
+                    itemTitle={itemTitle(item)}
+                    agentRunId={item.agent_run_id}
+                  />
                 </div>
               </div>
 
@@ -367,7 +387,12 @@ export default function ReviewPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void runStatusAction(item, "request-more-evidence")}
+                      onClick={() => {
+                        setEvidenceRequestId(item.id);
+                        setEvidenceRequestNote(
+                          "현재 근거만으로는 승인하기 어렵습니다. 원문 링크, 담당자 발언, 결정 시점을 추가로 확인해주세요.",
+                        );
+                      }}
                       disabled={Boolean(pendingAction)}
                       className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
@@ -377,6 +402,46 @@ export default function ReviewPage() {
                   </>
                 )}
               </div>
+              {isEvidenceRequestOpen ? (
+                <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
+                  <label className="block text-sm font-semibold text-[var(--ink)]">
+                    추가로 필요한 근거
+                    <textarea
+                      value={evidenceRequestNote}
+                      onChange={(event) => setEvidenceRequestNote(event.target.value)}
+                      rows={3}
+                      className="mt-2 w-full rounded-lg border border-[var(--line-soft)] bg-[var(--surface)] px-3 py-2 text-sm font-normal leading-6 text-[var(--ink)] outline-none focus:border-[var(--workspace-rail-active)]"
+                    />
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void runStatusAction(item, "request-more-evidence", {
+                          note: evidenceRequestNote,
+                        })
+                      }
+                      disabled={Boolean(pendingAction)}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
+                    >
+                      <FileSearch className="h-4 w-4" aria-hidden="true" />
+                      {evidenceRequestPending ? "요청 중" : "요청 보내기"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEvidenceRequestId(undefined);
+                        setEvidenceRequestNote("");
+                      }}
+                      disabled={Boolean(pendingAction)}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                    >
+                      <XCircle className="h-4 w-4" aria-hidden="true" />
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </article>
           );
         })}

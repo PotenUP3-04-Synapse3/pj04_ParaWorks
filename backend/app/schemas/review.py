@@ -9,3 +9,7 @@ class ReviewItemUpdate(BaseModel):
     source_snippets: list[str] | None = None
     confidence_score: float | None = None
     permission_level: str | None = None
+
+
+class ReviewEvidenceRequest(BaseModel):
+    note: str | None = None

@@ -233,12 +233,32 @@ export type ReviewItemUpdate = {
   permission_level?: string;
 };
 
+export type ReviewEvidenceRequest = {
+  note?: string;
+};
+
+export type ReviewSourceEvidence = {
+  index: number;
+  rank: number;
+  source_id?: string | null;
+  source_url?: string | null;
+  source_snippet: string;
+  permission_level: string;
+  confidence_score: number;
+  importance_score: number;
+  timestamp?: string | null;
+  author?: string | null;
+  agent_run_id?: number | null;
+};
+
 export type ReviewItem = {
   id: number;
   item_type: string;
   payload: Record<string, unknown>;
   source_links: string[];
   source_snippets: string[];
+  source_evidence?: ReviewSourceEvidence[];
+  agent_run_id?: number | null;
   confidence_score: number;
   permission_level: string;
   status: ReviewStatus;

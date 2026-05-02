@@ -3019,6 +3019,35 @@ Cost/security note:
 - Calendar sync uses `updatedMin` so repeated syncs avoid full event history
   collection.
 
+## Source Evidence Review Drawer
+
+What changed:
+
+- Review Queue responses now include structured `source_evidence` rows with
+  source URL, snippet, permission level, confidence score, rank, importance
+  score, source id, author/timestamp when available, and originating AgentRun.
+- The Review UI drawer now presents source evidence as reviewer-ready cards
+  instead of only raw links and snippets.
+- The "request more evidence" workflow now captures a reviewer note and stores
+  it in the ReviewItem payload before moving the item to
+  `needs_more_evidence`.
+
+Portfolio angle:
+
+- Makes the human-in-the-loop trust boundary more concrete: reviewers can see
+  exactly what evidence supports an AI-generated timeline, history, decision,
+  or todo candidate.
+- Shows practical product ownership for Track C because orchestration output is
+  now reviewable by Korean business users, not only visible in backend logs.
+
+Cost/security note:
+
+- Structured evidence is assembled from already persisted ReviewItem and
+  AgentRun metadata. It does not call Slack, Google, embeddings, or paid LLMs.
+- The Drawer preserves permission labels and source snippets so reviewers can
+  reject or request more evidence before any candidate becomes trusted
+  knowledge.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3142,3 +3171,6 @@ Cost/security note:
   - Extended `ReviewCandidate` with structured payload fields so each candidate can preserve type-specific fields such as `decision_summary`, `result_summary`, `reason`, `priority`, and `priority_reason`.
   - LangGraph company-memory orchestration now runs Track C extraction after source-specific agents create fresh review candidates, while cache-hit runs avoid duplicate candidate generation.
   - Verification: backend suite `203 passed, 1 skipped`; Ruff passed; local orchestration API returned cache-safe `memory_review_items_created=0` when source agents reused cached evidence.
+- `feat: add review source evidence drawer`
+  - Review Queue API exposes structured source evidence and originating AgentRun metadata for Drawer rendering.
+  - Reviewers can request more evidence with a note, preserving why the candidate was not ready for approval.

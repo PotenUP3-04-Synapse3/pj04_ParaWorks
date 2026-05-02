@@ -135,12 +135,15 @@ Current state:
 - Ranked Slack evidence is visible in orchestration and AgentRun detail.
 - Track C extraction boundaries now exist for Timeline, History, Decision
   Record, Todo, and Validation in deterministic harness mode.
+- Review Queue items now expose structured source evidence for reviewer
+  inspection, including source URL, snippet, permission, confidence, rank, and
+  originating AgentRun where available.
 
 Next priorities:
 
-1. Add Source Evidence Drawer and "request more evidence" UX.
-2. Add LangGraph HITL checkpoint strategy.
-3. Add quality and permission regression suite.
+1. Add LangGraph HITL checkpoint strategy.
+2. Add quality and permission regression suite.
+3. Expand review evidence quality signals from Track A and Track B agents.
 
 ## 4. Shared Runtime Contracts
 
@@ -248,6 +251,7 @@ Completed harness slices include:
 - AgentRun ranked evidence detail UI
 - Track C deterministic extraction boundaries for Timeline, History, Decision
   Record, Todo, and Validation
+- Source Evidence Drawer and reviewer "request more evidence" note workflow
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -293,10 +297,10 @@ Goal: Make human review genuinely usable.
 
 Tasks:
 
-- Add Source Evidence Drawer.
-- Show source URL, snippet, permission, rank, confidence, and agent run.
-- Improve `needs_more_evidence` workflow.
-- Add reviewer notes.
+- Add Source Evidence Drawer. Done.
+- Show source URL, snippet, permission, rank, confidence, and agent run. Done.
+- Improve `needs_more_evidence` workflow. Done.
+- Add reviewer notes. Done.
 
 ### Milestone 4. Connector Quality Hardening
 
