@@ -1,3 +1,7 @@
+import base64
+import binascii
+import html
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,6 +13,7 @@ import httpx
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
 
 GoogleQueryParams = dict[str, str | list[str]]
+GOOGLE_TEXT_BODY_LIMIT = 4_000
 
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
     'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
@@ -25,7 +30,7 @@ class GoogleApiClient(Protocol):
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         raise NotImplementedError
 
-    def calendar_events(self) -> list[dict]:
+    def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
         raise NotImplementedError
 
 
@@ -69,10 +74,7 @@ class GoogleWebApiClient:
             messages.append(
                 self._get_json(
                     f'{self.gmail_base_url}/gmail/v1/users/me/messages/{message_id}',
-                    params={
-                        'format': 'metadata',
-                        'metadataHeaders': ['Subject', 'From', 'Date'],
-                    },
+                    params={'format': 'full'},
                 )
             )
         return messages
@@ -80,7 +82,11 @@ class GoogleWebApiClient:
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         params: GoogleQueryParams = {
             'pageSize': str(self.page_limit),
-            'fields': 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,owners)',
+            'fields': (
+                'nextPageToken,'
+                'files(id,name,description,mimeType,webViewLink,createdTime,modifiedTime,owners,'
+                'lastModifyingUser(emailAddress,displayName))'
+            ),
         }
         if modified_after:
             params['q'] = f"modifiedTime > '{modified_after}'"
@@ -90,16 +96,19 @@ class GoogleWebApiClient:
             params=params,
         )
 
-    def calendar_events(self) -> list[dict]:
-        payload = self._get_json(
+    def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
+        params: GoogleQueryParams = {
+            'maxResults': str(self.page_limit),
+            'singleEvents': 'true',
+            'orderBy': 'updated',
+        }
+        if updated_min:
+            params['updatedMin'] = updated_min
+        return self._get_paged_items(
             f'{self.calendar_base_url}/calendar/v3/calendars/primary/events',
-            params={
-                'maxResults': str(self.page_limit),
-                'singleEvents': 'true',
-                'orderBy': 'updated',
-            },
+            item_key='items',
+            params=params,
         )
-        return list(payload.get('items', []))
 
     def _get_json(self, url: str, *, params: GoogleQueryParams) -> dict:
         for attempt in range(self.max_retries + 1):
@@ -184,28 +193,46 @@ class GoogleConnector:
                 self._drive_file_to_source_event(file)
                 for file in self.client.drive_files(modified_after=latest_cursors_by_partition.get('drive'))
             ]
+        if self.config.connector_type == 'calendar':
+            return [
+                self._calendar_event_to_source_event(event)
+                for event in self.client.calendar_events(updated_min=latest_cursors_by_partition.get('calendar'))
+            ]
         return self.fetch_events()
 
     def _gmail_message_to_source_event(self, message: dict) -> SourceEvent:
         message_id = str(message['id'])
         subject = _header_value(message, 'Subject') or f'Gmail message {message_id}'
         author = _header_value(message, 'From') or self.config.account_name
+        date_header = _header_value(message, 'Date')
         snippet = str(message.get('snippet') or '')
+        extracted_body = _gmail_text_body(message)
+        source_body = extracted_body or snippet
+        body_text, body_truncated = _bounded_text(source_body)
+        body_source = 'payload' if extracted_body else 'snippet'
+        header_lines = [f'From: {author}'] if author else []
+        if date_header:
+            header_lines.append(f'Date: {date_header}')
         return SourceEvent(
             source_type='gmail',
             source_id=f'gmail:{message_id}',
             source_url=f'https://mail.google.com/mail/u/0/#all/{message_id}',
             title=subject,
-            body=f'{subject}\n\n{snippet}'.strip(),
+            body='\n\n'.join(part for part in [subject, '\n'.join(header_lines), body_text] if part).strip(),
             author=author,
             participants=[author] if author else [],
             timestamp=_timestamp_from_google_millis(message.get('internalDate')),
             permission_level='internal',
             raw_metadata={
                 'message_id': message_id,
+                'thread_id': message.get('threadId'),
+                'label_ids': message.get('labelIds') or [],
+                'date_header': date_header,
                 'account_id': self.config.account_id,
                 'sync_partition': 'gmail',
                 'sync_cursor': str(message.get('internalDate') or ''),
+                'body_source': body_source,
+                'body_truncated': body_truncated,
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
             },
         )
@@ -215,12 +242,22 @@ class GoogleConnector:
         title = str(file.get('name') or f'Drive file {file_id}')
         author = _first_owner_email(file) or self.config.account_name
         modified_time = str(file.get('modifiedTime') or '')
+        description = str(file.get('description') or '')
+        last_modifying_user_email = str((file.get('lastModifyingUser') or {}).get('emailAddress') or '')
+        body_lines = [
+            f'Google Drive file changed: {title}',
+            f'Mime type: {file.get("mimeType")}' if file.get('mimeType') else '',
+            f'Description: {description}' if description else '',
+            f'Owner: {author}' if author else '',
+            f'Last modifier: {last_modifying_user_email}' if last_modifying_user_email else '',
+            f'Modified: {modified_time}' if modified_time else '',
+        ]
         return SourceEvent(
             source_type='drive',
             source_id=f'drive:{file_id}',
             source_url=str(file.get('webViewLink') or f'https://drive.google.com/file/d/{file_id}/view'),
             title=title,
-            body=f'Google Drive file changed: {title}',
+            body='\n'.join(line for line in body_lines if line),
             author=author,
             participants=[author] if author else [],
             timestamp=_timestamp_from_iso(modified_time),
@@ -228,6 +265,10 @@ class GoogleConnector:
             raw_metadata={
                 'file_id': file_id,
                 'mime_type': file.get('mimeType'),
+                'description': description,
+                'created_time': file.get('createdTime'),
+                'modified_time': modified_time,
+                'last_modifying_user_email': last_modifying_user_email,
                 'account_id': self.config.account_id,
                 'sync_partition': 'drive',
                 'sync_cursor': modified_time,
@@ -239,6 +280,11 @@ class GoogleConnector:
         event_id = str(event['id'])
         title = str(event.get('summary') or f'Calendar event {event_id}')
         author = str((event.get('creator') or {}).get('email') or self.config.account_name)
+        updated = str(event.get('updated') or '')
+        description = str(event.get('description') or '')
+        location = str(event.get('location') or '')
+        start = _calendar_time_value(event.get('start'))
+        end = _calendar_time_value(event.get('end'))
         participants = [
             str(attendee['email'])
             for attendee in event.get('attendees', [])
@@ -246,19 +292,33 @@ class GoogleConnector:
         ]
         if author and author not in participants:
             participants.insert(0, author)
+        body_lines = [
+            title,
+            '',
+            f'Description: {description}' if description else '',
+            f'Location: {location}' if location else '',
+            f'Start: {start}' if start else '',
+            f'End: {end}' if end else '',
+        ]
         return SourceEvent(
             source_type='calendar',
             source_id=f'calendar:{event_id}',
             source_url=str(event.get('htmlLink') or 'https://calendar.google.com'),
             title=title,
-            body=str(event.get('description') or title),
+            body='\n'.join(line for line in body_lines if line or line == '').strip(),
             author=author,
             participants=participants,
-            timestamp=_timestamp_from_iso(event.get('updated')),
+            timestamp=_timestamp_from_iso(updated),
             permission_level='internal',
             raw_metadata={
                 'event_id': event_id,
+                'location': location,
+                'start': start,
+                'end': end,
+                'attendee_count': len(participants),
                 'account_id': self.config.account_id,
+                'sync_partition': 'calendar',
+                'sync_cursor': updated,
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['calendar']),
             },
         )
@@ -311,11 +371,68 @@ def _header_value(message: dict, name: str) -> str | None:
     return None
 
 
+def _gmail_text_body(message: dict) -> str:
+    payload = message.get('payload') or {}
+    candidates = _gmail_payload_text_candidates(payload)
+    if not candidates:
+        return ''
+    plain_text = [text for mime_type, text in candidates if mime_type == 'text/plain' and text]
+    if plain_text:
+        return _normalize_text('\n\n'.join(plain_text))
+    html_text = [text for mime_type, text in candidates if mime_type == 'text/html' and text]
+    if html_text:
+        return _normalize_text(_strip_html('\n\n'.join(html_text)))
+    return _normalize_text(candidates[0][1])
+
+
+def _gmail_payload_text_candidates(payload: dict) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    mime_type = str(payload.get('mimeType') or '')
+    data = (payload.get('body') or {}).get('data')
+    if isinstance(data, str) and mime_type.startswith('text/'):
+        decoded = _decode_base64url(data)
+        if decoded:
+            candidates.append((mime_type, decoded))
+    for part in payload.get('parts') or []:
+        candidates.extend(_gmail_payload_text_candidates(part))
+    return candidates
+
+
+def _decode_base64url(value: str) -> str:
+    padded = value + '=' * (-len(value) % 4)
+    try:
+        return base64.urlsafe_b64decode(padded.encode('ascii')).decode('utf-8', errors='replace')
+    except (binascii.Error, ValueError):
+        return ''
+
+
+def _strip_html(value: str) -> str:
+    without_tags = re.sub(r'<[^>]+>', ' ', value)
+    return html.unescape(without_tags)
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r'\s+', ' ', value).strip()
+
+
+def _bounded_text(value: str, limit: int = GOOGLE_TEXT_BODY_LIMIT) -> tuple[str, bool]:
+    normalized = _normalize_text(value)
+    if len(normalized) <= limit:
+        return normalized, False
+    return normalized[:limit].rstrip(), True
+
+
 def _first_owner_email(file: dict) -> str | None:
     owners = file.get('owners') or []
     if not owners:
         return None
     return owners[0].get('emailAddress')
+
+
+def _calendar_time_value(value: object) -> str:
+    if not isinstance(value, dict):
+        return ''
+    return str(value.get('dateTime') or value.get('date') or '')
 
 
 def _timestamp_from_google_millis(value: object) -> datetime:

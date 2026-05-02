@@ -2988,6 +2988,37 @@ Cost/security note:
 - Existing cost-related smoke tests still mock dry-run and approval responses
   so CI-style browser checks remain deterministic.
 
+## Google Source Quality And Calendar Delta Sync
+
+What changed:
+
+- Gmail live collection now hydrates messages with `format=full` and extracts
+  bounded `text/plain` payload content for review/RAG instead of relying only on
+  snippets.
+- Gmail source metadata now records thread id, labels, date header, body source,
+  and whether the extracted body was truncated for ingestion safety.
+- Google Drive source events now include description, owner, last modifier,
+  created time, modified time, and richer searchable body text.
+- Google Calendar live collection now paginates events and supports `updatedMin`
+  incremental sync through the shared `sync_partition` / `sync_cursor` contract.
+- Calendar source events now include description, location, start/end time,
+  attendee count, and reusable sync cursor metadata.
+
+Portfolio angle:
+
+- Moves Google integrations beyond "connected" status into useful business
+  memory ingestion: mail context, document metadata, and calendar timelines now
+  carry enough structure for review and RAG.
+- Shows cross-connector consistency because Gmail, Drive, and Calendar all share
+  the same incremental cursor pattern.
+
+Cost/security note:
+
+- Gmail body extraction is bounded before review and embedding stages, reducing
+  the risk of large messages driving unnecessary downstream token cost.
+- Calendar sync uses `updatedMin` so repeated syncs avoid full event history
+  collection.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3070,3 +3101,4 @@ Cost/security note:
 - `feat: improve rag citation ranking`
 - `feat: harden google live sync deltas`
 - `test: expand whole-app playwright regression`
+- `feat: enrich google live source quality`
