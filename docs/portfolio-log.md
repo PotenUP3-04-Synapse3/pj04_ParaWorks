@@ -2551,6 +2551,24 @@ Verification evidence:
   and 2 expected mobile skips after starting the local smoke backend with a
   SQLite dev DB because the local PostgreSQL password was rejected.
 
+## Workspace Glass Card Consistency
+
+What changed:
+
+- Promoted the integrations page glass-card treatment into shared
+  `--card-glass-*` and `--row-glass-*` design tokens.
+- Aligned `integration-glass-card`, `liquid-surface`, general `bg-white` cards,
+  and `glass-row` helper panels so dark and light modes use the same card
+  background, border, highlight, and shadow model.
+- Verified computed browser styles for integration, dashboard, and search cards
+  in both dark and light modes.
+
+Verification evidence:
+
+- `npm run build` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts` passed with 50 executed tests
+  and 2 expected mobile skips.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2621,3 +2639,4 @@ Verification evidence:
 - `feat: activate google oauth callback`
 - `style: tune light deep purple palette`
 - `feat: add demo login and admin console`
+- `style: unify workspace glass cards`
