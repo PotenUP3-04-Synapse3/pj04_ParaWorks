@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import text
@@ -69,7 +69,7 @@ class PgVectorStore:
                 'source_url': document.source_url,
                 'source_snippet': document.source_snippet,
                 'permission_level': document.permission_level,
-                'metadata_json': document.metadata,
+                'metadata_json': json.dumps(document.metadata),
                 'embedding': _embedding_literal(embedding),
             },
         )
@@ -129,7 +129,7 @@ class PgVectorStore:
             :source_url,
             :source_snippet,
             :permission_level,
-            :metadata_json,
+            CAST(:metadata_json AS jsonb),
             CAST(:embedding AS vector),
             now()
         )

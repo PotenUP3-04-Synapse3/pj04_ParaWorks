@@ -30,7 +30,7 @@ docker compose up -d postgres redis
 Then point the app at the matching database URL:
 
 ```powershell
-$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@localhost:55432/paraworks'
+$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:55432/paraworks'
 ```
 
 Or start the app stack with the helper:
@@ -45,10 +45,21 @@ If `5432` is already taken, use the helper's port flags:
 .\scripts\start-pgvector-dev.ps1 -PostgresPort 55432 -RedisPort 56379
 ```
 
+By default the helper also detects a non-ParaWorks listener on `127.0.0.1:5432`
+and falls back to `55432`. This avoids the common local failure mode where an
+existing PostgreSQL instance answers on `5432` but rejects the ParaWorks
+`paraworks/paraworks` credentials.
+
+To prepare only Postgres + Redis without starting the app:
+
+```powershell
+.\scripts\start-pgvector-dev.ps1 -SkipApp
+```
+
 Default database URL:
 
 ```text
-postgresql+psycopg://paraworks:paraworks@localhost:5432/paraworks
+postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks
 ```
 
 ## Environment
@@ -73,7 +84,7 @@ verified. Toggle it only for manual vector retrieval checks.
 ## Initialize database
 
 ```powershell
-$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@localhost:5432/paraworks'
+$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks'
 uv run python -m backend.app.db.init_db
 ```
 
@@ -85,6 +96,17 @@ volumes:
 - `docker/postgres/init/003_vector_index_states.sql`
 
 The API also calls `PgVectorStore.ensure_schema()` before production writes.
+The helper runs the same schema guard explicitly:
+
+```powershell
+uv run python scripts/check_pgvector_dev.py --database-url $env:DATABASE_URL --ensure-vector-schema
+uv run python scripts/check_pgvector_dev.py --database-url $env:DATABASE_URL --expect-app-schema
+```
+
+If the check fails with a password error, you are not connected to the expected
+ParaWorks database. Use `-PostgresPort 55432`, stop the conflicting local
+Postgres service, or reset the Docker volume intentionally with
+`docker compose down -v` when you do not need the local data.
 
 ## Safe smoke sequence
 
@@ -151,11 +173,17 @@ The automated integration test never calls OpenAI. It writes deterministic fake
 embeddings into a real pgvector database only when this variable is present:
 
 ```powershell
-$env:PARAWORKS_PGVECTOR_TEST_DATABASE_URL='postgresql+psycopg://paraworks:paraworks@localhost:5432/paraworks'
+$env:PARAWORKS_PGVECTOR_TEST_DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks'
 uv run pytest backend/tests/test_pgvector_integration.py -v
 ```
 
 Without `PARAWORKS_PGVECTOR_TEST_DATABASE_URL`, the test is skipped.
+When the helper falls back to `55432`, use the matching URL:
+
+```powershell
+$env:PARAWORKS_PGVECTOR_TEST_DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:55432/paraworks'
+uv run pytest backend/tests/test_pgvector_integration.py -v
+```
 
 ## Cost policy
 

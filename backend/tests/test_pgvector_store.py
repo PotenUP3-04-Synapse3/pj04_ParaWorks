@@ -1,10 +1,12 @@
+from pathlib import Path
+
 from backend.app.core.demo_auth import USERS
 from backend.app.rag.pgvector_store import PgVectorConfig, PgVectorStore
 from backend.app.rag.vector_store import VectorDocument
 
 
 def test_docker_postgres_init_creates_pgvector_rag_table() -> None:
-    sql = open('docker/postgres/init/002_rag_vector_documents.sql', encoding='utf-8').read()
+    sql = Path('docker/postgres/init/002_rag_vector_documents.sql').read_text(encoding='utf-8')
 
     assert 'CREATE TABLE IF NOT EXISTS rag_vector_documents' in sql
     assert 'embedding vector(1536)' in sql
@@ -66,7 +68,7 @@ def test_pgvector_upsert_writes_document_with_embedding_literal() -> None:
     assert 'ON CONFLICT (document_id) DO UPDATE' in statement
     assert params['document_id'] == 'knowledge:decision:1'
     assert params['embedding'] == '[0.1,0.2,0.3]'
-    assert params['metadata_json'] == {'source_type': 'decision_record'}
+    assert params['metadata_json'] == '{"source_type": "decision_record"}'
 
 
 def test_pgvector_search_filters_by_user_permission_and_tracks_hidden_matches() -> None:

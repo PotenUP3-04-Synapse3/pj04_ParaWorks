@@ -67,6 +67,6 @@ def test_pgvector_dev_stack_supports_alternate_host_ports() -> None:
     assert '[int]$RedisPort = 6379' in script
     assert '$env:PARAWORKS_POSTGRES_PORT = "$PostgresPort"' in script
     assert '$env:PARAWORKS_REDIS_PORT = "$RedisPort"' in script
-    assert 'localhost:$PostgresPort/paraworks' in script
+    assert '127.0.0.1:$PostgresPort/paraworks' in script
     assert '"127.0.0.1:${PARAWORKS_POSTGRES_PORT:-5432}:5432"' in compose
     assert '"127.0.0.1:${PARAWORKS_REDIS_PORT:-6379}:6379"' in compose

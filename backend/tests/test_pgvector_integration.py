@@ -19,7 +19,9 @@ from backend.app.rag.vector_store import VectorDocument
 def test_pgvector_reindex_path_with_fake_embedding() -> None:
     engine = create_engine(os.environ['PARAWORKS_PGVECTOR_TEST_DATABASE_URL'])
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    table_name = f'rag_vector_documents_test_{uuid4().hex[:8]}'
+    test_id = uuid4().hex[:8]
+    table_name = f'rag_vector_documents_test_{test_id}'
+    document_id = f'chunk:pgvector-test:{test_id}'
 
     with session_local() as db:
         store = PgVectorStore(session=db, config=PgVectorConfig(table_name=table_name, embedding_dimensions=8))
@@ -30,7 +32,7 @@ def test_pgvector_reindex_path_with_fake_embedding() -> None:
             db=db,
             documents=[
                 VectorDocument(
-                    document_id='chunk:pgvector-test',
+                    document_id=document_id,
                     text='PostgreSQL pgvector stores durable company memory embeddings.',
                     source_url='https://pgvector.mock/company-memory',
                     source_snippet='pgvector stores durable company memory',
@@ -51,7 +53,7 @@ def test_pgvector_reindex_path_with_fake_embedding() -> None:
 
         assert result.indexed_count == 1
         assert result.embedding_request_count == 1
-        assert search_result.matches[0].document.document_id == 'chunk:pgvector-test'
+        assert search_result.matches[0].document.document_id == document_id
 
         db.execute(text(f'DROP TABLE IF EXISTS {table_name}'))
         db.commit()

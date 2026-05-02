@@ -2569,6 +2569,44 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts` passed with 50 executed tests
   and 2 expected mobile skips.
 
+## Pgvector Dev Environment Hardening
+
+What changed:
+
+- Added Postgres and Redis healthchecks to the local Docker stack and made the
+  pgvector helper detect an occupied host `5432` before falling back to `55432`.
+- Added `scripts/check_pgvector_dev.py` so developers can verify the vector
+  extension, vector table, and app indexing state table without guessing whether
+  the local DB is ready.
+- Added a `-SkipApp` path for DB-only setup, documented the `127.0.0.1` database
+  URL convention, and kept frontend dev URLs on `localhost` for stable Next.js
+  browser testing.
+- Fixed pgvector metadata writes by serializing metadata as JSON before casting
+  to `jsonb` in PostgreSQL.
+- Made the live pgvector integration test use unique document IDs so incremental
+  indexing state does not hide regressions between repeated runs.
+
+Portfolio angle:
+
+- Shows production-minded local infrastructure work: the vector DB path is now
+  reproducible, testable, and safer when another local PostgreSQL instance is
+  already running.
+- Strengthens the RAG story for interviews because ParaWorks can demonstrate
+  SQLite smoke mode for quick demos and PostgreSQL + pgvector for the real
+  retrieval architecture.
+- Keeps future embedding/token costs under control by preserving the incremental
+  indexing path while validating that only changed documents need to be written.
+
+Verification evidence:
+
+- `uv run python scripts/check_pgvector_dev.py --database-url postgresql+psycopg://paraworks:paraworks@127.0.0.1:55432/paraworks --expect-app-schema`
+  passed against the local pgvector container with vector extension `0.8.2`.
+- `uv run pytest backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py backend/tests/test_pgvector_store.py backend/tests/test_rag_indexing.py backend/tests/test_rag_indexing_tasks.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_vector_retriever.py -v`
+  passed with 37 tests.
+- `docker compose config` passed.
+- `uv run ruff check backend/app/rag/pgvector_store.py scripts/check_pgvector_dev.py backend/tests/test_pgvector_store.py backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py backend/tests/test_rag_indexing_tasks.py`
+  passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2640,3 +2678,4 @@ Verification evidence:
 - `style: tune light deep purple palette`
 - `feat: add demo login and admin console`
 - `style: unify workspace glass cards`
+- `chore: harden pgvector dev path`
