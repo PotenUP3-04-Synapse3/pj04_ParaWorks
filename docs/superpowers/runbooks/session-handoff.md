@@ -454,6 +454,31 @@ Next recommended step from `plan.md`:
 2. Add product completion pages for decisions/timeline/history.
 3. Add production auth plan after product surfaces stabilize.
 
+## 2026-05-02 Structured Memory Extraction Adapter Update
+
+Aligned with the current root `plan.md` Milestone 6.
+
+- Added `backend/app/agents/memory_extraction_agent/langchain_adapter.py`.
+- The adapter implements the existing `MemoryExtractionModel` contract and
+  returns `MemoryExtractionModelResponse`.
+- It uses `chat_model.with_structured_output(StructuredMemoryExtractionOutput)`
+  so real LangChain providers can be injected later without changing Track C
+  agent contracts.
+- Prompt rendering includes bounded evidence rows with source id, source URL,
+  timestamp, author, permission level, and text.
+
+Cost note:
+
+- No provider builder or live model call is enabled by default.
+- Tests use fake chat models only.
+- Evidence rendering is bounded by `max_input_chars`.
+
+Next recommended step from `plan.md`:
+
+1. Add product completion pages for decisions/timeline/history.
+2. Add production auth plan after product surfaces stabilize.
+3. Keep expanding golden fixtures as new real-data failures appear.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

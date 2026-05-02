@@ -144,8 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Prepare structured LangChain output adapters behind deterministic contracts.
-2. Add product completion pages for decisions/timeline/history.
+1. Add product completion pages for decisions/timeline/history.
+2. Add production auth plan after product surfaces stabilize.
 
 ## 4. Shared Runtime Contracts
 
@@ -273,6 +273,9 @@ Completed harness slices include:
   agent-ready metadata expectations
 - RAG smoke evaluation fixture now reports precision, recall, hit rate, and
   matched expected source ids for deterministic retrieval quality
+- Track C memory extraction now has a LangChain `with_structured_output`
+  adapter boundary behind the same deterministic `MemoryExtractionModel`
+  contract
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -360,6 +363,8 @@ Tasks:
 - Cost/cache regression tests. Initial suite done.
 - Golden dataset for Slack, Gmail, Drive, Calendar. Initial fixture done.
 - RAG precision/recall smoke metrics. Initial fixture done.
+- Structured LangChain output adapters behind deterministic contracts. Initial
+  Track C adapter done.
 
 ### Milestone 7. Product Completion Layer
 

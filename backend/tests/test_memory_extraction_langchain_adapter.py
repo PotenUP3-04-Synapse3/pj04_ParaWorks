@@ -1,0 +1,89 @@
+from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
+from backend.app.agents.memory_extraction_agent.langchain_adapter import (
+    LangChainMemoryExtractionModel,
+    StructuredMemoryExtractionOutput,
+    render_memory_extraction_prompt,
+)
+
+
+class FakeStructuredChatModel:
+    def __init__(self) -> None:
+        self.messages = None
+
+    def invoke(self, messages):
+        self.messages = messages
+        return StructuredMemoryExtractionOutput(
+            title='Redis decision',
+            summary='Redis will handle queue progress while PostgreSQL remains durable storage.',
+            item_type='decision_record',
+            confidence_score=0.86,
+            payload_fields={'decision_summary': 'Redis handles queue progress.'},
+            uncertainty_reason=None,
+        )
+
+
+class FakeChatModel:
+    def __init__(self) -> None:
+        self.schema = None
+        self.structured_model = FakeStructuredChatModel()
+
+    def with_structured_output(self, schema):
+        self.schema = schema
+        return self.structured_model
+
+
+def test_langchain_memory_adapter_uses_structured_output_contract() -> None:
+    chat_model = FakeChatModel()
+    packet = build_packet()
+    model = LangChainMemoryExtractionModel(
+        chat_model=chat_model,
+        expected_item_type='decision_record',
+        task_name='decision record extraction',
+        model_name='fake-structured-model',
+    )
+
+    response = model.extract(packet)
+
+    assert chat_model.schema is StructuredMemoryExtractionOutput
+    assert response.title == 'Redis decision'
+    assert response.item_type == 'decision_record'
+    assert response.confidence_score == 0.86
+    assert response.payload_fields == {'decision_summary': 'Redis handles queue progress.'}
+    assert response.input_tokens > 0
+    assert response.output_tokens > 0
+    assert chat_model.structured_model.messages[0][0] == 'system'
+    assert 'Use only the provided evidence' in chat_model.structured_model.messages[0][1]
+
+
+def test_render_memory_extraction_prompt_bounds_evidence_text() -> None:
+    packet = build_packet(text='A' * 120)
+
+    prompt = render_memory_extraction_prompt(
+        packet,
+        expected_item_type='timeline_event',
+        task_name='timeline extraction',
+        max_input_chars=32,
+    )
+
+    assert 'timeline_event' in prompt
+    assert 'source-1' in prompt
+    assert 'A' * 32 in prompt
+    assert 'A' * 33 not in prompt
+
+
+def build_packet(text: str = 'Decision: Redis queue progress moves into company memory.') -> EvidencePacket:
+    return EvidencePacket(
+        source_type='company_memory',
+        source_window='test:structured-output',
+        messages=[
+            EvidenceMessage(
+                source_id='source-1',
+                source_url='https://example.test/source-1',
+                text=text,
+                author='owner@example.com',
+                timestamp='2026-05-02T09:00:00+09:00',
+                permission_level='internal',
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )

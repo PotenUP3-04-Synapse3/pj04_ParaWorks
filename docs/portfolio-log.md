@@ -3323,6 +3323,31 @@ Cost/security note:
 - This is the correct first guardrail before enabling broader pgvector or
   model-judge evaluation.
 
+## Structured LangChain Memory Extraction Adapter
+
+What changed:
+
+- Added a Track C `LangChainMemoryExtractionModel` adapter that implements the
+  existing `MemoryExtractionModel` contract.
+- The adapter uses `chat_model.with_structured_output` with a Pydantic
+  `StructuredMemoryExtractionOutput` schema, keeping Timeline/History/Decision
+  Record/Todo extraction behind the same deterministic agent interface.
+- Added prompt rendering with bounded evidence windows and source metadata.
+
+Portfolio angle:
+
+- Shows the correct migration path from deterministic harness logic to real
+  LangChain structured-output agents without breaking shared contracts.
+- Demonstrates that agent implementation can evolve independently while Review
+  Queue, cost accounting, and evidence-first contracts remain stable.
+
+Cost/security note:
+
+- No live model provider is invoked by default. The adapter accepts an injected
+  chat model and is covered by fake-model tests.
+- Evidence rendering is bounded by `max_input_chars`, preserving the project
+  rule that full source sync does not mean full LLM input.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3470,3 +3495,5 @@ Cost/security note:
   - Added static Slack/Gmail/Drive/Calendar golden payloads and metadata regression assertions.
 - `test: add rag retrieval smoke metrics`
   - Added local precision/recall/hit-rate evaluation for deterministic RAG retrieval fixtures.
+- `feat: add structured memory extraction adapter`
+  - Added a LangChain structured-output adapter behind the existing Track C memory extraction contract.
