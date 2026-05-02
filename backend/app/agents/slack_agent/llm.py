@@ -39,10 +39,18 @@ class SlackLlmSettings:
 
 
 class LangChainSlackAgentModel:
-    def __init__(self, *, provider: str, model_name: str, chat_model: Any) -> None:
+    def __init__(
+        self,
+        *,
+        provider: str,
+        model_name: str,
+        chat_model: Any,
+        max_input_chars: int = DEFAULT_MAX_INPUT_CHARS,
+    ) -> None:
         self.provider = provider
         self.model_name = model_name
         self.chat_model = chat_model
+        self.max_input_chars = max_input_chars
 
     def extract(self, packet: EvidencePacket) -> SlackAgentModelResponse:
         messages = [
@@ -51,7 +59,7 @@ class LangChainSlackAgentModel:
                 'You extract one reviewable company history candidate from Slack evidence. '
                 'Return only JSON with title, summary, item_type, confidence_score, and optional uncertainty_reason.',
             ),
-            ('user', render_slack_llm_prompt(packet)),
+            ('user', render_slack_llm_prompt(packet, max_input_chars=self.max_input_chars)),
         ]
         try:
             response = self.chat_model.invoke(messages)
@@ -159,9 +167,13 @@ def build_langchain_slack_agent_model(settings: SlackLlmSettings) -> FallbackSla
     return FallbackSlackAgentModel(providers)
 
 
-def render_slack_llm_prompt(packet: EvidencePacket) -> str:
+def render_slack_llm_prompt(
+    packet: EvidencePacket,
+    *,
+    max_input_chars: int = DEFAULT_MAX_INPUT_CHARS,
+) -> str:
     evidence_rows = []
-    remaining_chars = DEFAULT_MAX_INPUT_CHARS
+    remaining_chars = max_input_chars
     for message in packet.messages:
         text = message.text[: max(0, min(len(message.text), remaining_chars))]
         remaining_chars -= len(text)
@@ -202,6 +214,7 @@ def _build_openai_model(settings: SlackLlmSettings) -> LangChainSlackAgentModel:
     return LangChainSlackAgentModel(
         provider='openai',
         model_name=settings.openai_model,
+        max_input_chars=settings.max_input_chars,
         chat_model=ChatOpenAI(
             model=settings.openai_model,
             api_key=settings.openai_api_key,
@@ -220,6 +233,7 @@ def _build_gemini_model(settings: SlackLlmSettings) -> LangChainSlackAgentModel:
     return LangChainSlackAgentModel(
         provider='gemini',
         model_name=settings.gemini_model,
+        max_input_chars=settings.max_input_chars,
         chat_model=ChatGoogleGenerativeAI(
             model=settings.gemini_model,
             google_api_key=settings.gemini_api_key,
@@ -258,9 +272,9 @@ def _preflight_response(
 
 
 def _estimated_token_usage(packet: EvidencePacket, settings: SlackLlmSettings) -> TokenUsage:
-    prompt = render_slack_llm_prompt(packet)
+    prompt = render_slack_llm_prompt(packet, max_input_chars=settings.max_input_chars)
     return TokenUsage(
-        input_tokens=max(1, min(len(prompt), settings.max_input_chars) // 4),
+        input_tokens=max(1, len(prompt)),
         output_tokens=settings.max_output_tokens,
     )
 

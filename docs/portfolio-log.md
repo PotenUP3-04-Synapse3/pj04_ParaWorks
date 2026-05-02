@@ -3117,3 +3117,8 @@ Cost/security note:
   - Added paid-run preflight that reports provider availability, estimated tokens, estimated cost, budget status, and requires explicit confirmation before live LLM calls.
   - Kept the deterministic Slack Agent as the default safe harness while exposing a separate real LLM test action in the integrations UI.
   - Verification: backend suite `191 passed, 1 skipped` with demo-mode override; frontend lint/build passed; Playwright integrations desktop dark/light regression passed.
+- `fix: make slack llm preflight conservative`
+  - Ran one confirmed real Slack LLM test with OpenAI primary and Gemini fallback configured; it created one review candidate and persisted an AgentRun.
+  - Found the first preflight underestimated Korean/Slack JSON token usage, then tightened prompt caps and changed input-token estimation to a conservative character-count floor.
+  - After the fix, the same live Slack evidence window is blocked as `over_budget` instead of allowing another paid run under an optimistic estimate.
+  - Verification: backend suite `193 passed, 1 skipped` with demo-mode override; frontend lint passed; Playwright integrations desktop dark/light regression passed.

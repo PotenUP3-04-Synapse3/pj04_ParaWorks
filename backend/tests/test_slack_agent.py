@@ -1,3 +1,5 @@
+import json
+
 from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
 from backend.app.agents.slack_agent import (
     SLACK_AGENT_MANIFEST,
@@ -10,6 +12,7 @@ from backend.app.agents.slack_agent.llm import (
     SlackLlmProviderError,
     SlackLlmSettings,
     build_slack_llm_preflight,
+    render_slack_llm_prompt,
 )
 
 
@@ -173,3 +176,37 @@ def test_slack_llm_preflight_reports_missing_credentials_for_all_providers() -> 
     assert preflight['action'] == 'blocked'
     assert preflight['reason'] == 'missing_credentials'
     assert preflight['available_providers'] == []
+
+
+def test_slack_llm_preflight_estimates_tokens_conservatively_for_capped_prompt() -> None:
+    packet = build_packet()
+    settings = SlackLlmSettings(
+        enabled=True,
+        provider_order=('openai', 'gemini'),
+        openai_api_key='openai-key',
+        gemini_api_key='gemini-key',
+        max_estimated_cost_usd=1.0,
+        max_input_chars=120,
+    )
+
+    preflight = build_slack_llm_preflight(packet=packet, settings=settings)
+    prompt = render_slack_llm_prompt(packet, max_input_chars=settings.max_input_chars)
+
+    assert preflight['estimated_input_tokens'] >= len(prompt)
+
+
+def test_langchain_slack_agent_model_uses_configured_prompt_cap() -> None:
+    chat_model = FakeLangChainChatModel()
+    model = LangChainSlackAgentModel(
+        provider='openai',
+        model_name='gpt-test',
+        chat_model=chat_model,
+        max_input_chars=24,
+    )
+
+    model.extract(build_packet())
+
+    user_payload = chat_model.messages[1][1]
+    payload = json.loads(user_payload)
+    assert len(payload['evidence'][0]['text']) <= 24
+    assert payload['evidence'][0]['text'] != build_packet().messages[0].text

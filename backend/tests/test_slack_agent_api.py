@@ -32,6 +32,10 @@ def test_slack_agent_review_endpoint_creates_agent_review_item(client, db_sessio
 
 
 def test_slack_llm_preflight_requires_explicit_enablement(client) -> None:
+    def override_settings() -> Settings:
+        return Settings(agent_llm_enabled=False)
+
+    client.app.dependency_overrides[get_settings] = override_settings
     client.post('/api/v1/integrations/slack/sync')
 
     response = client.get('/api/v1/integrations/slack/agent-review/llm/preflight')
