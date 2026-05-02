@@ -431,6 +431,29 @@ Next recommended step from `plan.md`:
 2. Prepare structured LangChain output adapters behind deterministic contracts.
 3. Continue product completion pages after evaluation hooks are stable.
 
+## 2026-05-02 RAG Retrieval Smoke Metrics Update
+
+Aligned with the current root `plan.md` Milestone 6.
+
+- Added `backend/app/rag/evaluation.py`.
+- Added `backend/tests/fixtures/rag_smoke_eval_cases.json`.
+- Added `backend/tests/test_rag_evaluation_metrics.py`.
+- Metrics include precision@k, recall@k, hit rate, expected/retrieved counts,
+  and matched expected source ids.
+- The smoke fixture runs deterministic retrieval over local seeded chunks and
+  confirms expected source ids are recovered.
+
+Cost note:
+
+- This evaluation path uses local fixtures only. It does not call paid LLMs,
+  embedding APIs, Slack, or Google.
+
+Next recommended step from `plan.md`:
+
+1. Prepare structured LangChain output adapters behind deterministic contracts.
+2. Add product completion pages for decisions/timeline/history.
+3. Add production auth plan after product surfaces stabilize.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

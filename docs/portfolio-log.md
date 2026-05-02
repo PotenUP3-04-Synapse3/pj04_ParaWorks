@@ -3296,6 +3296,33 @@ Cost/security note:
 - The fixture protects future cost optimizations such as hash/signature skips
   by keeping metadata expectations explicit.
 
+## RAG Precision Recall Smoke Metrics
+
+What changed:
+
+- Added `backend/app/rag/evaluation.py` with deterministic retrieval metrics:
+  precision@k, recall@k, hit rate, expected/retrieved counts, and matched
+  expected source ids.
+- Added `backend/tests/fixtures/rag_smoke_eval_cases.json` and a smoke test
+  that seeds known chunks, runs deterministic retrieval, and verifies the
+  expected sources are recovered.
+- The test complements `/search` backend disclosure by measuring whether the
+  zero-cost retrieval path still finds the right evidence.
+
+Portfolio angle:
+
+- Shows evaluation-minded RAG engineering: retrieval quality is tracked with a
+  repeatable smoke metric before adding more expensive model-based evaluation.
+- Gives interview/demo material for explaining why ParaWorks avoids blind LLM
+  calls and validates evidence selection first.
+
+Cost/security note:
+
+- The smoke metric uses local fixtures and deterministic retrieval only.
+  It makes no paid LLM, embedding, Slack, or Google calls.
+- This is the correct first guardrail before enabling broader pgvector or
+  model-judge evaluation.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3441,3 +3468,5 @@ Cost/security note:
   - Calendar events now preserve event context, status, organizer, RSVP counts, duration, and external attendee domains.
 - `test: add connector golden dataset`
   - Added static Slack/Gmail/Drive/Calendar golden payloads and metadata regression assertions.
+- `test: add rag retrieval smoke metrics`
+  - Added local precision/recall/hit-rate evaluation for deterministic RAG retrieval fixtures.

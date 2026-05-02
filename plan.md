@@ -145,7 +145,7 @@ Current state:
 Next priorities:
 
 1. Prepare structured LangChain output adapters behind deterministic contracts.
-2. Add RAG precision/recall smoke metrics.
+2. Add product completion pages for decisions/timeline/history.
 
 ## 4. Shared Runtime Contracts
 
@@ -271,6 +271,8 @@ Completed harness slices include:
   attendee response counts, duration, and external attendee domains
 - Connector golden dataset fixture now locks Slack, Gmail, Drive, and Calendar
   agent-ready metadata expectations
+- RAG smoke evaluation fixture now reports precision, recall, hit rate, and
+  matched expected source ids for deterministic retrieval quality
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -357,7 +359,7 @@ Tasks:
 - Source validation tests. Initial suite done.
 - Cost/cache regression tests. Initial suite done.
 - Golden dataset for Slack, Gmail, Drive, Calendar. Initial fixture done.
-- RAG precision/recall smoke metrics.
+- RAG precision/recall smoke metrics. Initial fixture done.
 
 ### Milestone 7. Product Completion Layer
 
