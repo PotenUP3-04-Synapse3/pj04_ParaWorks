@@ -44,6 +44,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { dictionary, locale, setLocale } = useLanguage();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [hydrated, setHydrated] = useState(false);
   const shell = dictionary.shell;
   const workspaceItems = navItems.filter((item) => item.section === "workspace");
   const toolItems = navItems.filter((item) => item.section === "tools");
@@ -53,9 +54,11 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
     if (savedTheme === "light" || savedTheme === "dark") {
       setTheme(savedTheme);
       document.documentElement.dataset.theme = savedTheme;
+      setHydrated(true);
       return;
     }
     document.documentElement.dataset.theme = "dark";
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -66,7 +69,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
   const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
   return (
-    <div className="min-h-screen text-ink">
+    <div className="min-h-screen text-ink" data-testid="app-shell" data-hydrated={hydrated ? "true" : "false"}>
       <aside className="shell-rail fixed inset-y-4 left-4 hidden w-[276px] rounded-[34px] md:block">
         <div className="flex h-full flex-col">
           <div className="border-b border-[var(--shell-border)] px-4 py-4">

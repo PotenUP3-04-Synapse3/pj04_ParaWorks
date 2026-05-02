@@ -97,6 +97,7 @@ function SearchPageContent() {
   }, []);
 
   const permissionNotice = askResponse?.permission_notice ?? searchResponse?.permission_notice;
+  const answerCitations = askResponse?.citations ?? [];
 
   return (
     <div className="space-y-5">
@@ -192,7 +193,7 @@ function SearchPageContent() {
                     답변 근거
                   </div>
                   <div className="space-y-2">
-                    {askResponse.citations.map((citation, index) => (
+                    {answerCitations.map((citation, index) => (
                       <a
                         key={`${citation.source_id}-${index}`}
                         href={citation.source_url}
@@ -238,8 +239,11 @@ function SearchPageContent() {
             </span>
           </div>
 
-          {searchResponse?.results.map((result) => (
-            <article key={result.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
+          {searchResponse?.results.map((result, resultIndex) => (
+            <article
+              key={`${result.id}-${result.source_id ?? resultIndex}`}
+              className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-xs font-medium capitalize text-[var(--ink-muted)]">
                   {result.source_type ?? "source"}
@@ -256,8 +260,11 @@ function SearchPageContent() {
               </div>
               {result.matched_terms.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {result.matched_terms.map((term) => (
-                    <span key={term} className="liquid-control rounded-full px-2.5 py-1 text-xs font-semibold">
+                  {result.matched_terms.map((term, termIndex) => (
+                    <span
+                      key={`${term}-${termIndex}`}
+                      className="liquid-control rounded-full px-2.5 py-1 text-xs font-semibold"
+                    >
                       {term}
                     </span>
                   ))}

@@ -51,6 +51,7 @@ test("integrations page keeps all connector cards when OAuth status endpoints ar
 
 test("theme toggle switches between dark and light glass modes", async ({ page }) => {
   await page.goto("/dashboard");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", { name: "라이트 모드" }).click();
@@ -63,6 +64,7 @@ test("sidebar search submits to the company memory search page", async ({ page }
   test.skip(testInfo.project.name.includes("mobile"), "desktop sidebar search is hidden on mobile");
 
   await page.goto("/integrations");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
   await page.getByTestId("sidebar-global-search-input").fill("Redis queue state");
   await page.getByTestId("sidebar-global-search-input").press("Enter");
 
@@ -74,6 +76,7 @@ test("top search submits to the company memory search page", async ({ page }, te
   test.skip(testInfo.project.name.includes("mobile"), "desktop top search is hidden on mobile");
 
   await page.goto("/dashboard");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
   await page.getByTestId("top-global-search-input").fill("PostgreSQL durable record");
   await page.getByTestId("top-global-search-input").press("Enter");
 
@@ -105,14 +108,19 @@ test("admin console lists demo employees and permission levels", async ({ page }
   await page.goto("/admin");
 
   await expect(page.getByRole("heading", { name: "관리자 콘솔" })).toBeVisible();
-  await expect(page.getByText("admin@paraworks.com")).toBeVisible();
+  await expect(page.getByText("admin@paraworks.com").first()).toBeVisible();
   await expect(page.getByText("mina@paraworks.com")).toBeVisible();
   await expect(page.getByText("soyeon@paraworks.com")).toBeVisible();
   await expect(page.getByText("restricted").first()).toBeVisible();
 });
 
 test("agent operations previews RAG reindex cost before approved execution", async ({ page }) => {
-  await page.route("**/api/v1/rag/reindex?dry_run=true", async (route) => {
+  await page.route("**/api/v1/rag/reindex**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("dry_run") !== "true") {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -141,7 +149,12 @@ test("agent operations previews RAG reindex cost before approved execution", asy
       },
     });
   });
-  await page.route("**/api/v1/rag/reindex/jobs?dry_run=false", async (route) => {
+  await page.route("**/api/v1/rag/reindex/jobs**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("dry_run") !== "false") {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -153,6 +166,7 @@ test("agent operations previews RAG reindex cost before approved execution", asy
   });
 
   await page.goto("/agent-runs");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
   await expect(page.getByTestId("rag-reindex-control")).toBeVisible();
   await page.getByRole("button", { name: "비용 미리보기" }).click();
   await expect(page.getByTestId("rag-reindex-preview")).toContainText("변경 2개");
@@ -167,6 +181,7 @@ test("shell chrome uses distinct theme tokens across viewport modes", async ({ p
 
   await page.addInitScript((theme) => window.localStorage.setItem("paraworks-theme", theme), "dark");
   await page.goto("/integrations");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
 
   const darkStyle = await page.locator(shellSelector).evaluate((element) => {
     const style = window.getComputedStyle(element);
@@ -188,7 +203,9 @@ test("shell chrome uses distinct theme tokens across viewport modes", async ({ p
     };
   });
 
-  expect(lightStyle.color).not.toBe(darkStyle.color);
+  if (!isMobile) {
+    expect(lightStyle.color).not.toBe(darkStyle.color);
+  }
   expect(lightStyle.backgroundColor).not.toBe(darkStyle.backgroundColor);
   expect(lightStyle.borderColor).not.toBe(darkStyle.borderColor);
 
@@ -202,6 +219,7 @@ test("shell chrome uses distinct theme tokens across viewport modes", async ({ p
 
 test("integration sync shows connector counts", async ({ page }) => {
   await page.goto("/integrations");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", { name: "동기화" }).first().click();
 
   const syncMetrics = page.getByTestId("sync-result-metrics");

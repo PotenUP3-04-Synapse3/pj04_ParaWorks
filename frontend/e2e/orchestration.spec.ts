@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("agent runs page can execute a zero-cost LangGraph dry-run", async ({ page }) => {
-  await page.route("**/api/v1/orchestration/company-memory/dry-run", async (route) => {
+  await page.route("**/api/v1/orchestration/company-memory/dry-run**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -31,6 +31,7 @@ test("agent runs page can execute a zero-cost LangGraph dry-run", async ({ page 
   });
 
   await page.goto("/agent-runs");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", { name: "Dry-run 실행" }).click();
 
   await expect(page.getByText("Dry-run 완료")).toBeVisible();

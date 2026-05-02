@@ -2955,6 +2955,39 @@ Cost/security note:
 - Retry is bounded, so rate limit or server-side failures do not create runaway
   API usage.
 
+## Whole-App Playwright Regression Matrix
+
+What changed:
+
+- Added a route inventory guard that fails when a new `app/**/page.tsx` route is
+  not represented in Playwright coverage.
+- Added a whole-page regression matrix for desktop and mobile, dark and light
+  modes, including `/`, static pages, OAuth callback pages, and the dynamic
+  agent run detail page.
+- The matrix checks that each page mounts the workspace shell, avoids Next error
+  screens, has visible glass surfaces, stays nonblank, and does not introduce
+  horizontal viewport overflow.
+- Added an AppShell hydration marker so interaction tests wait for real React
+  handlers before clicking theme toggles or submitting global search.
+- Hardened existing smoke tests around hydration, route interception, and admin
+  audit-log text duplication.
+- Fixed Search page compatibility with older Ask responses that do not include
+  `citations`, and removed duplicate React keys in search evidence rendering.
+
+Portfolio angle:
+
+- Turns browser QA from manual spot checks into repeatable desktop/mobile
+  coverage for every current Next.js page.
+- Demonstrates integration discipline: new routes must be added to the
+  regression inventory instead of silently escaping visual smoke coverage.
+
+Cost/security note:
+
+- The new page regression matrix validates UI and local route health only; it
+  does not trigger paid LLM or embedding calls.
+- Existing cost-related smoke tests still mock dry-run and approval responses
+  so CI-style browser checks remain deterministic.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3036,3 +3069,4 @@ Cost/security note:
 - `feat: add admin audit logs`
 - `feat: improve rag citation ranking`
 - `feat: harden google live sync deltas`
+- `test: expand whole-app playwright regression`
