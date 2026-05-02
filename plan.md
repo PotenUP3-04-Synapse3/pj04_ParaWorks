@@ -247,6 +247,7 @@ Completed harness slices include:
 - Review Queue approval and knowledge promotion
 - pgvector adapter and incremental vector indexing
 - RAG ask/search path with citation ranking
+- `/search` retrieval backend disclosure and pgvector feature-flag path
 - LangGraph company-memory foundation
 - agent cost budget observability
 - OpenAI primary and Gemini fallback for Slack LLM runs

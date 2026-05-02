@@ -292,6 +292,12 @@ export type SearchResult = {
 };
 
 export type SearchResponse = {
+  retrieval_backend: "deterministic_lexical" | "pgvector" | string;
+  cost_policy: {
+    embedding_query_call: boolean;
+    paid_llm_call: boolean;
+    requires_pgvector_flag: boolean;
+  };
   results: SearchResult[];
   hidden_match_count: number;
   permission_notice?: string;

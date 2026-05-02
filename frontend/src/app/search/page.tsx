@@ -111,7 +111,7 @@ function SearchPageContent() {
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
           <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
-          RAG Orchestrator
+          {searchResponse?.retrieval_backend === "pgvector" ? "pgvector search" : "deterministic search"}
         </div>
       </div>
 
@@ -237,6 +237,13 @@ function SearchPageContent() {
             <span className="text-xs text-[var(--ink-muted)]">
               {searchResponse ? `${searchResponse.results.length}개` : "대기 중"}
             </span>
+            {searchResponse ? (
+              <span className="rounded-md border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                {searchResponse.retrieval_backend}
+                {" · "}
+                {searchResponse.cost_policy?.embedding_query_call ? "embedding query" : "no embedding call"}
+              </span>
+            ) : null}
           </div>
 
           {searchResponse?.results.map((result, resultIndex) => (

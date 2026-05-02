@@ -315,6 +315,33 @@ Next recommended step from `plan.md`:
 3. Prepare structured LangChain output adapters behind the deterministic agent
    contracts.
 
+## 2026-05-02 Search Retrieval Backend Alignment Update
+
+Checked `/search` retrieval behavior before continuing connector hardening.
+
+- `/search` page calls both `/api/v1/ask` and `/api/v1/search`.
+- `/api/v1/ask` could already use pgvector behind
+  `RAG_USE_PGVECTOR_SEARCH=true`, PostgreSQL, and OpenAI embedding key.
+- `/api/v1/search` previously always used deterministic lexical ranking.
+- Added `backend/app/rag/search_store.py` so both Ask and Search can share the
+  pgvector search adapter builder.
+- `/api/v1/search` now returns `retrieval_backend` and `cost_policy`.
+- The Search UI now shows whether the evidence list used pgvector or the
+  default deterministic zero-cost path.
+
+Cost note:
+
+- Default local/demo search still has `embedding_query_call=false`.
+- pgvector search requires the feature flag and will make one query embedding
+  call when enabled in a PostgreSQL environment with `OPENAI_API_KEY`.
+
+Next recommended step from `plan.md`:
+
+1. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
+2. Add connector-specific golden dataset fixtures.
+3. Prepare structured LangChain output adapters behind the deterministic agent
+   contracts.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

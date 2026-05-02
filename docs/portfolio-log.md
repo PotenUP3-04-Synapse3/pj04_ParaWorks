@@ -3133,6 +3133,37 @@ Cost/security note:
 - Permission labels remain attached to each evidence row for reviewer and RAG
   safety checks.
 
+## Search Retrieval Backend Alignment
+
+What changed:
+
+- Verified that `/search` page calls both `/api/v1/ask` and `/api/v1/search`.
+- Before this update, `/api/v1/ask` could use pgvector behind the feature flag,
+  while `/api/v1/search` always used deterministic lexical ranking.
+- Added a shared pgvector search adapter builder and wired `/api/v1/search` to
+  use the same pgvector feature-flag path when PostgreSQL, pgvector search flag,
+  and an OpenAI embedding key are available.
+- Search responses now disclose `retrieval_backend` and cost policy metadata,
+  and the `/search` UI shows whether the current result used pgvector or the
+  zero-cost deterministic search path.
+
+Portfolio angle:
+
+- Makes RAG behavior explainable to users and interviewers: answer generation
+  and evidence search now report which retrieval path they used.
+- Shows cost-aware product design because query-time embedding calls are
+  explicit instead of hidden behind a generic search button.
+
+Cost/security note:
+
+- Default SQLite/demo mode remains `deterministic_lexical` with no embedding or
+  paid LLM call.
+- pgvector search performs a query embedding only when
+  `RAG_USE_PGVECTOR_SEARCH=true`, PostgreSQL is active, and `OPENAI_API_KEY` is
+  configured.
+- Permission filtering and hidden-match accounting remain enforced in both
+  retrieval paths.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3266,3 +3297,5 @@ Cost/security note:
   - Added focused guardrails for evidence-first approval, restricted RAG hiding, HITL checkpoint metadata, and cache dedupe.
 - `feat: add cross-agent evidence summaries`
   - Mail/Docs and Track C memory extraction AgentRuns now persist source evidence summary metadata for richer Review Drawer inspection.
+- `feat: align search retrieval backend`
+  - `/api/v1/search` now reports its retrieval backend and can use the same pgvector feature-flag path as `/api/v1/ask`.
