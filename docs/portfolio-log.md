@@ -3398,6 +3398,30 @@ Cost/security note:
 - Auth checks must remain cheap session/database reads and must never trigger
   LLM calls, embeddings, connector sync, or RAG reindexing.
 
+## Deployment Runbook
+
+What changed:
+
+- Added `docs/superpowers/runbooks/deployment.md`.
+- Documented production components: Next.js, FastAPI, PostgreSQL + pgvector,
+  Redis, Celery worker, Slack/Google OAuth, and optional parser/object storage.
+- Added deployment order, verification commands, cost gates, rollback plan,
+  monitoring checklist, and production readiness checklist.
+
+Portfolio angle:
+
+- Shows that ParaWorks has a credible path from local harness to deployable
+  company-memory product.
+- Makes infrastructure choices explainable: Docker/Postgres/Redis are for
+  production parity, pgvector search, background indexing, and reliable sync.
+
+Cost/security note:
+
+- Deployment checklist keeps budget gates active and separates status/sync
+  endpoints from paid LLM or embedding work.
+- Secrets are explicitly kept out of git and moved to the deployment secret
+  manager.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3551,3 +3575,5 @@ Cost/security note:
   - Added Decisions, Timeline, and History pages backed by approved Knowledge API records.
 - `docs: add production auth plan`
   - Documented httpOnly cookie sessions, refresh token rotation, RBAC, audit, and demo-mode migration.
+- `docs: add deployment runbook`
+  - Documented production runtime components, verification, cost gates, monitoring, and rollback.

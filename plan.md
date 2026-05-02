@@ -144,8 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Add deployment runbook.
-2. Add notifications and Knowledge Map only after auth/deploy boundaries are stable.
+1. Add notifications only if they support Review Queue or agent-run workflows.
+2. Add Knowledge Map only if time allows after auth/deploy boundaries.
 
 ## 4. Shared Runtime Contracts
 
@@ -280,6 +280,8 @@ Completed harness slices include:
   records from the shared Knowledge API
 - Production auth migration plan now defines the httpOnly cookie, refresh token,
   RBAC, audit, and demo-mode migration boundary
+- Deployment runbook now defines the production FastAPI, Next.js, Postgres
+  pgvector, Redis, Celery, OAuth, verification, cost, and rollback boundaries
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -381,7 +383,7 @@ Tasks:
 - Notifications.
 - Knowledge Map, if time allows.
 - Production auth plan: httpOnly cookie + refresh token. Done.
-- Deployment runbook.
+- Deployment runbook. Done.
 
 ## 9. Cost Policy
 

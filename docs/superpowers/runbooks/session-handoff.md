@@ -526,6 +526,26 @@ Next recommended step from `plan.md`:
 2. Then revisit whether Notifications or Knowledge Map are worth building for
    the portfolio demo.
 
+## 2026-05-02 Deployment Runbook Update
+
+Aligned with the current root `plan.md` Milestone 7.
+
+- Added `docs/superpowers/runbooks/deployment.md`.
+- The runbook covers Next.js, FastAPI, PostgreSQL + pgvector, Redis, Celery,
+  Slack/Google OAuth, environment variables, deployment order, verification,
+  cost gates, rollback, monitoring, and production readiness.
+
+Cost note:
+
+- Production verification keeps paid LLM and embedding actions behind explicit
+  dry-run or confirmation gates.
+
+Next recommended step from `plan.md`:
+
+1. Add Notifications only if they directly support Review Queue or agent-run
+   workflow visibility.
+2. Add Knowledge Map only if there is enough time after core product polish.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing
