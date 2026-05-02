@@ -192,21 +192,23 @@ function SearchPageContent() {
                     답변 근거
                   </div>
                   <div className="space-y-2">
-                    {askResponse.source_links.map((sourceLink, index) => (
+                    {askResponse.citations.map((citation, index) => (
                       <a
-                        key={`${sourceLink}-${index}`}
-                        href={sourceLink}
+                        key={`${citation.source_id}-${index}`}
+                        href={citation.source_url}
                         target="_blank"
                         rel="noreferrer"
                         className="block rounded-lg border border-[var(--line-soft)] bg-white p-3 text-sm hover:bg-[#fbfaf8]"
                       >
                         <span className="font-medium text-[#21132b]">근거 {index + 1}</span>
-                        {askResponse.source_ids[index] ? (
-                          <span className="mt-1 block text-xs text-[var(--ink-muted)]">
-                            {askResponse.source_ids[index]}
-                          </span>
-                        ) : null}
-                        <span className="mt-1 block break-all text-xs text-[var(--ink-muted)]">{sourceLink}</span>
+                        <span className="mt-1 block text-xs text-[var(--ink-muted)]">{citation.source_id}</span>
+                        <span className="mt-1 block text-xs text-[var(--ink-muted)]">
+                          score {citation.relevance_score.toFixed(2)}
+                          {citation.matched_terms.length ? ` · ${citation.matched_terms.join(", ")}` : ""}
+                        </span>
+                        <span className="mt-1 block break-all text-xs text-[var(--ink-muted)]">
+                          {citation.source_url}
+                        </span>
                       </a>
                     ))}
                     {askResponse.source_links.length === 0 ? (
@@ -248,7 +250,19 @@ function SearchPageContent() {
                 <span className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-xs font-medium text-[var(--ink-muted)]">
                   {result.source_id}
                 </span>
+                <span className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-xs font-medium text-[var(--ink-muted)]">
+                  score {result.relevance_score.toFixed(2)}
+                </span>
               </div>
+              {result.matched_terms.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {result.matched_terms.map((term) => (
+                    <span key={term} className="liquid-control rounded-full px-2.5 py-1 text-xs font-semibold">
+                      {term}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <p className="mt-3 text-sm leading-6">{result.text}</p>
               <p className="mt-3 border-l-2 border-[var(--line-soft)] pl-3 text-sm leading-6 text-[var(--ink-muted)]">
                 {result.source_snippet}

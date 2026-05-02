@@ -2883,6 +2883,47 @@ Verification evidence:
 - `npx eslint src/app/admin/page.tsx src/lib/api/types.ts` passed.
 - `npm run build` passed and included `/admin`.
 
+## RAG Ranked Citation Quality
+
+What changed:
+
+- Reworked keyword retrieval from exact full-query substring matching to
+  term-based candidate scoring.
+- Search and Ask responses now include ranked citations with source id, source
+  URL, source type, permission level, snippet, relevance score, and matched
+  query terms.
+- Ask keeps restricted evidence hidden while still reporting hidden match
+  counts and returning only visible citations to the current user.
+- Updated the Company Memory search UI to show citation scores and matched
+  terms beside answer/search evidence.
+
+Portfolio angle:
+
+- Makes the RAG layer explainable: users can see why evidence appeared, not
+  only that an answer was generated.
+- Demonstrates permission-aware retrieval quality, including visible citation
+  filtering and hidden-match disclosure.
+- Strengthens the final product story because Slack/Gmail/Drive/approved
+  knowledge can now flow into answerable, cited company memory.
+
+Cost/security note:
+
+- Ranking and citation generation are deterministic local scoring operations.
+  They do not call embedding providers or paid LLMs.
+- Permission checks still run before citations are returned, so restricted
+  source URLs/snippets are not exposed to employee viewers.
+
+Verification evidence:
+
+- Added RED tests for ranked search citations and Ask citations with hidden
+  restricted matches.
+- `uv run pytest backend/tests/test_rag_quality.py backend/tests/test_search_permissions.py backend/tests/test_ask_api.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_vector_retriever.py -v`
+  passed with 16 tests.
+- `uv run ruff check backend/app/api/v1/search.py backend/app/api/v1/ask.py backend/app/agents/rag_orchestrator_agent/agent.py backend/app/agents/rag_orchestrator_agent/service.py backend/tests/test_rag_quality.py`
+  passed.
+- `npx eslint src/app/search/page.tsx src/lib/api/types.ts` passed.
+- `npm run build` passed and included `/search`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2962,3 +3003,4 @@ Verification evidence:
 - `feat: add slack live sync retry guardrails`
 - `feat: reuse cached langgraph evidence`
 - `feat: add admin audit logs`
+- `feat: improve rag citation ranking`

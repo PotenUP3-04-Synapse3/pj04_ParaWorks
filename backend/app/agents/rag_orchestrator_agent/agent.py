@@ -41,6 +41,7 @@ class RagAnswer:
     source_ids: list[str]
     source_links: list[str]
     source_snippets: list[str]
+    citations: list[dict[str, object]]
     permission_level: str
     hidden_match_count: int
     permission_notice: str | None
@@ -112,6 +113,18 @@ class RagOrchestratorAgent:
             source_ids=packet.source_ids,
             source_links=packet.source_links,
             source_snippets=packet.source_snippets,
+            citations=[
+                {
+                    'source_id': message.source_id,
+                    'source_url': message.source_url,
+                    'source_type': message.metadata.get('source_type'),
+                    'permission_level': message.permission_level,
+                    'source_snippet': message.source_snippet,
+                    'relevance_score': message.metadata.get('relevance_score', 0.0),
+                    'matched_terms': message.metadata.get('matched_terms', []),
+                }
+                for message in packet.messages
+            ],
             permission_level=packet.strictest_permission,
             hidden_match_count=hidden_match_count,
             permission_notice='Some sources may be hidden by permissions.' if hidden_match_count else None,

@@ -39,6 +39,7 @@ def ask_company_memory(
         'source_ids': answer.source_ids,
         'source_links': answer.source_links,
         'source_snippets': answer.source_snippets,
+        'citations': answer.citations,
         'permission_level': answer.permission_level,
         'hidden_match_count': answer.hidden_match_count,
         'permission_notice': answer.permission_notice,

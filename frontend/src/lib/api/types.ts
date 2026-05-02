@@ -249,12 +249,25 @@ export type SearchResult = {
   source_url?: string | null;
   source_type?: string | null;
   permission_level: string;
+  relevance_score: number;
+  matched_terms: string[];
+  citation: RagCitation;
 };
 
 export type SearchResponse = {
   results: SearchResult[];
   hidden_match_count: number;
   permission_notice?: string;
+};
+
+export type RagCitation = {
+  source_id: string;
+  source_url: string;
+  source_type?: string | null;
+  permission_level: string;
+  source_snippet: string;
+  relevance_score: number;
+  matched_terms: string[];
 };
 
 export type AskResponse = {
@@ -265,6 +278,7 @@ export type AskResponse = {
   source_ids: string[];
   source_links: string[];
   source_snippets: string[];
+  citations: RagCitation[];
   permission_level: string;
   hidden_match_count: number;
   permission_notice?: string | null;
