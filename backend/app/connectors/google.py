@@ -6,6 +6,8 @@ import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
 
+GoogleQueryParams = dict[str, str | list[str]]
+
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
     'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
     'drive': ('https://www.googleapis.com/auth/drive.readonly',),
@@ -48,21 +50,33 @@ class GoogleWebApiClient:
         self.page_limit = page_limit
 
     def gmail_messages(self) -> list[dict]:
-        payload = self._get_json(
+        messages: list[dict] = []
+        for message_ref in self._get_paged_items(
             f'{self.gmail_base_url}/gmail/v1/users/me/messages',
+            item_key='messages',
             params={'maxResults': str(self.page_limit)},
-        )
-        return list(payload.get('messages', []))
+        ):
+            message_id = str(message_ref['id'])
+            messages.append(
+                self._get_json(
+                    f'{self.gmail_base_url}/gmail/v1/users/me/messages/{message_id}',
+                    params={
+                        'format': 'metadata',
+                        'metadataHeaders': ['Subject', 'From', 'Date'],
+                    },
+                )
+            )
+        return messages
 
     def drive_files(self) -> list[dict]:
-        payload = self._get_json(
+        return self._get_paged_items(
             f'{self.drive_base_url}/drive/v3/files',
+            item_key='files',
             params={
                 'pageSize': str(self.page_limit),
-                'fields': 'files(id,name,mimeType,webViewLink,modifiedTime,owners)',
+                'fields': 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,owners)',
             },
         )
-        return list(payload.get('files', []))
 
     def calendar_events(self) -> list[dict]:
         payload = self._get_json(
@@ -75,7 +89,7 @@ class GoogleWebApiClient:
         )
         return list(payload.get('items', []))
 
-    def _get_json(self, url: str, *, params: dict[str, str]) -> dict:
+    def _get_json(self, url: str, *, params: GoogleQueryParams) -> dict:
         response = self.http_client.get(
             url,
             headers={'Authorization': f'Bearer {self.oauth_token}'},
@@ -84,6 +98,19 @@ class GoogleWebApiClient:
         if response.status_code >= 400:
             raise GoogleApiError(_google_error_message(response))
         return response.json()
+
+    def _get_paged_items(self, url: str, *, item_key: str, params: GoogleQueryParams) -> list[dict]:
+        items: list[dict] = []
+        page_token: str | None = None
+        while True:
+            page_params = dict(params)
+            if page_token:
+                page_params['pageToken'] = page_token
+            payload = self._get_json(url, params=page_params)
+            items.extend(payload.get(item_key, []))
+            page_token = payload.get('nextPageToken')
+            if not page_token:
+                return items
 
 
 @dataclass(frozen=True)

@@ -2682,6 +2682,47 @@ Verification evidence:
 - `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile -g "agent operations previews"`
   passed with 2 tests.
 
+## Google Live Collection Hardening
+
+What changed:
+
+- Upgraded the live Google Web API client so Gmail and Google Drive collection
+  can read beyond the first API page.
+- Gmail now performs a lightweight list -> detail hydration flow: list message
+  ids first, then fetch metadata-only details for `Subject`, `From`, and
+  `Date`.
+- Google Drive file listing now requests `nextPageToken` and follows it while
+  preserving the existing compact fields selection.
+- Updated connector tests around bearer-token propagation, Gmail pagination,
+  Gmail metadata hydration, Drive pagination, and error handling.
+
+Portfolio angle:
+
+- Moves Gmail and Drive closer to real SaaS evidence ingestion instead of a
+  first-page skeleton.
+- Preserves the three-developer merge contract because provider pagination is
+  hidden behind the same `GoogleConnector` and `SourceEvent` boundary.
+- Keeps the cost story explicit: sync fetches only source metadata/content
+  needed for review candidates and still does not trigger embeddings or LLM
+  calls by itself.
+
+Cost/security note:
+
+- Gmail hydration uses `format=metadata` rather than full message bodies, which
+  reduces payload size while keeping timeline author/title/date quality.
+- Drive listing keeps a narrow fields projection and does not download file
+  contents during connector sync.
+
+Verification evidence:
+
+- Added focused regression tests for paginated Gmail and Drive collection.
+- `uv run pytest backend/tests/test_google_connector.py -v` passed with 7
+  tests.
+- `uv run pytest backend/tests/test_google_connector.py backend/tests/test_connector_factory.py backend/tests/test_google_oauth.py backend/tests/test_integration_runtime_status.py -v`
+  passed with 26 tests.
+- `uv run ruff check backend/app/connectors/google.py backend/tests/test_google_connector.py`
+  passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2756,3 +2797,4 @@ Verification evidence:
 - `chore: harden pgvector dev path`
 - `feat: gate paid embedding reindex cost`
 - `feat: add rag reindex approval ux`
+- `feat: harden google live collection`

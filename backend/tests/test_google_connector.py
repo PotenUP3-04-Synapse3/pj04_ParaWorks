@@ -137,6 +137,8 @@ def test_google_web_api_client_attaches_bearer_token() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         assert request.headers['authorization'] == 'Bearer google-oauth-token'
+        if request.url.path == '/gmail/v1/users/me/messages/msg-1':
+            return httpx.Response(200, json={'id': 'msg-1'})
         return httpx.Response(200, json={'messages': [{'id': 'msg-1'}]})
 
     client = GoogleWebApiClient(
@@ -146,6 +148,84 @@ def test_google_web_api_client_attaches_bearer_token() -> None:
 
     assert client.gmail_messages() == [{'id': 'msg-1'}]
     assert requests[0].url.path == '/gmail/v1/users/me/messages'
+    assert requests[1].url.path == '/gmail/v1/users/me/messages/msg-1'
+
+
+def test_google_web_api_client_paginates_and_hydrates_gmail_messages() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == '/gmail/v1/users/me/messages' and request.url.params.get('pageToken') is None:
+            return httpx.Response(200, json={'messages': [{'id': 'msg-1'}], 'nextPageToken': 'page-2'})
+        if request.url.path == '/gmail/v1/users/me/messages' and request.url.params.get('pageToken') == 'page-2':
+            return httpx.Response(200, json={'messages': [{'id': 'msg-2'}]})
+        if request.url.path == '/gmail/v1/users/me/messages/msg-1':
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'msg-1',
+                    'snippet': 'first detail',
+                    'payload': {'headers': [{'name': 'Subject', 'value': 'First'}]},
+                },
+            )
+        if request.url.path == '/gmail/v1/users/me/messages/msg-2':
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'msg-2',
+                    'snippet': 'second detail',
+                    'payload': {'headers': [{'name': 'Subject', 'value': 'Second'}]},
+                },
+            )
+        raise AssertionError(f'unexpected request: {request.url}')
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        page_limit=1,
+    )
+
+    messages = client.gmail_messages()
+
+    assert [message['id'] for message in messages] == ['msg-1', 'msg-2']
+    assert messages[0]['payload']['headers'][0]['value'] == 'First'
+    assert messages[1]['snippet'] == 'second detail'
+    request_paths = [request.url.path for request in requests]
+    assert request_paths.count('/gmail/v1/users/me/messages') == 2
+    assert '/gmail/v1/users/me/messages/msg-1' in request_paths
+    assert '/gmail/v1/users/me/messages/msg-2' in request_paths
+    assert any(request.url.params.get('pageToken') == 'page-2' for request in requests)
+    detail_request = next(request for request in requests if request.url.path == '/gmail/v1/users/me/messages/msg-1')
+    assert detail_request.url.params.get_list('metadataHeaders') == ['Subject', 'From', 'Date']
+
+
+def test_google_web_api_client_paginates_drive_files() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.params.get('pageToken') is None:
+            return httpx.Response(
+                200,
+                json={
+                    'files': [{'id': 'file-1', 'name': 'First'}],
+                    'nextPageToken': 'drive-page-2',
+                },
+            )
+        return httpx.Response(200, json={'files': [{'id': 'file-2', 'name': 'Second'}]})
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        page_limit=1,
+    )
+
+    files = client.drive_files()
+
+    assert [file['id'] for file in files] == ['file-1', 'file-2']
+    assert requests[0].url.path == '/drive/v3/files'
+    assert requests[1].url.params['pageToken'] == 'drive-page-2'
 
 
 def test_google_web_api_client_raises_clear_error() -> None:
