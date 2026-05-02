@@ -11,6 +11,7 @@ from backend.app.agent_runtime.company_memory import (
 )
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
+from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/orchestration', tags=['orchestration'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -85,6 +86,21 @@ def run_company_memory_orchestration(
         user=user,
         question=request.question,
     )
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='orchestration.company_memory.run',
+        target_type='workflow',
+        target_id='company_memory',
+        metadata={
+            'backend': result.backend,
+            'completed_nodes': result.completed_nodes,
+            'slack_review_items_created': result.outputs.get('slack_review_items_created', 0),
+            'mail_document_review_items_created': result.outputs.get('mail_document_review_items_created', 0),
+            'rag_agent_run_created': result.outputs.get('rag_agent_run_created', False),
+        },
+    )
+    db.commit()
 
     return {
         'workflow_name': 'company_memory',

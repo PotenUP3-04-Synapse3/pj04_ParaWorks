@@ -2841,6 +2841,48 @@ Verification evidence:
 - `uv run ruff check backend/app/agent_runtime/company_memory.py backend/app/api/v1/orchestration.py backend/app/agents/slack_agent/__init__.py backend/app/agents/rag_orchestrator_agent/__init__.py backend/tests/test_company_memory_orchestration_service.py backend/tests/test_orchestration_api.py`
   passed.
 
+## Admin Audit Log Foundation
+
+What changed:
+
+- Added an `AuditLog` model and admin-only `/api/v1/admin/audit-logs` API.
+- Recorded audit events for review approval, bulk agent-candidate approval,
+  review reject/more-evidence actions, connector sync, agent review runs,
+  Company Memory LangGraph runs, and RAG reindex execution/job creation.
+- Added sanitized audit metadata so operational context is visible without
+  exposing tokens or secret references.
+- Extended `/admin` with a recent audit log panel using the same Liquid Glass
+  card system as the rest of the workspace.
+
+Portfolio angle:
+
+- Shows service maturity beyond feature demos: important operational actions
+  are now attributable to an actor, target, timestamp, and metadata.
+- Strengthens the three-developer workflow because merged AI-generated work can
+  be reviewed through a shared audit trail instead of scattered terminal logs.
+- Makes permission design more concrete: employees cannot read audit logs,
+  while admins can inspect workspace activity from the product UI.
+
+Cost/security note:
+
+- Audit writes are local database operations. They do not call Slack, Google,
+  embeddings, or LLM APIs.
+- Audit metadata is sanitized before persistence so token-like strings are not
+  rendered in the admin console.
+
+Verification evidence:
+
+- Added RED tests first for missing `AuditLog` model/API and key action audit
+  records.
+- `uv run pytest backend/tests/test_audit_logs.py backend/tests/test_auth_api.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_orchestration_api.py backend/tests/test_integration_runtime_status.py -v`
+  passed with 23 tests.
+- `uv run pytest backend/tests/test_audit_logs.py -v` passed with 6 tests after
+  Ruff cleanup.
+- `uv run ruff check backend/app/models/audit.py backend/app/services/audit.py backend/app/api/v1/admin.py backend/app/api/v1/router.py backend/app/api/v1/review.py backend/app/api/v1/integrations.py backend/app/api/v1/orchestration.py backend/app/api/v1/rag.py backend/tests/test_audit_logs.py`
+  passed.
+- `npx eslint src/app/admin/page.tsx src/lib/api/types.ts` passed.
+- `npm run build` passed and included `/admin`.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2919,3 +2961,4 @@ Verification evidence:
 - `feat: add slack incremental sync cursor`
 - `feat: add slack live sync retry guardrails`
 - `feat: reuse cached langgraph evidence`
+- `feat: add admin audit logs`

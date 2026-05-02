@@ -34,14 +34,17 @@ from backend.app.connectors.slack_oauth import (
     complete_slack_oauth_callback,
 )
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.core.redaction import redact_secret_text
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
 from backend.app.models import IntegrationConnection, SyncJob
+from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
+CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
 
 
 @router.get('')
@@ -150,7 +153,7 @@ def get_google_runtime_status(
 
 
 @router.post('/{connector_type}/sync')
-def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) -> dict[str, int | str]:
+def sync_connector(connector_type: str, db: DbSession, settings: AppSettings, user: CurrentUser) -> dict[str, int | str]:
     if connector_type not in CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
@@ -159,6 +162,21 @@ def sync_connector(connector_type: str, db: DbSession, settings: AppSettings) ->
         result = sync_connector_events(db=db, connector=connector)
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='integration.sync',
+        target_type='connector',
+        target_id=connector_type,
+        metadata={
+            'job_id': result.job_id,
+            'fetched_events': result.fetched_events,
+            'created_review_items': result.created_review_items,
+            'skipped_events': result.skipped_events,
+        },
+    )
+    db.commit()
 
     return {
         'job_id': result.job_id,
@@ -316,14 +334,23 @@ def complete_google_oauth_install(
 
 
 @router.post('/slack/agent-review')
-def run_slack_agent_review(db: DbSession) -> dict[str, int | str]:
+def run_slack_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | str]:
     agent = SlackAgent(model=DeterministicSlackAgentModel())
     review_items = create_slack_agent_review_items(
         db=db,
         agent=agent,
-        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
         source_window='mock-slack:all',
     )
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='agent.review.run',
+        target_type='agent',
+        target_id='slack_agent',
+        metadata={'created_review_items': len(review_items)},
+    )
+    db.commit()
 
     return {
         'agent_name': 'slack_agent',
@@ -333,14 +360,23 @@ def run_slack_agent_review(db: DbSession) -> dict[str, int | str]:
 
 
 @router.post('/mail-docs/agent-review')
-def run_mail_document_agent_review(db: DbSession) -> dict[str, int | str]:
+def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | str]:
     agent = MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
     review_items = create_mail_document_agent_review_items(
         db=db,
         agent=agent,
-        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
         source_window='mock-mail-docs:all',
     )
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='agent.review.run',
+        target_type='agent',
+        target_id='mail_document_agent',
+        metadata={'created_review_items': len(review_items)},
+    )
+    db.commit()
 
     return {
         'agent_name': 'mail_document_agent',

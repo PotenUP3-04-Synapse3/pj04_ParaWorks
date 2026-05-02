@@ -1,10 +1,10 @@
 "use client";
 
-import { AlertTriangle, ShieldCheck, UserCog, UsersRound } from "lucide-react";
+import { AlertTriangle, ScrollText, ShieldCheck, UserCog, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
-import type { AuthUsersResponse, DemoUser } from "@/lib/api/types";
+import type { AuditLog, AuditLogsResponse, AuthUsersResponse, DemoUser } from "@/lib/api/types";
 
 const text = {
   loading: "\uAD00\uB9AC\uC790 \uCF58\uC194\uC744 \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.",
@@ -22,24 +22,38 @@ const text = {
   usersAndPermissions: "\uC0AC\uC6A9\uC790\uC640 \uAD8C\uD55C",
   permissionNote:
     "\uAC80\uC0C9, RAG \uB2F5\uBCC0, \uAD00\uB9AC\uC790 API\uAC00 \uAC19\uC740 \uAD8C\uD55C \uB808\uBCA8\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4.",
+  auditLogs: "\uAC10\uC0AC \uB85C\uADF8",
+  auditNote:
+    "\uB3D9\uAE30\uD654, AI \uC2E4\uD589, \uB9AC\uBDF0 \uC2B9\uC778, RAG \uC7AC\uC0C9\uC778 \uAC19\uC740 \uC8FC\uC694 \uC6B4\uC601 \uD589\uC704\uB97C \uB0A8\uAE41\uB2C8\uB2E4.",
+  noAuditLogs: "\uC544\uC9C1 \uAE30\uB85D\uB41C \uAC10\uC0AC \uB85C\uADF8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
   account: "\uACC4\uC815",
   role: "\uC5ED\uD560",
   department: "\uBD80\uC11C",
   scope: "\uAD8C\uD55C \uBC94\uC704",
+  action: "\uD589\uC704",
+  target: "\uB300\uC0C1",
+  actor: "\uC0AC\uC6A9\uC790",
+  status: "\uC0C1\uD0DC",
+  time: "\uC2DC\uAC01",
 };
 
 export default function AdminPage() {
   const [users, setUsers] = useState<DemoUser[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
 
-    apiGet<AuthUsersResponse>("/api/v1/auth/users")
-      .then((result) => {
+    Promise.all([
+      apiGet<AuthUsersResponse>("/api/v1/auth/users"),
+      apiGet<AuditLogsResponse>("/api/v1/admin/audit-logs?limit=8"),
+    ])
+      .then(([usersResult, auditResult]) => {
         if (active) {
-          setUsers(result.users);
+          setUsers(usersResult.users);
+          setAuditLogs(auditResult.logs);
           setError(undefined);
         }
       })
@@ -166,6 +180,58 @@ export default function AdminPage() {
           </table>
         </div>
       </section>
+
+      <section className="liquid-surface overflow-hidden rounded-[30px]">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--line-soft)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold">{text.auditLogs}</h2>
+            <p className="mt-1 text-sm text-[var(--ink-muted)]">{text.auditNote}</p>
+          </div>
+          <div className="liquid-control hidden items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold md:inline-flex">
+            <ScrollText className="h-4 w-4" aria-hidden="true" />
+            {auditLogs.length.toLocaleString()}
+          </div>
+        </div>
+        {auditLogs.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-left text-sm">
+              <thead className="text-xs uppercase text-[var(--ink-muted)]">
+                <tr className="border-b border-[var(--line-soft)]">
+                  <th className="px-5 py-3 font-semibold">{text.action}</th>
+                  <th className="px-5 py-3 font-semibold">{text.target}</th>
+                  <th className="px-5 py-3 font-semibold">{text.actor}</th>
+                  <th className="px-5 py-3 font-semibold">{text.status}</th>
+                  <th className="px-5 py-3 font-semibold">{text.time}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((log) => (
+                  <tr key={log.id} className="border-b border-[var(--line-soft)] last:border-0">
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-[var(--ink-strong)]">{formatAction(log.action)}</p>
+                      <p className="text-xs text-[var(--ink-muted)]">{metadataSummary(log.metadata)}</p>
+                    </td>
+                    <td className="px-5 py-4 text-[var(--ink-muted)]">
+                      <p className="font-medium text-[var(--ink-strong)]">{log.target_type}</p>
+                      <p className="text-xs">{log.target_id ?? "-"}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-[var(--ink-strong)]">{log.actor_email}</p>
+                      <p className="text-xs text-[var(--ink-muted)]">{log.actor_role}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="liquid-control rounded-full px-3 py-1 text-xs font-semibold">{log.status}</span>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-[var(--ink-muted)]">{formatDate(log.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="px-5 py-6 text-sm text-[var(--ink-muted)]">{text.noAuditLogs}</p>
+        )}
+      </section>
     </div>
   );
 }
@@ -182,4 +248,25 @@ function MetricCard({ label, value, icon: Icon }: { label: string; value: number
       <p className="mt-2 text-2xl font-semibold">{value.toLocaleString()}</p>
     </article>
   );
+}
+
+function formatAction(action: string) {
+  return action.replaceAll(".", " / ");
+}
+
+function metadataSummary(metadata: Record<string, unknown>) {
+  const entries = Object.entries(metadata).slice(0, 2);
+  if (!entries.length) {
+    return "-";
+  }
+  return entries.map(([key, value]) => `${key}=${String(value)}`).join(" · ");
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }

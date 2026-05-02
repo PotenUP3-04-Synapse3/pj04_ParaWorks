@@ -14,6 +14,7 @@ from backend.app.knowledge.promotion import (
 )
 from backend.app.models import ReviewItem
 from backend.app.schemas.review import ReviewItemUpdate
+from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/review', tags=['review'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -71,6 +72,18 @@ def approve_agent_review_candidates(
         promote_review_item(db, item)
         approved_item_ids.append(item.id)
 
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='review.approve_agent_candidates',
+        target_type='review_queue',
+        target_id='agent_candidates',
+        metadata={
+            'approved_count': len(approved_item_ids),
+            'skipped_count': skipped_count,
+            'approved_item_ids': approved_item_ids,
+        },
+    )
     db.commit()
 
     return {
@@ -135,6 +148,17 @@ def approve_review_item(
     item.reviewer_id = user.id
     item.reviewed_at = datetime.now(UTC)
     promote_review_item(db, item)
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='review.approve',
+        target_type='review_item',
+        target_id=item.id,
+        metadata={
+            'item_type': item.item_type,
+            'permission_level': item.permission_level,
+        },
+    )
     db.commit()
     db.refresh(item)
     return _review_item_response(item)
@@ -153,6 +177,14 @@ def request_more_evidence_for_review_item(
     item.status = 'needs_more_evidence'
     item.reviewer_id = user.id
     item.reviewed_at = datetime.now(UTC)
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='review.request_more_evidence',
+        target_type='review_item',
+        target_id=item.id,
+        metadata={'item_type': item.item_type},
+    )
     db.commit()
     db.refresh(item)
     return _review_item_response(item)
@@ -171,6 +203,14 @@ def reject_review_item(
     item.status = 'rejected'
     item.reviewer_id = user.id
     item.reviewed_at = datetime.now(UTC)
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='review.reject',
+        target_type='review_item',
+        target_id=item.id,
+        metadata={'item_type': item.item_type},
+    )
     db.commit()
     db.refresh(item)
     return _review_item_response(item)

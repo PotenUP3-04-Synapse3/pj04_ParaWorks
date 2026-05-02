@@ -30,6 +30,23 @@ export type AuthUsersResponse = {
   users: DemoUser[];
 };
 
+export type AuditLog = {
+  id: number;
+  actor_id: string;
+  actor_email: string;
+  actor_role: string;
+  action: string;
+  target_type: string;
+  target_id?: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AuditLogsResponse = {
+  logs: AuditLog[];
+};
+
 export type AgentRunSummaryItem = {
   id: number;
   agent_name: string;
@@ -92,6 +109,7 @@ export type OrchestrationStatusResponse = {
   cost_policy: {
     delta_sync: boolean;
     source_hash_skip: boolean;
+    evidence_cache_reuse?: boolean;
     evidence_token_budget: boolean;
     per_run_budget_usd?: number;
     budget_actions?: string[];

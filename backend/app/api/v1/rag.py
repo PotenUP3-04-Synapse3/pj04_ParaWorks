@@ -6,9 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
 from backend.app.models import SyncJob, VectorIndexState
 from backend.app.rag.reindexing import ReindexConfigurationError, run_reindex
+from backend.app.services.audit import record_audit_log
 from backend.app.tasks.rag_indexing import (
     enqueue_rag_reindex_job,
     execute_rag_reindex_job,
@@ -17,18 +19,34 @@ from backend.app.tasks.rag_indexing import (
 router = APIRouter(prefix='/rag', tags=['rag'])
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
+CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
 
 
 @router.post('/reindex')
-def reindex_rag_vectors(db: DbSession, settings: AppSettings, dry_run: bool = True) -> dict:
+def reindex_rag_vectors(db: DbSession, settings: AppSettings, user: CurrentUser, dry_run: bool = True) -> dict:
     try:
-        return run_reindex(db=db, settings=settings, dry_run=dry_run)
+        result = run_reindex(db=db, settings=settings, dry_run=dry_run)
     except ReindexConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='rag.reindex.run',
+        target_type='rag-index',
+        target_id='direct',
+        metadata={
+            'dry_run': dry_run,
+            'indexed_count': result.get('indexed_count', 0),
+            'skipped_count': result.get('skipped_count', 0),
+            'embedding_request_count': result.get('embedding_request_count', 0),
+        },
+    )
+    db.commit()
+    return result
 
 
 @router.post('/reindex/jobs')
-def create_reindex_job(db: DbSession, settings: AppSettings, dry_run: bool = True) -> dict:
+def create_reindex_job(db: DbSession, settings: AppSettings, user: CurrentUser, dry_run: bool = True) -> dict:
     job = SyncJob(
         job_id=f'rag-index-{uuid4().hex}',
         connector_type='rag-index',
@@ -39,6 +57,15 @@ def create_reindex_job(db: DbSession, settings: AppSettings, dry_run: bool = Tru
     db.add(job)
     db.commit()
     db.refresh(job)
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='rag.reindex.job.create',
+        target_type='rag-index',
+        target_id=job.job_id,
+        metadata={'dry_run': dry_run, 'eager': settings.celery_task_always_eager},
+    )
+    db.commit()
 
     if settings.celery_task_always_eager:
         try:

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from backend.app.api.v1 import (
+    admin,
     agent_runs,
     ask,
     auth,
@@ -16,6 +17,7 @@ from backend.app.api.v1 import (
 )
 
 api_router = APIRouter(prefix='/api/v1')
+api_router.include_router(admin.router)
 api_router.include_router(agent_runs.router)
 api_router.include_router(ask.router)
 api_router.include_router(auth.router)
