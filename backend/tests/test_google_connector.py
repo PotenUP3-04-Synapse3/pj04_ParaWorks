@@ -79,11 +79,18 @@ class FakeGoogleClient:
                 'description': '런칭 일정 점검',
                 'location': '회의실 A',
                 'htmlLink': 'https://calendar.google.com/event?eid=event-1',
+                'status': 'confirmed',
                 'updated': '2026-05-01T10:00:00Z',
                 'start': {'dateTime': '2026-05-02T09:00:00+09:00'},
                 'end': {'dateTime': '2026-05-02T10:00:00+09:00'},
+                'organizer': {'email': 'lead@example.com'},
                 'creator': {'email': 'pm@example.com'},
-                'attendees': [{'email': 'pm@example.com'}, {'email': 'dev@example.com'}],
+                'attendees': [
+                    {'email': 'pm@example.com', 'responseStatus': 'accepted'},
+                    {'email': 'dev@example.com', 'responseStatus': 'needsAction'},
+                    {'email': 'client@customer.co.kr', 'responseStatus': 'declined'},
+                ],
+                'recurringEventId': 'series-1',
             }
         ]
 
@@ -242,12 +249,26 @@ def test_google_connector_maps_calendar_events_to_source_events() -> None:
         'Start: 2026-05-02T09:00:00+09:00\nEnd: 2026-05-02T10:00:00+09:00'
     )
     assert event.author == 'pm@example.com'
-    assert event.participants == ['pm@example.com', 'dev@example.com']
+    assert event.participants == ['pm@example.com', 'dev@example.com', 'client@customer.co.kr']
     assert event.timestamp == datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
     assert event.raw_metadata['sync_partition'] == 'calendar'
     assert event.raw_metadata['sync_cursor'] == '2026-05-01T10:00:00Z'
     assert event.raw_metadata['location'] == '회의실 A'
-    assert event.raw_metadata['attendee_count'] == 2
+    assert event.raw_metadata['attendee_count'] == 3
+    assert event.raw_metadata['event_context_key'] == 'event-1:2026-05-01T10:00:00Z'
+    assert event.raw_metadata['event_status'] == 'confirmed'
+    assert event.raw_metadata['organizer_email'] == 'lead@example.com'
+    assert event.raw_metadata['creator_email'] == 'pm@example.com'
+    assert event.raw_metadata['recurring_event_id'] == 'series-1'
+    assert event.raw_metadata['attendee_response_statuses'] == {
+        'accepted': 1,
+        'declined': 1,
+        'needsAction': 1,
+    }
+    assert event.raw_metadata['attendee_domains'] == ['customer.co.kr', 'example.com']
+    assert event.raw_metadata['external_domains'] == ['customer.co.kr']
+    assert event.raw_metadata['has_external_attendees'] is True
+    assert event.raw_metadata['duration_minutes'] == 60
 
 
 def test_google_web_api_client_attaches_bearer_token() -> None:

@@ -394,6 +394,25 @@ Next recommended step from `plan.md`:
 2. Add connector-specific golden dataset fixtures.
 3. Prepare structured LangChain output adapters behind deterministic contracts.
 
+## 2026-05-02 Calendar Event Quality Metadata Update
+
+Aligned with the current root `plan.md` Milestone 5.
+
+- Calendar SourceEvents now include `event_context_key`, `event_status`,
+  `organizer_email`, `creator_email`, `recurring_event_id`,
+  `attendee_response_statuses`, `attendee_domains`, `external_domains`,
+  `has_external_attendees`, and `duration_minutes`.
+- The implementation derives these values locally from already fetched
+  Calendar event payloads.
+- Milestone 5 connector quality hardening is now complete for Slack, Gmail,
+  Drive, and Calendar.
+
+Next recommended step from `plan.md`:
+
+1. Add connector-specific golden dataset fixtures.
+2. Add RAG precision/recall smoke metrics.
+3. Prepare structured LangChain output adapters behind deterministic contracts.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

@@ -3,6 +3,7 @@ import binascii
 import html
 import re
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -305,6 +306,15 @@ class GoogleConnector:
         ]
         if author and author not in participants:
             participants.insert(0, author)
+        calendar_metadata = _calendar_quality_metadata(
+            event_id=event_id,
+            event=event,
+            participants=participants,
+            account_name=self.config.account_name,
+            updated=updated,
+            start=start,
+            end=end,
+        )
         body_lines = [
             title,
             '',
@@ -329,6 +339,7 @@ class GoogleConnector:
                 'start': start,
                 'end': end,
                 'attendee_count': len(participants),
+                **calendar_metadata,
                 'account_id': self.config.account_id,
                 'sync_partition': 'calendar',
                 'sync_cursor': updated,
@@ -433,6 +444,57 @@ def _drive_parser_metadata(*, file_id: str, file: dict, modified_time: str) -> d
         'revision_id': revision_id,
         'content_signature': ':'.join(signature_parts),
     }
+
+
+def _calendar_quality_metadata(
+    *,
+    event_id: str,
+    event: dict,
+    participants: list[str],
+    account_name: str,
+    updated: str,
+    start: str,
+    end: str,
+) -> dict[str, object]:
+    account_domain = _email_domain(account_name)
+    attendee_domains = sorted({
+        domain
+        for participant in participants
+        if (domain := _email_domain(participant))
+    })
+    external_domains = [domain for domain in attendee_domains if account_domain and domain != account_domain]
+    return {
+        'event_context_key': f'{event_id}:{updated}' if updated else event_id,
+        'event_status': str(event.get('status') or ''),
+        'organizer_email': str((event.get('organizer') or {}).get('email') or ''),
+        'creator_email': str((event.get('creator') or {}).get('email') or ''),
+        'recurring_event_id': str(event.get('recurringEventId') or ''),
+        'attendee_response_statuses': _calendar_response_status_counts(event),
+        'attendee_domains': attendee_domains,
+        'external_domains': external_domains,
+        'has_external_attendees': bool(external_domains),
+        'duration_minutes': _calendar_duration_minutes(start, end),
+    }
+
+
+def _calendar_response_status_counts(event: dict) -> dict[str, int]:
+    counts = Counter(
+        str(attendee.get('responseStatus') or 'unknown')
+        for attendee in event.get('attendees', [])
+        if attendee.get('email')
+    )
+    return {status: counts[status] for status in sorted(counts)}
+
+
+def _calendar_duration_minutes(start: str, end: str) -> int | None:
+    if not start or not end:
+        return None
+    try:
+        started_at = _timestamp_from_iso(start)
+        ended_at = _timestamp_from_iso(end)
+    except ValueError:
+        return None
+    return max(int((ended_at - started_at).total_seconds() / 60), 0)
 
 
 def _gmail_text_body(message: dict) -> str:

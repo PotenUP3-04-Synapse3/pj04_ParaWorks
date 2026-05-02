@@ -3243,6 +3243,33 @@ Cost/security note:
 - `content_signature` gives the future indexer a cheap guardrail for skipping
   unchanged Drive files before paid embedding work.
 
+## Calendar Event Quality Metadata
+
+What changed:
+
+- Calendar SourceEvents now preserve `event_context_key`, `event_status`,
+  organizer/creator emails, `recurring_event_id`, attendee response counts,
+  attendee domains, external domains, and event duration.
+- Participants still come from attendee emails, but metadata now explains who
+  accepted, declined, or has not responded.
+- The connector keeps the same delta sync boundary through the event `updated`
+  cursor.
+
+Portfolio angle:
+
+- Makes calendar evidence more useful for Korean business review flows:
+  meetings can be understood as internal/external, confirmed/cancelled, and
+  time-bounded evidence.
+- Gives future Timeline/History agents better deterministic signals before
+  spending LLM tokens.
+
+Cost/security note:
+
+- This is local metadata derivation from already fetched Calendar event
+  payloads. It adds no Google calls, LLM calls, or embedding calls.
+- External-domain flags support safer future permission and disclosure
+  policies without leaking hidden event content.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3384,3 +3411,5 @@ Cost/security note:
   - Gmail events now preserve thread context keys, participants, participant domains, and external-domain flags.
 - `feat: add drive parser version metadata`
   - Drive events now preserve parser status, document version, revision id, and content signatures for safer parsing/indexing.
+- `feat: add calendar event quality metadata`
+  - Calendar events now preserve event context, status, organizer, RSVP counts, duration, and external attendee domains.

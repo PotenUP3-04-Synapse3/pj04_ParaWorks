@@ -144,9 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Harden Calendar connector quality metadata.
-2. Add golden dataset fixtures for connector-specific extraction quality.
-3. Prepare structured LangChain output adapters behind deterministic contracts.
+1. Add golden dataset fixtures for connector-specific extraction quality.
+2. Prepare structured LangChain output adapters behind deterministic contracts.
 
 ## 4. Shared Runtime Contracts
 
@@ -268,6 +267,8 @@ Completed harness slices include:
   domains, and external-domain flags for better review/RAG filtering
 - Drive connector now preserves metadata-only parser status, document version,
   revision id, and content signature for safer parser/index decisions
+- Calendar connector now preserves event context keys, status, organizer,
+  attendee response counts, duration, and external attendee domains
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -341,7 +342,7 @@ Tasks:
 - Slack thread context-aware chunking. Done.
 - Gmail thread metadata and domain filtering. Done.
 - Drive file parser status and version metadata. Done.
-- Calendar ingestion boundary.
+- Calendar ingestion boundary. Done.
 
 ### Milestone 6. Evaluation and Regression Suite
 
