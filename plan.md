@@ -144,9 +144,9 @@ Current state:
 
 Next priorities:
 
-1. Add quality and permission regression suite.
-2. Expand review evidence quality signals from Track A and Track B agents.
-3. Harden connector quality metadata for Slack, Gmail, Drive, and Calendar.
+1. Expand review evidence quality signals from Track A and Track B agents.
+2. Harden connector quality metadata for Slack, Gmail, Drive, and Calendar.
+3. Add golden dataset fixtures for connector-specific extraction quality.
 
 ## 4. Shared Runtime Contracts
 
@@ -257,6 +257,8 @@ Completed harness slices include:
 - Source Evidence Drawer and reviewer "request more evidence" note workflow
 - LangGraph HITL checkpoint strategy surfaced through the Company Memory
   orchestration API
+- Focused quality and permission regression suite covering source-less review
+  rejection, restricted RAG hiding, HITL checkpoints, and cache dedupe
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -338,11 +340,12 @@ Goal: Make quality measurable.
 
 Tasks:
 
+- Focused quality and permission regression suite. Done.
+- Permission leakage tests. Initial suite done.
+- Source validation tests. Initial suite done.
+- Cost/cache regression tests. Initial suite done.
 - Golden dataset for Slack, Gmail, Drive, Calendar.
-- Permission leakage tests.
-- Source validation tests.
 - RAG precision/recall smoke metrics.
-- Cost regression tests.
 
 ### Milestone 7. Product Completion Layer
 

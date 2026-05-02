@@ -277,11 +277,27 @@ Aligned with the current root `plan.md` Milestone 4.
 
 Next recommended step from `plan.md`:
 
-1. Add quality and permission regression coverage for Review Queue, RAG, and
-   connector evidence.
-2. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
+1. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
    author, timestamp, and source ids.
-3. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
+2. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
+
+## 2026-05-02 Quality And Permission Regression Suite Update
+
+Aligned with the current root `plan.md` Milestone 6.
+
+- Added `backend/tests/test_quality_permission_regression_suite.py`.
+- The suite covers source-less review approval rejection, restricted RAG hidden
+  match reporting without snippet/citation leakage, HITL checkpoint metadata,
+  and cache-hit dedupe for AgentRun/ReviewItem records.
+- The suite uses deterministic local fixtures and does not call live Slack,
+  Google, LLM, embedding, or external APIs.
+
+Next recommended step from `plan.md`:
+
+1. Expand Track A and Track B evidence metadata so more Drawer rows have rank,
+   author, timestamp, and source ids.
+2. Continue connector quality hardening for Slack/Gmail/Drive/Calendar.
+3. Add connector-specific golden dataset fixtures.
 
 ## Portfolio Recording Rule
 

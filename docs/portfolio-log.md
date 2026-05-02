@@ -3077,6 +3077,34 @@ Cost/security note:
 - The checkpoint keeps the trust boundary visible: generated outputs can be
   reviewed, rejected, or marked as needing more evidence before promotion.
 
+## Quality And Permission Regression Suite
+
+What changed:
+
+- Added a focused backend regression suite for ParaWorks' core trust promises.
+- The suite verifies that source-less Review Queue items cannot be approved.
+- It verifies that employee/viewer RAG responses report hidden restricted
+  matches without leaking restricted snippets or citations.
+- It verifies that Company Memory orchestration emits a Review Queue HITL
+  checkpoint without triggering paid calls.
+- It verifies that cache-hit orchestration runs do not duplicate AgentRun or
+  ReviewItem records.
+
+Portfolio angle:
+
+- Converts product principles into executable tests: evidence-first, permission
+  safe, cost-aware, and human-reviewed.
+- Gives the three-developer team a shared safety net before connector quality
+  and structured LangChain outputs become more complex.
+
+Cost/security note:
+
+- The regression suite uses deterministic local fixtures and fake harness
+  models. It does not call live Slack, Google, OpenAI, Gemini, embeddings, or
+  external APIs.
+- The tests make cost control observable by asserting cache reuse and no
+  duplicate review/agent records on unchanged evidence.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3206,3 +3234,5 @@ Cost/security note:
 - `feat: add orchestration hitl checkpoint policy`
   - Company Memory orchestration now emits Review Queue checkpoint metadata with resume policy and required review statuses.
   - Orchestration status APIs expose HITL checkpointing as part of the cost/trust policy.
+- `test: add quality permission regression suite`
+  - Added focused guardrails for evidence-first approval, restricted RAG hiding, HITL checkpoint metadata, and cache dedupe.
