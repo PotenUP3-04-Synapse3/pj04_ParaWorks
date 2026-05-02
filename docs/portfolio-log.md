@@ -3270,6 +3270,32 @@ Cost/security note:
 - External-domain flags support safer future permission and disclosure
   policies without leaking hidden event content.
 
+## Connector Golden Dataset Fixtures
+
+What changed:
+
+- Added `backend/tests/fixtures/connector_golden_payloads.json` covering
+  Slack, Gmail, Drive, and Calendar payloads.
+- Added a regression test that asserts each connector preserves agent-ready
+  metadata: Slack thread context, Gmail external domains, Drive parser/version
+  metadata, and Calendar RSVP/duration/external-domain metadata.
+- The fixture is intentionally deterministic and local, so it can run in every
+  developer and coding-assistant workflow.
+
+Portfolio angle:
+
+- Demonstrates team-scale AI-assisted development discipline: connector quality
+  is measured by stable examples, not only by manual UI inspection.
+- Gives three developer tracks a shared contract for evidence metadata before
+  they build more source-specific agents and RAG evaluation.
+
+Cost/security note:
+
+- Golden tests use static local payloads and make no Slack, Google, LLM, or
+  embedding calls.
+- The fixture protects future cost optimizations such as hash/signature skips
+  by keeping metadata expectations explicit.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3413,3 +3439,5 @@ Cost/security note:
   - Drive events now preserve parser status, document version, revision id, and content signatures for safer parsing/indexing.
 - `feat: add calendar event quality metadata`
   - Calendar events now preserve event context, status, organizer, RSVP counts, duration, and external attendee domains.
+- `test: add connector golden dataset`
+  - Added static Slack/Gmail/Drive/Calendar golden payloads and metadata regression assertions.

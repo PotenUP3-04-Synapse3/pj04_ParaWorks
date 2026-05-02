@@ -413,6 +413,24 @@ Next recommended step from `plan.md`:
 2. Add RAG precision/recall smoke metrics.
 3. Prepare structured LangChain output adapters behind deterministic contracts.
 
+## 2026-05-02 Connector Golden Dataset Update
+
+Aligned with the current root `plan.md` Milestone 6.
+
+- Added `backend/tests/fixtures/connector_golden_payloads.json` with static
+  Slack, Gmail, Drive, and Calendar payloads.
+- Added `backend/tests/test_connector_golden_dataset.py`.
+- The test verifies agent-ready evidence metadata across connectors:
+  Slack thread context, Gmail external-domain flags, Drive parser/version
+  signatures, and Calendar RSVP/duration/external-domain metadata.
+- The suite is deterministic and makes no live SaaS, LLM, or embedding calls.
+
+Next recommended step from `plan.md`:
+
+1. Add RAG precision/recall smoke metrics.
+2. Prepare structured LangChain output adapters behind deterministic contracts.
+3. Continue product completion pages after evaluation hooks are stable.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

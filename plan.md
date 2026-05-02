@@ -144,8 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Add golden dataset fixtures for connector-specific extraction quality.
-2. Prepare structured LangChain output adapters behind deterministic contracts.
+1. Prepare structured LangChain output adapters behind deterministic contracts.
+2. Add RAG precision/recall smoke metrics.
 
 ## 4. Shared Runtime Contracts
 
@@ -269,6 +269,8 @@ Completed harness slices include:
   revision id, and content signature for safer parser/index decisions
 - Calendar connector now preserves event context keys, status, organizer,
   attendee response counts, duration, and external attendee domains
+- Connector golden dataset fixture now locks Slack, Gmail, Drive, and Calendar
+  agent-ready metadata expectations
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -354,7 +356,7 @@ Tasks:
 - Permission leakage tests. Initial suite done.
 - Source validation tests. Initial suite done.
 - Cost/cache regression tests. Initial suite done.
-- Golden dataset for Slack, Gmail, Drive, Calendar.
+- Golden dataset for Slack, Gmail, Drive, Calendar. Initial fixture done.
 - RAG precision/recall smoke metrics.
 
 ### Milestone 7. Product Completion Layer

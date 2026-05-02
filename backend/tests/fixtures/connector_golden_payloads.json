@@ -1,0 +1,84 @@
+{
+  "slack": {
+    "workspace_url": "https://example.slack.com",
+    "channel_id": "C777",
+    "history": [
+      {
+        "type": "message",
+        "user": "U111",
+        "text": "Decision: use pgvector for company memory search.",
+        "ts": "1777600800.000100",
+        "thread_ts": "1777600800.000100",
+        "reply_count": 1
+      }
+    ],
+    "replies": [
+      {
+        "type": "message",
+        "user": "U111",
+        "text": "Decision: use pgvector for company memory search.",
+        "ts": "1777600800.000100",
+        "thread_ts": "1777600800.000100"
+      },
+      {
+        "type": "message",
+        "user": "U222",
+        "text": "Agreed. Skip unchanged embeddings by content signature.",
+        "ts": "1777600810.000200",
+        "thread_ts": "1777600800.000100"
+      }
+    ]
+  },
+  "gmail": {
+    "id": "msg-golden-1",
+    "threadId": "thread-golden-1",
+    "labelIds": ["INBOX", "IMPORTANT"],
+    "snippet": "Contract review is due Friday.",
+    "internalDate": "1777600800000",
+    "payload": {
+      "mimeType": "text/plain",
+      "headers": [
+        {"name": "Subject", "value": "Contract review schedule"},
+        {"name": "From", "value": "min@example.com"},
+        {"name": "To", "value": "para@example.com"},
+        {"name": "Cc", "value": "partner@client.co.kr"},
+        {"name": "Date", "value": "Fri, 1 May 2026 10:00:00 +0900"}
+      ],
+      "body": {
+        "data": "Q29udHJhY3QgcmV2aWV3IGlzIGR1ZSBGcmlkYXku"
+      }
+    }
+  },
+  "drive": {
+    "id": "file-golden-1",
+    "name": "Business plan",
+    "mimeType": "application/vnd.google-apps.document",
+    "description": "Revenue and hiring plan",
+    "webViewLink": "https://drive.google.com/file/d/file-golden-1/view",
+    "modifiedTime": "2026-05-01T09:00:00Z",
+    "createdTime": "2026-04-30T09:00:00Z",
+    "version": "42",
+    "headRevisionId": "rev-42",
+    "owners": [{"emailAddress": "owner@example.com"}],
+    "lastModifyingUser": {"emailAddress": "editor@example.com"}
+  },
+  "calendar": {
+    "id": "event-golden-1",
+    "summary": "Launch review",
+    "description": "Review launch scope and risks",
+    "location": "Conference A",
+    "htmlLink": "https://calendar.google.com/event?eid=event-golden-1",
+    "status": "confirmed",
+    "updated": "2026-05-01T10:00:00Z",
+    "start": {"dateTime": "2026-05-02T09:00:00+09:00"},
+    "end": {"dateTime": "2026-05-02T10:00:00+09:00"},
+    "organizer": {"email": "lead@example.com"},
+    "creator": {"email": "pm@example.com"},
+    "attendees": [
+      {"email": "pm@example.com", "responseStatus": "accepted"},
+      {"email": "dev@example.com", "responseStatus": "needsAction"},
+      {"email": "client@customer.co.kr", "responseStatus": "declined"}
+    ],
+    "recurringEventId": "series-1"
+  }
+}
