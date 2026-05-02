@@ -7,6 +7,11 @@ such as Codex, Claude Code, and Gemini. Follow this guide before changing code.
 
 ParaWorks is a Korean-first, multi-agentic company memory platform.
 
+The current source of truth for product direction and execution order is
+`plan.md` at the repository root. The older merged plan is reference material;
+if it conflicts with `plan.md`, follow `plan.md` unless the user explicitly
+asks to return to the older plan.
+
 The final system uses LangChain 1.x and LangGraph 1.x to orchestrate agents
 that:
 
@@ -47,6 +52,7 @@ well-tested, and stable.
 
 Before starting work, read or inspect:
 
+- `plan.md`
 - `docs/portfolio-log.md`
 - `docs/superpowers/runbooks/session-handoff.md`
 - the latest relevant spec under `docs/superpowers/specs/`
