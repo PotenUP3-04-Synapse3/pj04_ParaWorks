@@ -13,8 +13,9 @@ from backend.app.connectors.slack import (
 
 
 class FakeSlackClient:
-    def conversation_history(self, channel_id: str) -> list[dict]:
+    def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
         assert channel_id == 'C123'
+        assert oldest is None
         return [
             {
                 'type': 'message',
@@ -60,6 +61,37 @@ def test_slack_connector_maps_history_messages_to_source_events() -> None:
     assert event.raw_metadata['required_scopes'] == list(SLACK_REQUIRED_HISTORY_SCOPES)
 
 
+def test_slack_connector_fetches_incremental_history_after_channel_cursor() -> None:
+    observed_oldest: list[str | None] = []
+
+    class IncrementalFakeSlackClient:
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            assert channel_id == 'C123'
+            observed_oldest.append(oldest)
+            return [
+                {
+                    'type': 'message',
+                    'user': 'U456',
+                    'text': 'newer decision',
+                    'ts': '1777600900.000100',
+                }
+            ]
+
+    connector = SlackConnector(
+        config=SlackConnectorConfig(
+            bot_token='xoxb-test',
+            channel_ids=['C123'],
+            workspace_url='https://example.slack.com',
+        ),
+        client=IncrementalFakeSlackClient(),
+    )
+
+    events = connector.fetch_events_since({'C123': '1777600800.000100'})
+
+    assert observed_oldest == ['1777600800.000100']
+    assert [event.source_id for event in events] == ['C123:1777600900.000100']
+
+
 def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:
     requests: list[httpx.Request] = []
 
@@ -101,6 +133,30 @@ def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> N
     assert requests[0].url.params['channel'] == 'C123'
     assert requests[0].url.params['limit'] == '200'
     assert requests[1].url.params['cursor'] == 'cursor-2'
+
+
+def test_slack_web_api_client_sends_oldest_for_incremental_history() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                'ok': True,
+                'messages': [{'type': 'message', 'user': 'U1', 'text': 'new page', 'ts': '2.000100'}],
+                'response_metadata': {},
+            },
+        )
+
+    client = SlackWebApiClient(
+        bot_token='xoxb-test',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    client.conversation_history('C123', oldest='1.000100')
+
+    assert requests[0].url.params['oldest'] == '1.000100'
 
 
 def test_slack_web_api_client_raises_clear_error_for_slack_api_failure() -> None:

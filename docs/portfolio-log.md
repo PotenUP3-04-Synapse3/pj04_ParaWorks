@@ -2723,6 +2723,44 @@ Verification evidence:
 - `uv run ruff check backend/app/connectors/google.py backend/tests/test_google_connector.py`
   passed.
 
+## Slack Incremental Live Sync Cursor
+
+What changed:
+
+- Added a Slack live sync cursor path that derives the latest ingested
+  `channel_id` + `ts` per channel from existing source metadata.
+- `sync_connector_events` now passes that cursor to connectors that support
+  incremental fetching, while older/mock connectors still use `fetch_events()`.
+- `SlackConnector` forwards channel cursors to `SlackWebApiClient`, and the web
+  client sends Slack `conversations.history` an `oldest` timestamp.
+- Updated the Slack runbook with cursor behavior, test policy, and cost notes.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from duplicate-skipping after collection to true
+  source-delta collection before downstream work.
+- Gives the Slack Agent track a safer merge contract: live Slack sync can evolve
+  behind `fetch_events_since(...)` without forcing schema changes or frontend
+  churn.
+- Strengthens the AI-cost story because fewer repeated source events reach
+  review generation, agent drafting, or later RAG indexing.
+
+Cost/security note:
+
+- The cursor lookup is local database metadata only. It does not call Slack,
+  LLMs, or embedding providers.
+- Slack message bodies still stay out of terminal logs; only channel/timestamp
+  metadata is used to narrow the next API window.
+
+Verification evidence:
+
+- Added RED tests for Slack `oldest` handling and ingestion cursor passing,
+  then implemented the minimal code until they passed.
+- `uv run pytest backend/tests/test_slack_connector.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_connector_factory.py backend/tests/test_integration_runtime_status.py -v`
+  passed with 24 tests.
+- `uv run ruff check backend/app/connectors/slack.py backend/app/ingestion/sync.py backend/tests/test_slack_connector.py backend/tests/test_connector_ingestion_contract.py`
+  passed.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2798,3 +2836,4 @@ Verification evidence:
 - `feat: gate paid embedding reindex cost`
 - `feat: add rag reindex approval ux`
 - `feat: harden google live collection`
+- `feat: add slack incremental sync cursor`

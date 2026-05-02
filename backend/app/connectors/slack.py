@@ -15,7 +15,7 @@ SLACK_REQUIRED_HISTORY_SCOPES = (
 
 
 class SlackApiClient(Protocol):
-    def conversation_history(self, channel_id: str) -> list[dict]:
+    def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
         raise NotImplementedError
 
 
@@ -37,12 +37,12 @@ class SlackWebApiClient:
         self.base_url = base_url.rstrip('/')
         self.page_limit = page_limit
 
-    def conversation_history(self, channel_id: str) -> list[dict]:
+    def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
         messages: list[dict] = []
         cursor: str | None = None
 
         while True:
-            payload = self._get_history_page(channel_id=channel_id, cursor=cursor)
+            payload = self._get_history_page(channel_id=channel_id, cursor=cursor, oldest=oldest)
             messages.extend(payload.get('messages', []))
             cursor = str(payload.get('response_metadata', {}).get('next_cursor') or '')
             if not cursor:
@@ -50,11 +50,13 @@ class SlackWebApiClient:
 
         return messages
 
-    def _get_history_page(self, *, channel_id: str, cursor: str | None) -> dict:
+    def _get_history_page(self, *, channel_id: str, cursor: str | None, oldest: str | None) -> dict:
         params = {
             'channel': channel_id,
             'limit': str(self.page_limit),
         }
+        if oldest:
+            params['oldest'] = oldest
         if cursor:
             params['cursor'] = cursor
 
@@ -96,9 +98,13 @@ class SlackConnector:
         )
 
     def fetch_events(self) -> list[SourceEvent]:
+        return self.fetch_events_since({})
+
+    def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
         events: list[SourceEvent] = []
         for channel_id in self.config.channel_ids:
-            for message in self.client.conversation_history(channel_id):
+            oldest = latest_timestamps_by_partition.get(channel_id)
+            for message in self.client.conversation_history(channel_id, oldest=oldest):
                 if message.get('type') != 'message' or not message.get('text'):
                     continue
                 events.append(self._message_to_source_event(channel_id, message))

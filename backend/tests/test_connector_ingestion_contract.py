@@ -24,7 +24,11 @@ def source_event(source_id: str = 'contract-event-1') -> SourceEvent:
         participants=['u123'],
         timestamp=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
         permission_level='internal',
-        raw_metadata={'channel_id': 'C123', 'external_updated_at': '2026-05-01T09:00:00+00:00'},
+        raw_metadata={
+            'channel_id': 'C123',
+            'external_updated_at': '2026-05-01T09:00:00+00:00',
+            'ts': '1777600800.000100',
+        },
     )
 
 
@@ -43,6 +47,28 @@ class ContractConnector:
 
     def fetch_events(self) -> list[SourceEvent]:
         return [source_event()]
+
+
+@dataclass
+class IncrementalContractConnector:
+    observed_cursor: dict[str, str] | None = None
+    source_type: str = 'slack'
+    manifest: ConnectorManifest = ConnectorManifest(
+        connector_type='slack',
+        display_name='Slack',
+        mode='live',
+        auth_type='oauth',
+        required_scopes=('channels:history', 'groups:history', 'im:history', 'mpim:history'),
+        sync_strategy='incremental',
+        cost_policy='Fetch source deltas first; embed only changed chunks after review approval.',
+    )
+
+    def fetch_events(self) -> list[SourceEvent]:
+        raise AssertionError('incremental connector should receive a sync cursor')
+
+    def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
+        self.observed_cursor = latest_timestamps_by_partition
+        return [source_event('contract-event-2')]
 
 
 @dataclass(frozen=True)
@@ -94,6 +120,7 @@ def test_sync_connector_events_records_job_and_ingests_review_items(db_session: 
     assert chunk.metadata_['participants'] == ['u123']
     assert chunk.metadata_['channel_id'] == 'C123'
     assert chunk.metadata_['external_updated_at'] == '2026-05-01T09:00:00+00:00'
+    assert chunk.metadata_['ts'] == '1777600800.000100'
 
 
 def test_sync_connector_events_reports_skipped_duplicates(db_session: Session) -> None:
@@ -105,6 +132,17 @@ def test_sync_connector_events_reports_skipped_duplicates(db_session: Session) -
     assert result.fetched_events == 1
     assert result.created_review_items == 0
     assert result.skipped_events == 1
+
+
+def test_sync_connector_events_passes_latest_slack_timestamp_cursor(db_session: Session) -> None:
+    sync_connector_events(db=db_session, connector=ContractConnector())
+
+    connector = IncrementalContractConnector()
+    result = sync_connector_events(db=db_session, connector=connector)
+
+    assert connector.observed_cursor == {'C123': '1777600800.000100'}
+    assert result.fetched_events == 1
+    assert result.created_review_items == 1
 
 
 def test_sync_connector_events_marks_job_failed_on_connector_error(db_session: Session) -> None:

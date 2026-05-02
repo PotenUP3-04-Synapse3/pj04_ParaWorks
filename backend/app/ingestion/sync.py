@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -33,7 +34,10 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
     db.refresh(job)
 
     try:
-        events = connector.fetch_events()
+        if hasattr(connector, 'fetch_events_since'):
+            events = connector.fetch_events_since(_latest_timestamps_by_partition(db, connector.source_type))
+        else:
+            events = connector.fetch_events()
         existing_source_ids = set(
             db.scalars(
                 select(Source.source_id).where(Source.source_id.in_([event.source_id for event in events]))
@@ -67,3 +71,22 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
         created_review_items=created_review_items,
         skipped_events=skipped_events,
     )
+
+
+def _latest_timestamps_by_partition(db: Session, source_type: str) -> dict[str, str]:
+    latest: dict[str, tuple[Decimal, str]] = {}
+    sources = db.scalars(select(Source).where(Source.source_type == source_type)).all()
+    for source in sources:
+        raw_metadata = source.raw_metadata or {}
+        partition = raw_metadata.get('channel_id')
+        timestamp = raw_metadata.get('ts')
+        if not isinstance(partition, str) or not isinstance(timestamp, str):
+            continue
+        try:
+            timestamp_value = Decimal(timestamp)
+        except InvalidOperation:
+            continue
+        previous = latest.get(partition)
+        if previous is None or timestamp_value > previous[0]:
+            latest[partition] = (timestamp_value, timestamp)
+    return {partition: timestamp for partition, (_, timestamp) in latest.items()}

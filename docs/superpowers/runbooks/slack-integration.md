@@ -17,7 +17,8 @@ Code:
 Responsibilities:
 
 - `SlackWebApiClient` calls Slack `conversations.history` with bearer-token
-  auth and cursor pagination.
+  auth, cursor pagination, and optional `oldest` timestamps for incremental
+  history windows.
 - `SlackConnector` maps Slack message payloads into `SourceEvent`.
 - `get_sync_connector` uses an installed Slack connection first when demo mode
   is disabled, channel ids are configured, and the token vault can resolve the
@@ -32,8 +33,9 @@ Responsibilities:
   and masked tokens only. Raw tokens stay behind the token vault boundary.
 - The Integrations UI displays Slack connection readiness/status from sanitized
   API responses and never renders raw tokens or token references.
-- `sync_connector_events` handles `SyncJob`, duplicate skips, ingestion, and
-  failure status.
+- `sync_connector_events` handles `SyncJob`, duplicate skips, ingestion,
+  failure status, and Slack channel timestamp cursors derived from previously
+  ingested source metadata.
 
 ## Required Environment
 
@@ -133,6 +135,8 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
 - bearer-token headers are attached;
 - `conversations.history` receives the channel id and page limit;
 - cursor pagination continues until `next_cursor` is empty;
+- incremental Slack sync sends the latest stored channel timestamp as
+  `oldest`;
 - Slack API errors raise `SlackApiError`;
 - OAuth install URLs contain signed state and never expose client secrets;
 - OAuth code exchange is tested with fake Slack responses only;
@@ -153,6 +157,9 @@ Use `httpx.MockTransport` or fake `SlackApiClient` implementations to verify:
   ids. If the local vault is empty after a process restart, ParaWorks falls back
   to mock behavior instead of making partial or surprising external calls.
 - Fetch source deltas before any LLM or embedding work.
+- For Slack, source deltas use the latest stored `raw_metadata.channel_id` and
+  `raw_metadata.ts` values as channel-level cursors, then Slack receives that
+  timestamp as `oldest`.
 - Preserve Slack timestamp and channel id as stable source identifiers.
 - Keep raw private message text out of logs.
 - Store only `token_ref` plus a masked token in the database. The current local
