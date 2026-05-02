@@ -215,6 +215,41 @@ def test_slack_llm_preflight_caps_input_to_budget_affordable_window() -> None:
     assert preflight['estimated_cost_usd'] <= preflight['budget_limit_usd']
 
 
+def test_slack_llm_preflight_reserves_prompt_overhead_for_long_ranked_evidence() -> None:
+    packet = EvidencePacket(
+        source_type='slack',
+        source_window='slack:live:ranked:12',
+        messages=[
+            EvidenceMessage(
+                source_id=f'C123:{index}.000100',
+                source_url=f'https://example.slack.com/archives/C123/p{index}000100',
+                text=f'결정: 중요한 제품 의사결정 {index}. ' + ('비용 최적화와 배포 검증이 필요합니다. ' * 45),
+                author='U123',
+                timestamp=f'2026-05-01T09:{index:02d}:00+09:00',
+                permission_level='internal',
+            )
+            for index in range(12)
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+    settings = SlackLlmSettings(
+        enabled=True,
+        provider_order=('openai', 'gemini'),
+        openai_api_key='openai-key',
+        gemini_api_key='gemini-key',
+        max_estimated_cost_usd=0.001,
+        max_input_chars=12000,
+        max_output_tokens=512,
+        input_cost_per_1m=0.15,
+        output_cost_per_1m=0.60,
+    )
+
+    preflight = build_slack_llm_preflight(packet=packet, settings=settings)
+
+    assert preflight['action'] == 'run'
+    assert preflight['estimated_cost_usd'] <= preflight['budget_limit_usd']
+
+
 def test_langchain_slack_agent_model_uses_configured_prompt_cap() -> None:
     chat_model = FakeLangChainChatModel()
     model = LangChainSlackAgentModel(

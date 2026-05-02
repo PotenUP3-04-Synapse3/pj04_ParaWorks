@@ -1,9 +1,50 @@
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
 from backend.app.agents.slack_agent.agent import SlackAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
+
+_DECISION_KEYWORDS = (
+    '결정',
+    '합의',
+    '선택',
+    '확정',
+    '도입',
+    '사용합니다',
+    'decision',
+    'decided',
+    'agreed',
+)
+_ACTION_KEYWORDS = (
+    'todo',
+    '해야',
+    '진행',
+    '확인',
+    '배포',
+    '테스트',
+    '마감',
+    'action',
+    'follow up',
+    'next',
+)
+_TECH_COST_KEYWORDS = (
+    '비용',
+    '예산',
+    'api',
+    'llm',
+    'rag',
+    'pgvector',
+    'postgres',
+    'slack',
+    'oauth',
+    'gemini',
+    'openai',
+    'langgraph',
+)
+_LOW_SIGNAL_KEYWORDS = ('ㅋㅋ', 'ㅎㅎ', '좋아요', '오케이', '굿', '감사')
 
 
 def create_slack_agent_review_items(
@@ -14,6 +55,7 @@ def create_slack_agent_review_items(
     source_window: str,
     max_messages: int | None = None,
     newest_first: bool = False,
+    selection_strategy: str = 'chronological',
 ) -> list[ReviewItem]:
     packet = build_slack_evidence_packet(
         db=db,
@@ -21,6 +63,7 @@ def create_slack_agent_review_items(
         source_window=source_window,
         max_messages=max_messages,
         newest_first=newest_first,
+        selection_strategy=selection_strategy,
     )
     if not packet.messages:
         return []
@@ -91,6 +134,7 @@ def build_slack_evidence_packet(
     source_window: str,
     max_messages: int | None = None,
     newest_first: bool = False,
+    selection_strategy: str = 'chronological',
 ) -> EvidencePacket:
     rows = db.execute(
         select(DocumentChunk, Source)
@@ -98,8 +142,16 @@ def build_slack_evidence_packet(
         .where(Source.source_type == 'slack')
         .order_by(DocumentChunk.id)
     ).all()
-    if newest_first:
+    rows = [(row[0], row[1]) for row in rows]
+    importance_scores: dict[int, int] = {}
+
+    if selection_strategy == 'ranked':
+        ranked_rows = _dedupe_and_rank_slack_rows(rows)
+        rows = [(chunk, source) for chunk, source, _score in ranked_rows]
+        importance_scores = {chunk.id: score for chunk, _source, score in ranked_rows}
+    elif newest_first:
         rows = sorted(rows, key=lambda row: _source_sort_timestamp(row[1]), reverse=True)
+
     if max_messages is not None:
         rows = rows[:max(max_messages, 0)]
 
@@ -111,13 +163,15 @@ def build_slack_evidence_packet(
             author=source.author,
             timestamp=str(source.raw_metadata.get('ts') or source.created_at.isoformat()),
             permission_level=chunk.permission_level,
-            metadata={
-                'chunk_id': chunk.id,
-                'source_pk': source.id,
-                'channel_id': source.raw_metadata.get('channel_id'),
-            },
+            metadata=_slack_message_metadata(
+                chunk=chunk,
+                source=source,
+                evidence_rank=index,
+                importance_score=importance_scores.get(chunk.id),
+                selection_strategy=selection_strategy,
+            ),
         )
-        for chunk, source in rows
+        for index, (chunk, source) in enumerate(rows, start=1)
     ]
 
     return EvidencePacket(
@@ -134,3 +188,80 @@ def _source_sort_timestamp(source: Source) -> float:
         return float(raw_ts)
     except (TypeError, ValueError):
         return source.created_at.timestamp()
+
+
+def _dedupe_and_rank_slack_rows(
+    rows: list[tuple[DocumentChunk, Source]],
+) -> list[tuple[DocumentChunk, Source, int]]:
+    best_by_text: dict[str, tuple[DocumentChunk, Source, int]] = {}
+    for chunk, source in rows:
+        dedupe_key = _normalize_evidence_text(chunk.text) or source.source_id
+        score = _evidence_importance_score(chunk, source)
+        current = best_by_text.get(dedupe_key)
+        if current is None or _rank_sort_key(chunk, source, score) > _rank_sort_key(*current):
+            best_by_text[dedupe_key] = (chunk, source, score)
+
+    return sorted(
+        best_by_text.values(),
+        key=lambda row: _rank_sort_key(*row),
+        reverse=True,
+    )
+
+
+def _rank_sort_key(chunk: DocumentChunk, source: Source, score: int) -> tuple[int, float, int]:
+    return (score, _source_sort_timestamp(source), chunk.id)
+
+
+def _normalize_evidence_text(text: str) -> str:
+    return re.sub(r'\s+', ' ', text.strip().lower())
+
+
+def _evidence_importance_score(chunk: DocumentChunk, source: Source) -> int:
+    text = chunk.text.lower()
+    metadata = source.raw_metadata or {}
+    score = 0
+
+    if any(keyword in text for keyword in _DECISION_KEYWORDS):
+        score += 60
+    if any(keyword in text for keyword in _ACTION_KEYWORDS):
+        score += 35
+    if any(keyword in text for keyword in _TECH_COST_KEYWORDS):
+        score += 15
+    if 40 <= len(chunk.text) <= 1200:
+        score += 5
+    if metadata.get('thread_ts') and metadata.get('thread_ts') != metadata.get('ts'):
+        score += 5
+    if metadata.get('reply_count'):
+        score += min(int(metadata.get('reply_count') or 0), 5)
+    if any(keyword in text for keyword in _LOW_SIGNAL_KEYWORDS) and len(chunk.text) < 80:
+        score -= 20
+
+    return score
+
+
+def _slack_message_metadata(
+    *,
+    chunk: DocumentChunk,
+    source: Source,
+    evidence_rank: int,
+    importance_score: int | None,
+    selection_strategy: str,
+) -> dict[str, object]:
+    raw_metadata = source.raw_metadata or {}
+    metadata: dict[str, object] = {
+        'chunk_id': chunk.id,
+        'source_pk': source.id,
+        'channel_id': raw_metadata.get('channel_id'),
+    }
+    if selection_strategy == 'ranked':
+        metadata.update(
+            {
+                'selection_strategy': selection_strategy,
+                'evidence_rank': evidence_rank,
+                'importance_score': importance_score or 0,
+                'thread_ts': raw_metadata.get('thread_ts'),
+                'is_thread_reply': bool(raw_metadata.get('thread_ts') and raw_metadata.get('thread_ts') != raw_metadata.get('ts')),
+                'is_thread_parent': bool(raw_metadata.get('reply_count')),
+            }
+        )
+    return metadata

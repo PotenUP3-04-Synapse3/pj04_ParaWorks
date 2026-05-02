@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.agent_runtime import PermissionContext
+from backend.app.agent_runtime import EvidencePacket, PermissionContext
 from backend.app.agents.mail_document_agent import (
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
@@ -407,17 +407,13 @@ def get_slack_llm_agent_preflight(
     user: CurrentUser,
 ) -> dict[str, object]:
     llm_settings = _slack_llm_settings(settings)
-    packet = build_slack_evidence_packet(
-        db=db,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
-        source_window=_slack_llm_source_window(llm_settings),
-        max_messages=llm_settings.max_evidence_messages,
-        newest_first=True,
-    )
-    return build_slack_llm_preflight(
+    packet = _build_slack_llm_evidence_packet(db=db, user=user, settings=llm_settings)
+    preflight = build_slack_llm_preflight(
         packet=packet,
         settings=llm_settings,
     )
+    preflight['source_window'] = packet.source_window
+    return preflight
 
 
 @router.post('/slack/agent-review/llm')
@@ -428,14 +424,9 @@ def run_slack_llm_agent_review(
     user: CurrentUser,
 ) -> dict[str, int | str | float | dict[str, object]]:
     llm_settings = _slack_llm_settings(settings)
-    packet = build_slack_evidence_packet(
-        db=db,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
-        source_window=_slack_llm_source_window(llm_settings),
-        max_messages=llm_settings.max_evidence_messages,
-        newest_first=True,
-    )
+    packet = _build_slack_llm_evidence_packet(db=db, user=user, settings=llm_settings)
     preflight = build_slack_llm_preflight(packet=packet, settings=llm_settings)
+    preflight['source_window'] = packet.source_window
     if preflight['action'] != 'run':
         raise HTTPException(status_code=400, detail=preflight)
     if not request.confirm_paid_run:
@@ -453,7 +444,7 @@ def run_slack_llm_agent_review(
             permission_context=PermissionContext(user_id=user.id, role=user.role),
             source_window=_slack_llm_source_window(llm_settings),
             max_messages=llm_settings.max_evidence_messages,
-            newest_first=True,
+            selection_strategy='ranked',
         )
     except SlackLlmProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -529,7 +520,22 @@ def _slack_llm_settings(settings: Settings) -> SlackLlmSettings:
 
 
 def _slack_llm_source_window(settings: SlackLlmSettings) -> str:
-    return f'slack:live:recent:{settings.max_evidence_messages}'
+    return f'slack:live:ranked:{settings.max_evidence_messages}'
+
+
+def _build_slack_llm_evidence_packet(
+    *,
+    db: Session,
+    user: CurrentUser,
+    settings: SlackLlmSettings,
+) -> EvidencePacket:
+    return build_slack_evidence_packet(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window=_slack_llm_source_window(settings),
+        max_messages=settings.max_evidence_messages,
+        selection_strategy='ranked',
+    )
 
 
 def _clean_channel_ids(channel_ids: list[str] | None) -> list[str]:

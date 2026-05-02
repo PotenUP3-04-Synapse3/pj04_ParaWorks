@@ -3127,3 +3127,8 @@ Cost/security note:
   - Added shared windowing for preflight and paid execution so the estimated input and actual prompt use the same bounded packet.
   - Added UI visibility for evidence message count and kept the conservative budget cap, enabling a live run over 12 recent Slack messages within the configured budget.
   - Verification: backend suite `195 passed, 1 skipped` with demo-mode override; frontend lint/build passed; Playwright integrations desktop dark/light regression passed.
+- `feat: rank slack llm evidence`
+  - Replaced the temporary recent-only paid Slack LLM window with deduped, importance-ranked evidence selection while keeping full Slack sync unchanged.
+  - Ranking now prioritizes decision, action, cost, technical, thread, and recency signals; duplicate message bodies collapse before top-k selection.
+  - Preflight and paid execution use the same ranked source window, and prompt rendering dynamically shrinks evidence text to stay inside the configured per-run cost budget.
+  - Verification: backend suite `197 passed, 1 skipped`; frontend build passed; Playwright integrations desktop dark/light regression passed; live preflight returned `slack:live:ranked:12` at `$0.000966 / $0.001`.

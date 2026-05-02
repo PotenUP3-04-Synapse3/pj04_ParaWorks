@@ -355,6 +355,7 @@ export type SlackLlmPreflight = {
   budget_limit_usd?: number | null;
   evidence_message_count: number;
   max_evidence_messages: number;
+  source_window?: string;
   requires_paid_confirmation: boolean;
 };
 

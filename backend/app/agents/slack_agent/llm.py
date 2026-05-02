@@ -15,6 +15,7 @@ DEFAULT_INPUT_COST_PER_1M = 0.15
 DEFAULT_OUTPUT_COST_PER_1M = 0.60
 DEFAULT_MAX_OUTPUT_TOKENS = 512
 DEFAULT_MAX_INPUT_CHARS = 12_000
+DEFAULT_PROMPT_OVERHEAD_CHARS = 1_500
 
 
 class SlackLlmProviderError(RuntimeError):
@@ -277,7 +278,15 @@ def _preflight_response(
 
 
 def _estimated_token_usage(packet: EvidencePacket, settings: SlackLlmSettings) -> TokenUsage:
-    prompt = render_slack_llm_prompt(packet, max_input_chars=_effective_max_input_chars(settings))
+    max_input_chars = _effective_max_input_chars(settings)
+    prompt = render_slack_llm_prompt(packet, max_input_chars=max_input_chars)
+    affordable_prompt_chars = _affordable_prompt_chars(settings)
+    for _ in range(4):
+        if affordable_prompt_chars is None or len(prompt) <= affordable_prompt_chars or max_input_chars <= 0:
+            break
+        overage = len(prompt) - affordable_prompt_chars
+        max_input_chars = max(0, max_input_chars - overage - 128)
+        prompt = render_slack_llm_prompt(packet, max_input_chars=max_input_chars)
     return TokenUsage(
         input_tokens=max(1, len(prompt)),
         output_tokens=settings.max_output_tokens,
@@ -285,15 +294,22 @@ def _estimated_token_usage(packet: EvidencePacket, settings: SlackLlmSettings) -
 
 
 def _effective_max_input_chars(settings: SlackLlmSettings) -> int:
-    if settings.max_estimated_cost_usd is None:
+    affordable_prompt_chars = _affordable_prompt_chars(settings)
+    if affordable_prompt_chars is None:
         return settings.max_input_chars
+    affordable_evidence_chars = affordable_prompt_chars - DEFAULT_PROMPT_OVERHEAD_CHARS
+    return max(0, min(settings.max_input_chars, affordable_evidence_chars))
+
+
+def _affordable_prompt_chars(settings: SlackLlmSettings) -> int | None:
+    if settings.max_estimated_cost_usd is None:
+        return None
     total_budget_units = settings.max_estimated_cost_usd * 1_000_000
     reserved_output_units = settings.max_output_tokens * settings.output_cost_per_1m
     remaining_input_units = total_budget_units - reserved_output_units
     if remaining_input_units <= 0:
         return 0
-    affordable_input_chars = int(remaining_input_units // settings.input_cost_per_1m)
-    return max(0, min(settings.max_input_chars, affordable_input_chars))
+    return int(remaining_input_units // settings.input_cost_per_1m)
 
 
 def _available_providers(provider_order: tuple[str, ...], settings: SlackLlmSettings) -> list[str]:

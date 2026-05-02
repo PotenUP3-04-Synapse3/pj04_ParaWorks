@@ -44,6 +44,7 @@ def test_slack_llm_preflight_requires_explicit_enablement(client) -> None:
     payload = response.json()
     assert payload['action'] == 'blocked'
     assert payload['reason'] == 'llm_disabled'
+    assert payload['source_window'] == 'slack:live:ranked:12'
     assert payload['requires_paid_confirmation'] is True
 
 

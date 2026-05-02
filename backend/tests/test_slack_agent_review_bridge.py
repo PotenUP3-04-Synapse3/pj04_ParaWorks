@@ -140,3 +140,24 @@ def test_slack_evidence_packet_can_select_recent_bounded_window(db_session: Sess
     )
 
     assert [message.source_id for message in packet.messages] == ['C123:3.000100', 'C123:2.000100']
+
+
+def test_slack_evidence_packet_can_select_ranked_deduped_window(db_session: Session) -> None:
+    seed_slack_chunk_with_ts(db_session, 'C123:1.000100', '1.000100', '결정: Postgres와 pgvector를 사용합니다. 비용 상한을 둡니다.')
+    seed_slack_chunk_with_ts(db_session, 'C123:2.000100', '2.000100', 'TODO: Slack API 권한을 확인하고 배포 전 테스트합니다.')
+    seed_slack_chunk_with_ts(db_session, 'C123:3.000100', '3.000100', '결정: Postgres와 pgvector를 사용합니다. 비용 상한을 둡니다.')
+    seed_slack_chunk_with_ts(db_session, 'C123:4.000100', '4.000100', 'ㅋㅋㅋ 좋아요')
+    db_session.commit()
+
+    packet = build_slack_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='slack:live:ranked:2',
+        max_messages=2,
+        selection_strategy='ranked',
+    )
+
+    assert [message.source_id for message in packet.messages] == ['C123:3.000100', 'C123:2.000100']
+    assert packet.messages[0].metadata['selection_strategy'] == 'ranked'
+    assert packet.messages[0].metadata['evidence_rank'] == 1
+    assert packet.messages[0].metadata['importance_score'] > packet.messages[1].metadata['importance_score']
