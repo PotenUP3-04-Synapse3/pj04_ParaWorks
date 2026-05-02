@@ -2645,6 +2645,43 @@ Verification evidence:
 - `npx eslint src/app/search/page.tsx src/lib/api/types.ts` passed.
 - `npm run build` passed.
 
+## RAG Reindex Approval UX
+
+What changed:
+
+- Extended dry-run reindex responses with `embedding_budget`, including changed
+  document count, estimated input tokens, estimated cost, budget limit, and the
+  resulting budget action.
+- Kept dry-run free and non-blocking: over-budget dry-runs return a warning
+  preview instead of calling the embedding provider.
+- Added a RAG reindex approval panel to `/agent-runs` so operators can run a
+  cost preview before approving `dry_run=false` execution.
+- Added desktop and mobile Playwright coverage for the preview -> approved run
+  interaction.
+
+Portfolio angle:
+
+- Turns backend cost guardrails into an operator-facing workflow, which is more
+  compelling than a hidden environment variable.
+- Shows responsible AI product design: paid embedding work requires a visible
+  estimate and explicit approval.
+- Helps a three-developer team integrate safely because RAG indexing behavior is
+  observable and test-covered from API to browser.
+
+Verification evidence:
+
+- Added RED tests for missing dry-run `embedding_budget`, then implemented the
+  preview response until they passed.
+- `uv run pytest backend/tests/test_rag_indexing.py backend/tests/test_rag_indexing_tasks.py -v`
+  passed with 22 tests.
+- `uv run ruff check backend/app/rag/indexing.py backend/app/rag/reindexing.py backend/tests/test_rag_indexing.py`
+  passed.
+- `npx eslint src/app/agent-runs/page.tsx src/app/agent-runs/RagReindexControl.tsx src/lib/api/types.ts e2e/visual-smoke.spec.ts`
+  passed.
+- `npm run build` passed.
+- `npx playwright test e2e/visual-smoke.spec.ts --project=chromium-desktop --project=chromium-mobile -g "agent operations previews"`
+  passed with 2 tests.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -2718,3 +2755,4 @@ Verification evidence:
 - `style: unify workspace glass cards`
 - `chore: harden pgvector dev path`
 - `feat: gate paid embedding reindex cost`
+- `feat: add rag reindex approval ux`

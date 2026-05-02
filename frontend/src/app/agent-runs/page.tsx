@@ -25,6 +25,7 @@ import type {
   RagIndexingSummaryResponse,
 } from "@/lib/api/types";
 import { OrchestrationDryRun } from "./OrchestrationDryRun";
+import { RagReindexControl } from "./RagReindexControl";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +136,7 @@ export default async function AgentRunsPage() {
         <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,440px)]">
           <div className="space-y-4">
             <LatestIndexingJob job={latestRagJob} />
+            <RagReindexControl summary={ragIndexing} />
             <div className="grid gap-3 sm:grid-cols-3">
               <IndexingMetric
                 icon={Database}

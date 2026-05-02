@@ -354,20 +354,50 @@ def test_reindex_endpoint_returns_dry_run_index_summary(client: TestClient, db_s
     response = client.post('/api/v1/rag/reindex')
 
     assert response.status_code == 200
-    assert response.json() == {
-        'dry_run': True,
-        'indexed_count': 1,
-        'skipped_count': 0,
-        'saved_embedding_calls': 0,
-        'embedding_request_count': 1,
-        'embedding_prompt_tokens': 0,
-        'embedding_total_tokens': 0,
-        'embedding_dimensions': 16,
-        'document_ids': ['chunk:1'],
-        'skipped_document_ids': [],
-        'incremental': True,
-        'storage_backend': 'preview',
-    }
+    body = response.json()
+    assert body['dry_run'] is True
+    assert body['indexed_count'] == 1
+    assert body['skipped_count'] == 0
+    assert body['saved_embedding_calls'] == 0
+    assert body['embedding_request_count'] == 1
+    assert body['embedding_prompt_tokens'] == 0
+    assert body['embedding_total_tokens'] == 0
+    assert body['embedding_dimensions'] == 16
+    assert body['document_ids'] == ['chunk:1']
+    assert body['skipped_document_ids'] == []
+    assert body['incremental'] is True
+    assert body['storage_backend'] == 'preview'
+    assert body['embedding_budget']['embedding_model'] == 'text-embedding-3-small'
+    assert body['embedding_budget']['changed_document_count'] == 1
+    assert body['embedding_budget']['estimated_input_tokens'] > 0
+    assert body['embedding_budget']['estimated_cost_usd'] > 0
+    assert body['embedding_budget']['budget_limit_usd'] == 0.001
+    assert body['embedding_budget']['budget_status'] == 'within_budget'
+
+
+def test_reindex_dry_run_reports_over_budget_without_provider_call(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    seed_chunk(db_session, 'Budget pressure from repeated company history. ' * 2_000, 'gmail-budget-preview')
+
+    def override_settings() -> Settings:
+        return Settings(
+            database_url='sqlite://',
+            rag_embedding_max_estimated_cost_usd=0.000001,
+        )
+
+    client.app.dependency_overrides[get_settings] = override_settings
+
+    response = client.post('/api/v1/rag/reindex')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['dry_run'] is True
+    assert body['storage_backend'] == 'preview'
+    assert body['embedding_budget']['budget_status'] == 'over_budget'
+    assert body['embedding_budget']['action'] == 'block'
+    assert body['embedding_budget']['estimated_cost_usd'] > body['embedding_budget']['budget_limit_usd']
 
 
 def test_reindex_endpoint_reports_skipped_documents_from_index_state(

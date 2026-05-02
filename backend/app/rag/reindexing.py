@@ -34,10 +34,9 @@ def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
             embedding_model=embedding_model,
             embedding_model_name=embedding_model_name,
             persist_state=persist_state,
-            embedding_cost_per_1m_tokens=0.0
-            if dry_run
-            else settings.openai_embedding_input_cost_per_1m_tokens,
-            max_embedding_cost_usd=None if dry_run else settings.rag_embedding_max_estimated_cost_usd,
+            embedding_cost_per_1m_tokens=settings.openai_embedding_input_cost_per_1m_tokens,
+            max_embedding_cost_usd=settings.rag_embedding_max_estimated_cost_usd,
+            enforce_embedding_budget=not dry_run,
         )
     except EmbeddingBudgetExceededError as exc:
         decision = exc.decision
@@ -46,6 +45,10 @@ def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
             f"estimated=${float(decision['estimated_cost_usd']):.6f} "
             f"> budget=${float(decision['budget_limit_usd'] or 0):.6f}"
         ) from exc
+    embedding_budget = dict(result.embedding_budget or {})
+    if dry_run and embedding_budget:
+        embedding_budget['embedding_model'] = settings.openai_embedding_model
+
     return {
         'dry_run': dry_run,
         'indexed_count': result.indexed_count,
@@ -59,6 +62,7 @@ def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
         'skipped_document_ids': result.skipped_document_ids or [],
         'incremental': True,
         'storage_backend': storage_backend,
+        'embedding_budget': embedding_budget,
     }
 
 

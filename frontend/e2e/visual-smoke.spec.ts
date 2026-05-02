@@ -111,6 +111,56 @@ test("admin console lists demo employees and permission levels", async ({ page }
   await expect(page.getByText("restricted").first()).toBeVisible();
 });
 
+test("agent operations previews RAG reindex cost before approved execution", async ({ page }) => {
+  await page.route("**/api/v1/rag/reindex?dry_run=true", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        dry_run: true,
+        indexed_count: 2,
+        skipped_count: 3,
+        saved_embedding_calls: 3,
+        embedding_request_count: 1,
+        embedding_prompt_tokens: 0,
+        embedding_total_tokens: 0,
+        embedding_dimensions: 16,
+        document_ids: ["chunk:1", "decision_record:2"],
+        skipped_document_ids: ["chunk:old"],
+        incremental: true,
+        storage_backend: "preview",
+        embedding_budget: {
+          embedding_model: "text-embedding-3-small",
+          changed_document_count: 2,
+          estimated_input_tokens: 1200,
+          estimated_cost_usd: 0.000024,
+          budget_limit_usd: 0.001,
+          budget_status: "within_budget",
+          action: "run",
+          reason: "within_embedding_budget",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/rag/reindex/jobs?dry_run=false", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        job_id: "rag-index-approved",
+        status: "queued",
+        dry_run: false,
+      },
+    });
+  });
+
+  await page.goto("/agent-runs");
+  await expect(page.getByTestId("rag-reindex-control")).toBeVisible();
+  await page.getByRole("button", { name: "비용 미리보기" }).click();
+  await expect(page.getByTestId("rag-reindex-preview")).toContainText("변경 2개");
+  await expect(page.getByTestId("rag-reindex-preview")).toContainText("$0.000024");
+  await page.getByRole("button", { name: "승인 후 실행" }).click();
+  await expect(page.getByText("rag-index-approved")).toBeVisible();
+});
+
 test("shell chrome uses distinct theme tokens across viewport modes", async ({ page }, testInfo) => {
   const isMobile = testInfo.project.name.includes("mobile");
   const shellSelector = isMobile ? "header.md\\:hidden .liquid-surface" : "aside.shell-rail";

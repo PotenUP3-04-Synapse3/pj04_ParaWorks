@@ -124,6 +124,33 @@ export type RagIndexingJobSummary = {
   updated_at: string;
 };
 
+export type EmbeddingBudgetDecision = {
+  embedding_model: string;
+  changed_document_count: number;
+  estimated_input_tokens: number;
+  estimated_cost_usd: number;
+  budget_limit_usd?: number | null;
+  budget_status: string;
+  action: string;
+  reason: string;
+};
+
+export type RagReindexResponse = {
+  dry_run: boolean;
+  indexed_count: number;
+  skipped_count: number;
+  saved_embedding_calls: number;
+  embedding_request_count: number;
+  embedding_prompt_tokens: number;
+  embedding_total_tokens: number;
+  embedding_dimensions: number;
+  document_ids: string[];
+  skipped_document_ids: string[];
+  incremental: boolean;
+  storage_backend: string;
+  embedding_budget: EmbeddingBudgetDecision;
+};
+
 export type RagIndexingSummaryResponse = {
   state_counts: Record<string, number>;
   latest_jobs: RagIndexingJobSummary[];

@@ -42,6 +42,7 @@ class VectorIndexResult:
     embedding_request_count: int = 0
     embedding_prompt_tokens: int = 0
     embedding_total_tokens: int = 0
+    embedding_budget: dict[str, float | int | str | None] | None = None
 
 
 class PreviewVectorIndexWriter:
@@ -84,6 +85,7 @@ def index_changed_vector_documents(
     persist_state: bool = True,
     embedding_cost_per_1m_tokens: float = 0.0,
     max_embedding_cost_usd: float | None = None,
+    enforce_embedding_budget: bool = True,
 ) -> VectorIndexResult:
     changed_documents: list[tuple[VectorDocument, str, VectorIndexState | None]] = []
     skipped_document_ids: list[str] = []
@@ -109,7 +111,7 @@ def index_changed_vector_documents(
         cost_per_1m_tokens=embedding_cost_per_1m_tokens,
         max_cost_usd=max_embedding_cost_usd,
     )
-    if budget_decision['action'] == 'block':
+    if enforce_embedding_budget and budget_decision['action'] == 'block':
         raise EmbeddingBudgetExceededError(budget_decision)
 
     batch = _embed_many(embedding_model, changed_texts)
@@ -141,6 +143,7 @@ def index_changed_vector_documents(
         embedding_request_count=batch.request_count,
         embedding_prompt_tokens=batch.prompt_tokens,
         embedding_total_tokens=batch.total_tokens,
+        embedding_budget=budget_decision,
     )
 
 
