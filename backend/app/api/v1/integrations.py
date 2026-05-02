@@ -15,6 +15,11 @@ from backend.app.agents.mail_document_agent import (
 from backend.app.agents.slack_agent import (
     DeterministicSlackAgentModel,
     SlackAgent,
+    SlackLlmProviderError,
+    SlackLlmSettings,
+    build_langchain_slack_agent_model,
+    build_slack_evidence_packet,
+    build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
 from backend.app.connectors.factory import get_sync_connector
@@ -51,6 +56,10 @@ CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
 
 class IntegrationSyncRequest(BaseModel):
     selected_channel_ids: list[str] | None = None
+
+
+class SlackLlmRunRequest(BaseModel):
+    confirm_paid_run: bool = False
 
 
 SYNC_REQUEST_BODY = Body(default=None)
@@ -391,6 +400,78 @@ def run_slack_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | 
     }
 
 
+@router.get('/slack/agent-review/llm/preflight')
+def get_slack_llm_agent_preflight(
+    db: DbSession,
+    settings: AppSettings,
+    user: CurrentUser,
+) -> dict[str, object]:
+    packet = build_slack_evidence_packet(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window='slack:live:all',
+    )
+    return build_slack_llm_preflight(
+        packet=packet,
+        settings=_slack_llm_settings(settings),
+    )
+
+
+@router.post('/slack/agent-review/llm')
+def run_slack_llm_agent_review(
+    request: SlackLlmRunRequest,
+    db: DbSession,
+    settings: AppSettings,
+    user: CurrentUser,
+) -> dict[str, int | str | float | dict[str, object]]:
+    packet = build_slack_evidence_packet(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window='slack:live:all',
+    )
+    llm_settings = _slack_llm_settings(settings)
+    preflight = build_slack_llm_preflight(packet=packet, settings=llm_settings)
+    if preflight['action'] != 'run':
+        raise HTTPException(status_code=400, detail=preflight)
+    if not request.confirm_paid_run:
+        raise HTTPException(status_code=400, detail='Paid LLM run requires confirm_paid_run=true')
+
+    try:
+        agent = SlackAgent(
+            model=build_langchain_slack_agent_model(llm_settings),
+            input_cost_per_1m=llm_settings.input_cost_per_1m,
+            output_cost_per_1m=llm_settings.output_cost_per_1m,
+        )
+        review_items = create_slack_agent_review_items(
+            db=db,
+            agent=agent,
+            permission_context=PermissionContext(user_id=user.id, role=user.role),
+            source_window='slack:live:all',
+        )
+    except SlackLlmProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='agent.review.llm_run',
+        target_type='agent',
+        target_id='slack_agent',
+        metadata={
+            'created_review_items': len(review_items),
+            'preflight': preflight,
+        },
+    )
+    db.commit()
+
+    return {
+        'agent_name': 'slack_agent',
+        'status': 'complete',
+        'created_review_items': len(review_items),
+        'preflight': preflight,
+    }
+
+
 @router.post('/mail-docs/agent-review')
 def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | str]:
     agent = MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
@@ -419,6 +500,24 @@ def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str
 
 def _configured_channel_ids(raw_channel_ids: str) -> list[str]:
     return [channel_id.strip() for channel_id in raw_channel_ids.split(',') if channel_id.strip()]
+
+
+def _slack_llm_settings(settings: Settings) -> SlackLlmSettings:
+    return SlackLlmSettings(
+        enabled=settings.agent_llm_enabled,
+        provider_order=tuple(_configured_channel_ids(settings.agent_llm_provider_order)),
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key or settings.google_api_key,
+        openai_model=settings.agent_llm_openai_model,
+        gemini_model=settings.agent_llm_gemini_model,
+        input_cost_per_1m=settings.agent_llm_input_cost_per_1m_tokens,
+        output_cost_per_1m=settings.agent_llm_output_cost_per_1m_tokens,
+        max_estimated_cost_usd=settings.agent_llm_max_estimated_cost_usd,
+        max_input_chars=settings.agent_llm_max_input_chars,
+        max_output_tokens=settings.agent_llm_max_output_tokens,
+        temperature=settings.agent_llm_temperature,
+        timeout_seconds=settings.agent_llm_timeout_seconds,
+    )
 
 
 def _clean_channel_ids(channel_ids: list[str] | None) -> list[str]:

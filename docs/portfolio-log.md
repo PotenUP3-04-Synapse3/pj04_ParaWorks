@@ -3112,3 +3112,8 @@ Cost/security note:
   - Executed Slack live sync for the configured selected channel; Slack API path completed successfully with no new delta events.
   - Ran Slack Agent review on existing synced Slack sources; one review candidate was created and runtime status reported agent testing readiness.
   - Verification: Playwright integrations desktop dark/light regression passed in live mode.
+- `feat: add slack real llm adapter guardrails`
+  - Added a LangChain-based Slack Agent adapter with OpenAI as the primary provider and Gemini as a fallback provider chain.
+  - Added paid-run preflight that reports provider availability, estimated tokens, estimated cost, budget status, and requires explicit confirmation before live LLM calls.
+  - Kept the deterministic Slack Agent as the default safe harness while exposing a separate real LLM test action in the integrations UI.
+  - Verification: backend suite `191 passed, 1 skipped` with demo-mode override; frontend lint/build passed; Playwright integrations desktop dark/light regression passed.

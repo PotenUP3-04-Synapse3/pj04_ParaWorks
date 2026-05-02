@@ -26,6 +26,7 @@ import type {
   IntegrationManifest,
   IntegrationSyncResponse,
   OAuthInstallUrlResponse,
+  SlackLlmPreflight,
   SlackRuntimeStatus,
 } from "@/lib/api/types";
 
@@ -100,12 +101,14 @@ export default function IntegrationsPage() {
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
+  const [slackLlmPreflight, setSlackLlmPreflight] = useState<SlackLlmPreflight>();
   const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
   const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
   const [agentRunningKey, setAgentRunningKey] = useState<string>();
+  const [llmAgentRunning, setLlmAgentRunning] = useState(false);
   const [error, setError] = useState<string>();
   const jobStatus = useJobStatus(activeJobId);
 
@@ -163,6 +166,18 @@ export default function IntegrationsPage() {
       .catch(() => {
         if (active) {
           setSlackRuntime(undefined);
+        }
+      });
+
+    apiGet<SlackLlmPreflight>("/api/v1/integrations/slack/agent-review/llm/preflight")
+      .then((preflight) => {
+        if (active) {
+          setSlackLlmPreflight(preflight);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSlackLlmPreflight(undefined);
         }
       });
 
@@ -280,6 +295,23 @@ export default function IntegrationsPage() {
       setError(caught instanceof Error ? caught.message : "Agent 실행에 실패했습니다.");
     } finally {
       setAgentRunningKey(undefined);
+    }
+  }
+
+  async function runSlackLlmAgent() {
+    setLlmAgentRunning(true);
+    setError(undefined);
+
+    try {
+      const result = await apiPost<AgentReviewResponse>("/api/v1/integrations/slack/agent-review/llm", {
+        confirm_paid_run: true,
+      });
+      setAgentResult(result);
+      setSlackLlmPreflight(result.preflight);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "실제 LLM Agent 실행에 실패했습니다.");
+    } finally {
+      setLlmAgentRunning(false);
     }
   }
 
@@ -474,7 +506,10 @@ export default function IntegrationsPage() {
             {slackRuntime ? (
               <SlackRuntimeStatusPanel
                 status={slackRuntime}
+                llmPreflight={slackLlmPreflight}
+                llmAgentRunning={llmAgentRunning}
                 selectedChannelIds={selectedSlackChannels}
+                onRunLlmAgent={runSlackLlmAgent}
                 onToggleChannel={toggleSlackChannel}
               />
             ) : null}
@@ -536,11 +571,17 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
 
 function SlackRuntimeStatusPanel({
   status,
+  llmPreflight,
+  llmAgentRunning,
   selectedChannelIds,
+  onRunLlmAgent,
   onToggleChannel,
 }: {
   status: SlackRuntimeStatus;
+  llmPreflight?: SlackLlmPreflight;
+  llmAgentRunning: boolean;
   selectedChannelIds: string[];
+  onRunLlmAgent: () => void;
   onToggleChannel: (channelId: string) => void;
 }) {
   const channelOptions =
@@ -636,6 +677,35 @@ function SlackRuntimeStatusPanel({
           {status.agent_bridge.pending_review_count.toLocaleString()}개
         </p>
       </div>
+
+      {llmPreflight ? (
+        <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold">실제 LLM 테스트</span>
+            <span className="font-semibold">{llmPreflight.budget_status}</span>
+          </div>
+          <p className="mt-1 text-[var(--ink-muted)]">
+            {llmPreflight.model_name ?? "모델 미설정"} · {llmPreflight.available_providers.join(" → ") || "API key 필요"}
+          </p>
+          <p className="mt-1 text-[var(--ink-muted)]">
+            예상 {llmPreflight.estimated_total_tokens.toLocaleString()} tokens · $
+            {llmPreflight.estimated_cost_usd.toFixed(6)}
+            {llmPreflight.budget_limit_usd ? ` / $${llmPreflight.budget_limit_usd}` : ""}
+          </p>
+          <button
+            type="button"
+            onClick={() => onRunLlmAgent()}
+            disabled={llmAgentRunning || llmPreflight.action !== "run"}
+            className="liquid-primary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            <Bot className="h-4 w-4" aria-hidden="true" />
+            {llmAgentRunning ? "실제 LLM 실행 중" : "실제 LLM 테스트 실행"}
+          </button>
+          {llmPreflight.action !== "run" ? (
+            <p className="mt-2 text-[var(--ink-muted)]">상태: {llmPreflight.reason}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {status.last_error ? (
         <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">

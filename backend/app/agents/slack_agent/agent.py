@@ -34,6 +34,7 @@ class SlackAgentModelResponse:
     confidence_score: float
     input_tokens: int
     output_tokens: int
+    model_name: str = SLACK_AGENT_MODEL_NAME
     uncertainty_reason: str | None = None
 
 
@@ -97,7 +98,7 @@ class SlackAgent:
             output_tokens=model_response.output_tokens,
         )
         cost = estimate_agent_run_cost(
-            model_name=SLACK_AGENT_MODEL_NAME,
+            model_name=model_response.model_name,
             token_usage=token_usage,
             input_cost_per_1m=self.input_cost_per_1m,
             output_cost_per_1m=self.output_cost_per_1m,

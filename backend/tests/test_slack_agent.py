@@ -4,6 +4,13 @@ from backend.app.agents.slack_agent import (
     SlackAgent,
     SlackAgentModelResponse,
 )
+from backend.app.agents.slack_agent.llm import (
+    FallbackSlackAgentModel,
+    LangChainSlackAgentModel,
+    SlackLlmProviderError,
+    SlackLlmSettings,
+    build_slack_llm_preflight,
+)
 
 
 class FakeSlackModel:
@@ -68,3 +75,101 @@ def test_slack_agent_preserves_restricted_permission() -> None:
     result = agent.run(build_packet(permission_level='restricted'))
 
     assert result.candidates[0].permission_level == 'restricted'
+
+
+class FakeLangChainResponse:
+    content = '{"title":"LLM captured Redis decision","summary":"Redis was selected for queue progress.","item_type":"history_event","confidence_score":0.91}'
+    usage_metadata = {'input_tokens': 1200, 'output_tokens': 90}
+
+
+class FakeLangChainChatModel:
+    def __init__(self) -> None:
+        self.messages: list = []
+
+    def invoke(self, messages: list) -> FakeLangChainResponse:
+        self.messages = messages
+        return FakeLangChainResponse()
+
+
+def test_langchain_slack_agent_model_parses_json_response_and_usage() -> None:
+    chat_model = FakeLangChainChatModel()
+    model = LangChainSlackAgentModel(
+        provider='openai',
+        model_name='gpt-test',
+        chat_model=chat_model,
+    )
+
+    response = model.extract(build_packet())
+
+    assert response.title == 'LLM captured Redis decision'
+    assert response.summary == 'Redis was selected for queue progress.'
+    assert response.item_type == 'history_event'
+    assert response.confidence_score == 0.91
+    assert response.input_tokens == 1200
+    assert response.output_tokens == 90
+    assert response.model_name == 'gpt-test'
+    assert chat_model.messages[0][0] == 'system'
+    assert 'JSON' in chat_model.messages[0][1]
+
+
+def test_fallback_slack_agent_model_uses_gemini_when_openai_fails() -> None:
+    class FailingModel:
+        provider = 'openai'
+
+        def extract(self, packet: EvidencePacket) -> SlackAgentModelResponse:
+            raise SlackLlmProviderError('openai unavailable')
+
+    class GeminiModel:
+        provider = 'gemini'
+
+        def extract(self, packet: EvidencePacket) -> SlackAgentModelResponse:
+            return SlackAgentModelResponse(
+                title='Gemini fallback candidate',
+                summary='Gemini recovered the timeline candidate.',
+                item_type='history_event',
+                confidence_score=0.82,
+                input_tokens=100,
+                output_tokens=50,
+                model_name='gemini-test',
+            )
+
+    model = FallbackSlackAgentModel([FailingModel(), GeminiModel()])
+
+    response = model.extract(build_packet())
+
+    assert response.title == 'Gemini fallback candidate'
+    assert response.model_name == 'gemini-test'
+
+
+def test_slack_llm_preflight_blocks_when_budget_exceeded() -> None:
+    packet = build_packet()
+    settings = SlackLlmSettings(
+        enabled=True,
+        provider_order=('openai', 'gemini'),
+        openai_api_key='openai-key',
+        gemini_api_key='gemini-key',
+        max_estimated_cost_usd=0.000001,
+    )
+
+    preflight = build_slack_llm_preflight(packet=packet, settings=settings)
+
+    assert preflight['action'] == 'skip'
+    assert preflight['budget_status'] == 'over_budget'
+    assert preflight['provider_order'] == ['openai', 'gemini']
+    assert preflight['estimated_cost_usd'] > preflight['budget_limit_usd']
+
+
+def test_slack_llm_preflight_reports_missing_credentials_for_all_providers() -> None:
+    packet = build_packet()
+    settings = SlackLlmSettings(
+        enabled=True,
+        provider_order=('openai', 'gemini'),
+        openai_api_key=None,
+        gemini_api_key=None,
+    )
+
+    preflight = build_slack_llm_preflight(packet=packet, settings=settings)
+
+    assert preflight['action'] == 'blocked'
+    assert preflight['reason'] == 'missing_credentials'
+    assert preflight['available_providers'] == []

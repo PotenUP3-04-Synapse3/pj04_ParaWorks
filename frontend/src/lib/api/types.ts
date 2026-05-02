@@ -336,9 +336,25 @@ export type AgentReviewResponse = {
   agent_name: string;
   status: string;
   created_review_items: number;
+  preflight?: SlackLlmPreflight;
 };
 
 export type SlackAgentReviewResponse = AgentReviewResponse;
+
+export type SlackLlmPreflight = {
+  action: "run" | "skip" | "blocked" | "use_cache" | string;
+  reason: string;
+  budget_status: string;
+  model_name?: string | null;
+  provider_order: string[];
+  available_providers: string[];
+  estimated_input_tokens: number;
+  estimated_output_tokens: number;
+  estimated_total_tokens: number;
+  estimated_cost_usd: number;
+  budget_limit_usd?: number | null;
+  requires_paid_confirmation: boolean;
+};
 
 export type SlackRuntimeStatus = {
   connector_type: "slack";
