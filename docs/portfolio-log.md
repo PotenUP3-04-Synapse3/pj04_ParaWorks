@@ -3107,3 +3107,8 @@ Cost/security note:
   - Slack live collection now follows thread replies incrementally from the same channel cursor, avoiding full-thread re-vectorization/reprocessing on every sync.
   - Slack runtime status exposes channel options, latest sync counts, actionable Slack error hints, and whether synced Slack sources are ready for agent testing.
   - Verification: backend suite `185 passed, 1 skipped`; frontend lint/build passed; Playwright integrations desktop dark/light regression passed.
+- `test: validate slack live sync path`
+  - Switched local smoke mode to live, restarted backend/frontend, and verified backend health reported `demo_mode=False`.
+  - Executed Slack live sync for the configured selected channel; Slack API path completed successfully with no new delta events.
+  - Ran Slack Agent review on existing synced Slack sources; one review candidate was created and runtime status reported agent testing readiness.
+  - Verification: Playwright integrations desktop dark/light regression passed in live mode.
