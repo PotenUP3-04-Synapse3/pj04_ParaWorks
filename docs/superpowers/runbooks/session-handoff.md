@@ -546,6 +546,28 @@ Next recommended step from `plan.md`:
    workflow visibility.
 2. Add Knowledge Map only if there is enough time after core product polish.
 
+## 2026-05-02 Notifications Update
+
+Aligned with the current root `plan.md` Milestone 7.
+
+- Added `/api/v1/notifications`.
+- The endpoint derives alerts from pending Review Queue items,
+  `needs_more_evidence` items, and recent non-complete AgentRuns.
+- Added `/notifications` frontend page and sidebar navigation.
+- Added Playwright route inventory and render coverage for the page.
+
+Cost note:
+
+- Notifications are read-only database summaries and do not trigger paid LLMs,
+  embeddings, provider sync, or RAG reindexing.
+
+Next recommended step from `plan.md`:
+
+1. Add Knowledge Map only if it can be useful without distracting from the core
+   Review/RAG story.
+2. Otherwise spend the next pass on frontend consistency and final portfolio
+   polish.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing

@@ -3422,6 +3422,28 @@ Cost/security note:
 - Secrets are explicitly kept out of git and moved to the deployment secret
   manager.
 
+## Review And AgentRun Notifications
+
+What changed:
+
+- Added `/api/v1/notifications` as a derived alert API.
+- Notifications summarize pending Review Queue items, items needing more
+  evidence, and recent non-complete AgentRuns.
+- Added `/notifications` frontend page and sidebar navigation entry.
+- Added Playwright route inventory coverage for the new page.
+
+Portfolio angle:
+
+- Improves the operational product loop: users can see what needs attention
+  without opening every review or agent-run page manually.
+- Keeps notifications tied to the trust workflow rather than generic activity
+  noise.
+
+Cost/security note:
+
+- Notifications are read-only database summaries and do not call LLMs,
+  embeddings, Slack, Google, sync jobs, or reindex jobs.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3577,3 +3599,5 @@ Cost/security note:
   - Documented httpOnly cookie sessions, refresh token rotation, RBAC, audit, and demo-mode migration.
 - `docs: add deployment runbook`
   - Documented production runtime components, verification, cost gates, monitoring, and rollback.
+- `feat: add review agent notifications`
+  - Added derived Review Queue and AgentRun notifications with a product page and route regression coverage.

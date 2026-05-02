@@ -144,8 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Add notifications only if they support Review Queue or agent-run workflows.
-2. Add Knowledge Map only if time allows after auth/deploy boundaries.
+1. Add Knowledge Map only if time allows after core product polish.
+2. Continue frontend consistency pass before final portfolio recording.
 
 ## 4. Shared Runtime Contracts
 
@@ -282,6 +282,8 @@ Completed harness slices include:
   RBAC, audit, and demo-mode migration boundary
 - Deployment runbook now defines the production FastAPI, Next.js, Postgres
   pgvector, Redis, Celery, OAuth, verification, cost, and rollback boundaries
+- Notifications now surface Review Queue and AgentRun alerts without creating
+  new paid model or embedding paths
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -380,7 +382,7 @@ Tasks:
 
 - Decisions page. Done.
 - Timeline and History views. Done.
-- Notifications.
+- Notifications. Done for Review Queue and AgentRun visibility.
 - Knowledge Map, if time allows.
 - Production auth plan: httpOnly cookie + refresh token. Done.
 - Deployment runbook. Done.

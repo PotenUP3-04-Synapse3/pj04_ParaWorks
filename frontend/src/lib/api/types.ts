@@ -224,6 +224,26 @@ export type KnowledgeResponse = {
   todos: KnowledgeItem[];
 };
 
+export type NotificationItem = {
+  id: string;
+  category: "review" | "agent_run" | string;
+  severity: "info" | "warning" | "error" | string;
+  title: string;
+  message: string;
+  action_href: string;
+  source_count: number;
+  created_at?: string | null;
+};
+
+export type NotificationsResponse = {
+  counts: {
+    total: number;
+    review: number;
+    agent_runs: number;
+  };
+  notifications: NotificationItem[];
+};
+
 export type ReviewStatus =
   | "pending_review"
   | "approved"

@@ -3,6 +3,7 @@
 import {
   Activity,
   BarChart3,
+  Bell,
   Bot,
   Database,
   Library,
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, section: "workspace" },
   { href: "/messages", labelKey: "messages", icon: MessageSquare, section: "workspace" },
   { href: "/review", labelKey: "review", icon: Activity, section: "workspace" },
+  { href: "/notifications", labelKey: "notifications", icon: Bell, section: "workspace" },
   { href: "/knowledge", labelKey: "knowledge", icon: Library, section: "workspace" },
   { href: "/search", labelKey: "search", icon: Search, section: "workspace" },
   { href: "/agent-runs", labelKey: "agentRuns", icon: BarChart3, section: "workspace" },
