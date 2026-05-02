@@ -144,8 +144,8 @@ Current state:
 
 Next priorities:
 
-1. Add production auth plan after product surfaces stabilize.
-2. Add notifications and Knowledge Map only after core memory surfaces are stable.
+1. Add deployment runbook.
+2. Add notifications and Knowledge Map only after auth/deploy boundaries are stable.
 
 ## 4. Shared Runtime Contracts
 
@@ -278,6 +278,8 @@ Completed harness slices include:
   contract
 - Product memory pages now expose approved Decisions, Timeline, and History
   records from the shared Knowledge API
+- Production auth migration plan now defines the httpOnly cookie, refresh token,
+  RBAC, audit, and demo-mode migration boundary
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -378,7 +380,7 @@ Tasks:
 - Timeline and History views. Done.
 - Notifications.
 - Knowledge Map, if time allows.
-- Production auth plan: httpOnly cookie + refresh token.
+- Production auth plan: httpOnly cookie + refresh token. Done.
 - Deployment runbook.
 
 ## 9. Cost Policy

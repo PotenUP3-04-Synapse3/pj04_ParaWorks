@@ -3376,6 +3376,28 @@ Cost/security note:
 - They reuse reviewed records and preserve permission/confidence/source
   metadata for every card.
 
+## Production Auth Plan
+
+What changed:
+
+- Added `docs/superpowers/runbooks/production-auth.md`.
+- Documented the migration from demo `X-Demo-User` auth to httpOnly cookie
+  sessions with rotating refresh tokens.
+- Defined backend tables, auth endpoints, frontend API-client changes,
+  CSRF/rate-limit/audit guardrails, and permission-model alignment.
+
+Portfolio angle:
+
+- Shows that ParaWorks is being built toward a real company product, not a
+  demo-only harness.
+- Connects auth design to the core product promise: permission-safe company
+  memory and source evidence.
+
+Cost/security note:
+
+- Auth checks must remain cheap session/database reads and must never trigger
+  LLM calls, embeddings, connector sync, or RAG reindexing.
+
 ## Commit Timeline
 
 - `091c21f feat: add Korean UX and messenger MVP`
@@ -3527,3 +3549,5 @@ Cost/security note:
   - Added a LangChain structured-output adapter behind the existing Track C memory extraction contract.
 - `feat: add product memory pages`
   - Added Decisions, Timeline, and History pages backed by approved Knowledge API records.
+- `docs: add production auth plan`
+  - Documented httpOnly cookie sessions, refresh token rotation, RBAC, audit, and demo-mode migration.
