@@ -691,6 +691,13 @@ Aligned with `docs/superpowers/specs/2026-05-03-google-identity-rbac-design.md`.
   - manager/admin: `public/internal/restricted`
 - Frontend navigation now hides admin/integrations/agent-runs from non-admin
   users and hides Review Queue from users below reviewer.
+- Google identity readiness is visible from `/api/v1/auth/google/login-url`
+  and `/login`:
+  - `redirect_uri`
+  - `missing_config`
+  - `configured`
+- `configured=true` now requires client id, client secret, identity redirect
+  URI, and identity state secret.
 
 Environment:
 

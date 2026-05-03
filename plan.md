@@ -423,6 +423,7 @@ Recommended order:
      group, and staging domain confirmation.
 6. Production identity and RBAC:
    - Google identity login boundary. Done.
+   - Google identity readiness diagnostics. Done.
    - Seeded admin/employee/reviewer users. Done.
    - Admin user management API and UI. Initial slice done.
    - Review Queue role checks. Initial slice done.

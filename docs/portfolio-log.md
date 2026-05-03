@@ -3715,3 +3715,7 @@ Cost/security note:
   - Added seeded portfolio accounts: `hanvv3@gmail.com` as admin, `hanvv3@koreacu.ac.kr` as employee, plus reviewer/employee demo users for role comparison.
   - Added RBAC helpers, admin user management APIs/UI, role-aware navigation filtering, Google account picker login URL, and Review Queue approval checks.
   - Cost/security angle: login and role checks are zero-paid-call paths, unknown Google accounts are rejected, refresh tokens remain httpOnly/hashed, and role changes create audit logs.
+- `feat: expose google identity readiness`
+  - The login URL API now reports `redirect_uri` and exact missing Google identity configuration keys instead of treating a partial client id as ready.
+  - The login page surfaces the required redirect URI and missing settings so Google Cloud setup can be completed without guessing.
+  - Verification: backend suite `245 passed, 1 skipped`; frontend lint/build passed; targeted Playwright login/admin regression `14 passed`.

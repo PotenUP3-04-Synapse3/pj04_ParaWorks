@@ -9,6 +9,7 @@ from backend.app.auth.google_identity import (
     GoogleIdentityError,
     build_google_identity_login_url,
     complete_google_identity_login,
+    google_identity_missing_config,
 )
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_auth import (
@@ -66,6 +67,16 @@ def login(request: LoginRequest, response: Response, db: DbSession) -> dict:
 
 @router.get('/google/login-url')
 def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+    missing_config = google_identity_missing_config(settings)
+    if missing_config:
+        return {
+            'configured': False,
+            'login_url': None,
+            'state': None,
+            'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
+            'redirect_uri': settings.google_identity_redirect_uri,
+            'missing_config': missing_config,
+        }
     try:
         login_url = build_google_identity_login_url(settings=settings)
     except GoogleIdentityError:
@@ -74,12 +85,16 @@ def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -
             'login_url': None,
             'state': None,
             'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
+            'redirect_uri': settings.google_identity_redirect_uri,
+            'missing_config': ['GOOGLE_IDENTITY_CONFIGURATION'],
         }
     return {
         'configured': login_url.configured,
         'login_url': login_url.login_url,
         'state': login_url.state,
         'required_scopes': login_url.required_scopes,
+        'redirect_uri': login_url.redirect_uri,
+        'missing_config': login_url.missing_config,
     }
 
 

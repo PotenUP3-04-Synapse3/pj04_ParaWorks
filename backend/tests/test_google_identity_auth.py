@@ -32,6 +32,8 @@ def test_google_identity_login_url_uses_identity_scopes_and_account_picker(clien
     parsed = urlparse(payload['login_url'])
     params = parse_qs(parsed.query)
     assert payload['configured'] is True
+    assert payload['missing_config'] == []
+    assert payload['redirect_uri'] == 'http://localhost:3000/login/google/callback'
     assert payload['required_scopes'] == ['openid', 'email', 'profile']
     assert params['prompt'] == ['select_account']
     assert params['scope'] == ['openid email profile']
@@ -39,9 +41,13 @@ def test_google_identity_login_url_uses_identity_scopes_and_account_picker(clien
     assert 'google-secret' not in payload['login_url']
 
 
-def test_google_identity_login_url_fails_soft_when_unconfigured(client: TestClient) -> None:
+def test_google_identity_login_url_reports_missing_configuration(client: TestClient) -> None:
     def override_settings() -> Settings:
-        return Settings(google_client_id=None)
+        return Settings(
+            google_client_id='G123',
+            google_client_secret=None,
+            google_identity_redirect_uri='http://localhost:3000/login/google/callback',
+        )
 
     client.app.dependency_overrides[get_settings] = override_settings
 
@@ -53,7 +59,32 @@ def test_google_identity_login_url_fails_soft_when_unconfigured(client: TestClie
         'login_url': None,
         'state': None,
         'required_scopes': ['openid', 'email', 'profile'],
+        'redirect_uri': 'http://localhost:3000/login/google/callback',
+        'missing_config': ['GOOGLE_CLIENT_SECRET'],
     }
+
+
+def test_google_identity_login_url_reports_all_missing_configuration(client: TestClient) -> None:
+    def override_settings() -> Settings:
+        return Settings(
+            google_client_id=None,
+            google_client_secret=None,
+            google_identity_redirect_uri='',
+            google_identity_state_secret='',
+        )
+
+    client.app.dependency_overrides[get_settings] = override_settings
+
+    response = client.get('/api/v1/auth/google/login-url')
+
+    assert response.status_code == 200
+    assert response.json()['configured'] is False
+    assert response.json()['missing_config'] == [
+        'GOOGLE_CLIENT_ID',
+        'GOOGLE_CLIENT_SECRET',
+        'GOOGLE_IDENTITY_REDIRECT_URI',
+        'GOOGLE_IDENTITY_STATE_SECRET',
+    ]
 
 
 def test_google_identity_callback_accepts_seeded_admin_user(db_session: Session) -> None:

@@ -36,6 +36,8 @@ export type GoogleLoginUrlResponse = {
   login_url?: string | null;
   state?: string | null;
   required_scopes: string[];
+  redirect_uri?: string | null;
+  missing_config?: string[];
 };
 
 export type AuditLog = {

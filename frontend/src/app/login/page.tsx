@@ -13,23 +13,25 @@ import {
 import type { AuthUserResponse, AuthUsersResponse, DemoUser, GoogleLoginUrlResponse } from "@/lib/api/types";
 
 const text = {
-  title: "로그인",
+  title: "Login",
   eyebrow: "ParaWorks Identity",
   description:
-    "Google 계정으로 ParaWorks에 로그인합니다. Gmail, Drive, Calendar 연동 권한은 로그인과 분리해서 별도로 승인합니다.",
-  googleLogin: "Google로 로그인",
-  googleUnavailable: "Google 로그인 설정이 아직 준비되지 않았습니다.",
+    "Sign in with an invited Google account. Gmail, Drive, and Calendar data access stays separate from identity login.",
+  googleLogin: "Continue with Google",
+  googleUnavailable: "Google login is not fully configured yet.",
+  redirectUri: "Redirect URI",
+  missingConfig: "Missing configuration",
   demoAccounts: "Demo accounts",
-  demoDescription: "로컬 demo mode에서는 아래 계정으로 역할과 권한 차이를 빠르게 확인할 수 있습니다.",
-  loadError: "계정 정보를 불러오지 못했습니다.",
-  loginError: "로그인에 실패했습니다. 초대된 계정인지 확인해 주세요.",
-  logoutError: "로그아웃에 실패했습니다.",
-  switched: "계정으로 전환되었습니다.",
-  loggedOut: "로그아웃되었습니다. 다시 로그인할 계정을 선택해 주세요.",
-  current: "현재",
-  role: "역할",
-  loginAs: "이 계정으로 로그인",
-  logout: "로그아웃",
+  demoDescription: "Use local demo accounts to compare role and permission behavior without paid API calls.",
+  loadError: "Could not load account information.",
+  loginError: "Login failed. Check whether the account is invited.",
+  logoutError: "Logout failed.",
+  switched: "is now active.",
+  loggedOut: "Logged out. Choose the account to use next.",
+  current: "Current",
+  role: "Role",
+  loginAs: "Use this account",
+  logout: "Logout",
 };
 
 export default function LoginPage() {
@@ -119,7 +121,7 @@ export default function LoginPage() {
           <div>
             <h2 className="text-lg font-semibold">Google Identity</h2>
             <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
-              초대된 Google 계정만 ParaWorks 세션으로 매핑됩니다.
+              Only invited Google emails are mapped to ParaWorks users.
             </p>
           </div>
           <button
@@ -131,9 +133,7 @@ export default function LoginPage() {
             {text.googleLogin}
           </button>
         </div>
-        {googleLogin && !googleLogin.configured ? (
-          <p className="mt-3 text-sm text-amber-500">{text.googleUnavailable}</p>
-        ) : null}
+        <GoogleIdentityReadiness googleLogin={googleLogin} />
       </section>
 
       {status ? (
@@ -162,6 +162,39 @@ export default function LoginPage() {
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function GoogleIdentityReadiness({ googleLogin }: { googleLogin?: GoogleLoginUrlResponse }) {
+  if (!googleLogin) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+      <div className="liquid-control rounded-[22px] p-3">
+        <p className="text-xs font-semibold uppercase text-[var(--ink-muted)]">{text.redirectUri}</p>
+        <p className="mt-1 break-all font-mono text-xs text-[var(--ink-strong)]">
+          {googleLogin.redirect_uri || "not configured"}
+        </p>
+      </div>
+      <div className="liquid-control rounded-[22px] p-3">
+        <p className="text-xs font-semibold uppercase text-[var(--ink-muted)]">{text.missingConfig}</p>
+        {googleLogin.configured ? (
+          <p className="mt-1 text-sm font-semibold text-emerald-500">Ready</p>
+        ) : (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(googleLogin.missing_config?.length ? googleLogin.missing_config : ["GOOGLE_IDENTITY_CONFIGURATION"]).map(
+              (item) => (
+                <span key={item} className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-500">
+                  {item}
+                </span>
+              ),
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -200,7 +233,7 @@ function AccountCard({
       </div>
       <div className="mt-4 grid gap-2 text-sm text-[var(--ink-muted)]">
         <p>
-          <span className="font-semibold text-[var(--ink-strong)]">{user.department}</span> · {user.title}
+          <span className="font-semibold text-[var(--ink-strong)]">{user.department}</span> / {user.title}
         </p>
         <p>
           {text.role}: {user.role}

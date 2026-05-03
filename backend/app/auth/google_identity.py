@@ -29,6 +29,8 @@ class GoogleIdentityLoginUrl:
     login_url: str
     state: str
     required_scopes: list[str]
+    redirect_uri: str
+    missing_config: list[str]
     configured: bool = True
 
 
@@ -138,7 +140,22 @@ def build_google_identity_login_url(
         login_url=f'https://accounts.google.com/o/oauth2/v2/auth?{query}',
         state=state,
         required_scopes=list(GOOGLE_IDENTITY_SCOPES),
+        redirect_uri=settings.google_identity_redirect_uri,
+        missing_config=[],
     )
+
+
+def google_identity_missing_config(settings: Settings) -> list[str]:
+    missing: list[str] = []
+    if not settings.google_client_id:
+        missing.append('GOOGLE_CLIENT_ID')
+    if not settings.google_client_secret:
+        missing.append('GOOGLE_CLIENT_SECRET')
+    if not settings.google_identity_redirect_uri:
+        missing.append('GOOGLE_IDENTITY_REDIRECT_URI')
+    if not settings.google_identity_state_secret:
+        missing.append('GOOGLE_IDENTITY_STATE_SECRET')
+    return missing
 
 
 def complete_google_identity_login(
