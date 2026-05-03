@@ -52,6 +52,7 @@ def serialize_auth_user(user: AuthUser) -> dict:
         'name': user.display_name,
         'title': user.title,
         'department': user.department,
+        'status': user.status,
     }
 
 

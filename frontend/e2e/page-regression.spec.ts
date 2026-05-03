@@ -18,6 +18,7 @@ const expectedAppRoutes = [
   "/knowledge",
   "/knowledge-map",
   "/login",
+  "/login/google/callback",
   "/messages",
   "/notifications",
   "/review",
@@ -43,6 +44,7 @@ const staticPageTargets = [
   { name: "google callback", path: "/integrations/google/callback" },
   { name: "admin", path: "/admin" },
   { name: "login", path: "/login" },
+  { name: "google login callback", path: "/login/google/callback" },
 ];
 
 const themeModes = ["dark", "light"] as const;

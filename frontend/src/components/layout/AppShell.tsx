@@ -20,19 +20,21 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { apiGet } from "@/lib/api/client";
+import type { AuthUserResponse, DemoUser } from "@/lib/api/types";
 import { LanguageProvider, useLanguage } from "@/lib/i18n/LanguageProvider";
 
 const navItems = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, section: "workspace" },
   { href: "/messages", labelKey: "messages", icon: MessageSquare, section: "workspace" },
-  { href: "/review", labelKey: "review", icon: Activity, section: "workspace" },
+  { href: "/review", labelKey: "review", icon: Activity, section: "workspace", roles: ["reviewer", "manager", "admin"] },
   { href: "/notifications", labelKey: "notifications", icon: Bell, section: "workspace" },
   { href: "/knowledge", labelKey: "knowledge", icon: Library, section: "workspace" },
   { href: "/knowledge-map", labelKey: "knowledgeMap", icon: Network, section: "workspace" },
   { href: "/search", labelKey: "search", icon: Search, section: "workspace" },
-  { href: "/agent-runs", labelKey: "agentRuns", icon: BarChart3, section: "workspace" },
-  { href: "/integrations", labelKey: "integrations", icon: Database, section: "tools" },
-  { href: "/admin", labelKey: "admin", icon: ShieldCheck, section: "tools" },
+  { href: "/agent-runs", labelKey: "agentRuns", icon: BarChart3, section: "workspace", roles: ["admin"] },
+  { href: "/integrations", labelKey: "integrations", icon: Database, section: "tools", roles: ["admin"] },
+  { href: "/admin", labelKey: "admin", icon: ShieldCheck, section: "tools", roles: ["admin"] },
   { href: "/login", labelKey: "login", icon: LogIn, section: "tools" },
 ] as const;
 
@@ -49,9 +51,38 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
   const { dictionary, locale, setLocale } = useLanguage();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [hydrated, setHydrated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<DemoUser>();
   const shell = dictionary.shell;
-  const workspaceItems = navItems.filter((item) => item.section === "workspace");
-  const toolItems = navItems.filter((item) => item.section === "tools");
+  const availableItems = navItems.filter((item) => canUseNavItem(item, currentUser));
+  const workspaceItems = availableItems.filter((item) => item.section === "workspace");
+  const toolItems = availableItems.filter((item) => item.section === "tools");
+
+  useEffect(() => {
+    let active = true;
+
+    function loadUser() {
+      apiGet<AuthUserResponse>("/api/v1/auth/me")
+        .then((result) => {
+          if (active) {
+            setCurrentUser(result.user);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setCurrentUser(undefined);
+          }
+        });
+    }
+
+    loadUser();
+    window.addEventListener("storage", loadUser);
+    window.addEventListener("focus", loadUser);
+    return () => {
+      active = false;
+      window.removeEventListener("storage", loadUser);
+      window.removeEventListener("focus", loadUser);
+    };
+  }, []);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("paraworks-theme");
@@ -157,7 +188,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
             </div>
             <div className="liquid-control flex items-center gap-2 rounded-[22px] px-3 py-2 text-xs text-[var(--shell-muted)]">
               <span className="h-2 w-2 rounded-full bg-[var(--workspace-accent)]" />
-              MVP smoke workspace
+              {currentUser ? `${currentUser.name} · ${currentUser.role}` : "Login required"}
             </div>
           </div>
         </div>
@@ -195,7 +226,7 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
                 </button>
               </div>
               <nav className="flex gap-1">
-                {navItems.map((item) => {
+                {availableItems.map((item) => {
                   const Icon = item.icon;
                   const active = pathname === item.href;
                   return (
@@ -240,6 +271,16 @@ function LocalizedAppShell({ children }: { children: ReactNode }) {
 }
 
 type ShellItem = (typeof navItems)[number];
+
+function canUseNavItem(item: ShellItem, user?: DemoUser) {
+  if (!("roles" in item)) {
+    return true;
+  }
+  if (!user) {
+    return false;
+  }
+  return item.roles.some((role) => role === user.role);
+}
 
 function GlobalSearchForm({
   ariaLabel,

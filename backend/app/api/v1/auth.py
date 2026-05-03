@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.app.core.config import get_settings
+from backend.app.auth.google_identity import (
+    GOOGLE_IDENTITY_SCOPES,
+    GoogleIdentityError,
+    build_google_identity_login_url,
+    complete_google_identity_login,
+)
+from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_auth import (
     DemoUser,
     authenticate_demo_user,
@@ -40,15 +46,64 @@ def get_current_user(user: CurrentUser) -> dict:
 
 @router.get('/login-options')
 def get_login_options() -> dict:
+    settings = get_settings()
+    if not settings.paraworks_demo_mode:
+        return {'users': []}
     return {'users': list_demo_users()}
 
 
 @router.post('/login')
 def login(request: LoginRequest, response: Response, db: DbSession) -> dict:
+    settings = get_settings()
+    if not settings.paraworks_demo_mode:
+        raise HTTPException(status_code=403, detail='Demo login is disabled.')
     demo_user = authenticate_demo_user(request.email)
     auth_user = upsert_auth_user_from_demo(db, demo_user)
     issue_auth_cookies(response, db, auth_user)
     db.commit()
+    return {'user': serialize_auth_user(auth_user)}
+
+
+@router.get('/google/login-url')
+def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+    try:
+        login_url = build_google_identity_login_url(settings=settings)
+    except GoogleIdentityError:
+        return {
+            'configured': False,
+            'login_url': None,
+            'state': None,
+            'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
+        }
+    return {
+        'configured': login_url.configured,
+        'login_url': login_url.login_url,
+        'state': login_url.state,
+        'required_scopes': login_url.required_scopes,
+    }
+
+
+@router.get('/google/callback')
+def google_login_callback(
+    code: str,
+    state: str,
+    response: Response,
+    db: DbSession,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
+    try:
+        auth_user = complete_google_identity_login(
+            db=db,
+            settings=settings,
+            response=response,
+            code=code,
+            state=state,
+            cookie_issuer=issue_auth_cookies,
+        )
+    except GoogleIdentityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     return {'user': serialize_auth_user(auth_user)}
 
 

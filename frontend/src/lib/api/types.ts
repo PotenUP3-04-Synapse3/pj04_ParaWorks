@@ -15,11 +15,12 @@ export type DashboardResponse = {
 export type DemoUser = {
   id: string;
   email: string;
-  role: "admin" | "employee" | string;
+  role: "employee" | "reviewer" | "manager" | "admin" | string;
   permission_levels: string[];
   name: string;
   title: string;
   department: string;
+  status?: string;
 };
 
 export type AuthUserResponse = {
@@ -28,6 +29,13 @@ export type AuthUserResponse = {
 
 export type AuthUsersResponse = {
   users: DemoUser[];
+};
+
+export type GoogleLoginUrlResponse = {
+  configured: boolean;
+  login_url?: string | null;
+  state?: string | null;
+  required_scopes: string[];
 };
 
 export type AuditLog = {

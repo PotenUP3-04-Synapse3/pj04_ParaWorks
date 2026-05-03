@@ -73,6 +73,14 @@ Google:
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_OAUTH_REDIRECT_URI`
 - `GOOGLE_OAUTH_STATE_SECRET`
+- `GOOGLE_IDENTITY_REDIRECT_URI`
+- `GOOGLE_IDENTITY_STATE_SECRET`
+
+Google OAuth is split by purpose:
+
+- identity login uses `GOOGLE_IDENTITY_REDIRECT_URI` and identity scopes only;
+- Gmail, Drive, and Calendar data integrations use `GOOGLE_OAUTH_REDIRECT_URI`
+  and read-only data scopes.
 
 LLM and embedding:
 

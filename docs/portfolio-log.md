@@ -3710,3 +3710,8 @@ Cost/security note:
   - Added a recording-ready product walkthrough with cost and security talking points.
 - `feat: add azure openai compatible alias`
   - Added `azure_openai` provider-order support backed by the existing OpenAI API key path.
+- `feat: add google identity rbac`
+  - Separated ParaWorks Google identity login from Gmail/Drive/Calendar data integration OAuth so sign-in uses only identity scopes while data connectors keep explicit read-only consent.
+  - Added seeded portfolio accounts: `hanvv3@gmail.com` as admin, `hanvv3@koreacu.ac.kr` as employee, plus reviewer/employee demo users for role comparison.
+  - Added RBAC helpers, admin user management APIs/UI, role-aware navigation filtering, Google account picker login URL, and Review Queue approval checks.
+  - Cost/security angle: login and role checks are zero-paid-call paths, unknown Google accounts are rejected, refresh tokens remain httpOnly/hashed, and role changes create audit logs.

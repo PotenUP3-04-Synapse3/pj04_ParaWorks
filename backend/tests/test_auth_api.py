@@ -26,9 +26,38 @@ def test_login_accepts_employee_dummy_account(client) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload['user']['role'] == 'employee'
+    assert payload['user']['role'] == 'reviewer'
     assert payload['user']['department'] == 'Product'
     assert 'internal' in payload['user']['permission_levels']
+
+
+def test_login_options_include_requested_google_seed_accounts(client) -> None:
+    response = client.get('/api/v1/auth/login-options')
+
+    assert response.status_code == 200
+    users_by_email = {user['email']: user for user in response.json()['users']}
+    assert users_by_email['hanvv3@gmail.com']['role'] == 'admin'
+    assert 'restricted' in users_by_email['hanvv3@gmail.com']['permission_levels']
+    assert users_by_email['hanvv3@koreacu.ac.kr']['role'] == 'employee'
+    assert 'internal' in users_by_email['hanvv3@koreacu.ac.kr']['permission_levels']
+
+
+def test_login_accepts_requested_admin_google_seed_account(client) -> None:
+    response = client.post('/api/v1/auth/login', json={'email': 'hanvv3@gmail.com'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['user']['email'] == 'hanvv3@gmail.com'
+    assert payload['user']['role'] == 'admin'
+
+
+def test_login_accepts_requested_employee_google_seed_account(client) -> None:
+    response = client.post('/api/v1/auth/login', json={'email': 'hanvv3@koreacu.ac.kr'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['user']['email'] == 'hanvv3@koreacu.ac.kr'
+    assert payload['user']['role'] == 'employee'
 
 
 def test_admin_can_list_demo_users(client) -> None:
@@ -38,7 +67,13 @@ def test_admin_can_list_demo_users(client) -> None:
     payload = response.json()
     emails = {user['email'] for user in payload['users']}
     assert 'admin@paraworks.com' in emails
-    assert {'mina@paraworks.com', 'jun@paraworks.com', 'soyeon@paraworks.com'} <= emails
+    assert {
+        'hanvv3@gmail.com',
+        'hanvv3@koreacu.ac.kr',
+        'mina@paraworks.com',
+        'jun@paraworks.com',
+        'soyeon@paraworks.com',
+    } <= emails
 
 
 def test_employee_cannot_list_demo_users(client) -> None:

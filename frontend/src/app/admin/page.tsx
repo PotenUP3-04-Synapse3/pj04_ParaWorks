@@ -3,8 +3,8 @@
 import { AlertTriangle, ScrollText, ShieldCheck, UserCog, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/api/client";
-import type { AuditLog, AuditLogsResponse, AuthUsersResponse, DemoUser } from "@/lib/api/types";
+import { apiGet, apiPatch } from "@/lib/api/client";
+import type { AuditLog, AuditLogsResponse, AuthUserResponse, AuthUsersResponse, DemoUser } from "@/lib/api/types";
 
 const text = {
   loading: "\uAD00\uB9AC\uC790 \uCF58\uC194\uC744 \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.",
@@ -30,6 +30,7 @@ const text = {
   role: "\uC5ED\uD560",
   department: "\uBD80\uC11C",
   scope: "\uAD8C\uD55C \uBC94\uC704",
+  saveError: "사용자 권한을 변경하지 못했습니다.",
   action: "\uD589\uC704",
   target: "\uB300\uC0C1",
   actor: "\uC0AC\uC6A9\uC790",
@@ -37,41 +38,72 @@ const text = {
   time: "\uC2DC\uAC01",
 };
 
+const ROLE_OPTIONS = ["employee", "reviewer", "manager", "admin"] as const;
+const STATUS_OPTIONS = ["active", "suspended"] as const;
+const PERMISSION_OPTIONS = ["public", "internal", "restricted"] as const;
+
 export default function AdminPage() {
   const [users, setUsers] = useState<DemoUser[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [savingUserId, setSavingUserId] = useState<string>();
+
+  async function loadAdminData(active = true) {
+    try {
+      const currentUser = await apiGet<AuthUserResponse>("/api/v1/auth/me");
+      if (currentUser.user.role !== "admin") {
+        if (active) {
+          setError(text.permissionRequired);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const [usersResult, auditResult] = await Promise.all([
+        apiGet<AuthUsersResponse>("/api/v1/admin/users"),
+        apiGet<AuditLogsResponse>("/api/v1/admin/audit-logs?limit=8"),
+      ]);
+      if (active) {
+        setUsers(usersResult.users);
+        setAuditLogs(auditResult.logs);
+        setError(undefined);
+      }
+    } catch {
+      if (active) {
+        setError(text.permissionRequired);
+      }
+    } finally {
+      if (active) {
+        setLoading(false);
+      }
+    }
+  }
 
   useEffect(() => {
     let active = true;
 
-    Promise.all([
-      apiGet<AuthUsersResponse>("/api/v1/auth/users"),
-      apiGet<AuditLogsResponse>("/api/v1/admin/audit-logs?limit=8"),
-    ])
-      .then(([usersResult, auditResult]) => {
-        if (active) {
-          setUsers(usersResult.users);
-          setAuditLogs(auditResult.logs);
-          setError(undefined);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setError(text.permissionRequired);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
+    void loadAdminData(active);
 
     return () => {
       active = false;
     };
   }, []);
+
+  async function updateUser(user: DemoUser, update: Partial<Pick<DemoUser, "role" | "status" | "permission_levels">>) {
+    setSavingUserId(user.id);
+    setError(undefined);
+    try {
+      const result = await apiPatch<{ user: DemoUser }>(`/api/v1/admin/users/${encodeURIComponent(user.id)}`, update);
+      setUsers((current) => current.map((row) => (row.id === user.id ? result.user : row)));
+      const auditResult = await apiGet<AuditLogsResponse>("/api/v1/admin/audit-logs?limit=8");
+      setAuditLogs(auditResult.logs);
+    } catch {
+      setError(text.saveError);
+    } finally {
+      setSavingUserId(undefined);
+    }
+  }
 
   const metrics = useMemo(() => {
     const adminCount = users.filter((user) => user.role === "admin").length;
@@ -139,11 +171,12 @@ export default function AdminPage() {
           <p className="mt-1 text-sm text-[var(--ink-muted)]">{text.permissionNote}</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="text-xs uppercase text-[var(--ink-muted)]">
               <tr className="border-b border-[var(--line-soft)]">
                 <th className="px-5 py-3 font-semibold">{text.account}</th>
                 <th className="px-5 py-3 font-semibold">{text.role}</th>
+                <th className="px-5 py-3 font-semibold">{text.status}</th>
                 <th className="px-5 py-3 font-semibold">{text.department}</th>
                 <th className="px-5 py-3 font-semibold">{text.scope}</th>
               </tr>
@@ -156,7 +189,34 @@ export default function AdminPage() {
                     <p className="text-xs text-[var(--ink-muted)]">{user.email}</p>
                   </td>
                   <td className="px-5 py-4">
-                    <span className="liquid-control rounded-full px-3 py-1 text-xs font-semibold">{user.role}</span>
+                    <select
+                      value={user.role}
+                      disabled={savingUserId === user.id}
+                      onChange={(event) => void updateUser(user, { role: event.target.value })}
+                      className="liquid-control rounded-full px-3 py-2 text-xs font-semibold outline-none"
+                      aria-label={`${user.email} role`}
+                    >
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-5 py-4">
+                    <select
+                      value={user.status ?? "active"}
+                      disabled={savingUserId === user.id}
+                      onChange={(event) => void updateUser(user, { status: event.target.value })}
+                      className="liquid-control rounded-full px-3 py-2 text-xs font-semibold outline-none"
+                      aria-label={`${user.email} status`}
+                    >
+                      {STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-5 py-4 text-[var(--ink-muted)]">
                     <p className="font-medium text-[var(--ink-strong)]">{user.department}</p>
@@ -164,14 +224,27 @@ export default function AdminPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex flex-wrap gap-2">
-                      {user.permission_levels.map((level) => (
-                        <span
+                      {PERMISSION_OPTIONS.map((level) => {
+                        const enabled = user.permission_levels.includes(level);
+                        const nextLevels = enabled
+                          ? user.permission_levels.filter((item) => item !== level)
+                          : [...user.permission_levels, level];
+                        return (
+                        <button
+                          type="button"
                           key={level}
-                          className="rounded-full border border-[var(--line-soft)] px-3 py-1 text-xs font-semibold text-[var(--ink-muted)]"
+                          disabled={savingUserId === user.id}
+                          onClick={() => void updateUser(user, { permission_levels: nextLevels })}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                            enabled
+                              ? "liquid-primary border-transparent"
+                              : "border-[var(--line-soft)] text-[var(--ink-muted)]"
+                          }`}
                         >
                           {level}
-                        </span>
-                      ))}
+                        </button>
+                        );
+                      })}
                     </div>
                   </td>
                 </tr>

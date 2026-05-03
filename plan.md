@@ -295,6 +295,9 @@ Completed harness slices include:
 - Azure integration design now defines Container Apps, PostgreSQL pgvector,
   Redis, Key Vault, and a first-stage `azure_openai` provider alias that reuses
   the existing `OPENAI_API_KEY` path for key-swap compatibility
+- Google identity login and RBAC now separate ParaWorks login from Google data
+  integrations, seed admin/employee/reviewer accounts, gate admin/review pages,
+  and enforce role-aware Review Queue approval
 - portfolio log and case-study documentation
 
 ## 8. Recommended Roadmap From Here
@@ -418,6 +421,13 @@ Recommended order:
    - `azure_openai` OpenAI-compatible provider alias. Done.
    - IaC/resource creation. Not started; requires budget, region, resource
      group, and staging domain confirmation.
+6. Production identity and RBAC:
+   - Google identity login boundary. Done.
+   - Seeded admin/employee/reviewer users. Done.
+   - Admin user management API and UI. Initial slice done.
+   - Review Queue role checks. Initial slice done.
+   - Future: CSRF, rate limiting, Alembic migration, and multi-step approval
+     states.
 
 ## 9. Cost Policy
 

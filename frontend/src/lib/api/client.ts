@@ -1,6 +1,6 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 export const DEMO_USER_STORAGE_KEY = "paraworks-demo-user";
-const DEFAULT_DEMO_USER = "admin";
+const DEFAULT_DEMO_USER = "hanvv-employee";
 
 function apiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -17,6 +17,10 @@ export function getStoredDemoUserId() {
 
 export function setStoredDemoUserId(userId: string) {
   window.localStorage.setItem(DEMO_USER_STORAGE_KEY, userId);
+}
+
+export function clearStoredDemoUserId() {
+  window.localStorage.removeItem(DEMO_USER_STORAGE_KEY);
 }
 
 function demoUserHeader(demoUser?: string) {

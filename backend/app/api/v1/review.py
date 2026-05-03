@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.demo_auth import DemoUser, get_demo_user
+from backend.app.core.rbac import ensure_can_review_permission
 from backend.app.db.session import get_db
 from backend.app.knowledge.promotion import (
     build_promotion_preview,
@@ -34,6 +35,7 @@ def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -
         'confidence_score': item.confidence_score,
         'permission_level': item.permission_level,
         'status': item.status,
+        'reviewer_id': item.reviewer_id,
     }
 
 
@@ -65,8 +67,9 @@ def approve_agent_review_candidates(
             skipped_count += 1
             continue
         try:
+            ensure_can_review_permission(user, item.permission_level)
             validate_review_item_for_approval(item)
-        except ValueError:
+        except (HTTPException, ValueError):
             skipped_count += 1
             continue
 
@@ -143,6 +146,7 @@ def approve_review_item(
         raise HTTPException(status_code=404, detail='Review item not found')
     if not item.source_links or not item.source_snippets:
         raise HTTPException(status_code=400, detail='Review item requires source evidence')
+    ensure_can_review_permission(user, item.permission_level)
     try:
         validate_review_item_for_approval(item)
     except ValueError as exc:

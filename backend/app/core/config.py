@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_oauth_redirect_uri: str = 'http://localhost:3000/integrations/google/callback'
     google_oauth_state_secret: str = 'local-development-google-state-secret'
+    google_identity_redirect_uri: str = 'http://localhost:3000/login/google/callback'
+    google_identity_state_secret: str = 'local-development-google-identity-state-secret'
 
 
 @lru_cache

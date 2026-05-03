@@ -667,6 +667,45 @@ Important:
 - Do not create Azure resources or commit keys without user confirmation on
   budget, region, resource group, and staging domain.
 
+## 2026-05-03 Google Identity and RBAC Update
+
+Aligned with `docs/superpowers/specs/2026-05-03-google-identity-rbac-design.md`.
+
+- Added `docs/superpowers/plans/2026-05-03-google-identity-rbac.md`.
+- Google identity login now has a separate login URL and callback path:
+  - `GET /api/v1/auth/google/login-url`
+  - `GET /api/v1/auth/google/callback`
+- Google identity login uses `openid email profile` and `prompt=select_account`.
+- Gmail, Drive, and Calendar OAuth remain separate data integration flows.
+- Added seeded accounts:
+  - `hanvv3@gmail.com`: admin, `public/internal/restricted`
+  - `hanvv3@koreacu.ac.kr`: employee, `public/internal`
+  - `mina@paraworks.com`: reviewer, `public/internal`
+- Added admin user management:
+  - `GET /api/v1/admin/users`
+  - `PATCH /api/v1/admin/users/{external_id}`
+- Admin UI can change role, status, and permission levels, and changes create
+  audit logs.
+- Review Queue approval is now role-aware:
+  - reviewer: `public/internal`
+  - manager/admin: `public/internal/restricted`
+- Frontend navigation now hides admin/integrations/agent-runs from non-admin
+  users and hides Review Queue from users below reviewer.
+
+Environment:
+
+```text
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_IDENTITY_REDIRECT_URI=http://localhost:3000/login/google/callback
+GOOGLE_IDENTITY_STATE_SECRET=replace-with-local-google-login-state-secret
+```
+
+Cost note:
+
+- Identity login, RBAC checks, admin user management, and Review Queue role
+  checks do not call paid LLMs, embeddings, sync jobs, or reindex jobs.
+
 ## Portfolio Recording Rule
 
 When future ParaWorks work changes the product story, architecture, UX, testing
