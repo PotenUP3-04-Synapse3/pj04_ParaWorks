@@ -49,6 +49,31 @@ def test_agent_runs_api_returns_recent_runs_and_totals(client, db_session) -> No
     assert payload['recent_runs'][0]['metadata']['included_source_types'] == ['drive', 'gmail']
 
 
+def test_agent_runs_api_requires_admin_role(client, db_session) -> None:
+    db_session.add(
+        AgentRun(
+            agent_name='slack_agent',
+            prompt_version='slack-timeline:v1',
+            status='complete',
+            source_window='mock-slack:all',
+            cache_key='slack-cache-key',
+            model_name='fake-slack-agent-model',
+            input_tokens=100,
+            output_tokens=20,
+            total_tokens=120,
+            estimated_cost_usd=0.00002,
+            permission_level='internal',
+            metadata_={'source_type': 'slack'},
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/agent-runs', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'
+
+
 def test_agent_run_detail_api_returns_single_run(client, db_session) -> None:
     agent_run = AgentRun(
         agent_name='rag_orchestrator_agent',
@@ -83,6 +108,31 @@ def test_agent_run_detail_api_returns_single_run(client, db_session) -> None:
     }
     assert payload['metadata']['question'] == 'Redis queues'
     assert payload['estimated_cost_usd'] == 0.000031
+
+
+def test_agent_run_detail_api_requires_admin_role(client, db_session) -> None:
+    agent_run = AgentRun(
+        agent_name='rag_orchestrator_agent',
+        prompt_version='rag-answer:v1',
+        status='complete',
+        source_window='ask:Redis queues',
+        cache_key='rag-cache-key',
+        model_name='fake-rag-orchestrator-model',
+        input_tokens=80,
+        output_tokens=32,
+        total_tokens=112,
+        estimated_cost_usd=0.000031,
+        permission_level='internal',
+        metadata_={'question': 'Redis queues'},
+    )
+    db_session.add(agent_run)
+    db_session.commit()
+    db_session.refresh(agent_run)
+
+    response = client.get(f'/api/v1/agent-runs/{agent_run.id}', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'
 
 
 def test_agent_run_detail_api_promotes_evidence_summary(client, db_session) -> None:
@@ -214,3 +264,10 @@ def test_agent_run_summary_api_returns_cost_and_agent_breakdown(client, db_sessi
             'latest_status': 'failed',
         },
     ]
+
+
+def test_agent_run_summary_api_requires_admin_role(client) -> None:
+    response = client.get('/api/v1/agent-runs/summary', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'

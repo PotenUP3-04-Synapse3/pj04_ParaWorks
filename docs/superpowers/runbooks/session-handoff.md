@@ -691,6 +691,16 @@ Aligned with `docs/superpowers/specs/2026-05-03-google-identity-rbac-design.md`.
   - manager/admin: `public/internal/restricted`
 - Frontend navigation now hides admin/integrations/agent-runs from non-admin
   users and hides Review Queue from users below reviewer.
+- Cost and operations APIs are now backend admin-only:
+  - `/api/v1/agent-runs`
+  - `/api/v1/agent-runs/summary`
+  - `/api/v1/agent-runs/{run_id}`
+  - `/api/v1/rag/reindex`
+  - `/api/v1/rag/reindex/jobs`
+  - `/api/v1/rag/reindex/jobs/{job_id}`
+  - `/api/v1/rag/indexing/summary`
+- Direct AgentRun pages render an admin-required state instead of a 500 when
+  the active context cannot access admin observability data.
 - Google identity readiness is visible from `/api/v1/auth/google/login-url`
   and `/login`:
   - `redirect_uri`

@@ -427,6 +427,7 @@ Recommended order:
    - Seeded admin/employee/reviewer users. Done.
    - Admin user management API and UI. Initial slice done.
    - Review Queue role checks. Initial slice done.
+   - AgentRun/RAG cost observability API admin guards. Done.
    - Future: CSRF, rate limiting, Alembic migration, and multi-step approval
      states.
 

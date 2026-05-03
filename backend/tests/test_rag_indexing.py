@@ -375,6 +375,15 @@ def test_reindex_endpoint_returns_dry_run_index_summary(client: TestClient, db_s
     assert body['embedding_budget']['budget_status'] == 'within_budget'
 
 
+def test_reindex_endpoint_requires_admin_role(client: TestClient, db_session: Session) -> None:
+    seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-employee-index')
+
+    response = client.post('/api/v1/rag/reindex', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'
+
+
 def test_reindex_dry_run_reports_over_budget_without_provider_call(
     client: TestClient,
     db_session: Session,
@@ -452,6 +461,15 @@ def test_reindex_job_endpoint_records_indexing_job(
     assert job.message == 'indexed=1 skipped=0 saved_embedding_calls=0'
 
 
+def test_reindex_job_endpoint_requires_admin_role(client: TestClient, db_session: Session) -> None:
+    seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-employee-job-index')
+
+    response = client.post('/api/v1/rag/reindex/jobs', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'
+
+
 def test_reindex_job_detail_endpoint_returns_status(
     client: TestClient,
     db_session: Session,
@@ -465,6 +483,23 @@ def test_reindex_job_detail_endpoint_returns_status(
     assert response.json()['job_id'] == created['job_id']
     assert response.json()['status'] == 'complete'
     assert response.json()['indexed_count'] == 1
+
+
+def test_reindex_job_detail_endpoint_requires_admin_role(client: TestClient, db_session: Session) -> None:
+    job = SyncJob(
+        job_id='rag-index-admin-only',
+        connector_type='rag-index',
+        status='complete',
+        message='indexed=0 skipped=0 saved_embedding_calls=0',
+        progress_pct=100,
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    response = client.get('/api/v1/rag/reindex/jobs/rag-index-admin-only', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'
 
 
 def test_reindex_job_detail_endpoint_returns_failure_reason(
@@ -559,3 +594,10 @@ def test_rag_indexing_summary_returns_latest_jobs_and_state_counts(
         'preflight_budget_gate': True,
         'incremental_hash_skip': True,
     }
+
+
+def test_rag_indexing_summary_requires_admin_role(client: TestClient) -> None:
+    response = client.get('/api/v1/rag/indexing/summary', headers={'X-Demo-User': 'hanvv-employee'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Admin permission required.'

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import Settings, get_settings
-from backend.app.core.demo_auth import DemoUser, get_demo_user
+from backend.app.core.demo_auth import DemoUser, require_admin_user
 from backend.app.db.session import get_db
 from backend.app.models import SyncJob, VectorIndexState
 from backend.app.rag.reindexing import ReindexConfigurationError, run_reindex
@@ -19,11 +19,11 @@ from backend.app.tasks.rag_indexing import (
 router = APIRouter(prefix='/rag', tags=['rag'])
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
-CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
+AdminUser = Annotated[DemoUser, Depends(require_admin_user)]
 
 
 @router.post('/reindex')
-def reindex_rag_vectors(db: DbSession, settings: AppSettings, user: CurrentUser, dry_run: bool = True) -> dict:
+def reindex_rag_vectors(db: DbSession, settings: AppSettings, user: AdminUser, dry_run: bool = True) -> dict:
     try:
         result = run_reindex(db=db, settings=settings, dry_run=dry_run)
     except ReindexConfigurationError as exc:
@@ -46,7 +46,7 @@ def reindex_rag_vectors(db: DbSession, settings: AppSettings, user: CurrentUser,
 
 
 @router.post('/reindex/jobs')
-def create_reindex_job(db: DbSession, settings: AppSettings, user: CurrentUser, dry_run: bool = True) -> dict:
+def create_reindex_job(db: DbSession, settings: AppSettings, user: AdminUser, dry_run: bool = True) -> dict:
     job = SyncJob(
         job_id=f'rag-index-{uuid4().hex}',
         connector_type='rag-index',
@@ -87,7 +87,7 @@ def create_reindex_job(db: DbSession, settings: AppSettings, user: CurrentUser, 
 
 
 @router.get('/reindex/jobs/{job_id}')
-def get_reindex_job(job_id: str, db: DbSession) -> dict:
+def get_reindex_job(job_id: str, db: DbSession, _: AdminUser) -> dict:
     job = db.scalar(select(SyncJob).where(SyncJob.job_id == job_id, SyncJob.connector_type == 'rag-index'))
     if job is None:
         raise HTTPException(status_code=404, detail='RAG indexing job not found')
@@ -95,7 +95,7 @@ def get_reindex_job(job_id: str, db: DbSession) -> dict:
 
 
 @router.get('/indexing/summary')
-def get_rag_indexing_summary(db: DbSession, settings: AppSettings) -> dict:
+def get_rag_indexing_summary(db: DbSession, settings: AppSettings, _: AdminUser) -> dict:
     state_counts = dict(
         db.execute(
             select(VectorIndexState.status, func.count(VectorIndexState.id))

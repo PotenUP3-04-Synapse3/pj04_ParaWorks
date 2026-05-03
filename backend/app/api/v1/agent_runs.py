@@ -4,11 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.demo_auth import DemoUser, require_admin_user
 from backend.app.db.session import get_db
 from backend.app.models import AgentRun
 
 router = APIRouter(prefix='/agent-runs', tags=['agent-runs'])
 DbSession = Annotated[Session, Depends(get_db)]
+AdminUser = Annotated[DemoUser, Depends(require_admin_user)]
 
 
 def _agent_run_response(run: AgentRun) -> dict:
@@ -40,7 +42,7 @@ def _agent_run_response(run: AgentRun) -> dict:
 
 
 @router.get('')
-def list_agent_runs(db: DbSession) -> dict:
+def list_agent_runs(db: DbSession, _: AdminUser) -> dict:
     total_runs = db.scalar(select(func.count(AgentRun.id))) or 0
     total_tokens = db.scalar(select(func.coalesce(func.sum(AgentRun.total_tokens), 0))) or 0
     estimated_cost_usd = db.scalar(select(func.coalesce(func.sum(AgentRun.estimated_cost_usd), 0.0))) or 0.0
@@ -55,7 +57,7 @@ def list_agent_runs(db: DbSession) -> dict:
 
 
 @router.get('/summary')
-def summarize_agent_runs(db: DbSession) -> dict:
+def summarize_agent_runs(db: DbSession, _: AdminUser) -> dict:
     runs = db.scalars(select(AgentRun).order_by(AgentRun.id.desc())).all()
     total_runs = len(runs)
     total_tokens = sum(run.total_tokens for run in runs)
@@ -108,7 +110,7 @@ def summarize_agent_runs(db: DbSession) -> dict:
 
 
 @router.get('/{run_id}')
-def get_agent_run(run_id: int, db: DbSession) -> dict:
+def get_agent_run(run_id: int, db: DbSession, _: AdminUser) -> dict:
     run = db.get(AgentRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail='Agent run not found')

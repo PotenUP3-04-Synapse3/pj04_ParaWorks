@@ -65,12 +65,21 @@ const STATUS_META: Record<
 };
 
 export default async function AgentRunsPage() {
-  const [runs, summary, ragIndexing, orchestration] = await Promise.all([
-    apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
-    apiGet<AgentRunSummaryResponse>("/api/v1/agent-runs/summary"),
-    apiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary"),
-    apiGet<OrchestrationStatusResponse>("/api/v1/orchestration/company-memory"),
-  ]);
+  let runs: AgentRunsResponse;
+  let summary: AgentRunSummaryResponse;
+  let ragIndexing: RagIndexingSummaryResponse;
+  let orchestration: OrchestrationStatusResponse;
+
+  try {
+    [runs, summary, ragIndexing, orchestration] = await Promise.all([
+      apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
+      apiGet<AgentRunSummaryResponse>("/api/v1/agent-runs/summary"),
+      apiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary"),
+      apiGet<OrchestrationStatusResponse>("/api/v1/orchestration/company-memory"),
+    ]);
+  } catch {
+    return <AdminOnlyNotice />;
+  }
   const cacheHitPercent = (summary.totals.cache_hit_rate * 100).toFixed(1);
   const latestRagJob = ragIndexing.latest_jobs[0];
   const jobStatusCounts = countJobStatuses(ragIndexing.latest_jobs);
@@ -259,6 +268,29 @@ export default async function AgentRunsPage() {
 }
 
 type MetricIcon = typeof Bot;
+
+function AdminOnlyNotice() {
+  return (
+    <section className="liquid-surface rounded-[32px] p-6">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Admin observability</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal">Admin permission required</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+            Agent run cost, token usage, RAG indexing status, and reindex controls are restricted to workspace admins.
+          </p>
+          <Link
+            href="/login"
+            className="liquid-primary mt-4 inline-flex h-11 items-center justify-center rounded-[24px] px-5 text-sm font-semibold"
+          >
+            Go to login
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function MetricCard({
   icon: Icon,

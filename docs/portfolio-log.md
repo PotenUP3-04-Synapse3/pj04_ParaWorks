@@ -3719,3 +3719,7 @@ Cost/security note:
   - The login URL API now reports `redirect_uri` and exact missing Google identity configuration keys instead of treating a partial client id as ready.
   - The login page surfaces the required redirect URI and missing settings so Google Cloud setup can be completed without guessing.
   - Verification: backend suite `245 passed, 1 skipped`; frontend lint/build passed; targeted Playwright login/admin regression `14 passed`.
+- `feat: restrict cost observability to admins`
+  - Added backend admin guards to AgentRun cost/token APIs and RAG reindex/indexing observability APIs.
+  - Direct `/agent-runs` and AgentRun detail URLs now render an admin-required state instead of crashing when a non-admin context reaches the page.
+  - Verification: targeted admin-only API tests passed, backend suite `252 passed, 1 skipped`, and targeted Playwright AgentRun regression `10 passed`.

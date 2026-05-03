@@ -11,7 +11,13 @@ type AgentRunDetailPageProps = {
 
 export default async function AgentRunDetailPage({ params }: AgentRunDetailPageProps) {
   const { id } = await params;
-  const run = await apiGet<AgentRunSummaryItem>(`/api/v1/agent-runs/${id}`);
+  let run: AgentRunSummaryItem;
+
+  try {
+    run = await apiGet<AgentRunSummaryItem>(`/api/v1/agent-runs/${id}`);
+  } catch {
+    return <AdminOnlyNotice />;
+  }
   const tokenUsage = run.token_usage ?? {
     input_tokens: run.input_tokens,
     output_tokens: run.output_tokens,
@@ -132,6 +138,29 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
 }
 
 type MetricIcon = typeof Sparkles;
+
+function AdminOnlyNotice() {
+  return (
+    <section className="liquid-surface rounded-[32px] p-6">
+      <div className="flex items-start gap-3">
+        <ShieldAlert className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Admin observability</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal">Admin permission required</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+            Agent run details can include cost, prompt metadata, and evidence windows, so this view is restricted to workspace admins.
+          </p>
+          <Link
+            href="/login"
+            className="liquid-primary mt-4 inline-flex h-11 items-center justify-center rounded-[24px] px-5 text-sm font-semibold"
+          >
+            Go to login
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function MetricCard({
   icon: Icon,
