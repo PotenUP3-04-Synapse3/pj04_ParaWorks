@@ -1,6 +1,6 @@
 import { GitBranch, Network, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type { KnowledgeMapEdge, KnowledgeMapNode, KnowledgeMapResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ function findEvidenceForMemory(memoryNode: KnowledgeMapNode, edges: KnowledgeMap
 }
 
 export default async function KnowledgeMapPage() {
-  const map = await apiGet<KnowledgeMapResponse>("/api/v1/knowledge/map");
+  const map = await serverApiGet<KnowledgeMapResponse>("/api/v1/knowledge/map");
   const memoryNodes = map.nodes.filter((node) => node.type !== "evidence_source");
   const evidenceNodes = map.nodes.filter((node) => node.type === "evidence_source");
   const visibleEvidenceNodes = evidenceNodes.slice(0, 24);

@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
+
 # env
 .env
 .env.local
@@ -22,6 +23,7 @@ wheels/
 # Frontend generated files
 frontend/node_modules/
 frontend/.next/
+frontend/.next-docker/
 frontend/.next-smoke/
 frontend/playwright-report/
 frontend/test-results/

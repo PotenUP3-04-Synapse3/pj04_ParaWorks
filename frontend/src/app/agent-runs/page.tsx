@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type {
   AgentRunAgentSummary,
   AgentRunsResponse,
@@ -72,10 +72,10 @@ export default async function AgentRunsPage() {
 
   try {
     [runs, summary, ragIndexing, orchestration] = await Promise.all([
-      apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
-      apiGet<AgentRunSummaryResponse>("/api/v1/agent-runs/summary"),
-      apiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary"),
-      apiGet<OrchestrationStatusResponse>("/api/v1/orchestration/company-memory"),
+      serverApiGet<AgentRunsResponse>("/api/v1/agent-runs"),
+      serverApiGet<AgentRunSummaryResponse>("/api/v1/agent-runs/summary"),
+      serverApiGet<RagIndexingSummaryResponse>("/api/v1/rag/indexing/summary"),
+      serverApiGet<OrchestrationStatusResponse>("/api/v1/orchestration/company-memory"),
     ]);
   } catch {
     return <AdminOnlyNotice />;

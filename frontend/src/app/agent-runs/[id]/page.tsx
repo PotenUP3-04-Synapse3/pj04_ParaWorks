@@ -1,6 +1,6 @@
 import { ArrowLeft, Bot, CircleDollarSign, Fingerprint, ShieldAlert, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type { AgentRunSummaryItem } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
   let run: AgentRunSummaryItem;
 
   try {
-    run = await apiGet<AgentRunSummaryItem>(`/api/v1/agent-runs/${id}`);
+    run = await serverApiGet<AgentRunSummaryItem>(`/api/v1/agent-runs/${id}`);
   } catch {
     return <AdminOnlyNotice />;
   }

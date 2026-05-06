@@ -1,11 +1,11 @@
 import { MemoryCollection } from "@/components/knowledge/MemoryCollection";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type { KnowledgeResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DecisionsPage() {
-  const knowledge = await apiGet<KnowledgeResponse>("/api/v1/knowledge");
+  const knowledge = await serverApiGet<KnowledgeResponse>("/api/v1/knowledge");
 
   return (
     <MemoryCollection

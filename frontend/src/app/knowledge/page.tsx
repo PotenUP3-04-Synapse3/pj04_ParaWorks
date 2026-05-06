@@ -1,7 +1,7 @@
 import { ClipboardList, GitBranch, History, Library, Network, Route } from "lucide-react";
 import Link from "next/link";
 import { MemoryCard } from "@/components/knowledge/MemoryCollection";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type { KnowledgeItem, KnowledgeResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ const collections = [
 ] as const;
 
 export default async function KnowledgePage() {
-  const knowledge = await apiGet<KnowledgeResponse>("/api/v1/knowledge");
+  const knowledge = await serverApiGet<KnowledgeResponse>("/api/v1/knowledge");
   const totalItems =
     knowledge.counts.decisions +
     knowledge.counts.timeline_events +

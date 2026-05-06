@@ -1,6 +1,6 @@
 import { ArrowRight, Bot, CircleDollarSign, Database, ShieldAlert, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type { AgentRunsResponse, DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +14,8 @@ const EMPTY_AGENT_RUNS: AgentRunsResponse = {
 
 export default async function DashboardPage() {
   const [dashboard, agentRuns] = await Promise.all([
-    apiGet<DashboardResponse>("/api/v1/dashboard"),
-    apiGet<AgentRunsResponse>("/api/v1/agent-runs").catch(() => EMPTY_AGENT_RUNS),
+    serverApiGet<DashboardResponse>("/api/v1/dashboard"),
+    serverApiGet<AgentRunsResponse>("/api/v1/agent-runs").catch(() => EMPTY_AGENT_RUNS),
   ]);
   const totalSources = Object.values(dashboard.source_counts).reduce((sum, count) => sum + count, 0);
 

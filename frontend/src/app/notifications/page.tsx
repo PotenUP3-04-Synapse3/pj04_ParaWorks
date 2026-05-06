@@ -1,12 +1,12 @@
 import { AlertTriangle, Bell, Bot, CheckCircle2, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { apiGet } from "@/lib/api/client";
+import { serverApiGet } from "@/lib/api/server";
 import type { NotificationItem, NotificationsResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage() {
-  const data = await apiGet<NotificationsResponse>("/api/v1/notifications");
+  const data = await serverApiGet<NotificationsResponse>("/api/v1/notifications");
 
   return (
     <div className="space-y-5">
