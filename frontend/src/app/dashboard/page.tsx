@@ -5,10 +5,17 @@ import type { AgentRunsResponse, DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
+const EMPTY_AGENT_RUNS: AgentRunsResponse = {
+  total_runs: 0,
+  total_tokens: 0,
+  estimated_cost_usd: 0,
+  recent_runs: [],
+};
+
 export default async function DashboardPage() {
   const [dashboard, agentRuns] = await Promise.all([
     apiGet<DashboardResponse>("/api/v1/dashboard"),
-    apiGet<AgentRunsResponse>("/api/v1/agent-runs"),
+    apiGet<AgentRunsResponse>("/api/v1/agent-runs").catch(() => EMPTY_AGENT_RUNS),
   ]);
   const totalSources = Object.values(dashboard.source_counts).reduce((sum, count) => sum + count, 0);
 
