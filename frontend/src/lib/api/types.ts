@@ -1,0 +1,559 @@
+export type SyncJob = {
+  job_id: string;
+  connector_type: string;
+  status: string;
+  message: string;
+  progress_pct: number;
+};
+
+export type DashboardResponse = {
+  source_counts: Record<string, number>;
+  pending_review_count: number;
+  recent_jobs: SyncJob[];
+};
+
+export type DemoUser = {
+  id: string;
+  email: string;
+  role: "employee" | "reviewer" | "manager" | "admin" | string;
+  permission_levels: string[];
+  name: string;
+  title: string;
+  department: string;
+  status?: string;
+};
+
+export type AuthUserResponse = {
+  user: DemoUser;
+};
+
+export type AuthUsersResponse = {
+  users: DemoUser[];
+};
+
+export type GoogleLoginUrlResponse = {
+  configured: boolean;
+  login_url?: string | null;
+  state?: string | null;
+  required_scopes: string[];
+  redirect_uri?: string | null;
+  missing_config?: string[];
+};
+
+export type AuditLog = {
+  id: number;
+  actor_id: string;
+  actor_email: string;
+  actor_role: string;
+  action: string;
+  target_type: string;
+  target_id?: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AuditLogsResponse = {
+  logs: AuditLog[];
+};
+
+export type AgentRunSummaryItem = {
+  id: number;
+  agent_name: string;
+  prompt_version: string;
+  status: string;
+  source_window: string;
+  cache_key: string;
+  model_name: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  token_usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+  estimated_cost_usd: number;
+  permission_level: string;
+  metadata: Record<string, unknown>;
+  selection_strategy?: string | null;
+  evidence_summary?: AgentRunEvidenceSummaryItem[];
+  started_at: string;
+  completed_at?: string | null;
+};
+
+export type AgentRunEvidenceSummaryItem = {
+  rank: number;
+  source_id: string;
+  source_url?: string | null;
+  timestamp?: string | null;
+  author?: string | null;
+  permission_level?: string | null;
+  channel_id?: string | null;
+  importance_score?: number;
+  snippet: string;
+};
+
+export type AgentRunsResponse = {
+  total_runs: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  recent_runs: AgentRunSummaryItem[];
+};
+
+export type AgentRunAgentSummary = {
+  agent_name: string;
+  run_count: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  average_tokens_per_run: number;
+  latest_run_id: number;
+  latest_status: string;
+};
+
+export type AgentRunSummaryResponse = {
+  totals: {
+    total_runs: number;
+    total_tokens: number;
+    estimated_cost_usd: number;
+    average_tokens_per_run: number;
+    average_cost_per_run: number;
+    cache_hits: number;
+    cache_hit_rate: number;
+  };
+  by_status: Record<string, number>;
+  by_agent: AgentRunAgentSummary[];
+};
+
+export type OrchestrationStatusResponse = {
+  workflow_name: string;
+  backend: string;
+  node_names: string[];
+  graph_mermaid: string;
+  cost_policy: {
+    delta_sync: boolean;
+    source_hash_skip: boolean;
+    evidence_cache_reuse?: boolean;
+    evidence_token_budget: boolean;
+    per_run_budget_usd?: number;
+    budget_actions?: string[];
+    paid_llm_calls_in_status_api: boolean;
+    requires_explicit_run: boolean;
+    hitl_checkpointing?: boolean;
+    checkpoint_store?: string;
+    trusted_knowledge_requires_approval?: boolean;
+  };
+};
+
+export type OrchestrationDryRunResponse = {
+  workflow_name: string;
+  backend: string;
+  objective: string;
+  inputs: Record<string, unknown>;
+  completed_nodes: string[];
+  outputs: Record<string, string>;
+  token_cost_usd: number;
+  cost_policy: OrchestrationStatusResponse["cost_policy"];
+};
+
+export type RagIndexingJobSummary = {
+  job_id: string;
+  connector_type: string;
+  status: string;
+  message: string;
+  failure_reason?: string | null;
+  progress_pct: number;
+  indexed_count: number;
+  skipped_count: number;
+  saved_embedding_calls: number;
+  updated_at: string;
+};
+
+export type EmbeddingBudgetDecision = {
+  embedding_model: string;
+  changed_document_count: number;
+  estimated_input_tokens: number;
+  estimated_cost_usd: number;
+  budget_limit_usd?: number | null;
+  budget_status: string;
+  action: string;
+  reason: string;
+};
+
+export type RagReindexResponse = {
+  dry_run: boolean;
+  indexed_count: number;
+  skipped_count: number;
+  saved_embedding_calls: number;
+  embedding_request_count: number;
+  embedding_prompt_tokens: number;
+  embedding_total_tokens: number;
+  embedding_dimensions: number;
+  document_ids: string[];
+  skipped_document_ids: string[];
+  incremental: boolean;
+  storage_backend: string;
+  embedding_budget: EmbeddingBudgetDecision;
+};
+
+export type RagIndexingSummaryResponse = {
+  state_counts: Record<string, number>;
+  latest_jobs: RagIndexingJobSummary[];
+  cost_policy: {
+    embedding_model: string;
+    embedding_input_cost_per_1m_tokens: number;
+    max_estimated_embedding_cost_usd?: number | null;
+    preflight_budget_gate: boolean;
+    incremental_hash_skip: boolean;
+  };
+};
+
+export type KnowledgeItem = {
+  id: number;
+  title: string;
+  summary: string;
+  priority?: string;
+  source_links: string[];
+  source_snippets: string[];
+  confidence_score: number;
+  permission_level: string;
+  review_status: string;
+  created_at: string;
+};
+
+export type KnowledgeResponse = {
+  counts: {
+    decisions: number;
+    history_events: number;
+    timeline_events: number;
+    todos: number;
+  };
+  decisions: KnowledgeItem[];
+  history_events: KnowledgeItem[];
+  timeline_events: KnowledgeItem[];
+  todos: KnowledgeItem[];
+};
+
+export type KnowledgeMapNode = {
+  id: string;
+  type: "decision" | "history_event" | "timeline_event" | "todo" | "evidence_source" | string;
+  label: string;
+  summary?: string;
+  source_url?: string;
+  permission_level: string;
+  confidence_score?: number;
+  review_status?: string;
+  created_at?: string;
+  source_count?: number;
+  href?: string;
+  connected_memory_count?: number;
+  snippet_count?: number;
+};
+
+export type KnowledgeMapEdge = {
+  source: string;
+  target: string;
+  relationship: string;
+  permission_level: string;
+};
+
+export type KnowledgeMapResponse = {
+  counts: {
+    memory_nodes: number;
+    evidence_nodes: number;
+    edges: number;
+    permission_levels: Record<string, number>;
+  };
+  nodes: KnowledgeMapNode[];
+  edges: KnowledgeMapEdge[];
+  cost_policy: {
+    paid_llm_calls: boolean;
+    embedding_calls: boolean;
+    sync_jobs_triggered: boolean;
+    strategy: string;
+  };
+};
+
+export type NotificationItem = {
+  id: string;
+  category: "review" | "agent_run" | string;
+  severity: "info" | "warning" | "error" | string;
+  title: string;
+  message: string;
+  action_href: string;
+  source_count: number;
+  created_at?: string | null;
+};
+
+export type NotificationsResponse = {
+  counts: {
+    total: number;
+    review: number;
+    agent_runs: number;
+  };
+  notifications: NotificationItem[];
+};
+
+export type ReviewStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "needs_more_evidence";
+
+export type ReviewItemUpdate = {
+  payload?: Record<string, unknown>;
+  source_links?: string[];
+  source_snippets?: string[];
+  confidence_score?: number;
+  permission_level?: string;
+};
+
+export type ReviewEvidenceRequest = {
+  note?: string;
+};
+
+export type ReviewSourceEvidence = {
+  index: number;
+  rank: number;
+  source_id?: string | null;
+  source_url?: string | null;
+  source_snippet: string;
+  permission_level: string;
+  confidence_score: number;
+  importance_score: number;
+  timestamp?: string | null;
+  author?: string | null;
+  agent_run_id?: number | null;
+};
+
+export type ReviewItem = {
+  id: number;
+  item_type: string;
+  payload: Record<string, unknown>;
+  source_links: string[];
+  source_snippets: string[];
+  source_evidence?: ReviewSourceEvidence[];
+  agent_run_id?: number | null;
+  confidence_score: number;
+  permission_level: string;
+  status: ReviewStatus;
+};
+
+export type ReviewPromotionPreview = {
+  target_type: string;
+  can_approve: boolean;
+  missing_required_fields: string[];
+  normalized_payload: Record<string, string>;
+};
+
+export type ReviewResponse = {
+  items: ReviewItem[];
+};
+
+export type SearchResult = {
+  id: number;
+  source_id: string;
+  text: string;
+  source_snippet: string;
+  source_url?: string | null;
+  source_type?: string | null;
+  permission_level: string;
+  relevance_score: number;
+  matched_terms: string[];
+  citation: RagCitation;
+};
+
+export type SearchResponse = {
+  retrieval_backend: "deterministic_lexical" | "pgvector" | string;
+  cost_policy: {
+    embedding_query_call: boolean;
+    paid_llm_call: boolean;
+    requires_pgvector_flag: boolean;
+  };
+  results: SearchResult[];
+  hidden_match_count: number;
+  permission_notice?: string;
+};
+
+export type RagCitation = {
+  source_id: string;
+  source_url: string;
+  source_type?: string | null;
+  permission_level: string;
+  source_snippet: string;
+  relevance_score: number;
+  matched_terms: string[];
+};
+
+export type AskResponse = {
+  agent_name: string;
+  prompt_version: string;
+  question: string;
+  answer: string;
+  source_ids: string[];
+  source_links: string[];
+  source_snippets: string[];
+  citations: RagCitation[];
+  permission_level: string;
+  hidden_match_count: number;
+  permission_notice?: string | null;
+  cache_key: string;
+  model_name: string;
+  estimated_cost_usd: number;
+  token_usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+};
+
+export type IntegrationSyncResponse = {
+  job_id: string;
+  connector_type: string;
+  status: string;
+  created_review_items: number;
+  fetched_events: number;
+  skipped_events: number;
+};
+
+export type IntegrationManifest = {
+  type: string;
+  display_name: string;
+  mode: string;
+  status: string;
+  auth_type: string;
+  required_scopes: string[];
+  sync_strategy: string;
+  cost_policy: string;
+};
+
+export type OAuthInstallUrlResponse = {
+  connector_type: string;
+  configured: boolean;
+  install_url?: string | null;
+  state?: string | null;
+  required_scopes: string[];
+};
+
+export type SlackOAuthInstallUrlResponse = OAuthInstallUrlResponse;
+
+export type IntegrationConnection = {
+  connector_type: string;
+  workspace_id: string;
+  workspace_name: string;
+  status: string;
+  credential_status?: "available" | "missing";
+  masked_bot_token: string;
+  scopes: string[];
+};
+
+export type AgentReviewResponse = {
+  agent_name: string;
+  status: string;
+  created_review_items: number;
+  preflight?: SlackLlmPreflight;
+};
+
+export type SlackAgentReviewResponse = AgentReviewResponse;
+
+export type SlackLlmPreflight = {
+  action: "run" | "skip" | "blocked" | "use_cache" | string;
+  reason: string;
+  budget_status: string;
+  model_name?: string | null;
+  provider_order: string[];
+  available_providers: string[];
+  estimated_input_tokens: number;
+  estimated_output_tokens: number;
+  estimated_total_tokens: number;
+  estimated_cost_usd: number;
+  budget_limit_usd?: number | null;
+  evidence_message_count: number;
+  max_evidence_messages: number;
+  source_window?: string;
+  requires_paid_confirmation: boolean;
+};
+
+export type SlackRuntimeStatus = {
+  connector_type: "slack";
+  mode: "mock" | "live";
+  configured_channel_ids: string[];
+  selected_channel_ids: string[];
+  channel_options: {
+    id: string;
+    name: string;
+    is_selected: boolean;
+    is_configured: boolean;
+  }[];
+  connection_status: string;
+  credential_status: "available" | "missing";
+  latest_sync?: {
+    job_id: string;
+    status: string;
+    message: string;
+    progress_pct: number;
+  } | null;
+  latest_sync_summary?: {
+    fetched_events: number;
+    created_review_items: number;
+    skipped_events: number;
+  } | null;
+  last_error?: {
+    code: string;
+    message: string;
+    action_hint: string;
+  } | null;
+  agent_bridge: {
+    slack_source_count: number;
+    pending_review_count: number;
+    ready_for_agent_test: boolean;
+  };
+  cost_policy: {
+    status_lookup_triggers_sync: boolean;
+    status_lookup_triggers_llm: boolean;
+    thread_reply_fetch_is_incremental: boolean;
+  };
+};
+
+export type GoogleRuntimeStatus = {
+  connector_type: "gmail" | "drive" | "calendar";
+  mode: "mock" | "live";
+  connection_status: string;
+  credential_status: "available" | "missing";
+  account_name?: string | null;
+  latest_sync?: {
+    job_id: string;
+    status: string;
+    message: string;
+    progress_pct: number;
+  } | null;
+  cost_policy: {
+    status_lookup_triggers_sync: boolean;
+    status_lookup_triggers_llm: boolean;
+  };
+};
+
+export type MessageChannel = {
+  id: string;
+  name: string;
+  description: string;
+  unread_count: number;
+};
+
+export type Message = {
+  id: string;
+  channel_id: string;
+  author_name: string;
+  author_role: string;
+  body: string;
+  created_at: string;
+};
+
+export type MessageChannelsResponse = {
+  channels: MessageChannel[];
+};
+
+export type ChannelMessagesResponse = {
+  channel: MessageChannel;
+  messages: Message[];
+};

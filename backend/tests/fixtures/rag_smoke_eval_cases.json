@@ -1,0 +1,33 @@
+{
+  "cases": [
+    {
+      "name": "redis_queue_progress",
+      "query": "Redis queue progress",
+      "k": 3,
+      "expected_source_ids": [
+        "gmail-redis-decision",
+        "slack-redis-progress"
+      ],
+      "chunks": [
+        {
+          "source_type": "gmail",
+          "source_id": "gmail-redis-decision",
+          "title": "Redis queue decision",
+          "text": "Redis queue progress will be tracked in the company memory timeline."
+        },
+        {
+          "source_type": "slack",
+          "source_id": "slack-redis-progress",
+          "title": "Slack Redis progress update",
+          "text": "The Slack thread confirms Redis queue progress and embedding cost controls."
+        },
+        {
+          "source_type": "calendar",
+          "source_id": "calendar-pto",
+          "title": "PTO calendar",
+          "text": "Team PTO schedule and office seating notes."
+        }
+      ]
+    }
+  ]
+}

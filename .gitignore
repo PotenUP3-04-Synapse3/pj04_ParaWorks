@@ -9,5 +9,25 @@ wheels/
 # Virtual environments
 .venv
 
+
 # env
 .env
+.env.local
+.env_backup
+
+
+# Test artifacts
+.pytest_cache/
+.tmp/
+
+# Frontend generated files
+frontend/node_modules/
+frontend/.next/
+frontend/.next-docker/
+frontend/.next-smoke/
+frontend/playwright-report/
+frontend/test-results/
+frontend/tsconfig.tsbuildinfo
+
+# Git worktrees
+.worktrees/

@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: paraworks-postgres
+    environment:
+      POSTGRES_DB: paraworks
+      POSTGRES_USER: paraworks
+      POSTGRES_PASSWORD: paraworks
+    ports:
+      - "127.0.0.1:${PARAWORKS_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paraworks -d paraworks"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: paraworks-redis
+    ports:
+      - "127.0.0.1:${PARAWORKS_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: paraworks-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: paraworks
+      MINIO_ROOT_PASSWORD: paraworks-secret
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+
+volumes:
+  postgres-data:
+  minio-data:
