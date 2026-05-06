@@ -1,217 +1,250 @@
-# ParaWorks Current Project Progress Plan
+# ParaWorks 현재 프로젝트 진행상황
+
+> 작성일: 2026-05-06  
+> 목적: 현재 ParaWorks 프로젝트의 구현 상태, 남은 작업, 검증 상태를 한눈에 보기 위한 진행상황 문서
+
+---
+
+## 1. 프로젝트 요약
+
+ParaWorks는 **한국어 우선, 근거 중심, 권한 인식형 회사 메모리 플랫폼**이다.
+
+Slack, Gmail, Google Drive, Calendar 등 업무 도구에서 수집한 증거를 바탕으로 AI Agent가 Timeline, History, Decision, Todo 후보를 만들고, 사람이 Review Queue에서 검토한 뒤 승인된 항목만 조직 지식으로 승격한다.
+
+현재 프로젝트는 단순 기획 단계가 아니라, **FastAPI 백엔드 + Next.js 프론트엔드 + 다중 Agent Runtime + Review Queue + RAG/pgvector 방향성 + Auth/RBAC**까지 구현된 포트폴리오형 MVP 단계다.
+
+---
+
+## 2. 전체 진행상황
+
+| 영역 | 현재 상태 | 요약 |
+| --- | --- | --- |
+| 제품 방향 | 완료 | Evidence-first, Review Queue, 권한/비용 정책이 정리됨 |
+| 백엔드 API | 진행 중 | 핵심 API는 구현됨, production hardening 필요 |
+| 프론트엔드 | 진행 중 | 주요 화면 구현됨, 최종 빌드/시각 검증 필요 |
+| Connector | 진행 중 | Slack/Google 계열 boundary 구현, Drive parser 고도화 필요 |
+| Agent Runtime | 진행 중 | Slack, Mail/Docs, RAG/Orchestrator Agent 구현 |
+| Review Queue | 진행 중 | 승인/보류/근거 확인 가능, multi-step approval은 미구현 |
+| RAG/검색 | 진행 중 | deterministic smoke path와 pgvector path가 공존 |
+| Auth/RBAC | 진행 중 | cookie auth, Google identity, role guard 구현, 보안 hardening 필요 |
+| 테스트 | 양호 | backend test suite 통과 |
+| 배포 | 준비 단계 | deployment/Azure 설계는 있음, 실제 staging은 미착수 |
+
+---
+
+## 3. 완료된 작업
+
+### 3.1 제품/아키텍처
+
+- [x] ParaWorks 제품 방향을 회사 메모리 플랫폼으로 정리
+- [x] Evidence-first 원칙 정리
+- [x] Review Queue를 AI output의 trust boundary로 정의
+- [x] Slack Agent, Mail/Document Agent, RAG/Orchestrator Agent 3트랙 구조 정리
+- [x] `backend/app/agent_runtime/`에 shared runtime contract 구현
+- [x] Agent registry와 manifest boundary 구현
+- [x] token cost, permission, source evidence 보존 정책 반영
+
+### 3.2 백엔드
+
+- [x] FastAPI 앱 구성
+- [x] `/api/v1` 라우터 구성
+- [x] health, auth, dashboard, integrations, review, search, ask, knowledge, notifications, agent-runs API 구현
+- [x] SQLAlchemy model 구성
+- [x] SQLite smoke mode 지원
+- [x] PostgreSQL + pgvector 방향성 반영
+- [x] Celery 기반 RAG indexing job boundary 구현
+
+### 3.3 Connector/Ingestion
+
+- [x] 공통 connector ingestion contract 구현
+- [x] `SourceEvent`, `ConnectorManifest` boundary 구현
+- [x] Slack connector boundary 구현
+- [x] Slack OAuth/install/runtime status 구현
+- [x] Slack selected channel sync와 incremental cursor 구현
+- [x] Slack thread reply context metadata 보존
+- [x] Google OAuth boundary 구현
+- [x] Gmail/Drive/Calendar installed sync boundary 구현
+- [x] Gmail thread/domain metadata 보존
+- [x] Drive parser/version metadata 보존
+- [x] Calendar attendee/status metadata 보존
+- [x] connector golden dataset fixture 추가
+
+### 3.4 Agent Runtime
+
+- [x] Slack Agent deterministic slice 구현
+- [x] Mail/Document Agent deterministic slice 구현
+- [x] RAG Orchestrator Agent 구현
+- [x] LangGraph company-memory orchestration foundation 구현
+- [x] Timeline, History, Decision Record, Todo extraction boundary 구현
+- [x] Validation gate 구현
+- [x] LangChain structured-output adapter boundary 구현
+- [x] Slack live LLM adapter 구현
+- [x] OpenAI primary, Gemini fallback 구조 구현
+- [x] paid LLM preflight, ranked evidence window, budget cap 구현
+
+### 3.5 Review Queue/Knowledge
+
+- [x] Review Queue API와 UI 구현
+- [x] source-less ReviewItem approval rejection 구현
+- [x] Source Evidence Drawer 구현
+- [x] source URL, snippet, permission, confidence, rank, AgentRun metadata 표시
+- [x] `needs_more_evidence`와 reviewer note workflow 구현
+- [x] Review Queue 승인 시 knowledge table promotion 구현
+- [x] role-aware Review Queue approval 구현
 
-작성일: 2026-05-06
+### 3.6 RAG/검색/지식 화면
 
-## 1. 검토한 문서와 결론
+- [x] `/api/v1/ask` RAG answer endpoint 구현
+- [x] `/api/v1/search` retrieval endpoint 구현
+- [x] permission-aware hidden match accounting 구현
+- [x] RAG citation과 source snippet 반환
+- [x] pgvector adapter 구현
+- [x] incremental vector indexing 구현
+- [x] content hash 기반 embedding skip 구현
+- [x] RAG smoke evaluation fixture 구현
+- [x] Knowledge Library 구현
+- [x] Decisions, Timeline, History page 구현
+- [x] Knowledge Map 구현
 
-검토 문서:
+### 3.7 Auth/RBAC/Security
 
-- `AGENTS.md`
-- `C:\Users\user\Documents\Obsidian Vault\Paraworks_Project_Plan_wbs.md`
-- `C:\Users\user\Documents\Obsidian Vault\PROJECT_TASK_AUDIT.md`
+- [x] httpOnly session cookie 구현
+- [x] refresh token table과 hashed refresh token 저장 구현
+- [x] refresh token rotation 구현
+- [x] logout revocation 구현
+- [x] demo-mode header fallback 유지
+- [x] Google identity login boundary 구현
+- [x] Google identity와 Google data integration OAuth 분리
+- [x] seeded admin/employee/reviewer account 구현
+- [x] admin user management API/UI 구현
+- [x] role-aware navigation filtering 구현
+- [x] admin-only cost observability guard 구현
+- [x] audit log 기록 구현
 
-보조 기준:
+### 3.8 프론트엔드
 
-- `plan.md`
-- `docs/portfolio-log.md`
-- `docs/superpowers/runbooks/session-handoff.md`
-- 최신 관련 spec/plan: Google Identity/RBAC 문서
-- 현재 저장소 코드와 테스트 상태
+- [x] Next.js App Router 기반 화면 구성
+- [x] Korean-first workspace shell 구현
+- [x] dashboard 구현
+- [x] messages 구현
+- [x] integrations 구현
+- [x] review 구현
+- [x] search/ask workbench 구현
+- [x] agent-runs summary/detail 구현
+- [x] knowledge, decisions, timeline, history 구현
+- [x] notifications 구현
+- [x] knowledge-map 구현
+- [x] login/admin/RBAC UI 구현
 
-결론: 세 문서는 모두 같은 ParaWorks 작업을 다룬다. 다만 문서의 성격과 시점이 다르므로 서로 동일한 계획서는 아니다.
+---
 
-- `Paraworks_Project_Plan_wbs.md`는 원 기획 발표/WBS 문서다. 문제 정의, MVP 범위, 예상 시나리오, 2주 개발 역할 분담을 설명한다.
-- `PROJECT_TASK_AUDIT.md`는 2026-05-04 시점의 코드 감사 문서다. 당시 빌드 차단 요소와 추가 작업을 넓게 정리했지만, 현재 코드 기준으로는 일부 내용이 오래되었다.
-- `AGENTS.md`는 현재 저장소의 협업/개발 규칙 문서다. 세 개발자가 Slack Agent, Mail/Document Agent, RAG/Orchestrator Agent를 나누어 소유한다는 실행 원칙을 정의한다.
+## 4. 현재 작업 중인 영역
 
-현재 실행 기준은 저장소 루트의 `plan.md`다. 외부 WBS와 감사 문서는 방향성과 과거 상태를 확인하는 참고 자료로 사용하고, 충돌이 있으면 `plan.md`와 현재 코드 상태를 우선한다.
+### 4.1 Connector 품질 고도화
 
-## 2. 전체 작업 Plan 재작성
+현재 상태:
 
-### A. 제품 방향과 협업 계약
+- Slack/Gmail/Drive/Calendar evidence metadata는 기본적으로 agent-ready 형태로 보존된다.
+- Drive는 아직 metadata-only parser 상태에 가깝다.
 
-완료:
+진행 중인 방향:
 
-- ParaWorks의 제품 목표가 "한국어 우선, 근거 중심, 권한 인식형 회사 메모리 플랫폼"으로 정리되었다.
-- 세 개발자 트랙이 Slack Agent, Mail/Document Agent, RAG/Orchestrator Agent로 재정의되었다.
-- `AgentManifest`, `AgentRegistry`, `EvidencePacket`, `ReviewCandidate`, `AgentRunCost`, `PermissionContext` 등 공유 계약이 `backend/app/agent_runtime/`에 존재한다.
-- Evidence-first, Review Queue trust boundary, 비용 정책, 권한 정책이 `AGENTS.md`와 `plan.md`에 문서화되었다.
+- 실제 문서 타입별 parser 품질 개선
+- Drive parser run record 추가
+- HWP/HWPX parser adapter 결정
+- connector별 pagination, rate limit, token refresh 검증 강화
 
-작업중:
+### 4.2 Agent 품질 고도화
 
-- shared contract를 유지하면서 각 agent 트랙이 더 실제 데이터 품질에 가까워지도록 정리 중이다.
-- portfolio/demo 기준으로 제품 설명, runbook, case study를 계속 보강 중이다.
+현재 상태:
 
-해야 할 것:
+- deterministic agent contract와 structured-output adapter가 공존한다.
+- Slack live LLM path는 preflight와 cost cap 뒤에 있다.
 
-- output schema, permission policy, token budget policy 변경 시 의사결정 기록을 남긴다.
-- 장기적으로 branch/integration pipeline을 실제 협업 방식과 맞춰 운영한다.
+진행 중인 방향:
 
-### B. Connector와 Ingestion
+- Slack/Gmail/Drive/Calendar evidence quality를 agent 입력에 더 안정적으로 반영
+- communication/document golden dataset 확장
+- LLM timeout, quota 초과, structured output parsing 실패 처리 정책 보강
+- LangGraph checkpoint persistence/resume 필요성 검토
 
-완료:
+### 4.3 Production Auth Hardening
 
-- Slack, Gmail, Google Drive, Calendar connector boundary가 존재한다.
-- Slack OAuth, Google OAuth, installed sync boundary가 구현되어 있다.
-- connector 공통 입력은 `SourceEvent`와 `ConnectorManifest`를 사용한다.
-- Slack thread context, Gmail thread/domain metadata, Drive parser/version metadata, Calendar attendee/status metadata가 보강되었다.
-- connector golden dataset fixture가 Slack/Gmail/Drive/Calendar metadata expectations를 고정한다.
+현재 상태:
 
-작업중:
+- cookie auth, refresh rotation, Google identity login, RBAC guard는 구현되어 있다.
 
-- Google Drive는 현재 metadata-only parser status와 version/revision 정보를 보존하는 단계다.
-- 실제 파일 타입별 파싱 품질과 parser run 기록은 더 보강해야 한다.
+진행 중인 방향:
 
-해야 할 것:
+- CSRF protection 추가
+- login/refresh rate limiting 추가
+- production auth table Alembic migration 정리
+- Google provider metadata, last login field 정리
+- production mode에서 demo header가 닫히는지 검증
 
-- Drive 파일 타입별 parser adapter를 확정한다.
-- HWP/HWPX parser adapter 방향을 결정한다.
-- live connector 검증은 fake client 기반 자동 테스트와 분리하고, 실제 API 호출은 수동 smoke로 제한한다.
-- connector별 sync 실패, pagination, rate limit, token refresh를 더 촘촘히 검증한다.
+### 4.4 Frontend Final Polish
 
-### C. Agent와 LangGraph Orchestration
+현재 상태:
 
-완료:
+- 주요 product page는 구현되어 있다.
+- 포트폴리오 demo story를 구성할 화면은 대부분 존재한다.
 
-- Slack Agent, Mail/Document Agent, RAG/Orchestrator Agent가 독립 slice로 구현되어 있다.
-- LangGraph company-memory workflow foundation이 존재한다.
-- Track C memory extraction boundary가 Timeline, History, Decision Record, Todo, Validation까지 확장되었다.
-- LangChain structured-output adapter가 deterministic contract 뒤에 추가되었다.
-- Slack live LLM path에는 OpenAI primary, Gemini fallback, paid-run preflight, evidence ranking, budget cap이 있다.
+진행 중인 방향:
 
-작업중:
+- 전체 UI consistency pass
+- loading/empty/error/unauthorized 상태 점검
+- desktop/mobile Playwright smoke
+- portfolio screenshot/clip capture
 
-- deterministic harness와 structured-output adapter 사이의 품질 검증을 넓히는 단계다.
-- Slack/Google 실제 evidence quality를 agent 입력에 더 안정적으로 반영하는 중이다.
+### 4.5 Deployment/Staging 준비
 
-해야 할 것:
+현재 상태:
 
-- communication/document golden dataset을 더 확장한다.
-- LLM timeout, quota 초과, structured output parsing 실패 정책을 제품 플로우와 연결한다.
-- LangGraph checkpoint persistence/resume은 현재 정책 metadata 수준이므로, 장기 실행 graph가 필요해지면 저장형 checkpoint를 구현한다.
+- deployment runbook과 Azure integration design은 존재한다.
+- `azure_openai` provider alias는 구현되어 있다.
+- 실제 Azure resource creation은 아직 시작하지 않았다.
 
-### D. Human Review와 Knowledge Promotion
+진행 중인 방향:
 
-완료:
+- staging budget, region, resource group, domain 결정
+- PostgreSQL pgvector, Redis, Container Apps, Key Vault 구성 준비
+- staging Playwright smoke 기준 정리
 
-- Review Queue가 LLM/agent output의 trust boundary로 작동한다.
-- source-less review approval rejection 테스트가 있다.
-- 승인된 ReviewItem은 knowledge table로 promotion된다.
-- Source Evidence Drawer가 source URL, snippet, permission, confidence, rank, AgentRun metadata를 보여준다.
-- `needs_more_evidence`와 reviewer note 흐름이 있다.
-- Review Queue approval은 role-aware RBAC와 연결되었다.
+---
 
-작업중:
+## 5. 남은 작업
 
-- reviewer가 더 쉽게 근거를 비교하고 승인/보류할 수 있도록 UI/정보 밀도를 정리하는 단계다.
+### 5.1 우선순위 P0
 
-해야 할 것:
+- [ ] 현재 환경 또는 Node/npm이 있는 환경에서 frontend lint 실행
+- [ ] 현재 환경 또는 Node/npm이 있는 환경에서 frontend build 실행
+- [ ] final Playwright route regression 실행
+- [ ] portfolio recording 전 screenshot/clip capture
 
-- multi-step approval states가 필요하면 `reviewer_approved`, `manager_approved`, `admin_approved`, `promoted_to_knowledge`로 확장한다.
-- 낮은 confidence 항목과 evidence 부족 항목의 큐 분리를 검토한다.
+### 5.2 우선순위 P1
 
-### E. RAG, Vector Indexing, Knowledge Surfaces
+- [ ] Drive file-type parser 구현
+- [ ] parser run record와 parse status 저장
+- [ ] HWP/HWPX parser adapter 결정
+- [ ] production auth CSRF 추가
+- [ ] login/refresh rate limiting 추가
+- [ ] Alembic migration hardening
+- [ ] multi-step approval state 필요 여부 결정
+- [ ] LLM 실패/timeout/quota 정책 정리
 
-완료:
+### 5.3 우선순위 P2
 
-- PostgreSQL + pgvector 방향이 정해졌고 adapter가 구현되어 있다.
-- SQLite smoke mode에서는 deterministic retrieval이 유지된다.
-- incremental vector indexing과 content-hash skip logic이 존재한다.
-- ask/search path가 permission-aware citation과 hidden-match accounting을 제공한다.
-- RAG smoke evaluation fixture가 precision, recall, hit rate를 계산한다.
-- Knowledge Library, Decisions, Timeline, History, Knowledge Map 페이지가 존재한다.
+- [ ] Azure staging resource 생성
+- [ ] true Azure OpenAI endpoint/deployment mode 구현
+- [ ] OpenTelemetry/Prometheus/Grafana 등 운영 관측성 확장
+- [ ] CI workflow에 backend test, frontend lint/build, Playwright smoke 추가
+- [ ] portfolio case study에 최종 screenshot과 demo 결과 반영
 
-작업중:
+---
 
-- pgvector search는 feature flag 뒤에 있으며, 기본 demo path는 zero-cost deterministic mode를 유지한다.
+## 6. 검증 상태
 
-해야 할 것:
-
-- production reindex는 PostgreSQL + pgvector + embedding provider key 조건에서만 허용되도록 계속 fail-closed 정책을 유지한다.
-- final demo 전 permission leakage와 hidden-match regression을 다시 실행한다.
-
-### F. Auth, RBAC, Security
-
-완료:
-
-- httpOnly session/refresh cookie slice가 구현되었다.
-- refresh token rotation, logout revocation, demo-mode fallback이 있다.
-- Google identity login과 Google data integration OAuth가 분리되었다.
-- seeded admin/employee/reviewer accounts가 존재한다.
-- admin user management API/UI와 audit log가 있다.
-- admin-only cost observability guards가 적용되었다.
-
-작업중:
-
-- production auth hardening은 진행 중이다. 현재는 MVP auth/RBAC slice가 구현된 상태다.
-
-해야 할 것:
-
-- CSRF, rate limiting, Alembic migration hardening을 추가한다.
-- Google identity provider metadata와 last-login 계열 필드를 migration으로 정리한다.
-- 보안/권한 regression을 final verification에 포함한다.
-
-### G. Frontend와 Demo UX
-
-완료:
-
-- Next.js App Router 기반 UI가 존재한다.
-- Korean-first shell, messages, integrations, review, search, dashboard, admin, notifications, knowledge pages가 구현되어 있다.
-- Knowledge Map과 approved memory pages가 demo story를 지원한다.
-- AgentRun cost/detail, ranked evidence, RAG reindex approval UX가 있다.
-- login/admin RBAC UI가 있다.
-
-작업중:
-
-- final Liquid Glass consistency pass와 portfolio recording용 화면 정리가 남아 있다.
-
-해야 할 것:
-
-- frontend final screenshot/clip capture를 수행한다.
-- 반복 사용 화면의 loading/empty/error/unauthorized 상태를 점검한다.
-- 전체 Playwright desktop/mobile smoke를 final demo 전에 다시 실행한다.
-
-### H. Testing, CI, Deployment, Documentation
-
-완료:
-
-- backend test suite가 존재하며 현재 세션 검증 결과 `252 passed, 1 skipped`다.
-- frontend에는 lint/build/playwright scripts가 있다.
-- deployment runbook, production auth runbook, portfolio demo script, portfolio case study/log가 존재한다.
-- `.env.example`이 존재한다.
-
-작업중:
-
-- Azure staging preparation은 design과 provider alias 수준까지 완료되었고, 실제 IaC/resource creation은 시작하지 않았다.
-
-해야 할 것:
-
-- 현재 환경에서는 `npm.cmd`가 없어 frontend lint/build를 재검증하지 못했다. Node/npm이 있는 환경에서 다시 실행한다.
-- CI workflow가 없다면 backend test, frontend lint/build, Playwright smoke를 자동화한다.
-- Azure resource creation은 예산, region, resource group, staging domain 확인 후 진행한다.
-
-## 3. 현재 전체 코드 진행상황
-
-### 현재 코드 기준으로 해소된 과거 감사 항목
-
-`PROJECT_TASK_AUDIT.md`의 2026-05-04 지적 중 현재 코드 기준으로 해소되었거나 오래된 항목:
-
-- `frontend/package.json` 충돌 마커: 현재 파일에 충돌 마커가 없다.
-- `.env.example` 부재: 현재 루트 `.env.example`이 존재한다.
-- `backend/main.py`와 `backend/app/main.py` 중복: 현재 `backend/main.py`는 없고 `backend/app/main.py`가 FastAPI 진입점이다.
-- test file 부재: 현재 `backend/tests` 아래 test 파일 56개가 존재한다.
-- search/knowledge/decisions 라우터 누락 가능성: 현재 `backend/app/api/v1/router.py`에 `search`, `knowledge` 라우터가 포함되어 있다.
-
-### 현재 구현 밀도
-
-- Backend: FastAPI API, SQLAlchemy models, auth/RBAC, connector ingestion, agent runtime, RAG/vector indexing, Review Queue, Knowledge API가 넓게 구현되어 있다.
-- Frontend: Next.js pages와 API client가 제품형 demo 흐름을 구성한다.
-- Agent runtime: Slack/Mail-Docs/RAG-Orchestrator와 Track C memory extraction boundary가 존재한다.
-- Data/RAG: pgvector production path와 SQLite deterministic smoke path가 함께 유지된다.
-- Cost policy: AgentRun, preflight, evidence windowing, cache/dedupe, reindex approval UX가 구현되어 있다.
-- Permission policy: Review Queue, RAG hidden matches, RBAC route/API guard가 구현되어 있다.
-
-### 현재 검증 결과
+### Backend
 
 현재 세션에서 실행:
 
@@ -225,10 +258,14 @@ $env:PARAWORKS_DEMO_MODE='true'; uv run pytest backend\tests -q
 252 passed, 1 skipped
 ```
 
-프론트 검증:
+상태:
 
-- `npm.cmd run lint`와 `npm.cmd run build`를 시도했으나 현재 셸에서 `npm.cmd` 명령을 찾을 수 없어 실행하지 못했다.
-- Node/npm이 설치된 개발 환경에서 다음 명령을 다시 실행해야 한다.
+- backend test suite는 현재 기준 통과
+- test coverage는 connector, RAG, Review Queue, RBAC, Agent Runtime, Knowledge promotion을 포함
+
+### Frontend
+
+현재 세션에서 시도:
 
 ```powershell
 cd frontend
@@ -236,20 +273,139 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-### 현재 남은 핵심 리스크
+결과:
 
-- 프론트 빌드 검증이 현재 세션에서 완료되지 않았다.
-- production auth는 MVP slice 이후 CSRF, rate limiting, migration hardening이 남아 있다.
-- Drive/HWP/HWPX parser는 metadata-only에서 실제 문서 타입별 parsing으로 확장해야 한다.
-- Azure staging은 설계와 alias까지만 완료되었고 실제 인프라 생성은 미착수다.
-- final portfolio recording 전 Playwright 전체 smoke와 screenshot capture가 필요하다.
+```text
+npm.cmd 명령을 현재 셸에서 찾을 수 없어 실행하지 못함
+```
 
-## 4. 추천 실행 순서
+상태:
 
-1. Node/npm이 있는 환경에서 frontend lint/build를 재검증한다.
-2. final Playwright desktop/mobile smoke를 실행한다.
-3. Drive parser run records와 file-type parser를 구현한다.
-4. production auth hardening으로 CSRF, rate limiting, migration을 추가한다.
-5. final portfolio screenshots/clips를 캡처한다.
-6. Azure staging은 예산/region/resource group/domain 확정 후 별도 branch에서 시작한다.
+- frontend 검증은 미완료
+- Node/npm이 있는 환경에서 재실행 필요
+
+권장 재검증:
+
+```powershell
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+npm.cmd run test:visual -- e2e/page-regression.spec.ts
+```
+
+---
+
+## 7. 현재 리스크
+
+| 리스크 | 영향 | 대응 |
+| --- | --- | --- |
+| frontend build 미검증 | demo 직전 UI/build 실패 가능성 | Node/npm 환경에서 즉시 재검증 |
+| Drive parser 미완성 | 문서 기반 history 품질 제한 | file-type parser와 parser run record 추가 |
+| production auth hardening 미완료 | 배포 수준 보안 부족 | CSRF, rate limit, migration 추가 |
+| Azure staging 미착수 | 실제 배포 시연 불가 | 예산/region/domain 결정 후 별도 진행 |
+| final visual evidence 부족 | 포트폴리오 설득력 저하 | screenshot/clip, Playwright 결과 확보 |
+
+---
+
+## 8. 다음 실행 순서
+
+1. Frontend lint/build를 Node/npm 환경에서 재실행한다.
+2. Playwright route regression을 실행한다.
+3. portfolio demo script 기준으로 login → integrations → agent-runs → review → knowledge → knowledge-map → search 흐름을 점검한다.
+4. Drive parser와 parser run record를 구현한다.
+5. production auth hardening을 진행한다.
+6. final screenshot/clip을 캡처해 portfolio case study에 반영한다.
+7. Azure staging은 예산과 배포 조건 확정 후 별도 branch에서 시작한다.
+
+---
+
+## 9. 포트폴리오 완성도를 높이기 위한 제언
+
+현재 프로젝트는 기능 구현량이 많고, 다중 Agent/Review/RAG/권한/비용 정책까지 포함되어 있어 취업 포트폴리오로 충분히 강점이 있다. 다만 더 높은 수준의 프로젝트로 보이려면 다음을 보강하는 것이 좋다.
+
+### 9.1 한 장짜리 Architecture Overview 추가
+
+포트폴리오 심사자는 전체 코드를 오래 보지 않는다. 다음 흐름을 한 장의 diagram과 짧은 설명으로 정리하면 전달력이 좋아진다.
+
+```text
+Connector
+  → SourceEvent
+  → Agent Runtime
+  → Review Queue
+  → Approved Knowledge
+  → RAG Answer
+```
+
+포인트:
+
+- AI output이 곧바로 지식이 되지 않는다는 점
+- 권한과 증거가 끝까지 따라간다는 점
+- 비용 통제가 AgentRun과 indexing에 반영된다는 점
+
+### 9.2 Demo Evidence Pack 만들기
+
+`docs/demo-evidence/` 같은 폴더를 만들어 다음 자료를 모으면 좋다.
+
+- backend test 결과 캡처
+- frontend build 결과 캡처
+- Playwright 결과 캡처
+- Review Queue evidence drawer screenshot
+- Knowledge Map screenshot
+- RAG answer citation screenshot
+- AgentRun cost observability screenshot
+
+이 자료는 면접에서 "실제로 어디까지 만들었는지"를 빠르게 증명한다.
+
+### 9.3 품질 지표를 수치로 보여주기
+
+현재 RAG smoke evaluation이 있으므로, 포트폴리오에는 다음 수치를 보여주는 것이 좋다.
+
+- RAG precision@k
+- recall@k
+- hidden restricted match count
+- indexed/skipped vector count
+- saved embedding calls
+- AgentRun estimated cost
+- cache hit count
+
+단순히 "RAG를 구현했다"보다 "비용과 품질을 측정했다"가 훨씬 강하게 보인다.
+
+### 9.4 Production Readiness Checklist를 완료형으로 만들기
+
+배포를 실제로 하지 않더라도, 아래 항목이 체크된 문서를 만들면 프로젝트 수준이 올라간다.
+
+- secrets는 git에 없음
+- demo auth와 production auth 분리
+- restricted source leakage test 있음
+- paid LLM call은 preflight 필요
+- embedding reindex는 dry-run 필요
+- rollback plan 있음
+- staging 환경 변수 표 있음
+
+### 9.5 “왜 이 구조가 필요한가”를 case study에 더 명확히 쓰기
+
+기술 나열보다 문제 해결 구조를 강조하는 것이 좋다.
+
+좋은 설명 구조:
+
+1. 문제: Slack/Gmail/Drive에 의사결정 맥락이 흩어짐
+2. 위험: AI가 출처 없이 답하면 업무 지식으로 신뢰할 수 없음
+3. 해결: EvidencePacket → Review Queue → Approved Knowledge
+4. 보강: permission filter, cost cap, cache, pgvector
+5. 결과: 검색 가능한 회사 기억과 감사 가능한 AI 실행 기록
+
+### 9.6 Final Demo는 “기능 목록”이 아니라 “업무 시나리오”로 구성하기
+
+추천 demo 시나리오:
+
+1. Slack/Gmail/Drive evidence가 수집된다.
+2. Agent가 의사결정 후보를 만든다.
+3. Reviewer가 source evidence를 열어본다.
+4. Reviewer가 승인한다.
+5. 승인된 내용이 Decision/Timeline/History에 나타난다.
+6. 사용자가 자연어로 질문한다.
+7. RAG가 citation과 permission notice를 포함해 답한다.
+8. Admin이 AgentRun cost와 token usage를 확인한다.
+
+이 흐름이 녹화되면 취업 포트폴리오에서 “완성된 제품형 프로젝트”로 보이기 쉽다.
 
