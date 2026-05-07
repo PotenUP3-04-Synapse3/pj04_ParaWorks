@@ -81,6 +81,9 @@ class SlackWebApiClient:
             },
         )
 
+    def users_list(self) -> list[dict]:
+        return self._get_paginated_items('users.list', 'members', {'limit': str(self.page_limit)})
+
     def _get_paginated_items(self, method: str, item_key: str, params: dict[str, str]) -> list[dict]:
         items: list[dict] = []
         cursor: str | None = None
