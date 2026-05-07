@@ -3723,3 +3723,25 @@ Cost/security note:
   - Added backend admin guards to AgentRun cost/token APIs and RAG reindex/indexing observability APIs.
   - Direct `/agent-runs` and AgentRun detail URLs now render an admin-required state instead of crashing when a non-admin context reaches the page.
   - Verification: targeted admin-only API tests passed, backend suite `252 passed, 1 skipped`, and targeted Playwright AgentRun regression `10 passed`.
+- `feat: redesign review-centered frontend shell`
+  - Reworked the global frontend shell around a Korean-first company-memory console with a persistent Ask/search bar, review count, role-aware navigation, and operational status signals.
+  - Redesigned `/dashboard` as a Review Queue workbench instead of a generic widget dashboard, foregrounding evidence-backed candidates, trusted knowledge, AgentRun cost, permissions, and sync health.
+  - Visual direction shifted from purple glass styling to a quieter business-console palette with compact panels, status badges, and evidence-first calls to action.
+  - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed after rerunning outside the sandbox because the sandboxed build hit a Windows `.next` rename `EPERM`.
+- `feat: redesign ui as macos sequoia productivity app`
+  - Rebuilt the global shell around translucent macOS-style sidebars, soft glass toolbars, native icon controls, dark/light material tokens, and Spotlight-style command search.
+  - Reframed `/dashboard` as a desktop productivity workspace for AI-detected decisions: center timeline, approval workflow, project history, and right-side source evidence inspector.
+  - Added reusable glass, native button, badge, inspector, sheet, sidebar, and motion utility classes in the global UI system for consistent follow-on pages.
+  - Verification: `npm.cmd run build` passed; local Next dev server returned HTTP 200 for `http://127.0.0.1:3000/dashboard`.
+- `feat: align dashboard with prody-style project workspace`
+  - Revised the previous glass-heavy direction into a cleaner desktop app frame inspired by the supplied reference: light gray sidebar, rounded white workspace, breadcrumb top bar, compact controls, project header, chart card, and spreadsheet-like decision table.
+  - Dashboard data now reads as an enterprise archive project with confidence trend, source score indicators, review actions, and rows for decision/evidence/source records.
+  - Verification: `npm.cmd run build` passed; `http://127.0.0.1:3000/dashboard` returned HTTP 200.
+- `feat: implement asset-referenced enterprise console frontend`
+  - Used the `data/assets/pages (*.png)` references to rebuild the global shell and dashboard around a white Korean business console: fixed sidebar, top search/actions, compact source cards, live activity stream, review-priority table, and right-side operations summary.
+  - Replaced mojibake Korean copy in the touched shell/dashboard surfaces and added compatibility CSS tokens for existing Liquid Glass pages so the broader frontend keeps rendering while the new console direction lands.
+  - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed; local Next dev server returned HTTP 200 for `http://127.0.0.1:3000/dashboard`. Playwright screenshot capture could not run because the local Playwright browser binary is not installed.
+- `style: tighten frontend to supplied reference ratios`
+  - Rechecked the asset references and moved the shell/dashboard closer to the supplied console proportions: 216px left rail, narrower top search, 320px right rail, compact 8px panels, smaller 13px operational text, softer blue active states, and brighter off-white canvas.
+  - Rebuilt `/dashboard` around the reference dashboard composition: today's workflow cards, critical-action cards, review table rows, right-side live activity, agent summary, quick Ask, and bottom AI insight cards.
+  - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed; local `/dashboard` returned HTTP 200.

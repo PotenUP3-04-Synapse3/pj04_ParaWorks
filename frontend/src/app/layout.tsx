@@ -3,8 +3,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ParaWorks Harness",
-  description: "Minimal frontend harness for ParaWorks demos",
+  title: "Paraworks Company Memory",
+  description: "AI-powered enterprise company memory dashboard",
 };
 
 export default function RootLayout({
@@ -19,10 +19,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
 try {
-  var theme = localStorage.getItem('paraworks-theme') || 'dark';
-  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = 'light';
+  localStorage.setItem('paraworks-theme', 'light');
 } catch (_) {
-  document.documentElement.dataset.theme = 'dark';
+  document.documentElement.dataset.theme = 'light';
 }
 `,
           }}
