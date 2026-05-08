@@ -44,7 +44,12 @@ const navGroups: { items: NavItem[] }[] = [
   {
     items: [
       { href: "/search", label: "Ask \uc6cc\ud06c\uc2a4\ud398\uc774\uc2a4", icon: Bot },
-      { href: "/agent-runs", label: "\uc5d0\uc774\uc804\ud2b8 \uc2e4\ud589 \uae30\ub85d", icon: CalendarClock },
+      {
+        href: "/agent-runs",
+        label: "\uc5d0\uc774\uc804\ud2b8 \uc2e4\ud589 \uae30\ub85d",
+        icon: CalendarClock,
+        requiredRole: "admin",
+      },
       { href: "/integrations", label: "\uc5f0\ub3d9 \uad00\ub9ac", icon: Database },
       { href: "/notifications", label: "\uc54c\ub9bc", icon: Bell, badge: 3 },
     ],

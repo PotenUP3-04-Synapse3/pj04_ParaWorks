@@ -3753,3 +3753,9 @@ Cost/security note:
   - Reworked Messages, Ask/Search, Knowledge Library, Decisions, Timeline, History, Knowledge Map, and Notifications around the existing backend API contracts instead of placeholder content.
   - Added clear API-unavailable states for server-backed knowledge pages so users can distinguish developed features from a stopped backend.
   - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed; local HTTP smoke returned 200 for dashboard, messages, search, knowledge, decisions, timeline, history, knowledge map, notifications, review, agent-runs, integrations, admin, and login.
+- `feat: polish account-aware frontend shell`
+  - Connected the sidebar account card to the current `/api/v1/auth/me` user instead of a hard-coded placeholder, including role labels and profile image fallback from `frontend/public/profile`.
+  - Added a dedicated `/account` page so the account dropdown's "내 계정" action shows the current user's email, role, title, department, status, account id, permission levels, and profile image without logging out or returning to the login screen.
+  - Hid admin-only navigation entries from non-admin users, including Admin Console and AgentRun execution records, while keeping the existing backend/API authorization checks for direct URL access.
+  - Fixed escaped Korean text rendering in the account header and global search placeholder so users see readable Korean copy instead of raw `\u...` sequences.
+  - Verification: `npm.cmd exec tsc -- --noEmit` passed; targeted auth/admin/AgentRun backend tests passed; `npm.cmd run build` passed with `/account` included in the route manifest.
