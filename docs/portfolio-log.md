@@ -3745,3 +3745,11 @@ Cost/security note:
   - Rechecked the asset references and moved the shell/dashboard closer to the supplied console proportions: 216px left rail, narrower top search, 320px right rail, compact 8px panels, smaller 13px operational text, softer blue active states, and brighter off-white canvas.
   - Rebuilt `/dashboard` around the reference dashboard composition: today's workflow cards, critical-action cards, review table rows, right-side live activity, agent summary, quick Ask, and bottom AI insight cards.
   - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed; local `/dashboard` returned HTTP 200.
+- `style: align dashboard with 0508 page references`
+  - Used `data/assets/0508-pages/0508 (2).png`, `0508 (3).png`, and `0508 (4).png` to tighten the ParaWorks shell and dashboard into a Korean enterprise operations console.
+  - Restored readable Korean labels in the touched shell/dashboard surfaces, matched the fixed 216px left rail, compact top search, source metric cards, real-time activity stream, review table, and 320px right operations panels.
+  - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed; local `/dashboard` returned HTTP 200 on `http://127.0.0.1:3000/dashboard`.
+- `style: connect developed product pages to current console`
+  - Reworked Messages, Ask/Search, Knowledge Library, Decisions, Timeline, History, Knowledge Map, and Notifications around the existing backend API contracts instead of placeholder content.
+  - Added clear API-unavailable states for server-backed knowledge pages so users can distinguish developed features from a stopped backend.
+  - Verification: `npm.cmd exec tsc -- --noEmit` passed; `npm.cmd run build` passed; local HTTP smoke returned 200 for dashboard, messages, search, knowledge, decisions, timeline, history, knowledge map, notifications, review, agent-runs, integrations, admin, and login.

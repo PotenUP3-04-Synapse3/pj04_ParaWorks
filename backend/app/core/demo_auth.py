@@ -4,6 +4,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
+from backend.app.core.profile import profile_avatar_url
 from backend.app.core.session_auth import authenticate_session_cookie, serialize_auth_user
 from backend.app.db.session import get_db
 
@@ -123,6 +124,7 @@ def serialize_demo_user(user: DemoUser) -> dict:
         'name': user.name,
         'title': user.title,
         'department': user.department,
+        'avatar_url': profile_avatar_url(user.email, user.role),
     }
 
 

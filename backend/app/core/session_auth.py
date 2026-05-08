@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.profile import profile_avatar_url
 from backend.app.models import AuthUser, RefreshToken
 
 
@@ -53,6 +54,7 @@ def serialize_auth_user(user: AuthUser) -> dict:
         'title': user.title,
         'department': user.department,
         'status': user.status,
+        'avatar_url': profile_avatar_url(user.email, user.role),
     }
 
 

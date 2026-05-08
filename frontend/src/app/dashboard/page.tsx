@@ -1,18 +1,13 @@
 import {
-  AlertTriangle,
   ArrowRight,
-  Bell,
+  BarChart3,
   Bot,
-  Brain,
-  CheckCircle2,
-  FileCheck2,
   FileText,
-  Inbox,
   Mail,
   MessageSquare,
-  Plus,
-  ShieldCheck,
-  Workflow,
+  MoreHorizontal,
+  Pause,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -34,84 +29,108 @@ const FALLBACK_DASHBOARD: DashboardResponse = {
 };
 
 const FALLBACK_AGENT_RUNS: AgentRunsResponse = {
-  total_runs: 286,
+  total_runs: 248,
   total_tokens: 1240000,
   estimated_cost_usd: 124.58,
   recent_runs: [],
 };
 
-const workflowSteps = [
-  { label: "수집됨", value: 128, detail: "오늘 9:15 기준", icon: Workflow, tone: "blue" },
-  { label: "분석 완료", value: 26, detail: "어제 대비 +6", icon: Brain, tone: "violet" },
-  { label: "검토 대기", value: 12, detail: "높은 우선순위 3건", icon: Inbox, tone: "red" },
-  { label: "승인 완료", value: 8, detail: "어제 대비 +2", icon: CheckCircle2, tone: "green" },
-  { label: "지식으로 저장됨", value: 8, detail: "전체 지식 1,248개", icon: ShieldCheck, tone: "blue" },
+const sourceCards = [
+  { label: "전체 소스", key: "all", value: 248, detail: "실시간", icon: BarChart3, tone: "neutral" },
+  { label: "Slack", key: "slack", value: 128, detail: "실시간", icon: MessageSquare, tone: "slack" },
+  { label: "Gmail", key: "gmail", value: 62, detail: "실시간", icon: Mail, tone: "gmail" },
+  { label: "Google Drive", key: "drive", value: 34, detail: "실시간", icon: FileText, tone: "drive" },
+  { label: "기타", key: "other", value: 6, detail: "실시간", icon: MoreHorizontal, tone: "neutral" },
 ];
 
-const criticalItems = [
-  { title: "검토 대기", value: "12건", detail: "오늘 마감 18:00", action: "검토하러 가기", icon: AlertTriangle, tone: "red" },
-  { title: "높은 신뢰도 의사결정 후보", value: "3건", detail: "신뢰도 80% 이상", action: "확인하기", icon: ShieldCheck, tone: "orange" },
-  { title: "위험/지연 감지", value: "2건", detail: "즉시 확인 필요", action: "상세 보기", icon: AlertTriangle, tone: "yellow" },
-  { title: "실패한 에이전트 실행", value: "1건", detail: "재실행 필요", action: "확인하기", icon: Bot, tone: "violet" },
-  { title: "새 알림", value: "3건", detail: "읽지 않은 알림", action: "알림 보기", icon: Bell, tone: "blue" },
-];
-
-const reviewRows = [
+const activities = [
   {
-    title: "Oracle DB 채택 결정",
-    summary: "MSSQL 대신 Oracle DB를 선택한 결정에 대한 근거가 감지되었습니다.",
-    type: "의사결정",
-    confidence: "87%",
-    evidence: "근거 15개",
-    source: "Project Orion · 2026.04.30 · Slack",
-    tone: "violet",
+    time: "11:42:31",
+    source: "Slack",
+    title: "#project-orion 스레드 수집 완료",
+    detail: "김하나님의 언급됨 · 고객사 요구사항 변경에 대한 논의",
+    meta: "Slack · #project-orion · 참여자 6명",
+    status: "미분석",
+    priority: "높은 중요도",
+    tone: "purple",
   },
   {
-    title: "결제 모듈 보안 이슈 대응",
-    summary: "결제 모듈 보안 취약점 발견 및 대응 과정이 기록되었습니다.",
-    type: "히스토리",
-    confidence: "82%",
-    evidence: "근거 9개",
-    source: "Project Pay · 2026.04.29 · Gmail",
-    tone: "green",
-  },
-  {
-    title: "API 성능 개선 배포",
-    summary: "v2.1.0 배포 및 성능 개선 작업이 감지되었습니다.",
-    type: "타임라인",
-    confidence: "78%",
-    evidence: "근거 6개",
-    source: "Project Orion · 2026.04.29 · GitHub",
+    time: "11:31:05",
+    source: "Gmail",
+    title: "FW: Oracle DB 선정 이유",
+    detail: "이메일 스레드 수집 완료 (8개 메시지)",
+    meta: "Gmail · 프로젝트 오리온",
+    status: "분석 완료",
+    priority: "높은 중요도",
     tone: "blue",
   },
   {
-    title: "테스트 환경 구성 문서화",
-    summary: "테스트 환경 구성 문서화가 필요하다는 논의가 감지되었습니다.",
-    type: "할 일 후보",
-    confidence: "65%",
-    evidence: "근거 5개",
-    source: "Project Pay · 2026.04.28 · Slack",
+    time: "11:21:18",
+    source: "Drive",
+    title: "ORION_PRD_v2.docx 수정됨",
+    detail: "문서 내용 변경 감지",
+    meta: "Drive · ORION / 기획 문서",
+    status: "분석 중",
+    priority: "중간 중요도",
+    tone: "green",
+  },
+  {
+    time: "11:15:42",
+    source: "Calendar",
+    title: "주간 프로젝트 회의",
+    detail: "새 이벤트 생성",
+    meta: "Calendar · 2026.05.07 (목) 10:00",
+    status: "분석 완료",
+    priority: "낮은 중요도",
     tone: "orange",
+  },
+  {
+    time: "11:08:27",
+    source: "Slack",
+    title: "#backend-team 새 메시지",
+    detail: "API 성능 개선 관련 논의",
+    meta: "Slack · #backend-team · 참여자 4명",
+    status: "미분석",
+    priority: "중간 중요도",
+    tone: "purple",
+  },
+  {
+    time: "10:55:12",
+    source: "Gmail",
+    title: "결제 요청: 보안 이슈 대응",
+    detail: "이메일 스레드 수집 완료 (5개 메시지)",
+    meta: "Gmail · 보안 이슈",
+    status: "분석 중",
+    priority: "높은 중요도",
+    tone: "blue",
+  },
+  {
+    time: "10:42:05",
+    source: "Drive",
+    title: "보안 점검 결과 보고서.pdf 업로드",
+    detail: "새 파일 업로드",
+    meta: "Drive · /보안/2026/05",
+    status: "미분석",
+    priority: "낮은 중요도",
+    tone: "green",
+  },
+  {
+    time: "10:33:18",
+    source: "Slack",
+    title: "#general 새 메시지",
+    detail: "일반 공지사항",
+    meta: "Slack · #general · 참여자 23명",
+    status: "분석 완료",
+    priority: "낮은 중요도",
+    tone: "purple",
   },
 ];
 
-const liveActivity = [
-  { time: "11:42", title: "#project-orion 스레드 수집", detail: "새로운 메시지 12개", icon: MessageSquare },
-  { time: "11:31", title: "FW: Oracle DB 선정 이유", detail: "이메일 스레드 수집", icon: Mail },
-  { time: "11:21", title: "ORION_PRD_v2.docx 수정됨", detail: "Google Drive 변경 감지", icon: FileText },
-  { time: "11:15", title: "주간 프로젝트 회의", detail: "일정 이벤트 수집", icon: FileCheck2 },
-];
-
-const agents = [
-  { name: "Slack Agent", rate: "98%", runs: 24, icon: MessageSquare },
-  { name: "Mail/Docs Agent", rate: "96%", runs: 18, icon: Mail },
-  { name: "RAG Orchestrator", rate: "95%", runs: 12, icon: Brain },
-];
-
-const insights = [
-  { title: "중요 의사결정 감지", body: "Oracle DB 도입 결정", tone: "green" },
-  { title: "위험 감지", body: "결제 모듈 보안 취약점", tone: "orange" },
-  { title: "트렌드", body: "API 성능 개선 추세", tone: "blue" },
+const reviewRows = [
+  ["프로젝트 ORION 요구사항 변경 검토", "문서", "이준호", "2026.05.07", "D-2", "대기 중", "높음"],
+  ["신규 보안 정책(안) 검토 요청", "정책", "박지은", "2026.05.07", "D-4", "대기 중", "보통"],
+  ["FY26 2분기 OKR 초안 검토", "의사결정", "정민철", "2026.05.06", "D-1", "검토 중", "높음"],
+  ["고객 데이터 처리 절차 문서 검토", "문서", "최유리", "2026.05.05", "D-3", "대기 중", "보통"],
 ];
 
 export default async function DashboardPage() {
@@ -119,129 +138,143 @@ export default async function DashboardPage() {
     serverApiGet<DashboardResponse>("/api/v1/dashboard").catch(() => FALLBACK_DASHBOARD),
     serverApiGet<AgentRunsResponse>("/api/v1/agent-runs").catch(() => FALLBACK_AGENT_RUNS),
   ]);
+
+  const counts = dashboard.source_counts || FALLBACK_DASHBOARD.source_counts;
+  const totalSources = counts.slack + counts.gmail + counts.drive + counts.calendar + counts.other;
   const pendingReviewCount = dashboard.pending_review_count || FALLBACK_DASHBOARD.pending_review_count;
 
   return (
     <div className="reference-dashboard">
       <section className="page-heading reference-heading">
         <div>
-          <h1>안녕하세요, 김하나님 👋</h1>
-          <p>AI가 수집하고 분석한 오늘의 업무 인사이트입니다. 중요한 항목을 먼저 확인해보세요.</p>
+          <h1>대시보드</h1>
+          <p>연결된 채널에서 수집되는 모든 활동을 실시간으로 확인하세요.</p>
         </div>
+      </section>
+
+      <section className="source-card-grid">
+        {sourceCards.map((card) => {
+          const value = card.key === "all" ? totalSources : counts[card.key as keyof typeof counts] || card.value;
+          return <SourceMetric key={card.label} card={{ ...card, value }} />;
+        })}
       </section>
 
       <section className="reference-grid">
         <div className="reference-main">
-          <Panel className="workflow-panel">
-            <PanelTitle title="오늘의 업무 흐름" />
-            <div className="workflow-steps">
-              {workflowSteps.map((step, index) => (
-                <WorkflowStep key={step.label} step={step} showArrow={index < workflowSteps.length - 1} />
+          <Panel className="activity-panel-large">
+            <div className="activity-toolbar">
+              <div>
+                <h2>실시간 활동 스트림</h2>
+                <div className="filter-pills">
+                  <span className="active">전체 <b>{totalSources}</b></span>
+                  <span>미분석 <b>86</b></span>
+                  <span>분석 중 <b>32</b></span>
+                  <span>분석 완료 <b>130</b></span>
+                </div>
+              </div>
+              <div className="toolbar-actions">
+                <button type="button">
+                  <Pause className="h-4 w-4" aria-hidden="true" />
+                  일시 정지
+                </button>
+                <button type="button">
+                  <Settings className="h-4 w-4" aria-hidden="true" />
+                  스트림 설정
+                </button>
+              </div>
+            </div>
+            <div className="activity-stream">
+              {activities.map((item) => (
+                <ActivityRow key={`${item.time}-${item.title}`} item={item} />
               ))}
             </div>
-          </Panel>
-
-          <Panel>
-            <PanelTitle title="오늘 반드시 확인할 항목" count="5건" />
-            <div className="critical-grid">
-              {criticalItems.map((item) => (
-                <CriticalCard key={item.title} item={item} />
-              ))}
+            <div className="dashboard-pagination">
+              <span>1-20 / {totalSources}</span>
+              <span className="pager">‹ 1 2 3 ··· 13 ›</span>
             </div>
           </Panel>
 
           <Panel className="review-panel">
             <div className="panel-header compact">
-              <PanelTitle title="검토 사항" count={`${pendingReviewCount}건`} />
+              <PanelTitle title="검토 우선순위" count={`${pendingReviewCount}건`} />
               <Link href="/review" className="text-link">
-                전체 검토 사항 보기
+                전체 검토 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
-            <div className="dashboard-review-list">
+            <div className="review-table">
+              <div className="review-table-head">
+                <span>제목</span>
+                <span>유형</span>
+                <span>요청자</span>
+                <span>요청일</span>
+                <span>마감</span>
+                <span>상태</span>
+                <span>우선순위</span>
+              </div>
               {reviewRows.map((row) => (
-                <ReviewRow key={row.title} row={row} />
+                <div className="review-table-row" key={row[0]}>
+                  {row.map((cell, index) => (
+                    <span key={`${row[0]}-${cell}`} className={index >= 4 ? "strong-cell" : ""}>
+                      {cell}
+                    </span>
+                  ))}
+                </div>
               ))}
-            </div>
-            <div className="dashboard-pagination">
-              <span>총 {pendingReviewCount}개 항목</span>
-              <span>1-4 / {pendingReviewCount}</span>
-            </div>
-          </Panel>
-
-          <Panel>
-            <div className="insight-header">
-              <PanelTitle title="AI 인사이트" />
-              <span>오늘의 주요 인사이트입니다.</span>
-            </div>
-            <div className="insight-grid">
-              {insights.map((insight) => (
-                <InsightCard key={insight.title} insight={insight} />
-              ))}
-              <Link href="/search" className="more-insight">
-                <Plus className="h-7 w-7" aria-hidden="true" />
-                <strong>더 많은 인사이트</strong>
-                <span>모든 인사이트 보기</span>
-              </Link>
             </div>
           </Panel>
         </div>
 
         <aside className="reference-aside">
           <Panel>
-            <div className="panel-header compact">
-              <PanelTitle title="실시간 활동" />
-              <Link href="/messages" className="text-link">
-                전체 보기
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
+            <div className="side-title">
+              <h2>활동 요약 (실시간)</h2>
+              <span>업데이트: 11:45:30</span>
             </div>
-            <div className="side-activity-list">
-              {liveActivity.map((item) => (
-                <SideActivity key={`${item.time}-${item.title}`} item={item} />
+            <div className="side-summary">
+              <div>
+                <strong>{totalSources}</strong>
+                <span>총 활동</span>
+              </div>
+              <MiniBars />
+            </div>
+            <Legend rows={[["미분석", 86, "35%", "purple"], ["분석 중", 32, "13%", "blue"], ["분석 완료", 130, "52%", "green"]]} />
+          </Panel>
+
+          <Panel>
+            <PanelTitle title="활동 소스별 현황" />
+            <SourceBar label="Slack" value={counts.slack} percent="52%" tone="purple" />
+            <SourceBar label="Gmail" value={counts.gmail} percent="25%" tone="blue" />
+            <SourceBar label="Google Drive" value={counts.drive} percent="14%" tone="green" />
+            <SourceBar label="Google Calendar" value={counts.calendar} percent="7%" tone="orange" />
+            <SourceBar label="기타" value={counts.other} percent="2%" tone="gray" />
+          </Panel>
+
+          <Panel>
+            <PanelTitle title="주요 키워드 (실시간)" />
+            <div className="keyword-cloud">
+              {["#project-orion 24", "보안 18", "API 15", "결재 12", "Oracle DB 10", "요구사항 8", "변경 8", "백엔드 6"].map((keyword) => (
+                <span key={keyword}>{keyword}</span>
               ))}
-            </div>
-            <div className="connection-status">
-              <span className="status-dot" />
-              연결 상태: 모든 연동 정상
             </div>
           </Panel>
 
           <Panel>
-            <div className="panel-header compact">
-              <PanelTitle title="에이전트 실행 요약" />
-              <Link href="/agent-runs" className="text-link">
-                전체 보기
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
+            <div className="side-title">
+              <h2>에이전트 요약</h2>
+              <Link href="/agent-runs">전체보기</Link>
             </div>
-            <div className="agent-summary-list">
-              {agents.map((agent) => (
-                <AgentSummary key={agent.name} agent={agent} />
-              ))}
+            <div className="agent-cost-line">
+              <span>총 실행</span>
+              <strong>{agentRuns.total_runs.toLocaleString()}회</strong>
             </div>
             <div className="agent-cost-line">
               <span>예상 비용</span>
               <strong>${agentRuns.estimated_cost_usd.toFixed(2)}</strong>
             </div>
-          </Panel>
-
-          <Panel>
-            <div className="panel-header compact">
-              <PanelTitle title="빠른 Ask" />
-              <Link href="/search" className="text-link">
-                Ask 워크스페이스로 이동
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
-            <div className="quick-ask-box">무엇이든 질문해보세요</div>
-            <div className="quick-prompts">
-              <span>Oracle DB 선택 이유는?</span>
-              <span>지난 주 배포 내역 요약해줘</span>
-              <span>결제 모듈 보안 이슈 대응 과정은?</span>
-            </div>
-            <Link href="/search" className="send-ask" aria-label="Ask로 이동">
+            <Link href="/search" className="primary-action">
               <Bot className="h-4 w-4" aria-hidden="true" />
+              Ask 워크스페이스로 이동
             </Link>
           </Panel>
         </aside>
@@ -263,115 +296,75 @@ function PanelTitle({ title, count }: { title: string; count?: string }) {
   );
 }
 
-function WorkflowStep({ step, showArrow }: { step: (typeof workflowSteps)[number]; showArrow: boolean }) {
-  const Icon = step.icon;
+function SourceMetric({ card }: { card: (typeof sourceCards)[number] }) {
+  const Icon = card.icon;
   return (
-    <>
-      <article className="workflow-step">
-        <span className={`workflow-icon ${step.tone}`}>
+    <article className="source-metric-card">
+      <div>
+        <span className={`source-logo ${card.tone}`}>
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
-        <div>
-          <p>{step.label}</p>
-          <strong>{step.value}</strong>
-          <span>{step.detail}</span>
-        </div>
-      </article>
-      {showArrow ? <ArrowRight className="workflow-arrow h-5 w-5" aria-hidden="true" /> : null}
-    </>
-  );
-}
-
-function CriticalCard({ item }: { item: (typeof criticalItems)[number] }) {
-  const Icon = item.icon;
-  return (
-    <article className={`critical-card ${item.tone}`}>
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4" aria-hidden="true" />
-        <span>{item.title}</span>
+        <strong>{card.label}</strong>
       </div>
-      <strong>{item.value}</strong>
-      <p>{item.detail}</p>
-      <Link href="/review">
-        {item.action}
-        <ArrowRight className="h-4 w-4" aria-hidden="true" />
-      </Link>
+      <b>{card.value}</b>
+      <p>{card.detail}</p>
     </article>
   );
 }
 
-function ReviewRow({ row }: { row: (typeof reviewRows)[number] }) {
+function ActivityRow({ item }: { item: (typeof activities)[number] }) {
+  const statusTone = item.status === "분석 완료" ? "green" : item.status === "분석 중" ? "blue" : "violet";
+  const priorityTone = item.priority.startsWith("높은") ? "danger" : item.priority.startsWith("중간") ? "warning" : "success";
   return (
-    <article className="dashboard-review-row">
-      <span className={`review-icon ${row.tone}`}>
-        <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3>{row.title}</h3>
-          <span className={`mini-badge ${row.tone}`}>{row.type}</span>
-        </div>
-        <p>{row.summary}</p>
-        <small>{row.source}</small>
-      </div>
-      <div className="row-metric">
-        <span>신뢰도</span>
-        <strong>{row.confidence}</strong>
-      </div>
-      <div className="row-metric evidence">
-        <span>{row.evidence}</span>
-      </div>
-      <Link href="/review" className="row-action">
-        검토
-      </Link>
-    </article>
-  );
-}
-
-function SideActivity({ item }: { item: (typeof liveActivity)[number] }) {
-  const Icon = item.icon;
-  return (
-    <article className="side-activity-row">
+    <article className="activity-row">
       <time>{item.time}</time>
-      <Icon className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" />
+      <span className={`activity-line-dot ${item.tone}`} />
+      <span className={`source-logo ${item.tone}`}>{item.source.slice(0, 1)}</span>
       <div>
         <h3>{item.title}</h3>
         <p>{item.detail}</p>
+        <small>{item.meta}</small>
       </div>
+      <span className={`badge ${statusTone}`}>{item.status}</span>
+      <span className={`priority-badge ${priorityTone}`}>{item.priority}</span>
     </article>
   );
 }
 
-function AgentSummary({ agent }: { agent: (typeof agents)[number] }) {
-  const Icon = agent.icon;
+function MiniBars() {
   return (
-    <article className="agent-summary-row">
-      <Icon className="h-6 w-6 text-[var(--primary)]" aria-hidden="true" />
-      <div className="min-w-0 flex-1">
-        <h3>{agent.name}</h3>
-        <p>최근 실행: 5분 전</p>
-      </div>
-      <div>
-        <span>성공률</span>
-        <strong>{agent.rate}</strong>
-      </div>
-      <div>
-        <span>오늘 실행</span>
-        <strong>{agent.runs}</strong>
-      </div>
-    </article>
+    <div className="mini-bars" aria-hidden="true">
+      {[34, 52, 46, 68, 42, 88, 54, 96].map((height, index) => (
+        <span key={index} style={{ height: `${height}%` }} />
+      ))}
+    </div>
   );
 }
 
-function InsightCard({ insight }: { insight: (typeof insights)[number] }) {
+function Legend({ rows }: { rows: [string, number, string, string][] }) {
   return (
-    <article className={`insight-card ${insight.tone}`}>
-      <strong>{insight.title}</strong>
-      <p>{insight.body}</p>
-      <Link href="/search">
-        자세히 보기
-        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
-    </article>
+    <div className="legend-list">
+      {rows.map(([label, value, percent, tone]) => (
+        <div key={label}>
+          <span className={`legend-dot ${tone}`} />
+          <span>{label}</span>
+          <strong>{value}</strong>
+          <em>({percent})</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SourceBar({ label, value, percent, tone }: { label: string; value: number; percent: string; tone: string }) {
+  return (
+    <div className="source-bar-row">
+      <span>{label}</span>
+      <div>
+        <i className={tone} style={{ width: percent }} />
+      </div>
+      <strong>{value}</strong>
+      <em>({percent})</em>
+    </div>
   );
 }

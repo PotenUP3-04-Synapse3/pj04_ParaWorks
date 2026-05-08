@@ -21,6 +21,7 @@ export type DemoUser = {
   title: string;
   department: string;
   status?: string;
+  avatar_url?: string | null;
 };
 
 export type AuthUserResponse = {

@@ -15,6 +15,7 @@ def test_login_accepts_admin_account(client) -> None:
     payload = response.json()
     assert payload['user']['email'] == 'admin@paraworks.com'
     assert payload['user']['role'] == 'admin'
+    assert payload['user']['avatar_url'] is None
     assert 'restricted' in payload['user']['permission_levels']
     assert 'paraworks_session=' in response.headers['set-cookie']
     assert 'paraworks_refresh=' in response.headers['set-cookie']
@@ -28,6 +29,7 @@ def test_login_accepts_employee_dummy_account(client) -> None:
     payload = response.json()
     assert payload['user']['role'] == 'reviewer'
     assert payload['user']['department'] == 'Product'
+    assert payload['user']['avatar_url'] == '/profile/mina.png'
     assert 'internal' in payload['user']['permission_levels']
 
 
@@ -37,8 +39,10 @@ def test_login_options_include_requested_google_seed_accounts(client) -> None:
     assert response.status_code == 200
     users_by_email = {user['email']: user for user in response.json()['users']}
     assert users_by_email['hanvv3@gmail.com']['role'] == 'admin'
+    assert users_by_email['hanvv3@gmail.com']['avatar_url'] is None
     assert 'restricted' in users_by_email['hanvv3@gmail.com']['permission_levels']
     assert users_by_email['hanvv3@koreacu.ac.kr']['role'] == 'employee'
+    assert users_by_email['hanvv3@koreacu.ac.kr']['avatar_url'] == '/profile/hanvv3.png'
     assert 'internal' in users_by_email['hanvv3@koreacu.ac.kr']['permission_levels']
 
 
@@ -102,6 +106,7 @@ def test_me_prefers_http_only_session_cookie_over_demo_header(client) -> None:
 
     assert response.status_code == 200
     assert response.json()['user']['email'] == 'admin@paraworks.com'
+    assert response.json()['user']['avatar_url'] is None
 
 
 def test_refresh_rotates_refresh_cookie(client) -> None:

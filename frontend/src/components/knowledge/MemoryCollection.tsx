@@ -19,16 +19,16 @@ export function MemoryCollection({
   metricLabel,
 }: MemoryCollectionProps) {
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <div className="reference-dashboard space-y-4">
+      <div className="page-heading reference-heading">
         <div>
-          <p className="text-sm font-semibold text-[var(--workspace-accent)]">{eyebrow}</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">{title}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink-muted)]">{description}</p>
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">{eyebrow}</p>
+          <h1>{title}</h1>
+          <p>{description}</p>
         </div>
-        <div className="liquid-surface inline-flex w-fit items-center gap-2 rounded-[26px] px-4 py-3 text-sm font-semibold">
-          <ShieldCheck className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
-          {items.length} {metricLabel}
+        <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
+          <ShieldCheck className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+          {items.length.toLocaleString()} {metricLabel}
         </div>
       </div>
 
@@ -36,63 +36,85 @@ export function MemoryCollection({
         {items.map((item) => (
           <MemoryCard key={item.id} item={item} />
         ))}
-        {items.length === 0 ? (
-          <div className="liquid-surface rounded-[30px] px-5 py-10 text-sm text-[var(--ink-muted)]">
-            {emptyText}
-          </div>
-        ) : null}
+        {items.length === 0 ? <EmptyState text={emptyText} /> : null}
       </section>
     </div>
   );
 }
 
 export function MemoryCard({ item }: { item: KnowledgeItem }) {
+  const firstLink = item.source_links[0];
+  const firstSnippet = item.source_snippets[0];
+
   return (
-    <article className="liquid-surface rounded-[30px] p-5">
-      <div className="relative space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-control-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-            <CheckCircle2 className="h-3.5 w-3.5 text-[var(--workspace-accent)]" aria-hidden="true" />
-            {item.review_status}
-          </span>
-          <span className="rounded-full bg-[var(--glass-control)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
-            {item.permission_level}
-          </span>
-          {item.priority ? (
-            <span className="rounded-full bg-[var(--glass-control)] px-2.5 py-1 text-xs font-semibold text-[var(--workspace-accent)]">
-              {item.priority}
-            </span>
-          ) : null}
-        </div>
-
-        <div>
-          <h3 className="text-base font-semibold leading-6">{item.title}</h3>
-          <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">{item.summary}</p>
-        </div>
-
-        <div className="rounded-[22px] border border-[var(--line-soft)] bg-[var(--panel-soft)] p-4">
-          <p className="text-xs font-semibold text-[var(--ink-muted)]">
-            confidence {(item.confidence_score * 100).toFixed(0)}%
-          </p>
-          {item.source_snippets[0] ? (
-            <p className="mt-2 border-l-2 border-[var(--line-strong)] pl-3 text-xs leading-5 text-[var(--ink-muted)]">
-              {item.source_snippets[0]}
-            </p>
-          ) : null}
-        </div>
-
-        {item.source_links[0] ? (
-          <a
-            href={item.source_links[0]}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--workspace-accent)] underline-offset-4 hover:underline"
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            근거 열기
-          </a>
-        ) : null}
+    <article className="panel reference-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="badge green">
+          <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          {statusLabel(item.review_status)}
+        </span>
+        <span className="badge blue">{permissionLabel(item.permission_level)}</span>
+        {item.priority ? <span className="priority-badge warning">{item.priority}</span> : null}
       </div>
+
+      <h2 className="mt-4 text-[16px] font-extrabold leading-6 text-ink">{item.title}</h2>
+      <p className="mt-2 text-[13px] leading-6 text-muted">{item.summary}</p>
+
+      <div className="mt-4 rounded-lg border border-line bg-surface-soft p-4">
+        <p className="text-[12px] font-bold text-muted">신뢰도 {(item.confidence_score * 100).toFixed(0)}%</p>
+        {firstSnippet ? (
+          <p className="mt-2 border-l-2 border-[#cbd5e1] pl-3 text-[12px] leading-5 text-muted">
+            {firstSnippet}
+          </p>
+        ) : (
+          <p className="mt-2 text-[12px] text-muted">표시할 근거 스니펫이 없습니다.</p>
+        )}
+      </div>
+
+      {firstLink ? (
+        <a
+          href={firstLink}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--primary-dark)] underline-offset-4 hover:underline"
+        >
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          근거 열기
+        </a>
+      ) : null}
     </article>
   );
+}
+
+export function EmptyState({ text }: { text: string }) {
+  return <div className="panel reference-panel px-5 py-10 text-[13px] text-muted">{text}</div>;
+}
+
+function statusLabel(status: string) {
+  if (status === "approved") {
+    return "승인됨";
+  }
+  if (status === "pending_review") {
+    return "검토 대기";
+  }
+  if (status === "needs_more_evidence") {
+    return "근거 요청";
+  }
+  if (status === "rejected") {
+    return "반려됨";
+  }
+  return status;
+}
+
+function permissionLabel(permissionLevel: string) {
+  if (permissionLevel === "restricted") {
+    return "제한";
+  }
+  if (permissionLevel === "internal") {
+    return "내부";
+  }
+  if (permissionLevel === "public") {
+    return "공개";
+  }
+  return permissionLevel;
 }
