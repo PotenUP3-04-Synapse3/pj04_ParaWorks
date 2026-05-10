@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
@@ -19,6 +19,7 @@ class ConnectorSyncResult:
     fetched_events: int
     created_review_items: int
     skipped_events: int
+    parser_status_counts: dict[str, int] = field(default_factory=dict)
 
 
 def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncResult:
@@ -38,11 +39,8 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
             events = connector.fetch_events_since(_latest_cursors_by_partition(db, connector.source_type))
         else:
             events = connector.fetch_events()
-        existing_source_ids = set(
-            db.scalars(
-                select(Source.source_id).where(Source.source_id.in_([event.source_id for event in events]))
-            ).all()
-        )
+        skipped_events = _count_same_content_signature_events(db, events)
+        parser_status_counts = _parser_status_counts(events)
         created_review_items = ingest_events(db, events)
     except Exception as exc:
         job.status = 'failed'
@@ -52,7 +50,6 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
         db.commit()
         raise
 
-    skipped_events = len(existing_source_ids)
     job.status = 'complete'
     job.message = (
         f'fetched={len(events)} '
@@ -70,6 +67,7 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
         fetched_events=len(events),
         created_review_items=created_review_items,
         skipped_events=skipped_events,
+        parser_status_counts=parser_status_counts,
     )
 
 
@@ -90,6 +88,41 @@ def _latest_cursors_by_partition(db: Session, source_type: str) -> dict[str, str
         if previous is None or cursor_value > previous[0]:
             latest[partition] = (cursor_value, cursor)
     return {partition: cursor for partition, (_, cursor) in latest.items()}
+
+
+def _count_same_content_signature_events(db: Session, events: list) -> int:
+    if not events:
+        return 0
+    sources_by_id = {
+        source.source_id: source
+        for source in db.scalars(
+            select(Source).where(Source.source_id.in_([event.source_id for event in events]))
+        ).all()
+    }
+    skipped = 0
+    for event in events:
+        source = sources_by_id.get(event.source_id)
+        if source is None:
+            continue
+        existing_signature = (source.raw_metadata or {}).get('content_signature')
+        incoming_signature = event.raw_metadata.get('content_signature')
+        if existing_signature and incoming_signature:
+            if existing_signature == incoming_signature:
+                skipped += 1
+        else:
+            skipped += 1
+    return skipped
+
+
+def _parser_status_counts(events: list) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for event in events:
+        parser_status = event.raw_metadata.get('parser_status')
+        if not parser_status:
+            continue
+        key = str(parser_status)
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _cursor_sort_key(cursor: str) -> tuple[int, object]:
