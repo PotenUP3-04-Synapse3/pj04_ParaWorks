@@ -94,7 +94,7 @@ export default async function AgentRunsPage() {
             에이전트 실행 비용, 토큰 사용량, 캐시 적중률, RAG 인덱싱 상태를 운영자 관점에서 확인합니다.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
           <BarChart3 className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
           {summary.totals.total_runs} audited runs
         </div>
@@ -129,7 +129,7 @@ export default async function AgentRunsPage() {
 
       <OrchestrationStatusCard orchestration={orchestration} />
 
-      <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+      <section className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
         <div className="flex flex-col justify-between gap-3 border-b border-[var(--line-soft)] px-4 py-4 lg:flex-row lg:items-center">
           <div>
             <h3 className="text-sm font-semibold">RAG 인덱싱 운영 상태</h3>
@@ -179,7 +179,7 @@ export default async function AgentRunsPage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <article className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <article className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <h3 className="text-sm font-semibold">Agent별 비용과 토큰</h3>
             <p className="mt-1 text-xs text-[var(--ink-muted)]">
@@ -198,14 +198,14 @@ export default async function AgentRunsPage() {
           </div>
         </article>
 
-        <article className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <article className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <h3 className="text-sm font-semibold">상태 분포</h3>
             <p className="mt-1 text-xs text-[var(--ink-muted)]">완료, 실패, 진행 상태를 집계합니다.</p>
           </div>
           <div className="space-y-3 p-4">
             {Object.entries(summary.by_status).map(([status, count]) => (
-              <div key={status} className="flex items-center justify-between rounded-lg bg-[#fbfaf8] px-3 py-2">
+              <div key={status} className="flex items-center justify-between rounded-lg bg-[var(--glass-strong)] px-3 py-2">
                 <span className="inline-flex items-center gap-2 text-sm font-medium capitalize">
                   <Activity className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
                   {status}
@@ -220,7 +220,7 @@ export default async function AgentRunsPage() {
         </article>
       </section>
 
-      <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+      <section className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
         <div className="border-b border-[var(--line-soft)] px-4 py-4">
           <h3 className="text-sm font-semibold">최근 실행 로그</h3>
           <p className="mt-1 text-xs text-[var(--ink-muted)]">
@@ -232,7 +232,7 @@ export default async function AgentRunsPage() {
             <Link
               key={run.id}
               href={`/agent-runs/${run.id}`}
-              className="grid gap-3 px-4 py-3 transition hover:bg-[#fbfaf8] lg:grid-cols-[minmax(0,1.2fr)_minmax(220px,1fr)_120px_120px_80px]"
+              className="grid gap-3 px-4 py-3 transition hover:bg-[var(--glass-strong)] lg:grid-cols-[minmax(0,1.2fr)_minmax(220px,1fr)_120px_120px_80px]"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{formatAgentName(run.agent_name)}</p>
@@ -271,7 +271,7 @@ type MetricIcon = typeof Bot;
 
 function AdminOnlyNotice() {
   return (
-    <section className="liquid-surface rounded-[32px] p-6">
+    <section className="liquid-surface rounded-lg p-6">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
         <div>
@@ -304,7 +304,7 @@ function MetricCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[var(--ink-muted)]">{label}</span>
         <Icon className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
@@ -327,7 +327,7 @@ function IndexingMetric({
   detail: string;
 }) {
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-3">
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[var(--ink-muted)]">{label}</span>
         <Icon className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
@@ -353,7 +353,7 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
   ];
 
   return (
-    <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+    <section className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
       <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -367,7 +367,7 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
             <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
               dry-run cost $0
             </span>
-            <span className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs font-semibold text-[var(--ink-muted)]">
+            <span className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-xs font-semibold text-[var(--ink-muted)]">
               budget ${perRunBudgetUsd.toFixed(3)}/run
             </span>
           </div>
@@ -378,7 +378,7 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {orchestration.node_names.map((nodeName, index) => (
-              <div key={nodeName} className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] px-3 py-2">
+              <div key={nodeName} className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] px-3 py-2">
                 <span className="text-[11px] font-semibold uppercase tracking-normal text-[var(--ink-muted)]">
                   Step {index + 1}
                 </span>
@@ -387,12 +387,12 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
             ))}
           </div>
         </div>
-        <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-4">
+        <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] p-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
             <h4 className="text-sm font-semibold">비용 가드레일</h4>
           </div>
-          <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs">
+          <div className="mt-3 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-xs">
             <div className="flex items-center justify-between gap-3">
               <span className="font-medium text-[var(--ink-muted)]">Per-run budget</span>
               <span className="font-semibold">${perRunBudgetUsd.toFixed(3)}</span>
@@ -407,7 +407,7 @@ function OrchestrationStatusCard({ orchestration }: { orchestration: Orchestrati
               return (
                 <div
                   key={item.label}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-xs"
+                  className="flex items-center justify-between gap-3 rounded-lg bg-[var(--glass-elevated)] px-3 py-2 text-xs"
                 >
                   <span className="font-medium text-[var(--ink-muted)]">{item.label}</span>
                   <span

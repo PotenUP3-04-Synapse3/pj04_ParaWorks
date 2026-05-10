@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2, Eye, LockKeyhole, LogIn, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { CheckCircle2, Eye, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DEMO_USER_STORAGE_KEY,
@@ -165,7 +166,7 @@ export default function LoginPage() {
       <section className="login-card">
         <aside className="login-brand-panel">
           <div className="login-brand-lockup">
-            <img src="/assets/paraworks-logo-icon.png" alt="" />
+            <Image src="/assets/paraworks-logo-icon.png" alt="" width={64} height={64} />
             <span className="brand-wordmark">paraworks</span>
           </div>
           <div>

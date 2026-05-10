@@ -32,7 +32,7 @@ export function OrchestrationDryRun() {
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-white p-3">
+    <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold">Zero-cost dry-run</p>

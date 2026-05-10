@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, BadgeCheck, Building2, IdCard, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
@@ -74,13 +75,13 @@ export default function AccountPage() {
   }, [user]);
 
   if (loading) {
-    return <div className="rounded-lg border border-line bg-white p-5 text-sm text-muted shadow-sm">{copy.loading}</div>;
+    return <div className="rounded-lg border border-line bg-[var(--glass-elevated)] p-5 text-sm text-muted shadow-sm">{copy.loading}</div>;
   }
 
   if (error || !user) {
     return (
       <div className="space-y-4">
-        <section className="rounded-lg border border-line bg-white p-6 shadow-sm">
+        <section className="rounded-lg border border-line bg-[var(--glass-elevated)] p-6 shadow-sm">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" aria-hidden="true" />
             <div>
@@ -89,7 +90,7 @@ export default function AccountPage() {
             </div>
           </div>
         </section>
-        <Link href="/login" className="inline-flex h-10 items-center justify-center rounded-lg bg-[#173a96] px-4 text-sm font-bold text-white">
+        <Link href="/login" className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--primary)] px-4 text-sm font-bold text-white">
           {copy.loginAction}
         </Link>
       </div>
@@ -107,22 +108,26 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-lg border border-line bg-white shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-line bg-[var(--glass-elevated)] shadow-panel">
         <div className="border-b border-line px-5 py-4">
-          <p className="text-xs font-bold uppercase text-[#173a96]">{copy.accountLabel}</p>
+          <p className="text-xs font-bold uppercase text-[var(--primary-dark)]">{copy.accountLabel}</p>
           <h1 className="mt-1 text-2xl font-bold text-ink">{user.name}</h1>
           <p className="mt-2 text-sm text-muted">{copy.accountDescription}</p>
         </div>
 
         <div className="grid gap-5 p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="rounded-lg border border-line bg-[#fafafa] p-5">
+          <aside className="rounded-lg border border-line bg-[var(--glass-strong)] p-5">
             <div className="flex flex-col items-center text-center">
               <span className="grid h-24 w-24 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-[#7c2d12] to-[#f0c0a5] text-2xl font-extrabold text-white">
-                {accountDisplay.avatarUrl ? <img src={accountDisplay.avatarUrl} alt="" className="h-full w-full object-cover" /> : accountDisplay.initial}
+                {accountDisplay.avatarUrl ? (
+                  <Image src={accountDisplay.avatarUrl} alt="" width={96} height={96} className="h-full w-full object-cover" />
+                ) : (
+                  accountDisplay.initial
+                )}
               </span>
               <h2 className="mt-4 text-xl font-bold text-ink">{user.name}</h2>
               <p className="mt-1 text-sm text-muted">{accountDisplay.role}</p>
-              <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-bold text-[#173a96]">
+              <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-line bg-[var(--glass-elevated)] px-3 py-1 text-xs font-bold text-[var(--primary-dark)]">
                 <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
                 {accountDisplay.status}
               </div>
@@ -133,7 +138,7 @@ export default function AccountPage() {
             {details.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.label} className="rounded-lg border border-line bg-white p-4 shadow-sm">
+                <div key={item.label} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4 shadow-sm">
                   <div className="flex items-center gap-2 text-xs font-bold text-muted">
                     <Icon className="h-4 w-4" aria-hidden="true" />
                     {item.label}
@@ -142,14 +147,14 @@ export default function AccountPage() {
                 </div>
               );
             })}
-            <div className="rounded-lg border border-line bg-white p-4 shadow-sm md:col-span-2">
+            <div className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4 shadow-sm md:col-span-2">
               <div className="flex items-center gap-2 text-xs font-bold text-muted">
                 <LockKeyhole className="h-4 w-4" aria-hidden="true" />
                 {copy.permissionScope}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {user.permission_levels.map((permission) => (
-                  <span key={permission} className="rounded-full border border-line bg-[#f3f7fd] px-3 py-1 text-xs font-bold text-[#173a96]">
+                  <span key={permission} className="rounded-full border border-line bg-[var(--glass-strong)] px-3 py-1 text-xs font-bold text-[var(--primary-dark)]">
                     {permissionLabels[permission] ?? permission}
                   </span>
                 ))}

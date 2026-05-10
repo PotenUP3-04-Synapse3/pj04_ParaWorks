@@ -96,7 +96,7 @@ function SearchPageContent() {
             id="query"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="h-11 min-w-0 flex-1 rounded-lg border border-line bg-white px-3 text-[13px] outline-none focus:border-[var(--primary)]"
+            className="h-11 min-w-0 flex-1 rounded-lg border border-line bg-[var(--glass-elevated)] px-3 text-[13px] outline-none focus:border-[var(--primary)]"
             placeholder="예: 지난주 Redis 역할 논의가 있었나요?"
           />
           <button type="submit" disabled={loading} className="row-action gap-2 px-4 disabled:bg-neutral-300">
@@ -147,7 +147,7 @@ function SearchPageContent() {
                   </div>
                   <div className="space-y-2">
                     {answerCitations.map((citation, index) => (
-                      <a key={`${citation.source_id}-${index}`} href={citation.source_url} target="_blank" rel="noreferrer" className="block rounded-lg border border-line bg-white p-3 text-[13px] hover:bg-[#fbfcff]">
+                      <a key={`${citation.source_id}-${index}`} href={citation.source_url} target="_blank" rel="noreferrer" className="block rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] hover:bg-[var(--glass-strong)]">
                         <span className="font-bold text-[var(--primary-dark)]">근거 {index + 1}</span>
                         <span className="mt-1 block text-[12px] text-muted">{citation.source_id}</span>
                         <span className="mt-1 block text-[12px] text-muted">
@@ -284,7 +284,7 @@ function getFreshnessState(job: RagIndexingJobSummary | undefined, indexedCount:
     return {
       title: "회사 메모리 준비 전",
       description: "아직 인덱싱 기록이 없습니다. 먼저 Slack, 메일, 문서를 동기화해 주세요.",
-      tone: "border-neutral-200 bg-white text-[var(--ink)]",
+      tone: "border-[var(--line-soft)] bg-[var(--glass-elevated)] text-[var(--ink)]",
       icon: Clock3,
     };
   }

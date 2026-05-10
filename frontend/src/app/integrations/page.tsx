@@ -334,7 +334,7 @@ export default function IntegrationsPage() {
             Slack, 메일, 문서, 캘린더 데이터를 공통 ingestion contract로 받아 Review Queue와 RAG 흐름에 연결합니다.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
           <PlugZap className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
           Connector contract ready
         </div>
@@ -375,7 +375,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className={`integration-glass-card rounded-lg border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                   featured ? "border-[#c9b7d5]" : "border-[var(--line-soft)]"
                 }`}
               >
@@ -434,14 +434,14 @@ export default function IntegrationsPage() {
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`rounded-full bg-white px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
+                        <span className={`rounded-full bg-[var(--glass-elevated)] px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
                           {connection ? (credentialAvailable ? connection.status : "token missing") : "ready"}
                         </span>
                         {canStartOAuth ? (
                           <button
                             type="button"
                             onClick={() => startOAuth(manifest.display_name, oauthInstall)}
-                            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-2.5 text-xs font-semibold shadow-sm ${oauthTheme.button}`}
+                            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-[var(--glass-elevated)] px-2.5 text-xs font-semibold shadow-sm ${oauthTheme.button}`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                             {connection ? `${manifest.display_name} 재연결` : `${manifest.display_name} 연결`}
@@ -493,7 +493,7 @@ export default function IntegrationsPage() {
           })}
         </div>
 
-        <aside className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <aside className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-[var(--workspace-rail-active)]" aria-hidden="true" />
@@ -528,7 +528,7 @@ export default function IntegrationsPage() {
 
             {syncResult ? (
               <div className="space-y-3 text-sm">
-                <div className="rounded-lg bg-[#fbfaf8] p-3">
+                <div className="rounded-lg bg-[var(--glass-strong)] p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Job</p>
                   <p className="mt-1 break-all font-medium">{syncResult.job_id}</p>
                 </div>
@@ -538,7 +538,7 @@ export default function IntegrationsPage() {
                   <ResultMetric label="Skipped" value={syncResult.skipped_events} />
                   <ResultMetric label="Status" value={syncResult.status} />
                 </div>
-                <div className="rounded-lg border border-[var(--line-soft)] bg-white p-3">
+                <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
                   <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--ink-muted)]">
                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                     SSE status
@@ -549,7 +549,7 @@ export default function IntegrationsPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-[var(--line-soft)] bg-[#fbfaf8] p-5 text-sm leading-6 text-[var(--ink-muted)]">
+              <div className="rounded-lg border border-dashed border-[var(--line-soft)] bg-[var(--glass-strong)] p-5 text-sm leading-6 text-[var(--ink-muted)]">
                 왼쪽 도구에서 동기화를 실행하면 작업 스트림과 생성된 Review 후보 수를 확인할 수 있습니다.
               </div>
             )}
@@ -600,7 +600,7 @@ function SlackRuntimeStatusPanel({
   return (
     <div
       data-testid="slack-runtime-status"
-      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-white p-3 text-sm"
+      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -751,7 +751,7 @@ function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, Google
   return (
     <div
       data-testid="google-runtime-status"
-      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-white p-3 text-sm"
+      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm"
     >
       <div className="flex items-center justify-between gap-3">
         <div>

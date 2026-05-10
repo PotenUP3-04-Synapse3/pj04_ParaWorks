@@ -169,17 +169,17 @@ export default function ReviewPage() {
   const agentItems = items.filter((item) => Boolean(item.payload.agent_name)).length;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="reference-dashboard space-y-5">
+      <div className="page-heading reference-heading">
         <div>
-          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Activity Inbox</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">검토 큐</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Activity Inbox</p>
+          <h1>검토 큐</h1>
+          <p>
             AI Agent와 connector가 만든 후보를 사람이 확인하고 승인해야 공식 지식으로 승격됩니다.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[var(--ink-muted)] shadow-sm">
+          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-[var(--ink-muted)] shadow-sm">
             <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
             Agent 후보 {agentItems}개
           </span>
@@ -187,7 +187,7 @@ export default function ReviewPage() {
             type="button"
             onClick={() => void loadItems()}
             disabled={loading}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             새로고침
@@ -219,14 +219,14 @@ export default function ReviewPage() {
           const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
 
           return (
-            <article key={item.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
+            <article key={item.id} className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-[var(--line-soft)] bg-[#fbfaf8] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                    <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
                       {itemTypeLabel(item.item_type)}
                     </span>
-                    <span className="rounded-full border border-[var(--line-soft)] bg-[#fbfaf8] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--ink-muted)]">
+                    <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--ink-muted)]">
                       {item.permission_level}
                     </span>
                     {isAgentItem ? (
@@ -280,7 +280,7 @@ export default function ReviewPage() {
                   ) : null}
 
                   {preview ? (
-                    <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-3">
+                    <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
                           승인 후 저장 형태 · {itemTypeLabel(preview.target_type)}
@@ -315,7 +315,7 @@ export default function ReviewPage() {
                 </div>
 
                 <div className="flex shrink-0 flex-col gap-3 sm:flex-row xl:items-start">
-                  <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] px-3 py-2">
+                  <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] px-3 py-2">
                     <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
                       <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                       신뢰도
@@ -350,7 +350,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => setEditingId(undefined)}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                       취소
@@ -371,7 +371,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => void runStatusAction(item, "reject")}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                       반려
@@ -380,7 +380,7 @@ export default function ReviewPage() {
                       type="button"
                       onClick={() => startEdit(item)}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                       수정
@@ -394,7 +394,7 @@ export default function ReviewPage() {
                         );
                       }}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <FileSearch className="h-4 w-4" aria-hidden="true" />
                       근거 추가 요청
@@ -434,7 +434,7 @@ export default function ReviewPage() {
                         setEvidenceRequestNote("");
                       }}
                       disabled={Boolean(pendingAction)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink hover:bg-[#fbfaf8] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
                     >
                       <XCircle className="h-4 w-4" aria-hidden="true" />
                       취소
@@ -447,12 +447,12 @@ export default function ReviewPage() {
         })}
 
         {!loading && items.length === 0 ? (
-          <div className="rounded-lg border border-[var(--line-soft)] bg-white p-8 text-sm text-[var(--ink-muted)] shadow-sm">
+          <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-8 text-sm text-[var(--ink-muted)] shadow-sm">
             대기 중인 검토 항목이 없습니다.
           </div>
         ) : null}
         {loading ? (
-          <div className="rounded-lg border border-[var(--line-soft)] bg-white p-8 text-sm text-[var(--ink-muted)] shadow-sm">
+          <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-8 text-sm text-[var(--ink-muted)] shadow-sm">
             검토 항목을 불러오는 중입니다.
           </div>
         ) : null}
@@ -463,7 +463,7 @@ export default function ReviewPage() {
 
 function MetadataTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] px-3 py-2">
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] px-3 py-2">
       <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
         <Coins className="h-3.5 w-3.5" aria-hidden="true" />
         {label}

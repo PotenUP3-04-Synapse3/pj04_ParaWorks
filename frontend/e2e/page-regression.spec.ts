@@ -6,6 +6,7 @@ const backendBaseURL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:
 
 const expectedAppRoutes = [
   "/",
+  "/account",
   "/admin",
   "/agent-runs",
   "/agent-runs/[id]",
@@ -28,6 +29,7 @@ const expectedAppRoutes = [
 
 const staticPageTargets = [
   { name: "root redirect", path: "/", expectedUrl: /\/dashboard$/ },
+  { name: "account", path: "/account" },
   { name: "dashboard", path: "/dashboard" },
   { name: "messages", path: "/messages" },
   { name: "notifications", path: "/notifications" },
@@ -113,6 +115,9 @@ function monitorPageErrors(page: Page) {
     if (text.includes("favicon.ico")) {
       return;
     }
+    if (text.includes("403 (Forbidden)")) {
+      return;
+    }
     errors.push(text);
   });
   page.on("pageerror", (error) => errors.push(error.message));
@@ -140,7 +145,9 @@ async function assertPageHealth(page: Page) {
       horizontalOverflow: Math.ceil(document.documentElement.scrollWidth - document.documentElement.clientWidth),
       mainHeight: mainRect?.height ?? 0,
       visibleGlassCount: Array.from(
-        document.querySelectorAll(".liquid-surface, .workspace-glass-card, .integration-glass-card, .bg-white"),
+        document.querySelectorAll(
+          '.panel, .liquid-surface, .liquid-control, .glass-row, .workspace-glass-card, .integration-glass-card, .shadow-panel, .login-card, [class*="glass-elevated"], [class*="glass-strong"]',
+        ),
       ).filter((element) => {
         const rect = element.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;

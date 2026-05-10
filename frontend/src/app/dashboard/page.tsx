@@ -140,7 +140,12 @@ export default async function DashboardPage() {
   ]);
 
   const counts = dashboard.source_counts || FALLBACK_DASHBOARD.source_counts;
-  const totalSources = counts.slack + counts.gmail + counts.drive + counts.calendar + counts.other;
+  const totalSources =
+    (counts.slack ?? 0) +
+    (counts.gmail ?? 0) +
+    (counts.drive ?? 0) +
+    (counts.calendar ?? 0) +
+    (counts.other ?? 0);
   const pendingReviewCount = dashboard.pending_review_count || FALLBACK_DASHBOARD.pending_review_count;
 
   return (

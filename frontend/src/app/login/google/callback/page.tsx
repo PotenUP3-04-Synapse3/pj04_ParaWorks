@@ -8,9 +8,11 @@ import type { AuthUserResponse } from "@/lib/api/types";
 
 export default function GoogleLoginCallbackPage() {
   return (
-    <Suspense fallback={<CallbackStatus status="loading" message="Google 로그인 결과를 확인하고 있습니다." />}>
-      <GoogleLoginCallbackClient />
-    </Suspense>
+    <main className="w-full px-4 py-6 md:px-6">
+      <Suspense fallback={<CallbackStatus status="loading" message="Google 로그인 결과를 확인하고 있습니다." />}>
+        <GoogleLoginCallbackClient />
+      </Suspense>
+    </main>
   );
 }
 
@@ -65,7 +67,7 @@ function CallbackStatus({ status, message }: { status: "loading" | "success" | "
         : "text-amber-500";
 
   return (
-    <section className="liquid-surface rounded-[32px] p-6">
+    <section className="liquid-surface rounded-lg p-6">
       <div className="flex items-start gap-3">
         <Icon className={`mt-1 h-5 w-5 ${iconClass}`} aria-hidden="true" />
         <div>
