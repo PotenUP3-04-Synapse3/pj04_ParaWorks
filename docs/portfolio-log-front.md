@@ -1,0 +1,222 @@
+# ParaWorks Frontend Portfolio Log
+
+Updated: 2026-05-10
+
+## Frontend Positioning
+
+ParaWorks frontend is now moving from a demo harness UI into a portfolio-ready
+Korean-first product surface. The recent pass focused on consistency,
+operational clarity, and visual confidence across the whole app rather than
+adding new feature breadth.
+
+The frontend story is:
+
+- Korean-first SaaS workspace for company memory operations.
+- Slack-like navigation and messaging surfaces.
+- Human review workflows with visible evidence and permission context.
+- Agent observability, cost controls, and RAG/search surfaces that feel like
+  product tools instead of debug screens.
+- A restrained Liquid Glass visual system with consistent panels, controls,
+  status states, and spacing.
+
+## Recent Work
+
+### Lint Warning Cleanup
+
+Cleaned the remaining frontend lint warnings.
+
+- Removed an unused `LogIn` import from the login page.
+- Replaced raw `<img>` usage with Next `Image` in:
+  - login brand logo;
+  - account profile avatar;
+  - app shell brand logos;
+  - app shell user avatar.
+
+Portfolio value:
+
+- Shows attention to production frontend quality.
+- Keeps the Next.js codebase aligned with framework guidance.
+- Reduces noise before final demo and screenshot capture.
+
+Verification:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+Result: both passed with no lint warnings.
+
+### Global Liquid Glass Consistency Pass
+
+Aligned the visual tone, spacing, card radius, and status surfaces across the
+main product pages.
+
+Updated patterns:
+
+- Replaced scattered hard-coded warm surfaces such as `#fbfaf8` with shared
+  glass tokens.
+- Replaced fixed blue `#173a96` product accents with `--primary` and
+  `--primary-dark`.
+- Standardized oversized `rounded-[30px]` and `rounded-[32px]` panels to the
+  app's tighter `rounded-lg` system.
+- Added a reusable `shadow-panel` utility for elevated glass surfaces.
+- Moved more panels and controls to:
+  - `--glass-elevated`;
+  - `--glass-strong`;
+  - `--line-soft`;
+  - `--shadow-panel`.
+- Preserved compact operational density instead of making the product feel like
+  a marketing landing page.
+
+Touched surfaces:
+
+- Dashboard
+- Messages
+- Review Queue
+- Search / Ask Workspace
+- Integrations and OAuth callback pages
+- Agent Runs and Agent Run detail
+- Knowledge Map
+- Account
+- Admin
+- Login and Google login callback
+- Shared AppShell
+
+Portfolio value:
+
+- Demonstrates a coherent product design system across many real screens.
+- Makes Review Queue, RAG, integrations, and agent observability feel like one
+  workspace.
+- Improves screenshot-readiness for final case-study material.
+
+### Review Queue and Page Health Polish
+
+Aligned Review Queue with the same heading and layout rhythm used by the rest
+of the app.
+
+- Changed Review Queue top section to use the shared `page-heading` pattern.
+- Kept reviewer actions compact and operational.
+- Preserved evidence-first workflow without changing backend behavior.
+
+Also fixed small page-health gaps found during visual regression:
+
+- Added `/account` to the Playwright route inventory.
+- Added a `main` wrapper to `/login/google/callback`.
+- Updated the page regression glass-surface detector to recognize the newer
+  token-based surface classes.
+- Ignored expected unauthenticated `403` console noise in the Search page
+  regression check.
+
+Portfolio value:
+
+- Shows that the UI is tested as a whole application, not only as isolated
+  components.
+- Keeps future route additions visible through route inventory coverage.
+
+### Dashboard Runtime Warning Fix
+
+Fixed a dashboard count calculation that could produce a React `NaN` warning
+when a source count key was missing.
+
+Change:
+
+- Source totals now coalesce missing counts to `0` before summing.
+
+Portfolio value:
+
+- Small but important polish: final demos should not emit noisy console
+  warnings.
+
+### Profile Avatar Verification
+
+Checked demo-user profile image behavior after AppShell avatar rendering was
+updated.
+
+Findings:
+
+- Admin accounts intentionally have no avatar image.
+- Employee/reviewer accounts expose these avatar URLs:
+  - `hanvv3@koreacu.ac.kr` -> `/profile/hanvv3.png`
+  - `mina@paraworks.com` -> `/profile/mina.png`
+  - `jun@paraworks.com` -> `/profile/jun.png`
+  - `soyeon@paraworks.com` -> `/profile/soyeon.png`
+- The Next dev server serves all profile image files with `200 OK`.
+
+Operational note:
+
+- Lee Jun's missing avatar was most likely caused by a stale Next dev server
+  or a browser session cookie that was not actually authenticated as Lee Jun.
+- The existing Next dev server was restarted and `http://localhost:3000` is
+  serving the refreshed app.
+
+## Verification Evidence
+
+Commands run in the current session:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+npm run test:visual -- --project=chromium-desktop e2e/page-regression.spec.ts
+```
+
+Results:
+
+- Frontend lint: passed.
+- Frontend build: passed.
+- Desktop page regression: `41 passed`.
+
+Additional checks:
+
+```bash
+curl -I http://127.0.0.1:3000/profile/jun.png
+curl -I http://127.0.0.1:3000/profile/mina.png
+curl -I http://127.0.0.1:3000/profile/soyeon.png
+curl -I http://127.0.0.1:3000/profile/hanvv3.png
+```
+
+Result: all returned `200 OK`.
+
+## Files Changed
+
+Primary frontend files:
+
+- `frontend/src/app/globals.css`
+- `frontend/src/components/layout/AppShell.tsx`
+- `frontend/src/app/dashboard/page.tsx`
+- `frontend/src/app/messages/page.tsx`
+- `frontend/src/app/review/page.tsx`
+- `frontend/src/app/search/page.tsx`
+- `frontend/src/app/account/page.tsx`
+- `frontend/src/app/login/page.tsx`
+- `frontend/src/app/login/google/callback/page.tsx`
+- `frontend/src/app/integrations/page.tsx`
+- `frontend/src/app/agent-runs/page.tsx`
+- `frontend/src/app/agent-runs/[id]/page.tsx`
+- `frontend/src/app/knowledge-map/page.tsx`
+- OAuth callback client/page files
+- `frontend/e2e/page-regression.spec.ts`
+
+Related local state:
+
+- Playwright Chromium was installed locally so page regression can run.
+- Next dev server was restarted.
+
+## Remaining Frontend Follow-Ups
+
+Recommended next frontend tasks:
+
+1. Run mobile Playwright regression and capture final mobile screenshots.
+2. Do a manual screenshot pass for:
+   - dashboard;
+   - messages;
+   - review queue;
+   - integrations;
+   - agent runs;
+   - knowledge map;
+   - search / ask workspace.
+3. Add final screenshots and short captions to `docs/portfolio-case-study.md`.
+4. Decide whether the `docker` dependency changes in `pyproject.toml` and
+   `uv.lock` belong in the same commit or should be separated.
