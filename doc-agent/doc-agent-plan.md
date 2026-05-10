@@ -1,5 +1,18 @@
 좋아요. 개발자 B의 역할은 이미 있는 Mail/Document Agent, Google OAuth/sync skeleton, pgvector 기반 위에 “문서 본문을 믿을 수 있게 가져와서, 버전별로 추적하고, RAG가 정확히 찾게 만드는” 트랙으로 잡으면 됩니다.
 
+**작업 운영 규칙**
+
+- `doc-agent/`는 임시 폴더가 아니라 Document Agent 트랙의 소유 자산 폴더다.
+- Document Agent 트랙의 계획, 로그, 평가셋, 프롬프트, 데모 자산, 설계 메모는 `./doc-agent/` 아래에 둔다.
+- 실제 ParaWorks 런타임에 포함되는 백엔드 코드와 테스트는 기존 프로젝트 구조에 맞춰
+  `backend/app/...`, `backend/tests/...`에 생성하거나 수정한다.
+- 기존 ParaWorks 런타임/커넥터/테스트 코드를 바꿔야 할 때는 해당 기존 파일을 직접 수정한다.
+- Document Agent 관련 작업 로그와 포트폴리오 기록은 `docs/portfolio-log.md`가 아니라
+  `doc-agent/portfolio-log-docs-agent.md`에 저장한다.
+- git 작업 브랜치는 `/agent_docs`를 기준으로 한다.
+- 공용 제품 방향은 루트 `plan.md`를 따르되, Document Agent 트랙의 세부 실행 기록과 의사결정은 이 계획 파일과
+  `doc-agent/portfolio-log-docs-agent.md`를 우선 확인한다.
+
 **현재 출발점**  
 plan.md 기준 Track B는 이미 “Document and Knowledge Pipeline”입니다. 코드상으로도 다음 기반이 있습니다.
 
@@ -186,7 +199,7 @@ plan.md 기준 Track B는 이미 “Document and Knowledge Pipeline”입니다
     
     Track B 단독 브랜치:
     
-    `codex/mail-document-agent`
+    `/agent_docs`
     
     세부 PR 또는 커밋 단위:
     

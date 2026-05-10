@@ -32,6 +32,36 @@ def source_event(source_id: str = 'contract-event-1') -> SourceEvent:
     )
 
 
+def drive_source_event(
+    *,
+    version: str = '42',
+    revision_id: str = 'rev-42',
+    body: str = '휴가 신청은 HR 시스템에서 진행합니다.',
+) -> SourceEvent:
+    return SourceEvent(
+        source_type='drive',
+        source_id='drive:file-1',
+        source_url='https://drive.google.com/file/d/file-1/view',
+        title='휴가 정책',
+        body=body,
+        author='owner@example.com',
+        participants=['owner@example.com'],
+        timestamp=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+        permission_level='restricted',
+        raw_metadata={
+            'sync_partition': 'drive',
+            'sync_cursor': '2026-05-01T09:00:00Z',
+            'document_version': version,
+            'revision_id': revision_id,
+            'content_signature': f'drive:file-1:{version}:{revision_id}',
+            'parser_name': 'google_drive_text_export',
+            'parser_status': 'parsed',
+            'parser_status_reason': None,
+            'source_snippet': body,
+        },
+    )
+
+
 @dataclass(frozen=True)
 class ContractConnector:
     source_type: str = 'slack'
@@ -88,6 +118,24 @@ class FailingConnector:
         raise RuntimeError('oauth token expired')
 
 
+@dataclass
+class DriveContentSignatureConnector:
+    events: list[SourceEvent]
+    source_type: str = 'drive'
+    manifest: ConnectorManifest = ConnectorManifest(
+        connector_type='drive',
+        display_name='Google Drive',
+        mode='live',
+        auth_type='oauth',
+        required_scopes=('drive.readonly',),
+        sync_strategy='incremental',
+        cost_policy='Fetch Drive deltas before parser and embedding work.',
+    )
+
+    def fetch_events(self) -> list[SourceEvent]:
+        return self.events
+
+
 def test_connector_manifests_define_parallel_ingestion_contracts() -> None:
     manifests = {manifest.connector_type: manifest for manifest in list_connector_manifests()}
 
@@ -132,6 +180,44 @@ def test_sync_connector_events_reports_skipped_duplicates(db_session: Session) -
     assert result.fetched_events == 1
     assert result.created_review_items == 0
     assert result.skipped_events == 1
+
+
+def test_sync_connector_events_skips_same_content_signature(db_session: Session) -> None:
+    sync_connector_events(db=db_session, connector=DriveContentSignatureConnector([drive_source_event()]))
+
+    result = sync_connector_events(db=db_session, connector=DriveContentSignatureConnector([drive_source_event()]))
+
+    assert result.status == 'complete'
+    assert result.fetched_events == 1
+    assert result.created_review_items == 0
+    assert result.skipped_events == 1
+    assert db_session.query(DocumentChunk).count() == 1
+
+
+def test_sync_connector_events_ingests_changed_content_signature(db_session: Session) -> None:
+    sync_connector_events(db=db_session, connector=DriveContentSignatureConnector([drive_source_event()]))
+
+    result = sync_connector_events(
+        db=db_session,
+        connector=DriveContentSignatureConnector(
+            [
+                drive_source_event(
+                    version='43',
+                    revision_id='rev-43',
+                    body='휴가 신청 승인자가 인사팀으로 변경되었습니다.',
+                )
+            ]
+        ),
+    )
+
+    assert result.status == 'complete'
+    assert result.fetched_events == 1
+    assert result.created_review_items == 0
+    assert result.skipped_events == 0
+    chunks = db_session.query(DocumentChunk).order_by(DocumentChunk.id).all()
+    assert len(chunks) == 2
+    assert chunks[0].metadata_['content_signature'] == 'drive:file-1:42:rev-42'
+    assert chunks[1].metadata_['content_signature'] == 'drive:file-1:43:rev-43'
 
 
 def test_sync_connector_events_passes_latest_slack_timestamp_cursor(db_session: Session) -> None:
