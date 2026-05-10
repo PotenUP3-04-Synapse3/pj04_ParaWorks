@@ -42,7 +42,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
             실행 {run.id}의 프롬프트, 모델, 비용, 토큰, 권한, 캐시 정보를 확인합니다.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
           <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
           {run.status}
         </div>
@@ -56,7 +56,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <article className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <article className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <h3 className="text-sm font-semibold">실행 계약</h3>
           </div>
@@ -71,13 +71,13 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
           </dl>
           <div className="border-t border-[var(--line-soft)] p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Cache key</p>
-            <p className="mt-2 break-all rounded-lg bg-[#fbfaf8] p-3 text-xs text-[var(--ink-muted)]">
+            <p className="mt-2 break-all rounded-lg bg-[var(--glass-strong)] p-3 text-xs text-[var(--ink-muted)]">
               {run.cache_key}
             </p>
           </div>
         </article>
 
-        <article className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <article className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <h3 className="text-sm font-semibold">토큰 세부</h3>
           </div>
@@ -90,7 +90,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
       </section>
 
       {evidenceSummary.length ? (
-        <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+        <section className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
           <div className="flex flex-col gap-1 border-b border-[var(--line-soft)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-sm font-semibold">Ranked evidence</h3>
             <p className="text-xs text-[var(--ink-muted)]">{evidenceSummary.length.toLocaleString()} selected messages</p>
@@ -125,7 +125,7 @@ export default async function AgentRunDetailPage({ params }: AgentRunDetailPageP
         </section>
       ) : null}
 
-      <section className="rounded-lg border border-[var(--line-soft)] bg-white shadow-sm">
+      <section className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-panel">
         <div className="border-b border-[var(--line-soft)] px-4 py-4">
           <h3 className="text-sm font-semibold">Metadata</h3>
         </div>
@@ -141,7 +141,7 @@ type MetricIcon = typeof Sparkles;
 
 function AdminOnlyNotice() {
   return (
-    <section className="liquid-surface rounded-[32px] p-6">
+    <section className="liquid-surface rounded-lg p-6">
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
         <div>
@@ -172,7 +172,7 @@ function MetricCard({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[var(--ink-muted)]">{label}</span>
         <Icon className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
@@ -193,7 +193,7 @@ function Meta({ label, value }: { label: string; value: string }) {
 
 function TokenRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded-lg bg-[#fbfaf8] px-3 py-2">
+    <div className="flex items-center justify-between rounded-lg bg-[var(--glass-strong)] px-3 py-2">
       <span className="text-sm text-[var(--ink-muted)]">{label}</span>
       <span className="text-sm font-semibold">{value.toLocaleString()}</span>
     </div>

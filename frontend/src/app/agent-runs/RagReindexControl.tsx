@@ -53,7 +53,7 @@ export function RagReindexControl({ summary }: { summary: RagIndexingSummaryResp
   const canRun = Boolean(preview) && budget?.budget_status !== "over_budget";
 
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-[#fbfaf8] p-4" data-testid="rag-reindex-control">
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-strong)] p-4" data-testid="rag-reindex-control">
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
         <div>
           <div className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export function RagReindexControl({ summary }: { summary: RagIndexingSummaryResp
             type="button"
             onClick={runPreview}
             disabled={isPreviewing || isRunning}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs font-semibold text-[var(--ink-strong)] shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-xs font-semibold text-[var(--ink-strong)] shadow-sm transition hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isPreviewing ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -163,7 +163,7 @@ export function RagReindexControl({ summary }: { summary: RagIndexingSummaryResp
 
 function ReindexStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2">
       <p className="text-xs font-medium text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>

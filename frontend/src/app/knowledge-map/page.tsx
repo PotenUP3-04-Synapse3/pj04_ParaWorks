@@ -155,14 +155,14 @@ function MemoryMapCard({ node, evidence }: { node: KnowledgeMapNode; evidence: K
             key={source.id}
             href={source.source_url ?? "/knowledge-map"}
             target={source.source_url ? "_blank" : undefined}
-            className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-[12px] text-muted"
+            className="flex items-center justify-between gap-3 rounded-lg bg-[var(--glass-elevated)] px-3 py-2 text-[12px] text-muted"
           >
             <span className="min-w-0 truncate">{source.label}</span>
             <span className="shrink-0 text-[var(--primary-dark)]">source</span>
           </Link>
         ))}
         {evidence.length > visibleEvidence.length ? (
-          <div className="rounded-lg bg-white px-3 py-2 text-[12px] font-bold text-muted">
+          <div className="rounded-lg bg-[var(--glass-elevated)] px-3 py-2 text-[12px] font-bold text-muted">
             + {evidence.length - visibleEvidence.length} more supporting sources
           </div>
         ) : null}
@@ -179,8 +179,8 @@ function EvidenceNodeCard({ node }: { node: KnowledgeMapNode }) {
         <span className="badge blue">{node.permission_level}</span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-muted">
-        <span className="rounded-lg bg-white px-3 py-2">memories {node.connected_memory_count ?? 0}</span>
-        <span className="rounded-lg bg-white px-3 py-2">snippets {node.snippet_count ?? 0}</span>
+        <span className="rounded-lg bg-[var(--glass-elevated)] px-3 py-2">memories {node.connected_memory_count ?? 0}</span>
+        <span className="rounded-lg bg-[var(--glass-elevated)] px-3 py-2">snippets {node.snippet_count ?? 0}</span>
       </div>
     </article>
   );

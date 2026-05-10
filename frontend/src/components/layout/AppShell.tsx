@@ -15,6 +15,7 @@ import {
   Settings,
   ShieldCheck,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
@@ -151,10 +152,10 @@ function ShellContent({ children }: { children: ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] border-r border-line bg-sidebar px-4 py-6 lg:flex lg:flex-col">
         <Link href="/dashboard" className="flex items-start gap-3">
           <span className="brand-logo" aria-hidden="true">
-            <img src="/assets/paraworks-logo-icon.png" alt="" />
+            <Image src="/assets/paraworks-logo-icon.png" alt="" width={37} height={37} />
           </span>
           <span className="min-w-0 pt-0.5">
-            <span className="brand-wordmark block text-[19px] leading-6 text-[#173a96]">paraworks</span>
+            <span className="brand-wordmark block text-[19px] leading-6 text-[var(--primary-dark)]">paraworks</span>
           </span>
         </Link>
 
@@ -181,7 +182,11 @@ function ShellContent({ children }: { children: ReactNode }) {
         <div className="relative mt-4 flex items-center justify-between rounded-lg bg-[#fafafa] p-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="avatar-photo" aria-hidden="true">
-              {accountDisplay.avatarUrl ? <img src={accountDisplay.avatarUrl} alt="" /> : accountDisplay.initial}
+              {accountDisplay.avatarUrl ? (
+                <Image src={accountDisplay.avatarUrl} alt="" width={34} height={34} />
+              ) : (
+                accountDisplay.initial
+              )}
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[13px] font-bold text-ink">{accountDisplay.name}</span>
@@ -199,7 +204,7 @@ function ShellContent({ children }: { children: ReactNode }) {
           </button>
 
           {accountMenuOpen ? (
-            <div className="absolute bottom-full right-0 z-40 mb-2 w-36 rounded-lg border border-line bg-white p-1 shadow-lg">
+            <div className="absolute bottom-full right-0 z-40 mb-2 w-36 rounded-lg border border-line bg-[var(--glass-elevated)] p-1 shadow-lg">
               <button
                 type="button"
                 className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
@@ -227,9 +232,9 @@ function ShellContent({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between gap-4">
             <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
               <span className="brand-logo small" aria-hidden="true">
-                <img src="/assets/paraworks-logo-icon.png" alt="" />
+                <Image src="/assets/paraworks-logo-icon.png" alt="" width={31} height={31} />
               </span>
-              <span className="brand-wordmark text-[#173a96]">paraworks</span>
+              <span className="brand-wordmark text-[var(--primary-dark)]">paraworks</span>
             </Link>
 
             <form onSubmit={submitSearch} className="top-search ml-auto min-w-0 flex-1 md:max-w-[470px]">

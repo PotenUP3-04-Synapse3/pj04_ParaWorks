@@ -11,7 +11,7 @@ export default function GoogleOAuthCallbackPage() {
 
 function GoogleCallbackFallback() {
   return (
-    <div className="mx-auto max-w-2xl rounded-lg border border-[var(--line-soft)] bg-white p-6 shadow-sm">
+    <div className="mx-auto max-w-2xl rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-6 shadow-sm">
       <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">OAuth</p>
       <h2 className="mt-2 text-2xl font-semibold tracking-normal">Google 연결 확인</h2>
       <p className="mt-3 text-sm leading-6 text-[var(--ink-muted)]">

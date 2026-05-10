@@ -117,13 +117,13 @@ export default function AdminPage() {
   }, [users]);
 
   if (loading) {
-    return <div className="liquid-surface rounded-[30px] p-6 text-sm text-[var(--ink-muted)]">{text.loading}</div>;
+    return <div className="liquid-surface rounded-lg p-6 text-sm text-[var(--ink-muted)]">{text.loading}</div>;
   }
 
   if (error) {
     return (
       <div className="space-y-5">
-        <section className="liquid-surface rounded-[32px] p-6">
+        <section className="liquid-surface rounded-lg p-6">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
             <div>
@@ -144,7 +144,7 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-5">
-      <section className="liquid-surface rounded-[32px] p-5 md:p-7">
+      <section className="liquid-surface rounded-lg p-5 md:p-7">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Workspace Admin</p>
@@ -165,7 +165,7 @@ export default function AdminPage() {
         <MetricCard label={text.restrictedAccess} value={metrics.restrictedCount} icon={ShieldCheck} />
       </section>
 
-      <section className="liquid-surface overflow-hidden rounded-[30px]">
+      <section className="liquid-surface overflow-hidden rounded-lg">
         <div className="border-b border-[var(--line-soft)] px-5 py-4">
           <h2 className="text-base font-semibold">{text.usersAndPermissions}</h2>
           <p className="mt-1 text-sm text-[var(--ink-muted)]">{text.permissionNote}</p>
@@ -254,7 +254,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section className="liquid-surface overflow-hidden rounded-[30px]">
+      <section className="liquid-surface overflow-hidden rounded-lg">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--line-soft)] px-5 py-4">
           <div>
             <h2 className="text-base font-semibold">{text.auditLogs}</h2>

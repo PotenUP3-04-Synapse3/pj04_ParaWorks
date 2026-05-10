@@ -78,7 +78,7 @@ export function SlackCallbackClient() {
         </p>
       </div>
 
-      <section className="rounded-lg border border-[var(--line-soft)] bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-5 shadow-sm">
         {callbackState.status === "success" ? (
           <SuccessPanel connection={callbackState.connection} />
         ) : callbackState.status === "error" ? (
@@ -122,7 +122,7 @@ function SuccessPanel({ connection }: { connection: IntegrationConnection }) {
         </div>
       </div>
 
-      <dl className="grid gap-3 rounded-lg bg-[#fbfaf8] p-4 text-sm sm:grid-cols-2">
+      <dl className="grid gap-3 rounded-lg bg-[var(--glass-strong)] p-4 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs font-semibold text-[var(--ink-muted)]">Status</dt>
           <dd className="mt-1 font-semibold">{connection.status}</dd>
@@ -170,7 +170,7 @@ function ErrorPanel({ message }: { message: string }) {
 
       <Link
         href="/integrations"
-        className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white px-4 text-sm font-semibold text-[#21132b] shadow-sm hover:bg-[#fbfaf8]"
+        className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-4 text-sm font-semibold text-[#21132b] shadow-sm hover:bg-[var(--glass-strong)]"
       >
         연동 페이지로 돌아가기
       </Link>

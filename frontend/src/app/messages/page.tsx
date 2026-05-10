@@ -107,8 +107,8 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      <section className="grid min-h-[680px] overflow-hidden rounded-lg border border-line bg-white shadow-sm lg:grid-cols-[300px_1fr]">
-        <aside className="border-b border-line bg-[#fbfcff] lg:border-b-0 lg:border-r">
+      <section className="grid min-h-[680px] overflow-hidden rounded-lg border border-line bg-[var(--glass-elevated)] shadow-panel lg:grid-cols-[300px_1fr]">
+        <aside className="border-b border-line bg-[var(--glass-strong)] lg:border-b-0 lg:border-r">
           <div className="border-b border-line px-4 py-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[14px] font-extrabold">채널</h2>
@@ -127,7 +127,7 @@ export default function MessagesPage() {
                   type="button"
                   onClick={() => setActiveChannelId(channel.id)}
                   className={`flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left transition ${
-                    active ? "bg-white shadow-sm ring-1 ring-line" : "hover:bg-white/80"
+                    active ? "bg-[var(--glass-elevated)] shadow-panel ring-1 ring-line" : "hover:bg-[var(--glass-strong)]"
                   }`}
                 >
                   <span className={`source-logo ${active ? "blue" : ""}`}>
@@ -147,7 +147,7 @@ export default function MessagesPage() {
         </aside>
 
         <div className="flex min-w-0 flex-col">
-          <header className="border-b border-line bg-white px-5 py-4">
+          <header className="border-b border-line bg-[var(--glass-elevated)] px-5 py-4">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div>
                 <div className="flex items-center gap-2">
@@ -169,13 +169,13 @@ export default function MessagesPage() {
             </div>
           </header>
 
-          <div className="flex-1 space-y-1 overflow-y-auto bg-white px-5 py-4">
+          <div className="flex-1 space-y-1 overflow-y-auto bg-[var(--glass-elevated)] px-5 py-4">
             {error ? <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] text-red-800">{error}</div> : null}
             {notice ? <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-[13px] text-emerald-800">{notice}</div> : null}
             {loading ? <p className="text-[13px] text-muted">Loading...</p> : null}
             {!loading && messages.length === 0 ? <p className="text-[13px] text-muted">표시할 메시지가 없습니다.</p> : null}
             {messages.map((message) => (
-              <article key={message.id} className="group -mx-2 flex gap-3 rounded-lg px-2 py-2 transition hover:bg-[#fbfcff]">
+              <article key={message.id} className="group -mx-2 flex gap-3 rounded-lg px-2 py-2 transition hover:bg-[var(--glass-strong)]">
                 <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#243152] text-[13px] font-bold text-white">
                   {message.author_name.slice(0, 1)}
                 </div>
@@ -192,7 +192,7 @@ export default function MessagesPage() {
                     type="button"
                     onClick={() => void sendToReview(message)}
                     disabled={Boolean(reviewMessageId)}
-                    className="mt-2 inline-flex h-8 items-center rounded-lg border border-line bg-white px-3 text-[12px] font-bold text-ink shadow-sm hover:bg-[#f6f8fb] disabled:cursor-not-allowed disabled:text-muted"
+                    className="mt-2 inline-flex h-8 items-center rounded-lg border border-line bg-[var(--glass-elevated)] px-3 text-[12px] font-bold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-muted"
                   >
                     {reviewMessageId === message.id ? "보내는 중..." : "Review Queue로 보내기"}
                   </button>
@@ -201,14 +201,14 @@ export default function MessagesPage() {
             ))}
           </div>
 
-          <form onSubmit={submit} className="border-t border-line bg-[#fbfcff] p-4">
-            <div className="rounded-xl border border-line bg-white p-2 shadow-sm">
+          <form onSubmit={submit} className="border-t border-line bg-[var(--glass-strong)] p-4">
+            <div className="rounded-lg border border-line bg-[var(--glass-elevated)] p-2 shadow-sm">
               <label htmlFor="message-draft" className="sr-only">메시지 입력</label>
               <input
                 id="message-draft"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                className="h-11 w-full min-w-0 rounded-lg border-0 bg-white px-3 text-[13px] outline-none"
+                className="h-11 w-full min-w-0 rounded-lg border-0 bg-[var(--glass-elevated)] px-3 text-[13px] outline-none"
                 placeholder="메시지를 입력하세요"
               />
               <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
