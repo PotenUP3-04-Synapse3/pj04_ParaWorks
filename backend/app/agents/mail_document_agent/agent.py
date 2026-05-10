@@ -62,14 +62,19 @@ class DeterministicMailDocumentAgentModel:
 
         input_tokens = max(1, len(combined_text) // 4)
         output_tokens = max(32, len(summary) // 4)
+        confidence_score = 0.8
+        uncertainty_reason = _parser_uncertainty_reason(packet)
+        if uncertainty_reason:
+            confidence_score = _parser_uncertainty_confidence(packet)
 
         return MailDocumentAgentModelResponse(
             title=title,
             summary=summary,
             item_type=item_type,
-            confidence_score=0.8,
+            confidence_score=confidence_score,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            uncertainty_reason=uncertainty_reason,
         )
 
 
@@ -113,3 +118,32 @@ class MailDocumentAgent:
             cost=cost,
             cache_key=cache_key,
         )
+
+
+def _parser_uncertainty_reason(packet: EvidencePacket) -> str | None:
+    uncertain_messages = [
+        message
+        for message in packet.messages
+        if message.metadata.get('source_type') == 'drive'
+        and message.metadata.get('parser_status')
+        and message.metadata.get('parser_status') != 'parsed'
+    ]
+    if not uncertain_messages:
+        return None
+    details = []
+    for message in uncertain_messages:
+        status = message.metadata.get('parser_status')
+        reason = message.metadata.get('parser_status_reason') or 'unknown_reason'
+        details.append(f'{message.source_id}={status}({reason})')
+    return f"Some document evidence is not body-parsed: {', '.join(details)}"
+
+
+def _parser_uncertainty_confidence(packet: EvidencePacket) -> float:
+    statuses = {
+        str(message.metadata.get('parser_status'))
+        for message in packet.messages
+        if message.metadata.get('source_type') == 'drive'
+    }
+    if 'unsupported' in statuses:
+        return 0.3
+    return 0.42

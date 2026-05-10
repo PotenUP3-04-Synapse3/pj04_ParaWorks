@@ -242,10 +242,27 @@ def _chunk_documents(db: Session) -> list[VectorDocument]:
                     'author': source.author,
                     'timestamp': str(timestamp),
                     'scenario': source.raw_metadata.get('scenario'),
+                    **_document_parser_metadata(chunk),
                 },
             )
         )
     return documents
+
+
+def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
+    keys = (
+        'parser_name',
+        'parser_status',
+        'parser_status_reason',
+        'mime_type',
+        'document_version',
+        'revision_id',
+        'content_signature',
+        'content_hash',
+        'section_path',
+        'page_number',
+    )
+    return {key: chunk.metadata_.get(key) for key in keys if key in chunk.metadata_}
 
 
 def _decision_documents(db: Session) -> list[VectorDocument]:

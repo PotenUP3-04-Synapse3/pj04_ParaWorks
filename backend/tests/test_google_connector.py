@@ -13,11 +13,17 @@ from backend.app.connectors.google import (
 
 
 class FakeGoogleClient:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        drive_files: list[dict] | None = None,
+        drive_exports: dict[tuple[str, str], str] | None = None,
+    ) -> None:
         self.gmail_after_internal_date: str | None = None
         self.drive_modified_after: str | None = None
         self.calendar_updated_min: str | None = None
         self.drive_export_requests: list[tuple[str, str]] = []
+        self._drive_files = drive_files
+        self._drive_exports = drive_exports or {}
 
     def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
         self.gmail_after_internal_date = after_internal_date
@@ -55,6 +61,8 @@ class FakeGoogleClient:
 
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         self.drive_modified_after = modified_after
+        if self._drive_files is not None:
+            return self._drive_files
         return [
             {
                 'id': 'file-1',
@@ -73,6 +81,8 @@ class FakeGoogleClient:
 
     def drive_file_text_export(self, *, file_id: str, export_mime_type: str) -> str:
         self.drive_export_requests.append((file_id, export_mime_type))
+        if (file_id, export_mime_type) in self._drive_exports:
+            return self._drive_exports[(file_id, export_mime_type)]
         return '휴가 신청은 HR 시스템에서 진행합니다.\n승인은 팀장이 검토합니다.'
 
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
@@ -195,6 +205,104 @@ def test_google_connector_exports_google_docs_text_into_drive_source_events() ->
     assert event.raw_metadata['parser_status'] == 'parsed'
     assert event.raw_metadata['parser_status_reason'] is None
     assert event.raw_metadata['source_snippet'] == '휴가 신청은 HR 시스템에서 진행합니다. 승인은 팀장이 검토합니다.'
+
+
+def test_google_connector_exports_google_sheets_csv_into_drive_source_events() -> None:
+    client = FakeGoogleClient(
+        drive_files=[
+            {
+                'id': 'sheet-1',
+                'name': '비용 정산표',
+                'mimeType': 'application/vnd.google-apps.spreadsheet',
+                'webViewLink': 'https://drive.google.com/file/d/sheet-1/view',
+                'modifiedTime': '2026-05-01T09:00:00Z',
+                'version': '7',
+                'headRevisionId': 'sheet-rev-7',
+                'owners': [{'emailAddress': 'owner@example.com'}],
+            }
+        ],
+        drive_exports={
+            ('sheet-1', 'text/csv'): '항목,금액\n출장비,120000\n식대,45000',
+        },
+    )
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert client.drive_export_requests == [('sheet-1', 'text/csv')]
+    assert event.body == '항목,금액\n출장비,120000\n식대,45000'
+    assert event.raw_metadata['parser_name'] == 'google_drive_sheets_csv_export'
+    assert event.raw_metadata['parser_status'] == 'parsed'
+    assert event.raw_metadata['parser_status_reason'] is None
+    assert event.raw_metadata['document_version'] == '7'
+    assert event.raw_metadata['revision_id'] == 'sheet-rev-7'
+    assert event.raw_metadata['content_signature'] == 'drive:sheet-1:7:sheet-rev-7'
+    assert event.raw_metadata['source_snippet'] == '항목,금액 출장비,120000 식대,45000'
+
+
+@pytest.mark.parametrize(
+    ('mime_type', 'expected_status', 'expected_reason'),
+    [
+        ('application/vnd.google-apps.presentation', 'metadata_only', 'slides_export_not_enabled'),
+        ('application/pdf', 'metadata_only', 'pdf_parser_not_enabled'),
+        (
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'metadata_only',
+            'docx_parser_not_enabled',
+        ),
+        ('application/x-hwp', 'unsupported', 'hwp_parser_not_decided'),
+        ('application/haansofthwp', 'unsupported', 'hwp_parser_not_decided'),
+        ('application/vnd.hancom.hwpx', 'unsupported', 'hwp_parser_not_decided'),
+    ],
+)
+def test_google_connector_marks_drive_parser_status_by_mime_type(
+    mime_type: str,
+    expected_status: str,
+    expected_reason: str,
+) -> None:
+    client = FakeGoogleClient(
+        drive_files=[
+            {
+                'id': 'file-typed',
+                'name': '타입별 문서',
+                'mimeType': mime_type,
+                'webViewLink': 'https://drive.google.com/file/d/file-typed/view',
+                'modifiedTime': '2026-05-01T09:00:00Z',
+                'version': '42',
+                'headRevisionId': 'rev-42',
+                'owners': [{'emailAddress': 'owner@example.com'}],
+            }
+        ]
+    )
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert client.drive_export_requests == []
+    assert event.raw_metadata['parser_name'] == 'google_drive_metadata'
+    assert event.raw_metadata['parser_status'] == expected_status
+    assert event.raw_metadata['parser_status_reason'] == expected_reason
+    assert event.raw_metadata['mime_type'] == mime_type
+    assert event.raw_metadata['document_version'] == '42'
+    assert event.raw_metadata['revision_id'] == 'rev-42'
+    assert event.raw_metadata['content_signature'] == 'drive:file-typed:42:rev-42'
+    assert 'Google Drive file changed: 타입별 문서' in event.body
 
 
 def test_google_connector_fetches_gmail_events_since_latest_cursor() -> None:

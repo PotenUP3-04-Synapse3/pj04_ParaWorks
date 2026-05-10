@@ -2,6 +2,7 @@ from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, Permissio
 from backend.app.agents.mail_document_agent import (
     MAIL_DOCUMENT_AGENT_MANIFEST,
     MAIL_DOCUMENT_AGENT_PROMPT_VERSION,
+    DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
     MailDocumentAgentModelResponse,
 )
@@ -65,3 +66,65 @@ def test_mail_document_agent_creates_evidence_backed_candidate() -> None:
     assert result.cost.token_usage.total_tokens == 1060
     assert result.cost.estimated_cost_usd > 0
     assert result.cache_key
+
+
+def test_deterministic_mail_document_agent_marks_metadata_only_evidence_uncertain() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:drive',
+        messages=[
+            EvidenceMessage(
+                source_id='drive-pdf-1',
+                source_url='https://drive.mock/policy.pdf',
+                text='Google Drive file changed: 휴가 정책 PDF',
+                author='owner@example.com',
+                timestamp='2026-05-01T09:00:00+00:00',
+                permission_level='restricted',
+                metadata={
+                    'source_type': 'drive',
+                    'parser_status': 'metadata_only',
+                    'parser_status_reason': 'pdf_parser_not_enabled',
+                },
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.confidence_score == 0.42
+    assert candidate.uncertainty_reason == (
+        'Some document evidence is not body-parsed: drive-pdf-1=metadata_only(pdf_parser_not_enabled)'
+    )
+
+
+def test_deterministic_mail_document_agent_marks_unsupported_evidence_uncertain() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:drive',
+        messages=[
+            EvidenceMessage(
+                source_id='drive-hwp-1',
+                source_url='https://drive.mock/policy.hwp',
+                text='Google Drive file changed: 휴가 정책 HWP',
+                author='owner@example.com',
+                timestamp='2026-05-01T09:00:00+00:00',
+                permission_level='restricted',
+                metadata={
+                    'source_type': 'drive',
+                    'parser_status': 'unsupported',
+                    'parser_status_reason': 'hwp_parser_not_decided',
+                },
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.confidence_score == 0.3
+    assert candidate.uncertainty_reason == (
+        'Some document evidence is not body-parsed: drive-hwp-1=unsupported(hwp_parser_not_decided)'
+    )

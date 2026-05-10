@@ -183,7 +183,7 @@ def sync_connector(
     settings: AppSettings,
     user: CurrentUser,
     request: IntegrationSyncRequest | None = SYNC_REQUEST_BODY,
-) -> dict[str, int | str]:
+) -> dict[str, object]:
     if connector_type not in CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
@@ -202,6 +202,7 @@ def sync_connector(
         result = sync_connector_events(db=db, connector=connector)
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    parser_status_counts = getattr(result, 'parser_status_counts', {})
 
     record_audit_log(
         db=db,
@@ -214,6 +215,7 @@ def sync_connector(
             'fetched_events': result.fetched_events,
             'created_review_items': result.created_review_items,
             'skipped_events': result.skipped_events,
+            'parser_status_counts': parser_status_counts,
             'selected_channel_ids': selected_channel_ids,
         },
     )
@@ -226,6 +228,7 @@ def sync_connector(
         'created_review_items': result.created_review_items,
         'fetched_events': result.fetched_events,
         'skipped_events': result.skipped_events,
+        'parser_status_counts': parser_status_counts,
     }
 
 

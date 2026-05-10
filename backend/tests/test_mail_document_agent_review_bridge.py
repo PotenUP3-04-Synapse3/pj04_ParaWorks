@@ -33,7 +33,13 @@ class FakeMailDocumentModel:
         )
 
 
-def seed_chunk(db: Session, source_type: str, source_id: str, permission_level: str) -> None:
+def seed_chunk(
+    db: Session,
+    source_type: str,
+    source_id: str,
+    permission_level: str,
+    metadata: dict | None = None,
+) -> None:
     source = Source(
         source_type=source_type,
         source_id=source_id,
@@ -62,7 +68,7 @@ def seed_chunk(db: Session, source_type: str, source_id: str, permission_level: 
             text=f'{source_type} body',
             source_snippet=f'{source_type} body',
             permission_level=permission_level,
-            metadata_={'source_url': source.source_url, 'source_type': source_type},
+            metadata_={'source_url': source.source_url, 'source_type': source_type, **(metadata or {})},
         )
     )
     db.commit()
@@ -121,3 +127,40 @@ def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session:
         'https://gmail.mock/gmail-agent-test',
         'https://drive.mock/drive-agent-test',
     ]
+
+
+def test_mail_document_evidence_packet_preserves_parser_status_metadata(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'drive',
+        'drive-pdf-test',
+        'restricted',
+        metadata={
+            'parser_name': 'google_drive_metadata',
+            'parser_status': 'metadata_only',
+            'parser_status_reason': 'pdf_parser_not_enabled',
+            'document_version': '42',
+            'revision_id': 'rev-42',
+            'content_signature': 'drive:file-1:42:rev-42',
+            'content_hash': 'hash-42',
+        },
+    )
+
+    from backend.app.agents.mail_document_agent import (
+        build_mail_document_evidence_packet,
+    )
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mail-docs:2026-05-01',
+    )
+
+    message = packet.messages[0]
+    assert message.metadata['parser_name'] == 'google_drive_metadata'
+    assert message.metadata['parser_status'] == 'metadata_only'
+    assert message.metadata['parser_status_reason'] == 'pdf_parser_not_enabled'
+    assert message.metadata['document_version'] == '42'
+    assert message.metadata['revision_id'] == 'rev-42'
+    assert message.metadata['content_signature'] == 'drive:file-1:42:rev-42'
+    assert message.metadata['content_hash'] == 'hash-42'

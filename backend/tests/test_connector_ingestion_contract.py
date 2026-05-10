@@ -37,6 +37,8 @@ def drive_source_event(
     version: str = '42',
     revision_id: str = 'rev-42',
     body: str = '휴가 신청은 HR 시스템에서 진행합니다.',
+    parser_status: str = 'parsed',
+    parser_status_reason: str | None = None,
 ) -> SourceEvent:
     return SourceEvent(
         source_type='drive',
@@ -55,8 +57,8 @@ def drive_source_event(
             'revision_id': revision_id,
             'content_signature': f'drive:file-1:{version}:{revision_id}',
             'parser_name': 'google_drive_text_export',
-            'parser_status': 'parsed',
-            'parser_status_reason': None,
+            'parser_status': parser_status,
+            'parser_status_reason': parser_status_reason,
             'source_snippet': body,
         },
     )
@@ -218,6 +220,29 @@ def test_sync_connector_events_ingests_changed_content_signature(db_session: Ses
     assert len(chunks) == 2
     assert chunks[0].metadata_['content_signature'] == 'drive:file-1:42:rev-42'
     assert chunks[1].metadata_['content_signature'] == 'drive:file-1:43:rev-43'
+
+
+def test_sync_connector_events_reports_parser_status_counts(db_session: Session) -> None:
+    result = sync_connector_events(
+        db=db_session,
+        connector=DriveContentSignatureConnector(
+            [
+                drive_source_event(),
+                drive_source_event(
+                    version='43',
+                    revision_id='rev-43',
+                    body='PDF metadata only',
+                    parser_status='metadata_only',
+                    parser_status_reason='pdf_parser_not_enabled',
+                ),
+            ]
+        ),
+    )
+
+    assert result.parser_status_counts == {
+        'metadata_only': 1,
+        'parsed': 1,
+    }
 
 
 def test_sync_connector_events_passes_latest_slack_timestamp_cursor(db_session: Session) -> None:
