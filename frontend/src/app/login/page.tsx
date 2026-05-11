@@ -71,10 +71,10 @@ const LOCAL_DEMO_USERS: DemoUser[] = [
 ];
 
 export default function LoginPage() {
-  const [users, setUsers] = useState<DemoUser[]>([]);
+  const [users, setUsers] = useState<DemoUser[]>(LOCAL_DEMO_USERS);
   const [googleLogin, setGoogleLogin] = useState<GoogleLoginUrlResponse>();
   const [currentUserId, setCurrentUserId] = useState("hanvv-employee");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(LOCAL_DEMO_USERS[0].email);
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();

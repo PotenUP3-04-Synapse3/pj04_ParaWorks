@@ -19,6 +19,24 @@ and demo evidence. Do not store Document Agent progress entries in
 - Document Agent portfolio and project records belong in this file.
 - Target git branch: `/agent_docs`.
 
+## Google Connector and Ingestion Foundation
+
+### Google Web API Client and Multi-Source Sync
+
+Recorded on 2026-05-11.
+
+Implemented a unified Google connector supporting Gmail, Drive, and Calendar.
+
+- **Unified Client**: Built `GoogleWebApiClient` in `backend/app/connectors/google.py` with support for OAuth, retries, and pagination across multiple Google services.
+- **Gmail Sync**: Implemented message and thread extraction with automatic text/plain and text/html body parsing and participant domain analysis.
+- **Calendar Sync**: Added calendar event ingestion with attendee status tracking and duration calculation.
+- **Incremental Sync Service**: Implemented `sync_connector_events` in `backend/app/ingestion/sync.py` with cursor-based partitioning and content-signature deduplication.
+
+Portfolio angle:
+
+- Shows the ability to build complex, reliable integrations with major SaaS providers.
+- Establishes the "Evidence-First" ingestion pipeline used by all downstream agents.
+
 ## Document Parser Contract and Google Docs Export
 
 Recorded on 2026-05-10.

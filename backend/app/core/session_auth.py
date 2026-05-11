@@ -5,7 +5,7 @@ import json
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Response
+from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -126,6 +126,7 @@ def clear_auth_cookies(response: Response, settings: Settings | None = None) -> 
     settings = settings or get_settings()
     response.delete_cookie(settings.auth_session_cookie_name, path='/')
     response.delete_cookie(settings.auth_refresh_cookie_name, path='/')
+    response.delete_cookie(settings.auth_csrf_cookie_name, path='/')
 
 
 def authenticate_session_cookie(session_token: str | None, db: Session, settings: Settings | None = None) -> AuthUser | None:
@@ -192,6 +193,41 @@ def set_auth_cookies(response: Response, session_token: str, refresh_token: str,
         samesite='lax',
         path='/',
     )
+    set_csrf_cookie(response, settings)
+
+
+async def check_csrf(request: Request, settings: Settings = Depends(get_settings)):
+    if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
+        return True
+    # Exempt login and refresh from established session CSRF
+    if request.url.path in ('/api/v1/auth/login', '/api/v1/auth/refresh'):
+        return True
+    if not verify_csrf_token(request, settings):
+        raise HTTPException(status_code=403, detail="CSRF validation failed")
+
+
+def set_csrf_cookie(response: Response, settings: Settings) -> str:
+    token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        settings.auth_csrf_cookie_name,
+        token,
+        max_age=settings.auth_session_ttl_seconds,
+        httponly=False,
+        secure=settings.auth_cookie_secure,
+        samesite='lax',
+        path='/',
+    )
+    return token
+
+
+def verify_csrf_token(request: Request, settings: Settings) -> bool:
+    if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
+        return True
+    cookie_token = request.cookies.get(settings.auth_csrf_cookie_name)
+    header_token = request.headers.get(settings.auth_csrf_header_name)
+    if not cookie_token or not header_token:
+        return False
+    return hmac.compare_digest(cookie_token, header_token)
 
 
 def _sign(encoded_payload: str, secret: str) -> str:

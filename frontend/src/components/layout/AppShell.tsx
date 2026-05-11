@@ -91,13 +91,14 @@ function ShellContent({ children }: { children: ReactNode }) {
       .catch(() => {
         if (active) {
           setCurrentUser(null);
+          router.push("/login");
         }
       });
 
     return () => {
       active = false;
     };
-  }, [pathname]);
+  }, [pathname, router]);
 
   const visibleNavGroups = useMemo(
     () =>
@@ -110,19 +111,20 @@ function ShellContent({ children }: { children: ReactNode }) {
   );
 
   const accountDisplay = useMemo(() => {
-    const name = currentUser?.name ?? "\ub85c\uadf8\uc778 \ud544\uc694";
+    const isLoggedIn = !!currentUser;
+    const name = currentUser?.name ?? "로그인이 필요합니다";
     const roleLabels: Record<string, string> = {
-      admin: "\uad00\ub9ac\uc790",
-      manager: "\ub9e4\ub2c8\uc800",
-      reviewer: "\ub9ac\ubdf0\uc5b4",
-      employee: "\uba64\ubc84",
+      admin: "관리자",
+      manager: "매니저",
+      reviewer: "리뷰어",
+      employee: "멤버",
     };
-    const role = currentUser ? (roleLabels[currentUser.role] ?? currentUser.role) : "\uacc4\uc815 \uc5c6\uc74c";
-    const initial = name.trim().charAt(0).toUpperCase() || "?";
+    const role = currentUser ? (roleLabels[currentUser.role] ?? currentUser.role) : "여기를 클릭해 로그인하세요";
+    const initial = isLoggedIn ? (currentUser?.name?.trim().charAt(0).toUpperCase() || "?") : "!";
     const avatarFileName = currentUser?.email.split("@", 1)[0]?.trim().toLowerCase();
     const fallbackAvatarUrl = avatarFileName ? `/profile/${avatarFileName}.png` : null;
     const avatarUrl = currentUser?.role === "admin" ? null : (currentUser?.avatar_url ?? fallbackAvatarUrl);
-    return { name, role, initial, avatarUrl };
+    return { name, role, initial, avatarUrl, isLoggedIn };
   }, [currentUser]);
 
   if (pathname === "/login" || pathname.startsWith("/login/")) {
@@ -179,24 +181,41 @@ function ShellContent({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="relative mt-4 flex items-center justify-between rounded-lg bg-[#fafafa] p-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="avatar-photo" aria-hidden="true">
+        <div className="relative mt-4 flex items-center justify-between rounded-lg bg-white p-2 shadow-sm border border-line/50">
+          <button
+            type="button"
+            className={`flex min-w-0 flex-1 items-center gap-2 p-1 text-left outline-none transition-opacity hover:opacity-80 ${
+              !accountDisplay.isLoggedIn ? "animate-pulse" : ""
+            }`}
+            onClick={() => {
+              if (!accountDisplay.isLoggedIn) {
+                router.push("/login");
+              } else {
+                setAccountMenuOpen((open) => !open);
+              }
+            }}
+          >
+            <span className={`avatar-photo ${!accountDisplay.isLoggedIn ? "bg-[var(--primary-soft)]" : ""}`} aria-hidden="true">
               {accountDisplay.avatarUrl ? (
                 <Image src={accountDisplay.avatarUrl} alt="" width={34} height={34} />
               ) : (
-                accountDisplay.initial
+                <span className={!accountDisplay.isLoggedIn ? "text-[var(--primary-dark)]" : ""}>
+                  {accountDisplay.initial}
+                </span>
               )}
             </span>
-            <span className="min-w-0">
-              <span className="block truncate text-[13px] font-bold text-ink">{accountDisplay.name}</span>
-              <span className="block text-[11px] text-muted">{accountDisplay.role}</span>
+            <span className="min-w-0 flex-1">
+              <span className={`block truncate text-[13px] font-bold ${accountDisplay.isLoggedIn ? "text-ink" : "text-[var(--primary-dark)]"}`}>
+                {accountDisplay.name}
+              </span>
+              <span className="block truncate text-[11px] text-muted">{accountDisplay.role}</span>
             </span>
-          </div>
+          </button>
+          
           <button
             type="button"
-            className="icon-button small"
-            aria-label={"\uacc4\uc815 \uba54\ub274"}
+            className="icon-button small shrink-0"
+            aria-label={"계정 메뉴"}
             aria-expanded={accountMenuOpen}
             onClick={() => setAccountMenuOpen((open) => !open)}
           >
@@ -204,24 +223,50 @@ function ShellContent({ children }: { children: ReactNode }) {
           </button>
 
           {accountMenuOpen ? (
-            <div className="absolute bottom-full right-0 z-40 mb-2 w-36 rounded-lg border border-line bg-[var(--glass-elevated)] p-1 shadow-lg">
-              <button
-                type="button"
-                className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
-                onClick={() => {
-                  setAccountMenuOpen(false);
-                  router.push("/account");
-                }}
-              >
-                {"\ub0b4 \uacc4\uc815"}
-              </button>
-              <button
-                type="button"
-                className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-red-600 hover:bg-red-50"
-                onClick={() => void logout()}
-              >
-                {"\ub85c\uadf8\uc544\uc6c3"}
-              </button>
+            <div className="absolute bottom-full right-0 z-40 mb-2 w-44 rounded-lg border border-line bg-[var(--glass-elevated)] p-1 shadow-lg">
+              {accountDisplay.isLoggedIn ? (
+                <>
+                  <button
+                    type="button"
+                    className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      router.push("/account");
+                    }}
+                  >
+                    내 계정 정보
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      router.push("/login");
+                    }}
+                  >
+                    다른 계정으로 전환
+                  </button>
+                  <div className="my-1 border-t border-line" />
+                  <button
+                    type="button"
+                    className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-red-600 hover:bg-red-50"
+                    onClick={() => void logout()}
+                  >
+                    로그아웃
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-[var(--primary-dark)] hover:bg-[var(--primary-soft)]"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    router.push("/login");
+                  }}
+                >
+                  로그인하기
+                </button>
+              )}
             </div>
           ) : null}
         </div>

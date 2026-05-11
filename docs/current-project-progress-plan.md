@@ -189,9 +189,13 @@ Slack, Gmail, Google Drive, Calendar 등 업무 도구에서 수집한 증거를
 - 주요 product page는 구현되어 있다.
 - 포트폴리오 demo story를 구성할 화면은 대부분 존재한다.
 
+**UI/UX 디자인 결정 사항 (규칙):**
+1. **Liquid Glass 테마 일괄 적용 지양**: 과거 안드로이드 UI 스타일처럼 보일 수 있으므로 모든 패널, 카드, 버튼에 Liquid Glass(반투명/그림자 과다) 테마를 일괄 적용하지 않는다. 현대적이고 세련된 애플리케이션 디자인을 달성할 수 있는 방안이 있을 때만 제안한다.
+2. **라이트 테마 유지 (`data-theme='light'`)**: 가독성 확보를 위해 현재 `layout.tsx`에 강제 주입된 라이트 모드를 기본값으로 유지한다. 다크 모드는 명확히 가독성이 보장되는 디자인이 준비될 때까지 제외한다.
+
 진행 중인 방향:
 
-- 전체 UI consistency pass
+- 전체 UI consistency pass (강제 테마 및 과도한 효과 지양)
 - loading/empty/error/unauthorized 상태 점검
 - desktop/mobile Playwright smoke
 - portfolio screenshot/clip capture

@@ -20,35 +20,35 @@
 
 :root {
   color-scheme: light;
-  --app-bg: #f0f0f0;
+  --app-bg: #f8f9fa;
   --font-global: "Noto Sans KR", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-logo: "Comfortaa", ui-sans-serif, system-ui, sans-serif;
-  --sidebar: #f0f0f0;
-  --surface: #fafafa;
-  --surface-soft: #f5f8fd;
-  --line: #e6edf6;
-  --ink: #101828;
-  --muted: #5b6b86;
-  --primary: #0a6cff;
-  --primary-dark: #0057df;
+  --sidebar: var(--app-bg);
+  --surface: #ffffff;
+  --surface-soft: #f1f3f5;
+  --line: #e9ecef;
+  --ink: #212529;
+  --muted: #868e96;
+  --primary: #228be6;
+  --primary-dark: #1c7ed6;
   --ink-strong: var(--ink);
   --ink-muted: var(--muted);
   --line-soft: var(--line);
-  --line-strong: #cbd5e1;
-  --panel-soft: #f6f8fb;
+  --line-strong: #dee2e6;
+  --panel-soft: #f8f9fa;
   --workspace-accent: var(--primary);
-  --workspace-rail: #243152;
+  --workspace-rail: #343a40;
   --workspace-rail-active: var(--primary-dark);
-  --glass-elevated: #fafafa;
-  --glass-strong: #f2f6fb;
-  --glass-control: #eef3f8;
-  --glass-control-strong: #e5edf7;
-  --avatar: #1f2937;
-  --success: #13a870;
-  --danger: #e5484d;
-  --warning: #f59e0b;
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.035), 0 12px 28px rgba(33, 53, 88, 0.045);
+  --glass-elevated: #ffffff;
+  --glass-strong: #f8f9fa;
+  --glass-control: #f1f3f5;
+  --glass-control-strong: #e9ecef;
+  --avatar: #495057;
+  --success: #40c057;
+  --danger: #fa5252;
+  --warning: #fab005;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 * {
@@ -184,14 +184,16 @@ button {
   }
 
   .sidebar-link:hover {
-    background: #f8f8f8;
+    background: rgba(0, 0, 0, 0.02);
     color: var(--primary-dark);
   }
 
   .sidebar-link.active {
-    background: #fafafa;
+    background: #ffffff;
     color: var(--primary-dark);
-    box-shadow: 1px 1px 1px 1px rgba(99, 99, 99, 0.14);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.05),
+      0 1px 2px rgba(0, 0, 0, 0.1);
   }
 
   .nav-badge {
@@ -267,17 +269,16 @@ button {
   }
 
   .page-heading h1 {
-    font-size: clamp(1.55rem, 2vw, 2rem);
-    font-weight: 800;
-    line-height: 1.2;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     color: var(--ink);
   }
 
   .page-heading p {
-    margin-top: 0.55rem;
-    color: #344054;
-    font-size: 0.95rem;
-    line-height: 1.6;
+    margin-top: 0.25rem;
+    color: var(--muted);
+    font-size: 0.9rem;
   }
 
   .status-dot {
@@ -290,19 +291,20 @@ button {
 
   .panel {
     border: 1px solid var(--line);
-    border-radius: 0.5rem;
+    border-radius: 0.6rem;
     background: var(--surface);
-    box-shadow: var(--shadow-panel);
-    padding: 1rem;
+    box-shadow: var(--shadow-xs);
+    padding: 1.25rem;
   }
 
   .panel-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
     border-bottom: 1px solid var(--line);
-    padding: 0.25rem 0 1rem;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
   }
 
   .panel-header h2,
@@ -423,21 +425,22 @@ button {
   }
 
   .activity-row time {
-    color: #475467;
-    font-size: 0.78rem;
-    font-weight: 650;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 500;
   }
 
   .activity-row h3 {
-    font-size: 0.95rem;
-    font-weight: 800;
+    font-size: 0.9rem;
+    font-weight: 600;
     color: var(--ink);
   }
 
   .activity-row p {
-    margin-top: 0.25rem;
-    font-size: 0.84rem;
-    color: #344054;
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    color: var(--ink);
+    opacity: 0.85;
   }
 
   .activity-row span {
@@ -464,42 +467,49 @@ button {
   .badge,
   .priority-badge {
     display: inline-flex;
-    min-height: 1.55rem;
+    height: 1.5rem;
     align-items: center;
-    border-radius: 0.35rem;
+    border-radius: 0.3rem;
     padding: 0 0.5rem;
-    font-size: 0.74rem;
-    font-weight: 800;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 1px solid transparent;
   }
 
   .badge.blue {
-    background: #eaf3ff;
-    color: var(--primary-dark);
+    background: #e7f5ff;
+    color: #1c7ed6;
+    border-color: #d0ebff;
   }
 
   .badge.green {
-    background: #e8f8ef;
-    color: #08784f;
+    background: #ebfbee;
+    color: #2b8a3e;
+    border-color: #d3f9d8;
   }
 
   .badge.violet {
-    background: #f2ecff;
-    color: #6d28d9;
+    background: #f3f0ff;
+    color: #6741d9;
+    border-color: #e5dbff;
   }
 
   .priority-badge.danger {
-    background: #ffecec;
-    color: #dc2626;
+    background: #fff5f5;
+    color: #fa5252;
+    border-color: #ffe3e3;
   }
 
   .priority-badge.warning {
-    background: #fff4df;
-    color: #c76a00;
+    background: #fff9db;
+    color: #f08c00;
+    border-color: #fff3bf;
   }
 
   .priority-badge.success {
-    background: #e8f8ef;
-    color: #08784f;
+    background: #ebfbee;
+    color: #2b8a3e;
+    border-color: #d3f9d8;
   }
 
   .review-table {
@@ -637,29 +647,37 @@ button {
     color: var(--ink);
   }
 
-  .liquid-surface,
-  .integration-glass-card {
+  .glass-panel,
+  .integration-card {
     border: 1px solid var(--line);
     background: var(--surface);
-    box-shadow: var(--shadow-panel);
-  }
-
-  .liquid-control,
-  .glass-row {
-    border: 1px solid var(--line);
-    background: var(--surface-soft);
+    border-radius: 0.5rem;
     box-shadow: var(--shadow-xs);
   }
 
-  .liquid-primary {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 10px 22px rgba(11, 107, 255, 0.18);
+  .sub-panel,
+  .standard-row {
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    border-radius: 0.4rem;
   }
 
-  .liquid-segment-active {
-    background: #eaf3ff;
+  .primary-btn {
+    background: var(--primary);
+    color: white;
+    font-weight: 700;
+    border-radius: 0.45rem;
+    transition: background 150ms ease;
+  }
+
+  .primary-btn:hover {
+    background: var(--primary-dark);
+  }
+
+  .segment-active {
+    background: #eff6ff;
     color: var(--primary-dark);
+    font-weight: 700;
   }
 
   .reference-dashboard {
@@ -1744,12 +1762,12 @@ button {
   }
 
   .source-metric-card {
-    min-height: 8.55rem;
+    min-height: 8rem;
     border: 1px solid var(--line);
-    border-radius: 0.5rem;
+    border-radius: 0.6rem;
     background: #fff;
     padding: 1.25rem;
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--shadow-xs);
   }
 
   .source-metric-card > div {
