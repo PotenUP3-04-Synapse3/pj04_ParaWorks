@@ -19,7 +19,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost, clearStoredDemoUserId } from "@/lib/api/client";
+import { LOCAL_DEMO_USERS, apiGet, apiPost, clearStoredDemoUserId, getStoredDemoUserId } from "@/lib/api/client";
 import type { AuthUserResponse, DemoUser } from "@/lib/api/types";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 
@@ -90,8 +90,14 @@ function ShellContent({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (active) {
-          setCurrentUser(null);
-          router.push("/login");
+          const storedId = getStoredDemoUserId();
+          const fallbackUser = LOCAL_DEMO_USERS.find((u) => u.id === storedId || u.email === storedId);
+          if (fallbackUser) {
+            setCurrentUser(fallbackUser);
+          } else {
+            setCurrentUser(null);
+            router.push("/login");
+          }
         }
       });
 

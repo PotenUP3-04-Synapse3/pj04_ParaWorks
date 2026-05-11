@@ -5,6 +5,7 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DEMO_USER_STORAGE_KEY,
+  LOCAL_DEMO_USERS,
   apiGet,
   apiPost,
   clearStoredDemoUserId,
@@ -12,63 +13,6 @@ import {
   setStoredDemoUserId,
 } from "@/lib/api/client";
 import type { AuthUserResponse, AuthUsersResponse, DemoUser, GoogleLoginUrlResponse } from "@/lib/api/types";
-
-const LOCAL_DEMO_USERS: DemoUser[] = [
-  {
-    id: "demo-admin",
-    email: "admin@paraworks.com",
-    role: "admin",
-    permission_levels: ["public", "internal", "restricted"],
-    name: "ParaWorks Admin",
-    title: "Workspace Administrator",
-    department: "Platform",
-  },
-  {
-    id: "google-hanvv-admin",
-    email: "hanvv3@gmail.com",
-    role: "admin",
-    permission_levels: ["public", "internal", "restricted"],
-    name: "Hanvv Admin",
-    title: "Workspace Administrator",
-    department: "Platform",
-  },
-  {
-    id: "google-hanvv-employee",
-    email: "hanvv3@koreacu.ac.kr",
-    role: "employee",
-    permission_levels: ["public", "internal"],
-    name: "Hanvv Employee",
-    title: "AI Agent Developer",
-    department: "Engineering",
-  },
-  {
-    id: "employee-mina",
-    email: "mina@paraworks.com",
-    role: "reviewer",
-    permission_levels: ["public", "internal"],
-    name: "Kim Mina",
-    title: "Product Manager",
-    department: "Product",
-  },
-  {
-    id: "employee-jun",
-    email: "jun@paraworks.com",
-    role: "employee",
-    permission_levels: ["public", "internal"],
-    name: "Lee Jun",
-    title: "Backend Engineer",
-    department: "Engineering",
-  },
-  {
-    id: "employee-soyeon",
-    email: "soyeon@paraworks.com",
-    role: "employee",
-    permission_levels: ["public"],
-    name: "Park Soyeon",
-    title: "Operations Associate",
-    department: "Operations",
-  },
-];
 
 export default function LoginPage() {
   const [users, setUsers] = useState<DemoUser[]>(LOCAL_DEMO_USERS);
