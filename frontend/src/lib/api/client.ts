@@ -2,6 +2,63 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.
 export const DEMO_USER_STORAGE_KEY = "paraworks-demo-user";
 export const DEFAULT_DEMO_USER = "hanvv-employee";
 
+export const LOCAL_DEMO_USERS = [
+  {
+    id: "demo-admin",
+    email: "admin@paraworks.com",
+    role: "admin",
+    permission_levels: ["public", "internal", "restricted"],
+    name: "ParaWorks Admin",
+    title: "Workspace Administrator",
+    department: "Platform",
+  },
+  {
+    id: "google-hanvv-admin",
+    email: "hanvv3@gmail.com",
+    role: "admin",
+    permission_levels: ["public", "internal", "restricted"],
+    name: "Hanvv Admin",
+    title: "Workspace Administrator",
+    department: "Platform",
+  },
+  {
+    id: "google-hanvv-employee",
+    email: "hanvv3@koreacu.ac.kr",
+    role: "employee",
+    permission_levels: ["public", "internal"],
+    name: "Hanvv Employee",
+    title: "AI Agent Developer",
+    department: "Engineering",
+  },
+  {
+    id: "employee-mina",
+    email: "mina@paraworks.com",
+    role: "reviewer",
+    permission_levels: ["public", "internal"],
+    name: "Kim Mina",
+    title: "Product Manager",
+    department: "Product",
+  },
+  {
+    id: "employee-jun",
+    email: "jun@paraworks.com",
+    role: "employee",
+    permission_levels: ["public", "internal"],
+    name: "Lee Jun",
+    title: "Backend Engineer",
+    department: "Engineering",
+  },
+  {
+    id: "employee-soyeon",
+    email: "soyeon@paraworks.com",
+    role: "employee",
+    permission_levels: ["public"],
+    name: "Park Soyeon",
+    title: "Operations Associate",
+    department: "Operations",
+  },
+];
+
 function apiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return typeof window === "undefined" ? `${API_BASE}${normalizedPath}` : normalizedPath;
