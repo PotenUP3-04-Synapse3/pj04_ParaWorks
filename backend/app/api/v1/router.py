@@ -6,6 +6,7 @@ from backend.app.api.v1 import (
     ask,
     auth,
     dashboard,
+    documents,
     integrations,
     knowledge,
     messages,
@@ -23,6 +24,7 @@ api_router.include_router(agent_runs.router)
 api_router.include_router(ask.router)
 api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(documents.router)
 api_router.include_router(integrations.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(messages.router)

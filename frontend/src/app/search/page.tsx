@@ -190,6 +190,16 @@ function SearchPageContent() {
                 <span className="badge blue">{result.source_type ?? "source"}</span>
                 <span className="badge green">{result.permission_level}</span>
                 <span className="badge violet">score {result.relevance_score.toFixed(2)}</span>
+                {result.parser_status === "metadata_only" && (
+                  <span className="badge amber" title={result.parser_status_reason || "메타데이터만 수집되었습니다"}>
+                    메타데이터 반환 (본문 없음)
+                  </span>
+                )}
+                {result.parser_status === "unsupported" && (
+                  <span className="badge red" title={result.parser_status_reason || "지원되지 않는 파일 형식입니다."}>
+                    미지원 파일 (본문 제외됨)
+                  </span>
+                )}
               </div>
               {result.matched_terms.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
