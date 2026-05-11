@@ -6,14 +6,12 @@ import {
   CalendarClock,
   CircleHelp,
   Database,
-  FileClock,
+  FolderKanban,
   GitBranch,
   Grid2X2,
   Inbox,
-  Map,
   Search,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,16 +33,14 @@ const navGroups: { items: NavItem[] }[] = [
   {
     items: [
       { href: "/dashboard", label: "\ub300\uc2dc\ubcf4\ub4dc", icon: Grid2X2 },
+      { href: "/projects", label: "\ud504\ub85c\uc81d\ud2b8", icon: FolderKanban },
       { href: "/review", label: "\uac80\ud1a0\uc0ac\ud56d", icon: Inbox, badge: 12 },
-      { href: "/decisions", label: "\uc758\uc0ac\uacb0\uc815", icon: ShieldCheck },
       { href: "/timeline", label: "\ud0c0\uc784\ub77c\uc778", icon: GitBranch },
-      { href: "/history", label: "\ud788\uc2a4\ud1a0\ub9ac", icon: FileClock },
-      { href: "/knowledge-map", label: "\uc9c0\uc2dd \ub9f5", icon: Map },
     ],
   },
   {
     items: [
-      { href: "/search", label: "Ask \uc6cc\ud06c\uc2a4\ud398\uc774\uc2a4", icon: Bot },
+      { href: "/search", label: "AI \ube44\uc11c", icon: Bot },
       {
         href: "/agent-runs",
         label: "\uc5d0\uc774\uc804\ud2b8 \uc2e4\ud589 \uae30\ub85d",
@@ -289,7 +285,9 @@ function ShellContent({ children }: { children: ReactNode }) {
             </Link>
 
             <form onSubmit={submitSearch} className="top-search ml-auto min-w-0 flex-1 md:max-w-[470px]">
-              <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+              <button type="submit" className="top-search-icon-button" aria-label="AI 비서에게 질문">
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </button>
               <input
                 name="q"
                 className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[#667085]"

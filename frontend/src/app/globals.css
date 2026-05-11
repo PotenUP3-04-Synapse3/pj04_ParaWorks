@@ -112,6 +112,28 @@ button {
   background-clip: content-box;
 }
 
+@keyframes history-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes history-panel-content-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @layer utilities {
   .bg-app {
     background: var(--app-bg);
@@ -220,6 +242,30 @@ button {
     box-shadow: var(--shadow-xs);
   }
 
+  .top-search-icon-button {
+    display: grid;
+    height: 1.85rem;
+    width: 1.85rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 0.38rem;
+    color: var(--muted);
+    transition:
+      color 150ms ease,
+      background 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .top-search-icon-button:hover {
+    background: var(--primary-soft);
+    color: var(--primary-dark);
+  }
+
+  .top-search-icon-button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
   .icon-button {
     position: relative;
     display: grid;
@@ -239,6 +285,12 @@ button {
   .icon-button.small {
     height: 2rem;
     width: 2rem;
+  }
+
+  .icon-button.active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary-dark);
   }
 
   .icon-button:hover {
@@ -279,6 +331,23 @@ button {
     margin-top: 0.25rem;
     color: var(--muted);
     font-size: 0.9rem;
+  }
+
+  .timeline-history-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    transition: grid-template-columns 320ms ease;
+  }
+
+  .timeline-history-panel {
+    animation: history-panel-content-in 220ms ease-out;
+  }
+
+  @media (min-width: 1024px) {
+    .timeline-history-layout.history-open {
+      grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr);
+    }
   }
 
   .status-dot {

@@ -13,6 +13,7 @@ from backend.app.api.v1 import (
     messages,
     notifications,
     orchestration,
+    projects,
     rag,
     review,
     search,
@@ -31,6 +32,7 @@ api_router.include_router(knowledge.router)
 api_router.include_router(messages.router)
 api_router.include_router(notifications.router)
 api_router.include_router(orchestration.router)
+api_router.include_router(projects.router)
 api_router.include_router(rag.router)
 api_router.include_router(review.router)
 api_router.include_router(search.router)

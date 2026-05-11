@@ -92,7 +92,7 @@ function getCookie(name: string): string | undefined {
   return undefined;
 }
 
-function csrfHeader() {
+function csrfHeader(): Record<string, string> {
   const token = getCookie("paraworks_csrf");
   return token ? { "X-CSRF-Token": token } : {};
 }

@@ -729,3 +729,54 @@ When future ParaWorks work changes the product story, architecture, UX, testing
 evidence, or demo flow, update `docs/portfolio-log.md` in the same session.
 Write entries so they can later be reused for a portfolio case study: problem,
 implementation, verification evidence, and portfolio angle.
+
+## 2026-05-11 Sidebar Navigation Update
+
+- Sidebar now foregrounds `대시보드`, `프로젝트`, `검토사항`, and `타임라인`.
+- Removed Decision, History, and Knowledge Map from the sidebar navigation.
+  Their routes still exist for now, but they are no longer primary menu items.
+- Added `/projects` as a frontend project workspace with a top project switcher,
+  Gantt-style planning, calendar scheduling, board status, and task list views.
+- Reworked `/timeline` as a project-scoped timeline. Each timeline item has a
+  history summary and a history/Slack icon path that opens the related source
+  conversation panel.
+- The global top search submits through the left search icon and routes to
+  `/search?q=...`, which drives `AI 비서`.
+- Navigation and `/search` now label the assistant surface as `AI 비서`.
+- `/dashboard` is now a personalized work-home view: today's assigned tasks,
+  personal review count, meetings, mentions/updates, assigned projects, and an
+  AI 비서 suggestion. Workspace-wide source counts were removed from Dashboard.
+- `/dashboard` includes a visible `검토사항` section for assigned review work.
+- `/review` is titled `검토사항` and keeps demo fallback review items visible if
+  the backend cannot return pending Review Queue data.
+- `/timeline` starts full-width and opens the history/source panel only after a
+  history icon click; closing the panel returns the timeline to full width.
+- `/integrations` now includes the source-by-connector collection status panel,
+  since source health and sync volume are connector operations context.
+- Verification: `cd frontend && npm run build` passed.
+
+## 2026-05-12 Mail/Document/Calendar Project Grouping Update
+
+- Added `docs/mail-doc-calendar-agent-status.md` as the Developer B status and
+  remaining-work document for Google Drive, Gmail, and Calendar project memory.
+- Mail/Document Agent evidence packet now includes Calendar chunks in addition
+  to Gmail, Gmail attachment, and Drive chunks.
+- Calendar event metadata is preserved into the agent evidence packet:
+  `event_context_key`, `event_status`, organizer/creator, attendee metadata,
+  external domains, and duration.
+- Added `GET /api/v1/projects`.
+  - Groups Gmail/Drive/Calendar evidence by explicit `project_key`, then
+    `scenario`, then URL/title/source-id fallback.
+  - Returns project summary, source types, evidence count, strictest permission,
+    latest timestamp, and source evidence rows.
+  - Hides projects whose strictest permission is outside the current user's
+    permission levels and returns `hidden_project_count`.
+- Backend test fixtures now attach matching CSRF cookie/header values to unsafe
+  requests and clear in-memory auth rate-limit state between tests.
+- Verification:
+
+```bash
+uv run pytest backend/tests -v
+```
+
+Result: 287 passed, 1 skipped.

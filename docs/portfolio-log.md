@@ -6,6 +6,38 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-11 Sidebar and Workspace Navigation Update
+
+- Simplified the main sidebar by removing separate Decision, History, and
+  Knowledge Map entries.
+- Added a Project page where users can switch between assigned projects from a
+  top project menu and review progress, risk, pending review count, Gantt-style
+  planning, calendar scheduling, board status, and task lists.
+- Kept the Timeline entry as `타임라인` and made the page project-scoped, with
+  history summaries tied back to source Slack/Gmail/Drive/Calendar evidence.
+- Updated the global top search so the left search icon acts as the submit
+  button and routes to `AI 비서` with the query prefilled.
+- Renamed the assistant surface to `AI 비서` in navigation and page copy.
+- Restored Dashboard review visibility with a `검토사항` section and renamed the
+  Review page heading from `검토 큐` to `검토사항`; when the backend is not
+  reachable, demo review items remain visible instead of leaving the page in a
+  loading state.
+- Updated Timeline history interactions so the history icon opens a source-
+  specific history panel only on demand, then collapses back to a full-width
+  timeline when closed.
+- Rebuilt the Dashboard as a personalized work home focused on today's assigned
+  tasks, review items, meetings, mentions, assigned projects, and suggested Ask
+  prompts instead of workspace-wide ingestion metrics.
+- Moved source collection status into Integrations, where connector operations
+  and source health belong.
+- Verification: `npm run build` passed from `frontend`.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from many knowledge-category pages toward an
+  operator-friendly workspace organized around projects, timelines, source
+  history, and evidence-backed Ask.
+
 ## Portfolio Positioning
 
 ParaWorks is a Korean-first, multi-agentic Slack-style collaboration and
@@ -3759,3 +3791,9 @@ Cost/security note:
   - Hid admin-only navigation entries from non-admin users, including Admin Console and AgentRun execution records, while keeping the existing backend/API authorization checks for direct URL access.
   - Fixed escaped Korean text rendering in the account header and global search placeholder so users see readable Korean copy instead of raw `\u...` sequences.
   - Verification: `npm.cmd exec tsc -- --noEmit` passed; targeted auth/admin/AgentRun backend tests passed; `npm.cmd run build` passed with `/account` included in the route manifest.
+- `feat: add mail document calendar project grouping`
+  - Added `docs/mail-doc-calendar-agent-status.md` to summarize the current Developer B agent state, gaps, and next work for Google Drive, Gmail, and Calendar evidence.
+  - Extended the Mail/Document Agent evidence packet to include Calendar chunks and preserve event context/status/organizer/duration metadata.
+  - Added `GET /api/v1/projects`, which groups Gmail, Gmail attachment, Drive, and Calendar evidence by `project_key`/`scenario` with permission-aware hidden project accounting.
+  - Updated backend test fixtures so CSRF cookies/headers and auth rate-limit state match the current production-like security middleware during tests.
+  - Verification: `uv run pytest backend/tests -v` passed with 287 tests and 1 skipped pgvector integration test.
