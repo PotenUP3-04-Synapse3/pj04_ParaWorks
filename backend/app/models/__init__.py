@@ -11,7 +11,13 @@ from backend.app.models.knowledge import (
 )
 from backend.app.models.messages import Message, MessageChannel
 from backend.app.models.review import ReviewItem
-from backend.app.models.source import Document, DocumentChunk, DocumentVersion, Source
+from backend.app.models.source import (
+    Document,
+    DocumentChunk,
+    DocumentParserRun,
+    DocumentVersion,
+    Source,
+)
 from backend.app.models.vector_index import VectorIndexState
 
 __all__ = [
@@ -30,6 +36,7 @@ __all__ = [
     'ReviewItem',
     'Document',
     'DocumentChunk',
+    'DocumentParserRun',
     'DocumentVersion',
     'Source',
     'VectorIndexState',

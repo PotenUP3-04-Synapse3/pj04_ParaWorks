@@ -3,7 +3,13 @@ from sqlalchemy.orm import Session
 
 from backend.app.connectors.base import SourceEvent
 from backend.app.documents.parsers import ParsedDocument, ParsedDocumentChunk, ParserRun
-from backend.app.models import Document, DocumentChunk, DocumentVersion, Source
+from backend.app.models import (
+    Document,
+    DocumentChunk,
+    DocumentParserRun,
+    DocumentVersion,
+    Source,
+)
 
 
 def parsed_document_from_source_event(event: SourceEvent) -> ParsedDocument:
@@ -64,6 +70,27 @@ def persist_parsed_document(
     )
     db.add(version)
     db.flush()
+
+    parser_run = DocumentParserRun(
+        document_id=document.id,
+        document_version_id=version.id,
+        source_id=source.id,
+        parser_name=parsed.parser_run.parser_name,
+        parser_status=parsed.parser_run.parser_status,
+        parser_status_reason=parsed.parser_run.parser_status_reason,
+        mime_type=parsed.mime_type,
+        document_version_label=parsed.document_version,
+        revision_id=parsed.revision_id,
+        content_signature=parsed.content_signature,
+        chunk_count=len(parsed.chunks),
+        metadata_={
+            'source_id': parsed.source_id,
+            'source_url': parsed.source_url,
+            'permission_level': parsed.permission_level,
+            'source_snippet': parsed.source_snippet,
+        },
+    )
+    db.add(parser_run)
 
     chunks: list[DocumentChunk] = []
     for parsed_chunk in parsed.chunks:
