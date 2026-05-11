@@ -6,6 +6,7 @@ from backend.app.knowledge.extractor import build_review_payloads
 from backend.app.models import (
     Document,
     DocumentChunk,
+    DocumentParserRun,
     DocumentVersion,
     ReviewItem,
     Source,
@@ -40,6 +41,27 @@ def ingest_events(db: Session, events: list[SourceEvent]) -> int:
         db.add(version)
         db.flush()
 
+        parser_run = DocumentParserRun(
+            document_id=document.id,
+            document_version_id=version.id,
+            source_id=source.id,
+            parser_name=str(event.raw_metadata.get('parser_name') or f'{event.source_type}_source_event'),
+            parser_status=str(event.raw_metadata.get('parser_status') or 'parsed'),
+            parser_status_reason=_optional_string(event.raw_metadata.get('parser_status_reason')),
+            mime_type=str(event.raw_metadata.get('mime_type') or event.source_type),
+            document_version_label=str(event.raw_metadata.get('document_version') or 'v1'),
+            revision_id=str(event.raw_metadata.get('revision_id') or ''),
+            content_signature=str(event.raw_metadata.get('content_signature') or event.source_id),
+            chunk_count=1,
+            metadata_={
+                'source_id': event.source_id,
+                'source_url': event.source_url,
+                'permission_level': event.permission_level,
+                'source_snippet': event.raw_metadata.get('source_snippet') or event.body[:240],
+            },
+        )
+        db.add(parser_run)
+
         chunk = DocumentChunk(
             version_id=version.id,
             source_id=source.id,
@@ -66,3 +88,9 @@ def ingest_events(db: Session, events: list[SourceEvent]) -> int:
 
     db.commit()
     return len(review_payloads)
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)

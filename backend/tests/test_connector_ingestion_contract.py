@@ -10,7 +10,7 @@ from backend.app.connectors.registry import (
     list_connector_manifests,
 )
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.models import DocumentChunk, Source, SyncJob
+from backend.app.models import DocumentChunk, DocumentParserRun, Source, SyncJob
 
 
 def source_event(source_id: str = 'contract-event-1') -> SourceEvent:
@@ -88,6 +88,45 @@ class FailingConnector:
         raise RuntimeError('oauth token expired')
 
 
+@dataclass(frozen=True)
+class DriveParserConnector:
+    source_type: str = 'drive'
+    manifest: ConnectorManifest = ConnectorManifest(
+        connector_type='drive',
+        display_name='Google Drive',
+        mode='mock',
+        auth_type='oauth',
+        required_scopes=('drive.readonly',),
+        sync_strategy='incremental',
+        cost_policy='Fetch source deltas first; embed only changed chunks after review approval.',
+    )
+
+    def fetch_events(self) -> list[SourceEvent]:
+        return [
+            SourceEvent(
+                source_type='drive',
+                source_id='drive:parser-test',
+                source_url='https://drive.mock/parser-test',
+                title='Parser test document',
+                body='Google Drive file changed: Parser test document',
+                author='owner@example.com',
+                participants=['owner@example.com'],
+                timestamp=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+                permission_level='restricted',
+                raw_metadata={
+                    'mime_type': 'application/pdf',
+                    'parser_name': 'google_drive_metadata',
+                    'parser_status': 'metadata_only',
+                    'parser_status_reason': 'pdf_parser_not_enabled',
+                    'document_version': '42',
+                    'revision_id': 'rev-42',
+                    'content_signature': 'drive:parser-test:42:rev-42',
+                    'source_snippet': 'Parser test document',
+                },
+            )
+        ]
+
+
 def test_connector_manifests_define_parallel_ingestion_contracts() -> None:
     manifests = {manifest.connector_type: manifest for manifest in list_connector_manifests()}
 
@@ -105,6 +144,7 @@ def test_sync_connector_events_records_job_and_ingests_review_items(db_session: 
 
     job = db_session.query(SyncJob).one()
     chunk = db_session.query(DocumentChunk).one()
+    parser_run = db_session.query(DocumentParserRun).one()
     assert result.job_id == job.job_id
     assert result.connector_type == 'slack'
     assert result.status == 'complete'
@@ -121,6 +161,16 @@ def test_sync_connector_events_records_job_and_ingests_review_items(db_session: 
     assert chunk.metadata_['channel_id'] == 'C123'
     assert chunk.metadata_['external_updated_at'] == '2026-05-01T09:00:00+00:00'
     assert chunk.metadata_['ts'] == '1777600800.000100'
+    assert parser_run.source_id == chunk.source_id
+    assert parser_run.document_version_id == chunk.version_id
+    assert parser_run.parser_name == 'slack_source_event'
+    assert parser_run.parser_status == 'parsed'
+    assert parser_run.parser_status_reason is None
+    assert parser_run.mime_type == 'slack'
+    assert parser_run.document_version_label == 'v1'
+    assert parser_run.content_signature == 'contract-event-1'
+    assert parser_run.chunk_count == 1
+    assert parser_run.metadata_['source_id'] == 'contract-event-1'
 
 
 def test_sync_connector_events_reports_skipped_duplicates(db_session: Session) -> None:
@@ -132,6 +182,28 @@ def test_sync_connector_events_reports_skipped_duplicates(db_session: Session) -
     assert result.fetched_events == 1
     assert result.created_review_items == 0
     assert result.skipped_events == 1
+    assert db_session.query(DocumentParserRun).count() == 1
+
+
+def test_sync_connector_events_persists_parser_run_provenance(db_session: Session) -> None:
+    result = sync_connector_events(db=db_session, connector=DriveParserConnector())
+
+    parser_run = db_session.query(DocumentParserRun).one()
+    assert result.fetched_events == 1
+    assert parser_run.parser_name == 'google_drive_metadata'
+    assert parser_run.parser_status == 'metadata_only'
+    assert parser_run.parser_status_reason == 'pdf_parser_not_enabled'
+    assert parser_run.mime_type == 'application/pdf'
+    assert parser_run.document_version_label == '42'
+    assert parser_run.revision_id == 'rev-42'
+    assert parser_run.content_signature == 'drive:parser-test:42:rev-42'
+    assert parser_run.chunk_count == 1
+    assert parser_run.metadata_ == {
+        'source_id': 'drive:parser-test',
+        'source_url': 'https://drive.mock/parser-test',
+        'permission_level': 'restricted',
+        'source_snippet': 'Parser test document',
+    }
 
 
 def test_sync_connector_events_passes_latest_slack_timestamp_cursor(db_session: Session) -> None:

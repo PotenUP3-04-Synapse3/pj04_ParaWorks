@@ -42,6 +42,28 @@ class DocumentVersion(Base):
     body: Mapped[str] = mapped_column(Text)
     document: Mapped[Document] = relationship(back_populates='versions')
     chunks: Mapped[list['DocumentChunk']] = relationship(back_populates='version')
+    parser_runs: Mapped[list['DocumentParserRun']] = relationship(back_populates='document_version')
+
+
+class DocumentParserRun(Base):
+    __tablename__ = 'document_parser_runs'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey('documents.id'), index=True)
+    document_version_id: Mapped[int] = mapped_column(ForeignKey('document_versions.id'), index=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey('sources.id'), index=True)
+    parser_name: Mapped[str] = mapped_column(String(128), index=True)
+    parser_status: Mapped[str] = mapped_column(String(32), index=True)
+    parser_status_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    mime_type: Mapped[str] = mapped_column(String(160), default='')
+    document_version_label: Mapped[str] = mapped_column(String(64), default='v1')
+    revision_id: Mapped[str] = mapped_column(String(128), default='')
+    content_signature: Mapped[str] = mapped_column(String(300), default='')
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    metadata_: Mapped[dict] = mapped_column('metadata', MutableDict.as_mutable(JSON), default=dict)
+    document_version: Mapped[DocumentVersion] = relationship(back_populates='parser_runs')
 
 
 class DocumentChunk(Base):
