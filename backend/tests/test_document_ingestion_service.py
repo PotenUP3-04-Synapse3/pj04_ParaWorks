@@ -11,8 +11,21 @@ def drive_event(
     *,
     version: str = '42',
     revision_id: str = 'rev-42',
+    chunk_max_chars: int | None = None,
     body: str = '휴가 신청은 HR 시스템에서 진행합니다.\n승인은 팀장이 검토합니다.',
 ) -> SourceEvent:
+    raw_metadata = {
+        'mime_type': 'application/vnd.google-apps.document',
+        'document_version': version,
+        'revision_id': revision_id,
+        'content_signature': f'drive:file-1:{version}:{revision_id}',
+        'parser_name': 'google_drive_text_export',
+        'parser_status': 'parsed',
+        'parser_status_reason': None,
+        'source_snippet': body.replace('\n', ' ')[:240],
+    }
+    if chunk_max_chars is not None:
+        raw_metadata['chunk_max_chars'] = chunk_max_chars
     return SourceEvent(
         source_type='drive',
         source_id='drive:file-1',
@@ -23,16 +36,7 @@ def drive_event(
         participants=['owner@example.com'],
         timestamp=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
         permission_level='restricted',
-        raw_metadata={
-            'mime_type': 'application/vnd.google-apps.document',
-            'document_version': version,
-            'revision_id': revision_id,
-            'content_signature': f'drive:file-1:{version}:{revision_id}',
-            'parser_name': 'google_drive_text_export',
-            'parser_status': 'parsed',
-            'parser_status_reason': None,
-            'source_snippet': body.replace('\n', ' ')[:240],
-        },
+        raw_metadata=raw_metadata,
     )
 
 
@@ -62,6 +66,32 @@ def test_ingest_drive_parsed_document_preserves_parser_metadata(db_session: Sess
     assert chunk.metadata_['parser_status'] == 'parsed'
     assert chunk.metadata_['parser_status_reason'] is None
     assert len(chunk.metadata_['content_hash']) == 64
+
+
+def test_ingest_drive_parsed_document_splits_long_body_into_stable_chunks(db_session: Session) -> None:
+    body = '\n\n'.join(
+        [
+            'Hiring policy',
+            'Alpha team hiring plan keeps contractor review evidence close to the decision record.',
+            'Budget policy',
+            'Beta team budget policy requires approval evidence before finance updates.',
+            'Launch policy',
+            'Gamma launch policy keeps customer escalation notes restricted.',
+        ]
+    )
+
+    ingest_events(db_session, [drive_event(body=body, chunk_max_chars=120)])
+
+    chunks = db_session.query(DocumentChunk).order_by(DocumentChunk.chunk_index).all()
+    assert [chunk.chunk_index for chunk in chunks] == [0, 1, 2]
+    assert all(len(chunk.text) <= 120 for chunk in chunks)
+    assert [chunk.metadata_['section_path'] for chunk in chunks] == [
+        'Hiring policy',
+        'Budget policy',
+        'Launch policy',
+    ]
+    assert len({chunk.metadata_['content_hash'] for chunk in chunks}) == 3
+    assert all(chunk.permission_level == 'restricted' for chunk in chunks)
 
 
 def test_ingest_skips_same_content_signature_for_existing_document(db_session: Session) -> None:

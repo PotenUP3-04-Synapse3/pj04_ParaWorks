@@ -57,6 +57,14 @@ class DeterministicMailDocumentAgentModel:
             title = 'Restricted document evidence requires review'
             summary = 'Drive evidence contains restricted pricing context that should stay behind permission checks.'
             item_type = 'history_event'
+        elif 'budget' in combined_text.lower() or 'revenue' in combined_text.lower():
+            title = 'Quarterly budget and revenue strategy updated'
+            summary = 'Parsed document evidence suggests an update to the quarterly budget and hiring plan.'
+            item_type = 'history_event'
+        elif 'contract review' in combined_text.lower() or 'due friday' in combined_text.lower():
+            title = 'Contract review scheduled'
+            summary = 'Extracted todo item from email/document indicating a contract review needs to be completed by Friday.'
+            item_type = 'todo'
         elif packet.messages:
             summary = packet.messages[0].source_snippet
 

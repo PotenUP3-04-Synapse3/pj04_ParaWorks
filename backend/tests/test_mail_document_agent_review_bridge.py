@@ -5,6 +5,7 @@ from backend.app.agent_runtime import EvidencePacket, PermissionContext
 from backend.app.agents.mail_document_agent import (
     MailDocumentAgent,
     MailDocumentAgentModelResponse,
+    build_mail_document_evidence_packet,
     create_mail_document_agent_review_items,
 )
 from backend.app.models import (
@@ -146,10 +147,6 @@ def test_mail_document_evidence_packet_preserves_parser_status_metadata(db_sessi
         },
     )
 
-    from backend.app.agents.mail_document_agent import (
-        build_mail_document_evidence_packet,
-    )
-
     packet = build_mail_document_evidence_packet(
         db=db_session,
         permission_context=PermissionContext(user_id='demo-admin', role='admin'),
@@ -164,3 +161,35 @@ def test_mail_document_evidence_packet_preserves_parser_status_metadata(db_sessi
     assert message.metadata['revision_id'] == 'rev-42'
     assert message.metadata['content_signature'] == 'drive:file-1:42:rev-42'
     assert message.metadata['content_hash'] == 'hash-42'
+
+
+def test_mail_document_evidence_packet_includes_gmail_attachment_sources(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'gmail_attachment',
+        'gmail_attachment:msg-1:att-1',
+        'internal',
+        metadata={
+            'parser_name': 'gmail_attachment_metadata',
+            'parser_status': 'metadata_only',
+            'parser_status_reason': 'pdf_parser_not_enabled',
+            'mime_type': 'application/pdf',
+            'document_version': '1777600800000',
+            'revision_id': 'att-1',
+            'content_signature': 'gmail_attachment:msg-1:att-1:2048',
+        },
+    )
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mail-docs:2026-05-01',
+    )
+
+    assert len(packet.messages) == 1
+    message = packet.messages[0]
+    assert message.source_id == 'gmail_attachment:msg-1:att-1'
+    assert message.metadata['source_type'] == 'gmail_attachment'
+    assert message.metadata['parser_name'] == 'gmail_attachment_metadata'
+    assert message.metadata['parser_status'] == 'metadata_only'
+    assert message.metadata['parser_status_reason'] == 'pdf_parser_not_enabled'

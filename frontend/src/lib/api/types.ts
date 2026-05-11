@@ -195,6 +195,7 @@ export type RagReindexResponse = {
   incremental: boolean;
   storage_backend: string;
   embedding_budget: EmbeddingBudgetDecision;
+  parser_status_counts: Record<string, number>;
 };
 
 export type RagIndexingSummaryResponse = {
@@ -362,6 +363,9 @@ export type SearchResult = {
   relevance_score: number;
   matched_terms: string[];
   citation: RagCitation;
+  parser_status?: string | null;
+  parser_status_reason?: string | null;
+  revision_id?: string | null;
 };
 
 export type SearchResponse = {
@@ -374,6 +378,28 @@ export type SearchResponse = {
   results: SearchResult[];
   hidden_match_count: number;
   permission_notice?: string;
+};
+
+export type DocumentSummary = {
+  id: number;
+  source_id: string;
+  title: string;
+  current_version: string;
+  revision_id?: string | null;
+  parser_name?: string | null;
+  parser_status?: string | null;
+  parser_status_reason?: string | null;
+  chunk_count?: number | null;
+};
+
+export type DocumentVersionSummary = {
+  id: number;
+  version: string;
+  revision_id?: string | null;
+  parser_name?: string | null;
+  parser_status?: string | null;
+  parser_status_reason?: string | null;
+  chunk_count?: number | null;
 };
 
 export type RagCitation = {
@@ -415,6 +441,7 @@ export type IntegrationSyncResponse = {
   created_review_items: number;
   fetched_events: number;
   skipped_events: number;
+  parser_status_counts?: Record<string, number>;
 };
 
 export type IntegrationManifest = {

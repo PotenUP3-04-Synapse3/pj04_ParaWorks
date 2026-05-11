@@ -538,6 +538,7 @@ export default function IntegrationsPage() {
                   <ResultMetric label="Skipped" value={syncResult.skipped_events} />
                   <ResultMetric label="Status" value={syncResult.status} />
                 </div>
+                <ParserQualityBreakdown counts={syncResult.parser_status_counts} />
                 <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
                   <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--ink-muted)]">
                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
@@ -565,6 +566,40 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
+function ParserQualityBreakdown({ counts }: { counts?: Record<string, number> }) {
+  const rows = parserQualityRows(counts);
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
+
+  return (
+    <div
+      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-xs"
+      data-testid="sync-parser-quality"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold text-[var(--ink-strong)]">Parser quality</p>
+        <span className="text-[var(--ink-muted)]">{total.toLocaleString()} sources</span>
+      </div>
+      <div className="mt-2 grid gap-2">
+        {rows.map((row) => (
+          <div key={row.status} className="flex items-center justify-between gap-3 rounded-md bg-[var(--glass-strong)] px-2 py-1.5">
+            <span className="font-medium">{row.label}</span>
+            <span className={`rounded-full px-2 py-0.5 font-semibold ${row.className}`}>
+              {row.count.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 leading-5 text-[var(--ink-muted)]">
+        Metadata-only and unsupported files remain reviewable, but they are not treated as full body-parsed evidence.
+      </p>
     </div>
   );
 }
@@ -783,6 +818,34 @@ function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, Google
       </div>
     </div>
   );
+}
+
+function parserQualityRows(counts?: Record<string, number>) {
+  const statusLabels: Record<string, string> = {
+    parsed: "Parsed",
+    metadata_only: "Metadata only",
+    unsupported: "Unsupported",
+  };
+  const statusClasses: Record<string, string> = {
+    parsed: "bg-emerald-50 text-emerald-800",
+    metadata_only: "bg-amber-50 text-amber-800",
+    unsupported: "bg-red-50 text-red-800",
+  };
+
+  return Object.entries(counts ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => {
+      const order = ["parsed", "metadata_only", "unsupported"];
+      const leftIndex = order.indexOf(left);
+      const rightIndex = order.indexOf(right);
+      return (leftIndex === -1 ? order.length : leftIndex) - (rightIndex === -1 ? order.length : rightIndex);
+    })
+    .map(([status, count]) => ({
+      status,
+      count,
+      label: statusLabels[status] ?? status,
+      className: statusClasses[status] ?? "bg-[var(--glass-strong)] text-[var(--ink-strong)]",
+    }));
 }
 
 function formatScopes(scopes: string[]) {

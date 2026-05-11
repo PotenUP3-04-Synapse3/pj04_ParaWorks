@@ -35,7 +35,16 @@ class GoldenGoogleClient:
         return [self.payloads['gmail']]
 
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
-        return [self.payloads['drive']]
+        return [
+            self.payloads['drive_doc'],
+            self.payloads['drive_sheets'],
+            self.payloads['drive_hwp'],
+        ]
+
+    def drive_file_text_export(self, *, file_id: str, export_mime_type: str) -> str:
+        if file_id == 'file-golden-doc':
+            return 'Golden exported text'
+        return ''
 
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
         return [self.payloads['calendar']]
@@ -57,9 +66,9 @@ def test_connector_golden_dataset_preserves_agent_ready_metadata() -> None:
         client=GoldenSlackClient(payloads['slack']),
     ).fetch_events()
     google_client = GoldenGoogleClient(payloads)
-    gmail_event = _google_event('gmail', google_client)
-    drive_event = _google_event('drive', google_client)
-    calendar_event = _google_event('calendar', google_client)
+    gmail_event = _google_event('gmail', google_client)[0]
+    drive_events = _google_event('drive', google_client, expected_count=3)
+    calendar_event = _google_event('calendar', google_client)[0]
 
     assert len(slack_events) == 2
     slack_reply = slack_events[1]
@@ -71,9 +80,17 @@ def test_connector_golden_dataset_preserves_agent_ready_metadata() -> None:
     assert gmail_event.raw_metadata['external_domains'] == ['client.co.kr']
     assert gmail_event.raw_metadata['has_external_participants'] is True
 
-    assert drive_event.raw_metadata['parser_status'] == 'metadata_only'
-    assert drive_event.raw_metadata['document_version'] == '42'
-    assert drive_event.raw_metadata['content_signature'] == 'drive:file-golden-1:42:rev-42'
+    drive_doc, drive_sheets, drive_hwp = drive_events
+    
+    assert drive_doc.raw_metadata['parser_status'] == 'parsed'
+    assert drive_doc.raw_metadata['document_version'] == '42'
+    assert drive_doc.raw_metadata['content_signature'] == 'drive:file-golden-doc:42:rev-42'
+    assert 'Golden exported text' in drive_doc.body
+
+    assert drive_sheets.raw_metadata['parser_status'] == 'metadata_only'
+    assert drive_sheets.raw_metadata['document_version'] == '12'
+
+    assert drive_hwp.raw_metadata['parser_status'] == 'unsupported'
 
     assert calendar_event.raw_metadata['event_context_key'] == 'event-golden-1:2026-05-01T10:00:00Z'
     assert calendar_event.raw_metadata['attendee_response_statuses'] == {
@@ -85,7 +102,7 @@ def test_connector_golden_dataset_preserves_agent_ready_metadata() -> None:
     assert calendar_event.raw_metadata['duration_minutes'] == 60
 
 
-def _google_event(connector_type: str, client: GoldenGoogleClient):
+def _google_event(connector_type: str, client: GoldenGoogleClient, expected_count: int = 1):
     events = GoogleConnector(
         config=GoogleConnectorConfig(
             connector_type=connector_type,
@@ -95,9 +112,9 @@ def _google_event(connector_type: str, client: GoldenGoogleClient):
         ),
         client=client,
     ).fetch_events()
-    assert len(events) == 1
-    event = events[0]
-    assert event.raw_metadata['required_scopes']
-    assert event.source_url
-    assert event.body
-    return event
+    assert len(events) == expected_count
+    for event in events:
+        assert event.raw_metadata['required_scopes']
+        assert event.source_url
+        assert event.body
+    return events
