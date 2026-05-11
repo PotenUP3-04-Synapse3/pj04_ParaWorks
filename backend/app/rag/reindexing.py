@@ -26,10 +26,11 @@ def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
         settings=settings,
         dry_run=dry_run,
     )
+    documents = build_rag_index_documents(db)
     try:
         result = index_changed_vector_documents(
             db=db,
-            documents=build_rag_index_documents(db),
+            documents=documents,
             writer=writer,
             embedding_model=embedding_model,
             embedding_model_name=embedding_model_name,
@@ -63,7 +64,19 @@ def run_reindex(*, db: Session, settings: Settings, dry_run: bool) -> dict:
         'incremental': True,
         'storage_backend': storage_backend,
         'embedding_budget': embedding_budget,
+        'parser_status_counts': _parser_status_counts(documents),
     }
+
+
+def _parser_status_counts(documents: list) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for document in documents:
+        parser_status = document.metadata.get('parser_status')
+        if not parser_status:
+            continue
+        key = str(parser_status)
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def reindex_components(

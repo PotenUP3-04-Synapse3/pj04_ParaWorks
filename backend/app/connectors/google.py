@@ -15,6 +15,20 @@ from backend.app.connectors.base import ConnectorManifest, SourceEvent
 
 GoogleQueryParams = dict[str, str | list[str]]
 GOOGLE_TEXT_BODY_LIMIT = 4_000
+GOOGLE_DRIVE_DOC_MIME_TYPE = 'application/vnd.google-apps.document'
+GOOGLE_DRIVE_TEXT_EXPORT_MIME_TYPE = 'text/plain'
+GOOGLE_DRIVE_SHEETS_MIME_TYPE = 'application/vnd.google-apps.spreadsheet'
+GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE = 'text/csv'
+GOOGLE_DRIVE_SLIDES_MIME_TYPE = 'application/vnd.google-apps.presentation'
+PDF_MIME_TYPE = 'application/pdf'
+DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+HWP_MIME_TYPES = frozenset(
+    {
+        'application/x-hwp',
+        'application/haansofthwp',
+        'application/vnd.hancom.hwpx',
+    }
+)
 
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
     'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
@@ -29,6 +43,9 @@ class GoogleApiClient(Protocol):
         raise NotImplementedError
 
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
+        raise NotImplementedError
+
+    def drive_file_text_export(self, *, file_id: str, export_mime_type: str) -> str:
         raise NotImplementedError
 
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
@@ -97,6 +114,12 @@ class GoogleWebApiClient:
             params=params,
         )
 
+    def drive_file_text_export(self, *, file_id: str, export_mime_type: str) -> str:
+        return self._get_text(
+            f'{self.drive_base_url}/drive/v3/files/{file_id}/export',
+            params={'mimeType': export_mime_type},
+        )
+
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
         params: GoogleQueryParams = {
             'maxResults': str(self.page_limit),
@@ -120,6 +143,24 @@ class GoogleWebApiClient:
             )
             if response.status_code < 400:
                 return response.json()
+            if not _should_retry(response.status_code):
+                raise GoogleApiError(_google_error_message(response))
+            if attempt >= self.max_retries:
+                if response.status_code == 429:
+                    raise GoogleApiError('Google API request failed: rate_limited')
+                raise GoogleApiError(f'Google API request failed: http_{response.status_code}')
+            self.sleep(_retry_after_seconds(response))
+        raise GoogleApiError('Google API request failed')
+
+    def _get_text(self, url: str, *, params: GoogleQueryParams) -> str:
+        for attempt in range(self.max_retries + 1):
+            response = self.http_client.get(
+                url,
+                headers={'Authorization': f'Bearer {self.oauth_token}'},
+                params=params,
+            )
+            if response.status_code < 400:
+                return response.text
             if not _should_retry(response.status_code):
                 raise GoogleApiError(_google_error_message(response))
             if attempt >= self.max_retries:
@@ -256,8 +297,15 @@ class GoogleConnector:
         modified_time = str(file.get('modifiedTime') or '')
         description = str(file.get('description') or '')
         last_modifying_user_email = str((file.get('lastModifyingUser') or {}).get('emailAddress') or '')
-        parser_metadata = _drive_parser_metadata(file_id=file_id, file=file, modified_time=modified_time)
-        body_lines = [
+        export_result = _drive_exported_text(client=self.client, file=file)
+        parser_metadata = _drive_parser_metadata(
+            file_id=file_id,
+            file=file,
+            modified_time=modified_time,
+            exported_text=export_result[0] if export_result else None,
+            export_parser_name=export_result[1] if export_result else None,
+        )
+        metadata_body_lines = [
             f'Google Drive file changed: {title}',
             f'Mime type: {file.get("mimeType")}' if file.get('mimeType') else '',
             f'Description: {description}' if description else '',
@@ -265,12 +313,13 @@ class GoogleConnector:
             f'Last modifier: {last_modifying_user_email}' if last_modifying_user_email else '',
             f'Modified: {modified_time}' if modified_time else '',
         ]
+        body = export_result[0] if export_result else '\n'.join(line for line in metadata_body_lines if line)
         return SourceEvent(
             source_type='drive',
             source_id=f'drive:{file_id}',
             source_url=str(file.get('webViewLink') or f'https://drive.google.com/file/d/{file_id}/view'),
             title=title,
-            body='\n'.join(line for line in body_lines if line),
+            body=body,
             author=author,
             participants=[author] if author else [],
             timestamp=_timestamp_from_iso(modified_time),
@@ -431,19 +480,76 @@ def _email_domain(value: str) -> str:
     return addresses[0].split('@', 1)[1]
 
 
-def _drive_parser_metadata(*, file_id: str, file: dict, modified_time: str) -> dict[str, str]:
+def _drive_parser_metadata(
+    *,
+    file_id: str,
+    file: dict,
+    modified_time: str,
+    exported_text: str | None,
+    export_parser_name: str | None,
+) -> dict[str, str | None]:
     version = str(file.get('version') or '')
     revision_id = str(file.get('headRevisionId') or '')
     document_version = version or revision_id or modified_time
     signature_parts = [part for part in [f'drive:{file_id}', document_version, revision_id] if part]
+    if exported_text:
+        snippet, _ = _bounded_text(exported_text)
+        return {
+            'parser_name': export_parser_name or 'google_drive_text_export',
+            'parser_status': 'parsed',
+            'parser_status_reason': None,
+            'document_version': document_version,
+            'revision_id': revision_id,
+            'content_signature': ':'.join(signature_parts),
+            'source_snippet': snippet,
+        }
+    parser_status, parser_status_reason = _drive_parser_status_for_mime_type(str(file.get('mimeType') or ''))
     return {
         'parser_name': 'google_drive_metadata',
-        'parser_status': 'metadata_only',
-        'parser_status_reason': 'content_export_not_enabled',
+        'parser_status': parser_status,
+        'parser_status_reason': parser_status_reason,
         'document_version': document_version,
         'revision_id': revision_id,
         'content_signature': ':'.join(signature_parts),
     }
+
+
+def _drive_parser_status_for_mime_type(mime_type: str) -> tuple[str, str]:
+    if mime_type == GOOGLE_DRIVE_DOC_MIME_TYPE:
+        return ('metadata_only', 'google_docs_export_not_available')
+    if mime_type == GOOGLE_DRIVE_SHEETS_MIME_TYPE:
+        return ('metadata_only', 'sheets_export_not_enabled')
+    if mime_type == GOOGLE_DRIVE_SLIDES_MIME_TYPE:
+        return ('metadata_only', 'slides_export_not_enabled')
+    if mime_type == PDF_MIME_TYPE:
+        return ('metadata_only', 'pdf_parser_not_enabled')
+    if mime_type == DOCX_MIME_TYPE:
+        return ('metadata_only', 'docx_parser_not_enabled')
+    if mime_type in HWP_MIME_TYPES:
+        return ('unsupported', 'hwp_parser_not_decided')
+    return ('metadata_only', 'content_export_not_enabled')
+
+
+def _drive_exported_text(*, client: GoogleApiClient, file: dict) -> tuple[str, str] | None:
+    mime_type = file.get('mimeType')
+    if mime_type == GOOGLE_DRIVE_DOC_MIME_TYPE:
+        export_mime_type = GOOGLE_DRIVE_TEXT_EXPORT_MIME_TYPE
+        parser_name = 'google_drive_text_export'
+    elif mime_type == GOOGLE_DRIVE_SHEETS_MIME_TYPE:
+        export_mime_type = GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE
+        parser_name = 'google_drive_sheets_csv_export'
+    else:
+        return None
+    exporter = getattr(client, 'drive_file_text_export', None)
+    if exporter is None:
+        return None
+    text = exporter(
+        file_id=str(file['id']),
+        export_mime_type=export_mime_type,
+    ).strip()
+    if not text:
+        return None
+    return (text, parser_name)
 
 
 def _calendar_quality_metadata(

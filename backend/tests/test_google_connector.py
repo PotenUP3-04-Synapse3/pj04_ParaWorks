@@ -13,10 +13,17 @@ from backend.app.connectors.google import (
 
 
 class FakeGoogleClient:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        drive_files: list[dict] | None = None,
+        drive_exports: dict[tuple[str, str], str] | None = None,
+    ) -> None:
         self.gmail_after_internal_date: str | None = None
         self.drive_modified_after: str | None = None
         self.calendar_updated_min: str | None = None
+        self.drive_export_requests: list[tuple[str, str]] = []
+        self._drive_files = drive_files
+        self._drive_exports = drive_exports or {}
 
     def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
         self.gmail_after_internal_date = after_internal_date
@@ -54,6 +61,8 @@ class FakeGoogleClient:
 
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         self.drive_modified_after = modified_after
+        if self._drive_files is not None:
+            return self._drive_files
         return [
             {
                 'id': 'file-1',
@@ -69,6 +78,12 @@ class FakeGoogleClient:
                 'lastModifyingUser': {'emailAddress': 'editor@example.com'},
             }
         ]
+
+    def drive_file_text_export(self, *, file_id: str, export_mime_type: str) -> str:
+        self.drive_export_requests.append((file_id, export_mime_type))
+        if (file_id, export_mime_type) in self._drive_exports:
+            return self._drive_exports[(file_id, export_mime_type)]
+        return '휴가 신청은 HR 시스템에서 진행합니다.\n승인은 팀장이 검토합니다.'
 
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
         self.calendar_updated_min = updated_min
@@ -152,9 +167,7 @@ def test_google_connector_maps_drive_files_to_source_events() -> None:
     assert event.source_id == 'drive:file-1'
     assert event.source_url == 'https://drive.google.com/file/d/file-1/view'
     assert event.title == '사업계획서'
-    assert 'Google Drive file changed: 사업계획서' in event.body
-    assert 'Description: 2026년 상반기 매출 목표와 채용 계획' in event.body
-    assert 'Last modifier: editor@example.com' in event.body
+    assert event.body == '휴가 신청은 HR 시스템에서 진행합니다.\n승인은 팀장이 검토합니다.'
     assert event.author == 'owner@example.com'
     assert event.timestamp == datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
     assert event.raw_metadata['mime_type'] == 'application/vnd.google-apps.document'
@@ -163,12 +176,133 @@ def test_google_connector_maps_drive_files_to_source_events() -> None:
     assert event.raw_metadata['description'] == '2026년 상반기 매출 목표와 채용 계획'
     assert event.raw_metadata['created_time'] == '2026-04-30T09:00:00Z'
     assert event.raw_metadata['last_modifying_user_email'] == 'editor@example.com'
-    assert event.raw_metadata['parser_name'] == 'google_drive_metadata'
-    assert event.raw_metadata['parser_status'] == 'metadata_only'
-    assert event.raw_metadata['parser_status_reason'] == 'content_export_not_enabled'
+    assert event.raw_metadata['parser_name'] == 'google_drive_text_export'
+    assert event.raw_metadata['parser_status'] == 'parsed'
+    assert event.raw_metadata['parser_status_reason'] is None
     assert event.raw_metadata['document_version'] == '42'
     assert event.raw_metadata['revision_id'] == 'rev-42'
     assert event.raw_metadata['content_signature'] == 'drive:file-1:42:rev-42'
+
+
+def test_google_connector_exports_google_docs_text_into_drive_source_events() -> None:
+    client = FakeGoogleClient()
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert client.drive_export_requests == [('file-1', 'text/plain')]
+    assert event.body == '휴가 신청은 HR 시스템에서 진행합니다.\n승인은 팀장이 검토합니다.'
+    assert event.permission_level == 'restricted'
+    assert event.raw_metadata['parser_name'] == 'google_drive_text_export'
+    assert event.raw_metadata['parser_status'] == 'parsed'
+    assert event.raw_metadata['parser_status_reason'] is None
+    assert event.raw_metadata['source_snippet'] == '휴가 신청은 HR 시스템에서 진행합니다. 승인은 팀장이 검토합니다.'
+
+
+def test_google_connector_exports_google_sheets_csv_into_drive_source_events() -> None:
+    client = FakeGoogleClient(
+        drive_files=[
+            {
+                'id': 'sheet-1',
+                'name': '비용 정산표',
+                'mimeType': 'application/vnd.google-apps.spreadsheet',
+                'webViewLink': 'https://drive.google.com/file/d/sheet-1/view',
+                'modifiedTime': '2026-05-01T09:00:00Z',
+                'version': '7',
+                'headRevisionId': 'sheet-rev-7',
+                'owners': [{'emailAddress': 'owner@example.com'}],
+            }
+        ],
+        drive_exports={
+            ('sheet-1', 'text/csv'): '항목,금액\n출장비,120000\n식대,45000',
+        },
+    )
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert client.drive_export_requests == [('sheet-1', 'text/csv')]
+    assert event.body == '항목,금액\n출장비,120000\n식대,45000'
+    assert event.raw_metadata['parser_name'] == 'google_drive_sheets_csv_export'
+    assert event.raw_metadata['parser_status'] == 'parsed'
+    assert event.raw_metadata['parser_status_reason'] is None
+    assert event.raw_metadata['document_version'] == '7'
+    assert event.raw_metadata['revision_id'] == 'sheet-rev-7'
+    assert event.raw_metadata['content_signature'] == 'drive:sheet-1:7:sheet-rev-7'
+    assert event.raw_metadata['source_snippet'] == '항목,금액 출장비,120000 식대,45000'
+
+
+@pytest.mark.parametrize(
+    ('mime_type', 'expected_status', 'expected_reason'),
+    [
+        ('application/vnd.google-apps.presentation', 'metadata_only', 'slides_export_not_enabled'),
+        ('application/pdf', 'metadata_only', 'pdf_parser_not_enabled'),
+        (
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'metadata_only',
+            'docx_parser_not_enabled',
+        ),
+        ('application/x-hwp', 'unsupported', 'hwp_parser_not_decided'),
+        ('application/haansofthwp', 'unsupported', 'hwp_parser_not_decided'),
+        ('application/vnd.hancom.hwpx', 'unsupported', 'hwp_parser_not_decided'),
+    ],
+)
+def test_google_connector_marks_drive_parser_status_by_mime_type(
+    mime_type: str,
+    expected_status: str,
+    expected_reason: str,
+) -> None:
+    client = FakeGoogleClient(
+        drive_files=[
+            {
+                'id': 'file-typed',
+                'name': '타입별 문서',
+                'mimeType': mime_type,
+                'webViewLink': 'https://drive.google.com/file/d/file-typed/view',
+                'modifiedTime': '2026-05-01T09:00:00Z',
+                'version': '42',
+                'headRevisionId': 'rev-42',
+                'owners': [{'emailAddress': 'owner@example.com'}],
+            }
+        ]
+    )
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert client.drive_export_requests == []
+    assert event.raw_metadata['parser_name'] == 'google_drive_metadata'
+    assert event.raw_metadata['parser_status'] == expected_status
+    assert event.raw_metadata['parser_status_reason'] == expected_reason
+    assert event.raw_metadata['mime_type'] == mime_type
+    assert event.raw_metadata['document_version'] == '42'
+    assert event.raw_metadata['revision_id'] == 'rev-42'
+    assert event.raw_metadata['content_signature'] == 'drive:file-typed:42:rev-42'
+    assert 'Google Drive file changed: 타입별 문서' in event.body
 
 
 def test_google_connector_fetches_gmail_events_since_latest_cursor() -> None:
@@ -370,6 +504,25 @@ def test_google_web_api_client_paginates_drive_files() -> None:
     assert 'version' in requests[0].url.params['fields']
     assert 'headRevisionId' in requests[0].url.params['fields']
     assert requests[1].url.params['pageToken'] == 'drive-page-2'
+
+
+def test_google_web_api_client_exports_drive_file_as_text() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, text='휴가 신청은 HR 시스템에서 진행합니다.')
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    text = client.drive_file_text_export(file_id='file-1', export_mime_type='text/plain')
+
+    assert text == '휴가 신청은 HR 시스템에서 진행합니다.'
+    assert requests[0].url.path == '/drive/v3/files/file-1/export'
+    assert requests[0].url.params['mimeType'] == 'text/plain'
 
 
 def test_google_web_api_client_paginates_calendar_events() -> None:

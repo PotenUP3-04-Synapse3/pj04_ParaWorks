@@ -348,6 +348,62 @@ def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_ses
     assert documents[1].source_url == 'https://knowledge.mock/pgvector'
 
 
+def test_build_rag_index_documents_includes_document_parser_metadata(db_session: Session) -> None:
+    source = Source(
+        source_type='drive',
+        source_id='drive:file-1',
+        source_url='https://drive.google.com/file/d/file-1/view',
+        title='휴가 정책',
+        author='owner@example.com',
+        permission_level='restricted',
+        raw_metadata={'sync_cursor': '2026-05-01T09:00:00Z'},
+    )
+    db_session.add(source)
+    db_session.flush()
+    document = Document(source_id=source.id, title=source.title, current_version='43')
+    db_session.add(document)
+    db_session.flush()
+    version = DocumentVersion(document_id=document.id, version='43', body='휴가 신청 승인자가 인사팀으로 변경되었습니다.')
+    db_session.add(version)
+    db_session.flush()
+    chunk = DocumentChunk(
+        version_id=version.id,
+        source_id=source.id,
+        chunk_index=0,
+        text='휴가 신청 승인자가 인사팀으로 변경되었습니다.',
+        source_snippet='휴가 신청 승인자가 인사팀으로 변경되었습니다.',
+        permission_level='restricted',
+        metadata_={
+            'parser_name': 'google_drive_text_export',
+            'parser_status': 'parsed',
+            'parser_status_reason': None,
+            'mime_type': 'application/vnd.google-apps.document',
+            'document_version': '43',
+            'revision_id': 'rev-43',
+            'content_signature': 'drive:file-1:43:rev-43',
+            'content_hash': 'hash-43',
+            'section_path': '휴가 정책',
+            'page_number': None,
+        },
+    )
+    db_session.add(chunk)
+    db_session.commit()
+
+    vector_document = build_rag_index_documents(db_session)[0]
+
+    assert vector_document.permission_level == 'restricted'
+    assert vector_document.metadata['parser_name'] == 'google_drive_text_export'
+    assert vector_document.metadata['parser_status'] == 'parsed'
+    assert vector_document.metadata['parser_status_reason'] is None
+    assert vector_document.metadata['mime_type'] == 'application/vnd.google-apps.document'
+    assert vector_document.metadata['document_version'] == '43'
+    assert vector_document.metadata['revision_id'] == 'rev-43'
+    assert vector_document.metadata['content_signature'] == 'drive:file-1:43:rev-43'
+    assert vector_document.metadata['content_hash'] == 'hash-43'
+    assert vector_document.metadata['section_path'] == '휴가 정책'
+    assert vector_document.metadata['page_number'] is None
+
+
 def test_reindex_endpoint_returns_dry_run_index_summary(client: TestClient, db_session: Session) -> None:
     seed_chunk(db_session, 'Slack and Gmail history should be embedded for search.', 'gmail-api-index')
 
@@ -373,6 +429,71 @@ def test_reindex_endpoint_returns_dry_run_index_summary(client: TestClient, db_s
     assert body['embedding_budget']['estimated_cost_usd'] > 0
     assert body['embedding_budget']['budget_limit_usd'] == 0.001
     assert body['embedding_budget']['budget_status'] == 'within_budget'
+
+
+def test_reindex_endpoint_reports_parser_status_counts(client: TestClient, db_session: Session) -> None:
+    parsed_source = Source(
+        source_type='drive',
+        source_id='drive:parsed',
+        source_url='https://drive.mock/parsed',
+        title='Parsed Drive doc',
+        author='owner@example.com',
+        permission_level='restricted',
+        raw_metadata={},
+    )
+    metadata_source = Source(
+        source_type='drive',
+        source_id='drive:metadata-only',
+        source_url='https://drive.mock/metadata-only',
+        title='Metadata-only Drive doc',
+        author='owner@example.com',
+        permission_level='restricted',
+        raw_metadata={},
+    )
+    db_session.add_all([parsed_source, metadata_source])
+    db_session.flush()
+
+    parsed_document = Document(source_id=parsed_source.id, title=parsed_source.title, current_version='42')
+    metadata_document = Document(source_id=metadata_source.id, title=metadata_source.title, current_version='42')
+    db_session.add_all([parsed_document, metadata_document])
+    db_session.flush()
+
+    parsed_version = DocumentVersion(document_id=parsed_document.id, version='42', body='본문 파싱 완료')
+    metadata_version = DocumentVersion(document_id=metadata_document.id, version='42', body='metadata only')
+    db_session.add_all([parsed_version, metadata_version])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            DocumentChunk(
+                version_id=parsed_version.id,
+                source_id=parsed_source.id,
+                chunk_index=0,
+                text='본문 파싱 완료',
+                source_snippet='본문 파싱 완료',
+                permission_level='restricted',
+                metadata_={'parser_status': 'parsed'},
+            ),
+            DocumentChunk(
+                version_id=metadata_version.id,
+                source_id=metadata_source.id,
+                chunk_index=0,
+                text='Metadata-only Drive file changed.',
+                source_snippet='Metadata-only Drive file changed.',
+                permission_level='restricted',
+                metadata_={'parser_status': 'metadata_only'},
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.post('/api/v1/rag/reindex')
+
+    assert response.status_code == 200
+    assert response.json()['parser_status_counts'] == {
+        'metadata_only': 1,
+        'parsed': 1,
+    }
 
 
 def test_reindex_endpoint_requires_admin_role(client: TestClient, db_session: Session) -> None:

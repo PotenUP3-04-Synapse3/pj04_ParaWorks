@@ -119,6 +119,7 @@ def build_mail_document_evidence_packet(
                 'source_pk': source.id,
                 'source_type': source.source_type,
                 'scenario': source.raw_metadata.get('scenario'),
+                **_document_parser_metadata(chunk),
             },
         )
         for chunk, source in rows
@@ -130,3 +131,19 @@ def build_mail_document_evidence_packet(
         messages=messages,
         permission_context=permission_context,
     )
+
+
+def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
+    keys = (
+        'parser_name',
+        'parser_status',
+        'parser_status_reason',
+        'mime_type',
+        'document_version',
+        'revision_id',
+        'content_signature',
+        'content_hash',
+        'section_path',
+        'page_number',
+    )
+    return {key: chunk.metadata_.get(key) for key in keys if key in chunk.metadata_}
