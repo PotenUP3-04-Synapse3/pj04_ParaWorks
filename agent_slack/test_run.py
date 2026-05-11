@@ -37,81 +37,83 @@ def run_real_slack_batch_test():
     print("="*70 + "\n")
 
     bot_token = os.environ.get("SLACK_BOT_TOKEN")
-    channel_ids = os.environ.get("SLACK_CHANNEL_IDS")
 
-    if not bot_token or not channel_ids:
-        print(" [!] 에러: .env.example 파일에 토큰 또는 채널 ID가 없습니다.")
+    if not bot_token:
+        print(" [!] 에러: .env.example 파일에 SLACK_BOT_TOKEN이 없습니다.")
         return
 
-    target_channel = channel_ids.split(',')[0].strip()
-    print(f"[*] 대상 채널: {target_channel}")
-    
     client = SlackWebApiClient(bot_token=bot_token)
     try:
-        # 오늘 00:00:00 의 타임스탬프 계산 (정확히 오늘 대화만 가져오기 위함)
+        # 1. 봇이 참여 중인 모든 채널 목록 조회
+        print("[*] 봇이 참여 중인 모든 채널 목록 조회 중...")
+        all_channels = client.conversations_list()
+        # 봇이 멤버인 채널만 필터링
+        joined_channels = [c for c in all_channels if c.get('is_member')]
+
+        if not joined_channels:
+            print(" [!] 봇이 참여 중인 채널이 없습니다. 채널에 봇을 초대해 주세요.")
+            return
+
+        print(f"[*] 총 {len(joined_channels)}개의 참여 채널을 발견했습니다: " + 
+              ", ".join([f"#{c.get('name')}" for c in joined_channels]))
+
+        # 사용자 이름 매핑 정보 수집 (채널 공통)
+        print("[*] 워크스페이스 사용자 정보 수집 중...")
+        users = client.users_list()
+        user_map = {u.get('id'): u.get('real_name') or u.get('name') for u in users}
+
+        # 오늘 00:00:00 의 타임스탬프 계산
         now = datetime.now()
         today_start = datetime(now.year, now.month, now.day)
         oldest_ts = str(today_start.timestamp())
         
-        print(f"[*] {today_start.strftime('%Y-%m-%d')} 00:00:00 이후의 대화 기록 일괄 수집 중...")
-        
-        # 오늘 데이터만 수집하도록 oldest 인자 추가
-        history = client.conversation_history(target_channel, oldest=oldest_ts)
-        
-        if not history:
-            print(" [!] 오늘(00:00 이후) 발생한 메시지가 채널에 존재하지 않습니다.")
-            return
-
-        # 사용자 이름 매핑 정보 수집 (가독성 향상)
-        print("[*] 워크스페이스 사용자 정보 수집 중...")
-        users = client.users_list()
-        user_map = {u.get('id'): u.get('real_name') or u.get('name') for u in users}
-        
-        # 각 메시지에 사용자 이름 주입
-        for msg in history:
-            user_id = msg.get('user')
-            msg['user_name'] = user_map.get(user_id, user_id)
-
-        print(f"[*] 총 {len(history)}건의 메시지를 수집했습니다.\n")
-        print("[*] 동기화 기반 에이전트 분석 시작 (아래에 미들웨어 작동 로그가 표시됩니다)\n")
-        
-        # 에이전트 실행 (단일 메시지가 아닌 메시지 리스트 전체 전달)
-        result = process_daily_slack_sync(target_channel, history)
-        
-        print("\n" + "-" * 50)
-        print(" [최종 분석 결과] ")
-        print(f" - 업무 관련성 존재 여부: {result.get('is_work_related')}")
-        
-        if result.get('summary'):
-            print(f"\n [오늘의 요약본]\n{result.get('summary')}\n")
-        
-        candidates = result.get('candidates')
-        if candidates and len(candidates) > 0:
-            print(f" [추출된 지식 후보 총 {len(candidates)}건]")
-            for idx, candidate in enumerate(candidates, 1):
-                title = candidate.title if hasattr(candidate, 'title') else candidate.get('title')
-                summary = candidate.summary if hasattr(candidate, 'summary') else candidate.get('summary')
-                item_type = candidate.item_type if hasattr(candidate, 'item_type') else candidate.get('item_type')
-                links = candidate.source_links if hasattr(candidate, 'source_links') else candidate.get('source_links', [])
-                snippets = candidate.source_snippets if hasattr(candidate, 'source_snippets') else candidate.get('source_snippets', [])
-                
-                print(f"   {idx}. [{item_type}] {title}")
-                print(f"      - 내용: {summary[:50]}...")
-                if snippets:
-                    print(f"      - 원문 증거: {snippets[0][:80]}...")
-                if links:
-                    print(f"      - 링크: {links[0]}")
-        else:
-            print(" - 추출된 지식 후보가 없습니다.")
-        
-        if result.get('error'):
-            print(f"\n [!] 에러 발생: {result.get('error')}")
+        # 각 채널별로 데이터 수집 및 분석 진행
+        for channel in joined_channels:
+            channel_id = channel['id']
+            channel_name = channel['name']
             
-        print(f"\n - 사용된 모델: {result.get('model_name')}")
-        
-        run_cost = result.get('run_cost')
-        if run_cost:
-            print(f" - 소모 비용: ${run_cost.estimated_cost_usd:.5f} (총 토큰: {run_cost.token_usage.total_tokens})")
+            print(f"\n{'-'*70}")
+            print(f" [채널 분석 시작: #{channel_name} ({channel_id})] ".center(70, "-"))
+            print(f"{'-'*70}\n")
+            
+            print(f"[*] {today_start.strftime('%Y-%m-%d')} 00:00:00 이후의 대화 기록 수집 중...")
+            history = client.conversation_history(channel_id, oldest=oldest_ts)
+            
+            if not history:
+                print(f" [!] #{channel_name} 채널에 오늘 발생한 메시지가 없습니다. 건너뜜.")
+                continue
+
+            # 각 메시지에 사용자 이름 주입
+            for msg in history:
+                user_id = msg.get('user')
+                msg['user_name'] = user_map.get(user_id, user_id)
+
+            print(f"[*] 총 {len(history)}건의 메시지를 수집했습니다.")
+            print("[*] 동기화 기반 에이전트 분석 시작...\n")
+            
+            # 에이전트 실행
+            result = process_daily_slack_sync(channel_id, history)
+            
+            print("\n [분석 결과 요약] ")
+            print(f" - 업무 관련성 존재: {result.get('is_work_related')}")
+            
+            if result.get('summary'):
+                print(f" - 요약: {result.get('summary')[:100]}...")
+            
+            candidates = result.get('candidates')
+            if candidates and len(candidates) > 0:
+                print(f" - 추출된 지식 후보: {len(candidates)}건")
+                for idx, candidate in enumerate(candidates, 1):
+                    title = candidate.title if hasattr(candidate, 'title') else candidate.get('title')
+                    print(f"   {idx}. {title}")
+            
+            run_cost = result.get('run_cost')
+            if run_cost:
+                print(f" - 소모 비용: ${run_cost.estimated_cost_usd:.5f} (총 토큰: {run_cost.token_usage.total_tokens})")
+
+        print("\n" + "="*70)
+        print(" [모든 채널 분석 완료] ".center(70, "="))
+        print("="*70)
 
     except Exception as e:
         print(f"\n [!] 테스트 중 오류 발생: {e}")

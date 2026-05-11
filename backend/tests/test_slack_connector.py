@@ -183,6 +183,38 @@ def test_slack_connector_collects_thread_replies_with_parent_context() -> None:
     assert events[1].raw_metadata['thread_context_window'] == 'parent_plus_reply'
 
 
+def test_slack_connector_discovers_channels_when_empty() -> None:
+    class DiscoveryFakeSlackClient:
+        def conversations_list(self) -> list[dict]:
+            return [
+                {'id': 'C1', 'name': 'chan1', 'is_member': True},
+                {'id': 'C2', 'name': 'chan2', 'is_member': False},
+                {'id': 'C3', 'name': 'chan3', 'is_member': True},
+            ]
+
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            return [{'type': 'message', 'user': 'U1', 'text': f'msg in {channel_id}', 'ts': '1.0'}]
+
+        def conversation_replies(self, *args, **kwargs) -> list[dict]:
+            return []
+
+    connector = SlackConnector(
+        config=SlackConnectorConfig(
+            bot_token='xoxb-test',
+            channel_ids=[],  # Empty channel list
+            workspace_url='https://example.slack.com',
+        ),
+        client=DiscoveryFakeSlackClient(),
+    )
+
+    events = connector.fetch_events()
+
+    # Should discover C1 and C3 (is_member=True)
+    assert len(events) == 2
+    assert events[0].source_id.startswith('C1:')
+    assert events[1].source_id.startswith('C3:')
+
+
 def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:
     requests: list[httpx.Request] = []
 

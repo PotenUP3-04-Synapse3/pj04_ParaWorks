@@ -75,7 +75,7 @@ class SlackWebApiClient:
             'conversations.list',
             'channels',
             {
-                'types': 'public_channel,private_channel',
+                'types': 'public_channel,private_channel,im,mpim',
                 'exclude_archived': 'true',
                 'limit': str(self.page_limit),
             },
@@ -157,7 +157,14 @@ class SlackConnector:
 
     def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
         events: list[SourceEvent] = []
-        for channel_id in self.config.channel_ids:
+        
+        # 설정된 채널 ID가 없으면 봇이 참여 중인 모든 채널을 자동으로 가져옴
+        channel_ids = self.config.channel_ids
+        if not channel_ids:
+            all_channels = self.client.conversations_list()
+            channel_ids = [c['id'] for c in all_channels if c.get('is_member')]
+            
+        for channel_id in channel_ids:
             oldest = latest_timestamps_by_partition.get(channel_id)
             for message in self.client.conversation_history(channel_id, oldest=oldest):
                 if message.get('type') != 'message' or not message.get('text'):

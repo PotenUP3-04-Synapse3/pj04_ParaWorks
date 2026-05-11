@@ -22,7 +22,12 @@ SLACK_AGENT_MANIFEST = AgentManifest(
     output_contract='AgentRunResult',
     prompt_versions=(SLACK_AGENT_PROMPT_VERSION,),
     supported_permissions=('internal', 'restricted'),
-    capabilities=('timeline_extraction', 'history_generation'),
+    capabilities=(
+        'timeline_extraction',
+        'history_generation',
+        'multi_channel_auto_discovery',
+        'dm_mpim_extraction',
+    ),
 )
 
 

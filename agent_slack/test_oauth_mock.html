@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParaWorks | Slack DM 연동 테스트 페이지</title>
+    <style>
+        :root {
+            --primary: #4A154B; /* Slack Purple */
+            --bg: #F8F9FA;
+            --card-bg: #FFFFFF;
+            --text: #1D1C1D;
+            --success: #2EB67D;
+            --border: #DDD;
+        }
+        body {
+            font-family: "Slack-Lato", apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        .card {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            width: 450px;
+        }
+        h2 { margin-top: 0; color: var(--primary); }
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #EEE;
+        }
+        .description {
+            font-size: 0.85rem;
+            color: #616061;
+            margin-top: 4px;
+        }
+        /* Switch UI */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        /* Modal UI */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            max-width: 400px;
+            text-align: center;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 0.5rem;
+            transition: 0.2s;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-ghost { background: #F0F0F0; color: #555; }
+        
+        /* Fake Slack OAuth Screen */
+        #slackOAuthScreen {
+            background: white;
+            width: 100%;
+            max-width: 600px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: none; /* Initial hidden */
+            flex-direction: column;
+            padding-bottom: 2rem;
+        }
+        .slack-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .slack-logo { font-weight: 900; font-size: 1.5rem; letter-spacing: -1px; }
+        .permission-content {
+            padding: 2rem;
+            text-align: center;
+        }
+        .app-icons {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .icon-box {
+            width: 60px; height: 60px;
+            border-radius: 12px;
+            background: #EEE;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+        }
+        .permission-list {
+            text-align: left;
+            background: #F8F8F8;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+        }
+        .permission-group-title {
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            color: #1D1C1D;
+        }
+        .permission-item {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 0.8rem;
+            font-size: 0.85rem;
+        }
+        .permission-item i { color: #616061; font-style: normal; }
+
+        .log-box {
+            background: #222;
+            color: #0F0;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 1.5rem;
+            border-radius: 4px;
+            height: 80px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 1. ParaWorks Settings Screen -->
+        <div id="paraworksScreen" class="card">
+            <div id="statusBadge" class="status-badge" style="background:#EEE; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold; margin-bottom:1rem;">상태: 봇 권한(채널 전용)</div>
+            <h2>슬랙 연동 설정</h2>
+            
+            <div class="setting-item">
+                <div>
+                    <strong>개인 DM 및 그룹 대화 포함</strong>
+                    <div class="description">High-Precision Sync 모드</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="dmToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="description" style="margin-top: 1rem;">
+                활성화 시 봇이 초대되지 않은 1:1 DM에서도 업무 맥락을 추출합니다. 이 기능은 사용자의 개인 권한(xoxp- 토큰)을 사용합니다.
+            </div>
+
+            <div class="log-box" id="logBox">> 시스템 대기 중...</div>
+        </div>
+
+        <!-- 2. Fake Slack Authorization Screen (The core update) -->
+        <div id="slackOAuthScreen">
+            <div class="slack-header">
+                <span class="slack-logo">Slack</span>
+            </div>
+            <div class="permission-content">
+                <div class="app-icons">
+                    <div class="icon-box" style="background:#4A154B; color:white;">PW</div>
+                    <div style="font-size: 1.5rem; color:#616061;">+</div>
+                    <div class="icon-box" style="background:#E01E5A; color:white;">SL</div>
+                </div>
+                <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;"><b>ParaWorks</b>에서 사용자님의 슬랙 워크스페이스에 대한 액세스 권한을 요청합니다.</h3>
+                <p style="color: #616061; font-size: 0.95rem;">연동을 완료하면 아래 항목에 대한 권한을 허용하게 됩니다.</p>
+
+                <div class="permission-list">
+                    <div class="permission-group-title">수집하려는 데이터 (User Scopes)</div>
+                    
+                    <div class="permission-item">
+                        <i>•</i>
+                        <div><b>사용자의 1:1 DM 메시지 열람</b><br><span style="color:#616061; font-size:0.8rem;">봇이 초대되지 않은 개인 대화방의 내용을 수집합니다 (im:history)</span></div>
+                    </div>
+                    <div class="permission-item">
+                        <i>•</i>
+                        <div><b>사용자의 그룹 DM 메시지 열람</b><br><span style="color:#616061; font-size:0.8rem;">참여 중인 모든 그룹 다이렉트 메시지를 확인합니다 (mpim:history)</span></div>
+                    </div>
+                    <div class="permission-item">
+                        <i>•</i>
+                        <div><b>워크스페이스 멤버 정보 조회</b><br><span style="color:#616061; font-size:0.8rem;">대화 참여자의 이름을 매핑하기 위해 필요합니다 (users:read)</span></div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem;">
+                    <button class="btn btn-ghost" id="cancelOAuth" style="padding: 0.75rem 2rem;">취소</button>
+                    <button class="btn" id="allowOAuth" style="background: #2EB67D; color:white; padding: 0.75rem 2rem;">허용</button>
+                </div>
+                <p style="font-size: 0.8rem; color: #616061; margin-top: 1.5rem;">
+                    ParaWorks의 개인정보 처리방침에 따라 데이터가 보호됩니다.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Permission Modal (Initial Step) -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h3 style="color: var(--primary);">개인 권한 승인이 필요합니다</h3>
+            <p style="font-size: 0.9rem; line-height: 1.5;">
+                슬랙 보안 정책상 봇은 개인 대화를 볼 수 없습니다.<br>
+                <b>[승인하기]</b>를 누르면 사용자의 시야를 공유하기 위한 슬랙 공식 승인 화면으로 연결됩니다.
+            </p>
+            <button class="btn btn-ghost" id="closeModal">나중에 하기</button>
+            <button class="btn btn-primary" id="goToSlack">슬랙 권한 승인하기</button>
+        </div>
+    </div>
+
+    <script>
+        const dmToggle = document.getElementById('dmToggle');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const closeModal = document.getElementById('closeModal');
+        const goToSlack = document.getElementById('goToSlack');
+        
+        const paraworksScreen = document.getElementById('paraworksScreen');
+        const slackOAuthScreen = document.getElementById('slackOAuthScreen');
+        const cancelOAuth = document.getElementById('cancelOAuth');
+        const allowOAuth = document.getElementById('allowOAuth');
+        
+        const statusBadge = document.getElementById('statusBadge');
+        const logBox = document.getElementById('logBox');
+
+        function addLog(msg) {
+            logBox.innerHTML = `> ${msg}<br>` + logBox.innerHTML;
+        }
+
+        // 1. ParaWorks에서 토글 클릭
+        dmToggle.addEventListener('change', () => {
+            if (dmToggle.checked) {
+                modalOverlay.style.display = 'flex';
+                dmToggle.checked = false;
+            } else {
+                addLog('사용자 토큰 연동이 해제되었습니다.');
+                statusBadge.innerText = '상태: 봇 권한(채널 전용)';
+                statusBadge.style.background = '#EEE';
+                statusBadge.style.color = '#1D1C1D';
+            }
+        });
+
+        closeModal.addEventListener('click', () => {
+            modalOverlay.style.display = 'none';
+        });
+
+        // 2. 승인 클릭 시 슬랙 화면으로 전환
+        goToSlack.addEventListener('click', () => {
+            modalOverlay.style.display = 'none';
+            paraworksScreen.style.display = 'none';
+            slackOAuthScreen.style.display = 'flex';
+            document.title = "Slack - ParaWorks 권한 요청";
+        });
+
+        // 3. 슬랙 화면에서 취소
+        cancelOAuth.addEventListener('click', () => {
+            slackOAuthScreen.style.display = 'none';
+            paraworksScreen.style.display = 'block';
+            document.title = "ParaWorks | Slack DM 연동 테스트 페이지";
+            addLog('사용자가 슬랙 권한 승인을 거부했습니다.');
+        });
+
+        // 4. 슬랙 화면에서 허용 (최종 완료)
+        allowOAuth.addEventListener('click', () => {
+            slackOAuthScreen.style.display = 'none';
+            paraworksScreen.style.display = 'block';
+            document.title = "ParaWorks | Slack DM 연동 테스트 페이지";
+            
+            addLog('OAuth Callback 수신 중 (code: temp_auth_code)...');
+            
+            setTimeout(() => {
+                dmToggle.checked = true;
+                statusBadge.innerText = '상태: 사용자 권한 활성화 (DM 포함)';
+                statusBadge.style.background = '#2EB67D';
+                statusBadge.style.color = 'white';
+                addLog('성공: User Token(xoxp-...) 저장 완료.');
+                alert('슬랙 개인 DM 수집 권한이 성공적으로 연동되었습니다!');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
