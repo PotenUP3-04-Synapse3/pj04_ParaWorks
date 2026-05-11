@@ -20,6 +20,7 @@ from backend.app.core.demo_auth import (
     require_admin_user,
     serialize_demo_user,
 )
+from backend.app.core.rate_limit import rate_limit_auth
 from backend.app.core.session_auth import (
     clear_auth_cookies,
     issue_auth_cookies,
@@ -53,7 +54,7 @@ def get_login_options() -> dict:
     return {'users': list_demo_users()}
 
 
-@router.post('/login')
+@router.post('/login', dependencies=[Depends(rate_limit_auth)])
 def login(request: LoginRequest, response: Response, db: DbSession) -> dict:
     settings = get_settings()
     if not settings.paraworks_demo_mode:
@@ -122,7 +123,7 @@ def google_login_callback(
     return {'user': serialize_auth_user(auth_user)}
 
 
-@router.post('/refresh')
+@router.post('/refresh', dependencies=[Depends(rate_limit_auth)])
 def refresh(request: Request, response: Response, db: DbSession) -> dict:
     settings = get_settings()
     auth_user = rotate_refresh_token(response, db, request.cookies.get(settings.auth_refresh_cookie_name), settings)

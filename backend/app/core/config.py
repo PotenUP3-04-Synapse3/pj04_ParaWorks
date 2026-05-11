@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     auth_session_ttl_seconds: int = 900
     auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 14
     auth_cookie_secure: bool = False
+    auth_csrf_cookie_name: str = 'paraworks_csrf'
+    auth_csrf_header_name: str = 'X-CSRF-Token'
     database_url: str = 'postgresql+psycopg://paraworks:paraworks@localhost:5432/paraworks'
     redis_url: str = 'redis://localhost:6379/0'
     celery_task_always_eager: bool = True

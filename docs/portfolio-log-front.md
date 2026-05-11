@@ -1,6 +1,6 @@
 # ParaWorks Frontend Portfolio Log
 
-Updated: 2026-05-10
+Updated: 2026-05-11
 
 ## Frontend Positioning
 
@@ -146,10 +146,39 @@ Findings:
 
 Operational note:
 
-- Lee Jun's missing avatar was most likely caused by a stale Next dev server
-  or a browser session cookie that was not actually authenticated as Lee Jun.
 - The existing Next dev server was restarted and `http://localhost:3000` is
   serving the refreshed app.
+
+### UX Polish: Profile and Sidebar Identity Restoration
+
+Recorded on 2026-05-11.
+
+Following user feedback that the recent "Clean Light Theme" pass felt too plain
+or less unified, restored and improved the premium identity of the sidebar and
+account profile.
+
+- **Profile Picture Resizing**: Increased the diameter on the Account page by
+  1.5x (96px -> 144px) for better visual balance and presence.
+- **Sidebar Background Alignment**: Reverted the sidebar background to match
+  the app's light-grey background (`#f8f9fa`), creating a unified "Rail" look.
+- **Elevated Interactive Elements**: Applied a pure white (`#ffffff`) background
+  with a soft shadow and fine-line border to active menu items and the bottom
+  profile box, making them appear "elevated" above the grey sidebar.
+
+Portfolio value:
+
+- Shows responsiveness to user feedback regarding "premium feel" and "unity."
+- Demonstrates how to balance a "clean" aesthetic with visual depth and
+  interactive affordance.
+- Aligns the sidebar identity with the "Elevated White" design pattern used
+  elsewhere in the app.
+
+Verification:
+
+- Manually verified the layout on the Account and Dashboard pages.
+- Confirmed that the sidebar and profile box now share the same "elevated"
+  visual language.
+- Next dev server refreshed with the new styles.
 
 ## Verification Evidence
 

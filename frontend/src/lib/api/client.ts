@@ -27,6 +27,19 @@ function demoUserHeader(demoUser?: string) {
   return demoUser ?? getStoredDemoUserId();
 }
 
+function getCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift();
+  return undefined;
+}
+
+function csrfHeader() {
+  const token = getCookie("paraworks_csrf");
+  return token ? { "X-CSRF-Token": token } : {};
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.text();
@@ -58,6 +71,7 @@ export async function apiPost<T>(
     headers: {
       "Content-Type": "application/json",
       "X-Demo-User": demoUserHeader(demoUser),
+      ...csrfHeader(),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: "include",
@@ -77,6 +91,7 @@ export async function apiPatch<T>(
     headers: {
       "Content-Type": "application/json",
       "X-Demo-User": demoUserHeader(demoUser),
+      ...csrfHeader(),
     },
     body: JSON.stringify(body),
     credentials: "include",
