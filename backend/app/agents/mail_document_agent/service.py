@@ -10,7 +10,7 @@ from backend.app.agent_runtime import (
 from backend.app.agents.mail_document_agent.agent import MailDocumentAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
-MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive')
+MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar')
 
 
 def create_mail_document_agent_review_items(
@@ -46,14 +46,14 @@ def create_mail_document_agent_review_items(
         total_tokens=result.cost.token_usage.total_tokens,
         estimated_cost_usd=result.cost.estimated_cost_usd,
         permission_level=packet.strictest_permission,
-            metadata_={
-                'source_type': packet.source_type,
-                'included_source_types': included_source_types,
-                'message_count': len(packet.messages),
-                'cache_hit': result.cost.cache_hit,
-                'evidence_summary': build_evidence_summary(packet),
-            },
-        )
+        metadata_={
+            'source_type': packet.source_type,
+            'included_source_types': included_source_types,
+            'message_count': len(packet.messages),
+            'cache_hit': result.cost.cache_hit,
+            'evidence_summary': build_evidence_summary(packet),
+        },
+    )
     db.add(agent_run)
     db.flush()
 
@@ -119,7 +119,7 @@ def build_mail_document_evidence_packet(
                 'source_pk': source.id,
                 'source_type': source.source_type,
                 'scenario': source.raw_metadata.get('scenario'),
-                **_document_parser_metadata(chunk),
+                **_source_quality_metadata(chunk),
             },
         )
         for chunk, source in rows
@@ -133,7 +133,7 @@ def build_mail_document_evidence_packet(
     )
 
 
-def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
+def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
     keys = (
         'parser_name',
         'parser_status',
@@ -145,5 +145,15 @@ def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
         'content_hash',
         'section_path',
         'page_number',
+        'event_context_key',
+        'event_status',
+        'organizer_email',
+        'creator_email',
+        'recurring_event_id',
+        'attendee_response_statuses',
+        'attendee_domains',
+        'external_domains',
+        'has_external_attendees',
+        'duration_minutes',
     )
     return {key: chunk.metadata_.get(key) for key in keys if key in chunk.metadata_}

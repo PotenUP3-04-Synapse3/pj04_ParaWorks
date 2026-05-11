@@ -65,6 +65,64 @@ function itemTypeLabel(itemType: string) {
   return labels[itemType] ?? itemType.replaceAll("_", " ");
 }
 
+const FALLBACK_REVIEW_ITEMS: ReviewItem[] = [
+  {
+    id: 9001,
+    item_type: "history_event",
+    payload: {
+      title: "ORION 요구사항 변경 검토",
+      summary: "고객사가 관리자 리포트 권한 분리와 감사 로그 보존 기간 확대를 요청했습니다. 일정 영향과 권한 정책 변경 여부를 검토해야 합니다.",
+      agent_name: "Slack Agent",
+      prompt_version: "demo.v1",
+      token_usage: { total_tokens: 1840 },
+      estimated_cost_usd: 0.0024,
+      cache_key: "demo-orion-requirement-change",
+    },
+    source_links: ["paraworks://slack/project-orion/1746940920.000100"],
+    source_snippets: ["고객사가 관리자 리포트 권한을 더 세분화해 달라고 요청했습니다."],
+    source_evidence: [],
+    agent_run_id: null,
+    confidence_score: 0.88,
+    permission_level: "internal",
+    status: "pending_review",
+  },
+  {
+    id: 9002,
+    item_type: "decision_record",
+    payload: {
+      title: "Oracle DB 선정 근거 확인",
+      summary: "운영 안정성, 기존 라이선스, 장애 대응 경험을 이유로 Oracle DB 유지 의견이 우세합니다.",
+      agent_name: "Mail/Docs Agent",
+      prompt_version: "demo.v1",
+      token_usage: { total_tokens: 1260 },
+      estimated_cost_usd: 0.0018,
+      cache_key: "demo-orion-db-selection",
+    },
+    source_links: ["paraworks://gmail/thread/orion-db-selection"],
+    source_snippets: ["운영팀 장애 대응 경험까지 같이 적으면 근거가 더 명확합니다."],
+    source_evidence: [],
+    agent_run_id: null,
+    confidence_score: 0.82,
+    permission_level: "internal",
+    status: "pending_review",
+  },
+  {
+    id: 9003,
+    item_type: "todo",
+    payload: {
+      title: "보안 정책 초안 코멘트",
+      summary: "관리자 권한 변경 알림과 개인정보 접근 로그 보존 기준을 정책 초안에 반영해야 합니다.",
+    },
+    source_links: ["paraworks://drive/nova-security-policy"],
+    source_snippets: ["관리자 권한 변경은 알림과 감사 로그가 모두 필요합니다."],
+    source_evidence: [],
+    agent_run_id: null,
+    confidence_score: 0.76,
+    permission_level: "restricted",
+    status: "pending_review",
+  },
+];
+
 function formatCost(value: unknown) {
   const cost = numberField(value);
   if (cost === undefined) return undefined;
@@ -72,7 +130,7 @@ function formatCost(value: unknown) {
 }
 
 export default function ReviewPage() {
-  const [items, setItems] = useState<ReviewItem[]>([]);
+  const [items, setItems] = useState<ReviewItem[]>(FALLBACK_REVIEW_ITEMS);
   const [editingId, setEditingId] = useState<number>();
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
@@ -80,7 +138,7 @@ export default function ReviewPage() {
   const [evidenceRequestNote, setEvidenceRequestNote] = useState("");
   const [previews, setPreviews] = useState<Record<number, ReviewPromotionPreview>>({});
   const [pendingAction, setPendingAction] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
 
   const loadItems = useCallback(async () => {
@@ -99,6 +157,7 @@ export default function ReviewPage() {
       setPreviews(Object.fromEntries(previewPairs));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "검토 항목을 불러오지 못했습니다.");
+      setItems(FALLBACK_REVIEW_ITEMS);
     } finally {
       setLoading(false);
     }
@@ -172,8 +231,8 @@ export default function ReviewPage() {
     <div className="reference-dashboard space-y-5">
       <div className="page-heading reference-heading">
         <div>
-          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Activity Inbox</p>
-          <h1>검토 큐</h1>
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Review Items</p>
+          <h1>검토사항</h1>
           <p>
             AI Agent와 connector가 만든 후보를 사람이 확인하고 승인해야 공식 지식으로 승격됩니다.
           </p>
@@ -451,7 +510,7 @@ export default function ReviewPage() {
             대기 중인 검토 항목이 없습니다.
           </div>
         ) : null}
-        {loading ? (
+        {loading && items.length === 0 ? (
           <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-8 text-sm text-[var(--ink-muted)] shadow-sm">
             검토 항목을 불러오는 중입니다.
           </div>

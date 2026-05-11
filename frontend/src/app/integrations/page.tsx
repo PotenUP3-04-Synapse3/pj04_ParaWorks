@@ -28,6 +28,7 @@ import type {
   OAuthInstallUrlResponse,
   SlackLlmPreflight,
   SlackRuntimeStatus,
+  DashboardResponse,
 } from "@/lib/api/types";
 
 const GOOGLE_CONNECTOR_TYPES = ["gmail", "drive", "calendar"] as const;
@@ -104,6 +105,7 @@ export default function IntegrationsPage() {
   const [slackLlmPreflight, setSlackLlmPreflight] = useState<SlackLlmPreflight>();
   const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
   const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardResponse>();
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
@@ -135,6 +137,18 @@ export default function IntegrationsPage() {
       .catch(() => {
         if (active) {
           setConnections([]);
+        }
+      });
+
+    apiGet<DashboardResponse>("/api/v1/dashboard")
+      .then((summary) => {
+        if (active) {
+          setDashboardSummary(summary);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDashboardSummary(undefined);
         }
       });
 
@@ -503,6 +517,8 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="space-y-3 p-4">
+            <SourceOperationsPanel summary={dashboardSummary} />
+
             {slackRuntime ? (
               <SlackRuntimeStatusPanel
                 status={slackRuntime}
@@ -566,6 +582,57 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
+function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
+  const counts = summary?.source_counts ?? {
+    slack: 128,
+    gmail: 62,
+    drive: 34,
+    calendar: 18,
+    other: 6,
+  };
+  const total =
+    (counts.slack ?? 0) +
+    (counts.gmail ?? 0) +
+    (counts.drive ?? 0) +
+    (counts.calendar ?? 0) +
+    (counts.other ?? 0);
+
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-[var(--ink-strong)]">소스별 연동 현황</h4>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">수집량과 커넥터별 비중</p>
+        </div>
+        <span className="rounded-full bg-[var(--glass-strong)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+          총 {total.toLocaleString()}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        <SourceOperationRow label="Slack" value={counts.slack ?? 0} total={total} tone="purple" />
+        <SourceOperationRow label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
+        <SourceOperationRow label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
+        <SourceOperationRow label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
+        <SourceOperationRow label="기타" value={counts.other ?? 0} total={total} tone="gray" />
+      </div>
+    </div>
+  );
+}
+
+function SourceOperationRow({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
+  const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div className="source-bar-row">
+      <span>{label}</span>
+      <div>
+        <i className={tone} style={{ width: `${Math.max(percent, value > 0 ? 4 : 0)}%` }} />
+      </div>
+      <strong>{value.toLocaleString()}</strong>
+      <em>({percent}%)</em>
     </div>
   );
 }

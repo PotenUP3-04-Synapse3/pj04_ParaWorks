@@ -193,3 +193,32 @@ def test_mail_document_evidence_packet_includes_gmail_attachment_sources(db_sess
     assert message.metadata['parser_name'] == 'gmail_attachment_metadata'
     assert message.metadata['parser_status'] == 'metadata_only'
     assert message.metadata['parser_status_reason'] == 'pdf_parser_not_enabled'
+
+
+def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'calendar',
+        'calendar-project-alpha-review',
+        'internal',
+        metadata={
+            'event_context_key': 'event-1:2026-05-01T10:00:00Z',
+            'event_status': 'confirmed',
+            'organizer_email': 'lead@example.com',
+            'duration_minutes': 60,
+        },
+    )
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mail-docs-calendar:2026-05-01',
+    )
+
+    assert len(packet.messages) == 1
+    message = packet.messages[0]
+    assert message.source_id == 'calendar-project-alpha-review'
+    assert message.metadata['source_type'] == 'calendar'
+    assert message.metadata['event_context_key'] == 'event-1:2026-05-01T10:00:00Z'
+    assert message.metadata['event_status'] == 'confirmed'
+    assert message.metadata['organizer_email'] == 'lead@example.com'

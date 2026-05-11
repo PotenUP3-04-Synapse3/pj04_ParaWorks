@@ -77,9 +77,9 @@ function SearchPageContent() {
     <div className="reference-dashboard space-y-4">
       <div className="page-heading reference-heading">
         <div>
-          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Company Memory</p>
-          <h1>Ask 워크스페이스</h1>
-          <p>승인된 지식과 접근 가능한 source evidence를 바탕으로 질문하고 근거를 확인합니다.</p>
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">AI Assistant</p>
+          <h1>AI 비서</h1>
+          <p>승인된 회사 기억과 접근 가능한 근거를 바탕으로 업무 질문에 답하고 출처를 함께 보여줍니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <Bot className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
@@ -101,7 +101,7 @@ function SearchPageContent() {
           />
           <button type="submit" disabled={loading} className="row-action gap-2 px-4 disabled:bg-neutral-300">
             <Sparkles className="h-4 w-4" aria-hidden="true" />
-            {loading ? "답변 생성 중" : "AI에게 질문"}
+            {loading ? "답변 생성 중" : "AI 비서에게 질문"}
           </button>
         </div>
       </form>
@@ -167,7 +167,7 @@ function SearchPageContent() {
               </>
             ) : (
               <div className="rounded-lg border border-dashed border-line bg-surface-soft p-8 text-[13px] text-muted">
-                질문을 입력하면 AI 답변과 근거가 여기에 표시됩니다.
+                질문을 입력하면 AI 비서의 답변과 근거가 여기에 표시됩니다.
               </div>
             )}
           </div>
@@ -229,7 +229,7 @@ function SearchPageContent() {
 }
 
 function SearchPageFallback() {
-  return <div className="panel reference-panel p-8 text-[13px] text-muted">검색 화면을 준비하고 있습니다.</div>;
+  return <div className="panel reference-panel p-8 text-[13px] text-muted">AI 비서 화면을 준비하고 있습니다.</div>;
 }
 
 type MetricIcon = typeof FileText;

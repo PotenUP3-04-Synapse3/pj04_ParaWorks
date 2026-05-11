@@ -3,13 +3,21 @@ from sqlalchemy import select
 from backend.app.models import DocumentChunk, DocumentParserRun, Source
 
 
+CSRF_HEADERS = {'X-CSRF-Token': 'test-csrf-token'}
+
+
+def _set_csrf_cookie(client) -> None:
+    client.cookies.set('paraworks_csrf', 'test-csrf-token')
+
+
 def test_mail_document_agent_review_endpoint_creates_agent_review_item(client) -> None:
-    gmail_sync = client.post('/api/v1/integrations/gmail/sync')
-    drive_sync = client.post('/api/v1/integrations/drive/sync')
+    _set_csrf_cookie(client)
+    gmail_sync = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+    drive_sync = client.post('/api/v1/integrations/drive/sync', headers=CSRF_HEADERS)
     assert gmail_sync.status_code == 200
     assert drive_sync.status_code == 200
 
-    response = client.post('/api/v1/integrations/mail-docs/agent-review')
+    response = client.post('/api/v1/integrations/mail-docs/agent-review', headers=CSRF_HEADERS)
 
     assert response.status_code == 200
     payload = response.json()
@@ -29,7 +37,8 @@ def test_mail_document_agent_review_endpoint_creates_agent_review_item(client) -
 
 
 def test_gmail_sync_smoke_ingests_attachment_metadata_boundary(client, db_session) -> None:
-    response = client.post('/api/v1/integrations/gmail/sync')
+    _set_csrf_cookie(client)
+    response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
 
     assert response.status_code == 200
     payload = response.json()
