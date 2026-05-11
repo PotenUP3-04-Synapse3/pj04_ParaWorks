@@ -10,7 +10,7 @@ from backend.app.agent_runtime import (
 from backend.app.agents.mail_document_agent.agent import MailDocumentAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
-MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'drive')
+MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive')
 
 
 def create_mail_document_agent_review_items(

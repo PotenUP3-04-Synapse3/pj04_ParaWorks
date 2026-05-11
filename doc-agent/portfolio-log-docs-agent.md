@@ -1,6 +1,6 @@
 # Document Agent Portfolio Log
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 This file records Document Agent specific product, architecture, verification,
 and demo evidence. Do not store Document Agent progress entries in
@@ -301,6 +301,217 @@ uv run ruff check backend/app/rag/reindexing.py backend/app/ingestion/sync.py ba
 ```
 
 Result: all checks passed.
+
+## ParserRun Persistence
+
+Recorded on 2026-05-11.
+
+- Added `DocumentParserRun` as a persisted audit table for document parser
+  execution metadata.
+- Connector ingestion now records one parser run for each newly persisted
+  `DocumentVersion`.
+- Parser runs preserve parser name, parser status, status reason, MIME type,
+  document version label, revision id, content signature, chunk count, source
+  URL, source id, permission level, and source snippet.
+- Duplicate source events remain skipped and do not create duplicate parser
+  run records.
+- During merge conflict resolution, ParserRun persistence was aligned with the
+  newer `backend/app/documents/service.py` persistence boundary instead of the
+  older direct ingestion path.
+
+Portfolio angle:
+
+- Makes parser quality auditable instead of leaving it only inside chunk
+  metadata.
+- Prepares the Document Agent track for future PDF, DOCX, Slides, and HWP/HWPX
+  parser adapters while preserving evidence and permission provenance.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_connector_ingestion_contract.py backend/tests/test_document_ingestion_service.py backend/tests/test_document_parser_contracts.py -q
+```
+
+Result: 15 passed.
+
+```powershell
+uv run pytest backend/tests/test_connector_ingestion_contract.py backend/tests/test_document_ingestion_service.py backend/tests/test_document_parser_contracts.py backend/tests/test_google_connector.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_rag_indexing.py -q
+```
+
+Result: 68 passed.
+
+```powershell
+uv run pytest backend/tests -q
+```
+
+Result: 275 passed, 1 skipped.
+
+## Stable Document Chunking
+
+Recorded on 2026-05-11.
+
+- Added deterministic paragraph and section-aware chunking for parsed
+  `SourceEvent` document bodies.
+- Short heading-like paragraphs now start a new chunk section, and each stored
+  `DocumentChunk` keeps a stable `chunk_index`, `section_path`, source snippet,
+  permission level, parser metadata, and content hash.
+- Long paragraphs are split within the configured chunk size instead of being
+  stored as one oversized RAG document.
+- ParserRun `chunk_count` now reflects the actual number of chunks persisted
+  for the document version.
+
+Portfolio angle:
+
+- Improves RAG evidence quality by keeping document structure visible after
+  ingestion.
+- Prepares Drive Docs/Sheets and future PDF/DOCX/HWPX parsers to share the
+  same versioned chunking path.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_document_ingestion_service.py backend/tests/test_document_parser_contracts.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_rag_indexing.py backend/tests/test_mail_document_agent_review_bridge.py -q
+```
+
+Result: 42 passed.
+
+```powershell
+uv run ruff check backend/app/documents/service.py backend/tests/test_document_ingestion_service.py
+```
+
+Result: all checks passed.
+
+```powershell
+uv run pytest backend/tests -q
+```
+
+Result: 276 passed, 1 skipped.
+
+## PDF and DOCX Parser Adapter Decisions
+
+Recorded on 2026-05-11.
+
+- Added a document-layer parser adapter decision contract for MIME types that
+  are not yet parsed through Google Drive export.
+- PDF now records the planned candidate package as `pypdf` while staying
+  `metadata_only` with `parser_status_reason="pdf_parser_not_enabled"`.
+- DOCX now records the planned candidate package as `python-docx` while
+  staying `metadata_only` with `parser_status_reason="docx_parser_not_enabled"`.
+- HWP/HWPX remain `unsupported` with
+  `parser_status_reason="hwp_parser_not_decided"`.
+- Google Drive parser status fallback now uses the same document-layer
+  decision contract, keeping connector metadata and parser planning aligned.
+
+Portfolio angle:
+
+- Documents parser roadmap decisions in code without adding new runtime
+  dependencies or live parsing risk.
+- Gives future PDF/DOCX parser workers a stable contract for tests, parser
+  status, candidate package, and enablement state.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_document_parser_contracts.py backend/tests/test_google_connector.py backend/tests/test_document_ingestion_service.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_rag_indexing.py -q
+```
+
+Result: 71 passed.
+
+```powershell
+uv run ruff check backend/app/documents/parsers.py backend/app/connectors/google.py backend/tests/test_document_parser_contracts.py backend/tests/test_google_connector.py
+```
+
+Result: all checks passed.
+
+```powershell
+uv run pytest backend/tests -q
+```
+
+Result: 278 passed, 1 skipped.
+
+## Gmail Attachment Boundary
+
+Recorded on 2026-05-11.
+
+- Added a Gmail attachment metadata boundary without downloading or parsing
+  attachment bodies.
+- Gmail messages with attachment parts now emit additional `SourceEvent`
+  records using stable source ids:
+  `gmail_attachment:{message_id}:{attachment_id}`.
+- Attachment events preserve parent Gmail source id, message id, thread id,
+  attachment id, filename, MIME type, size, parser status, document version,
+  revision id, content signature, source snippet, and Gmail readonly scope.
+- PDF attachments currently stay `metadata_only` through the shared parser
+  adapter decision contract.
+- Mail/Document Agent evidence packets now include `gmail_attachment` chunks
+  alongside Gmail body and Drive evidence.
+
+Portfolio angle:
+
+- Makes the Gmail document boundary explicit before any live attachment
+  download or paid parsing path exists.
+- Gives future PDF/DOCX attachment parsers stable source ids and provenance
+  metadata to plug into the existing document ingestion, Review Queue, and RAG
+  paths.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_google_connector.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_document_ingestion_service.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_rag_indexing.py -q
+```
+
+Result: 69 passed.
+
+```powershell
+uv run ruff check backend/app/connectors/google.py backend/app/agents/mail_document_agent/service.py backend/tests/test_google_connector.py backend/tests/test_mail_document_agent_review_bridge.py
+```
+
+Result: all checks passed.
+
+```powershell
+uv run pytest backend/tests -q
+```
+
+Result: 280 passed, 1 skipped.
+
+## Google Slides Text Export
+
+Recorded on 2026-05-11.
+
+- Expanded the Google Drive parser coverage to include Google Slides.
+- Slides files now export through Drive `files.export` using `text/plain`.
+- Slides evidence is stored with `parser_name="google_drive_slides_text_export"`
+  and `parser_status="parsed"` instead of remaining metadata-only.
+- PDF, DOCX, HWP, and HWPX remain on explicit metadata-only or unsupported
+  parser policies until their parser adapter decisions are made.
+
+Portfolio angle:
+
+- Broadens Track B evidence coverage from documents and spreadsheets into
+  presentation decks, which commonly hold planning, proposal, and review
+  decisions.
+- Reuses the same fakeable Google client boundary, version metadata,
+  content-signature skip behavior, and downstream chunk/RAG path.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_google_connector.py backend/tests/test_document_ingestion_service.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_rag_indexing.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py -q
+```
+
+Result: 67 passed.
+
+```powershell
+uv run ruff check backend/app/connectors/google.py backend/tests/test_google_connector.py backend/app/documents/service.py backend/tests/test_document_ingestion_service.py
+```
+
+Result: all checks passed.
+
+```powershell
+uv run pytest backend/tests -q
+```
+
+Result: 276 passed, 1 skipped.
 
 ## Google Sheets CSV Export
 

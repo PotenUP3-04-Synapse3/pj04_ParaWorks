@@ -5,6 +5,7 @@ from backend.app.documents.parsers import (
     ParsedDocument,
     ParsedDocumentChunk,
     ParserRun,
+    parser_adapter_decision_for_mime_type,
 )
 
 
@@ -70,3 +71,32 @@ def test_parsed_document_enriches_chunks_with_parser_metadata() -> None:
     assert chunk.metadata['revision_id'] == 'rev-42'
     assert chunk.metadata['content_signature'] == 'drive:file-1:42:rev-42'
     assert len(chunk.content_hash) == 64
+
+
+def test_parser_adapter_decision_documents_pdf_and_docx_candidates() -> None:
+    pdf = parser_adapter_decision_for_mime_type('application/pdf')
+    docx = parser_adapter_decision_for_mime_type(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+
+    assert pdf.parser_status == 'metadata_only'
+    assert pdf.parser_status_reason == 'pdf_parser_not_enabled'
+    assert pdf.candidate_package == 'pypdf'
+    assert pdf.live_enabled is False
+    assert docx.parser_status == 'metadata_only'
+    assert docx.parser_status_reason == 'docx_parser_not_enabled'
+    assert docx.candidate_package == 'python-docx'
+    assert docx.live_enabled is False
+
+
+def test_parser_adapter_decision_keeps_hwp_and_hwpx_unsupported() -> None:
+    for mime_type in [
+        'application/x-hwp',
+        'application/haansofthwp',
+        'application/vnd.hancom.hwpx',
+    ]:
+        decision = parser_adapter_decision_for_mime_type(mime_type)
+        assert decision.parser_status == 'unsupported'
+        assert decision.parser_status_reason == 'hwp_parser_not_decided'
+        assert decision.candidate_package is None
+        assert decision.live_enabled is False

@@ -12,6 +12,7 @@ from typing import Protocol
 import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
+from backend.app.documents.parsers import parser_adapter_decision_for_mime_type
 
 GoogleQueryParams = dict[str, str | list[str]]
 GOOGLE_TEXT_BODY_LIMIT = 4_000
@@ -20,15 +21,7 @@ GOOGLE_DRIVE_TEXT_EXPORT_MIME_TYPE = 'text/plain'
 GOOGLE_DRIVE_SHEETS_MIME_TYPE = 'application/vnd.google-apps.spreadsheet'
 GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE = 'text/csv'
 GOOGLE_DRIVE_SLIDES_MIME_TYPE = 'application/vnd.google-apps.presentation'
-PDF_MIME_TYPE = 'application/pdf'
-DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-HWP_MIME_TYPES = frozenset(
-    {
-        'application/x-hwp',
-        'application/haansofthwp',
-        'application/vnd.hancom.hwpx',
-    }
-)
+GOOGLE_DRIVE_SLIDES_EXPORT_MIME_TYPE = 'text/plain'
 
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
     'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
@@ -215,7 +208,10 @@ class GoogleConnector:
 
     def fetch_events(self) -> list[SourceEvent]:
         if self.config.connector_type == 'gmail':
-            return [self._gmail_message_to_source_event(message) for message in self.client.gmail_messages()]
+            events: list[SourceEvent] = []
+            for message in self.client.gmail_messages():
+                events.extend(self._gmail_message_to_source_events(message))
+            return events
         if self.config.connector_type == 'drive':
             return [self._drive_file_to_source_event(file) for file in self.client.drive_files()]
         if self.config.connector_type == 'calendar':
@@ -224,12 +220,12 @@ class GoogleConnector:
 
     def fetch_events_since(self, latest_cursors_by_partition: dict[str, str]) -> list[SourceEvent]:
         if self.config.connector_type == 'gmail':
-            return [
-                self._gmail_message_to_source_event(message)
-                for message in self.client.gmail_messages(
-                    after_internal_date=latest_cursors_by_partition.get('gmail')
-                )
-            ]
+            events: list[SourceEvent] = []
+            for message in self.client.gmail_messages(
+                after_internal_date=latest_cursors_by_partition.get('gmail')
+            ):
+                events.extend(self._gmail_message_to_source_events(message))
+            return events
         if self.config.connector_type == 'drive':
             return [
                 self._drive_file_to_source_event(file)
@@ -241,6 +237,13 @@ class GoogleConnector:
                 for event in self.client.calendar_events(updated_min=latest_cursors_by_partition.get('calendar'))
             ]
         return self.fetch_events()
+
+    def _gmail_message_to_source_events(self, message: dict) -> list[SourceEvent]:
+        message_event = self._gmail_message_to_source_event(message)
+        return [
+            message_event,
+            *self._gmail_attachment_source_events(message=message, parent_event=message_event),
+        ]
 
     def _gmail_message_to_source_event(self, message: dict) -> SourceEvent:
         message_id = str(message['id'])
@@ -289,6 +292,63 @@ class GoogleConnector:
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
             },
         )
+
+    def _gmail_attachment_source_events(self, *, message: dict, parent_event: SourceEvent) -> list[SourceEvent]:
+        events: list[SourceEvent] = []
+        message_id = str(message['id'])
+        thread_id = str(message.get('threadId') or '')
+        internal_date = str(message.get('internalDate') or '')
+        subject = _header_value(message, 'Subject') or f'Gmail message {message_id}'
+        for attachment in _gmail_attachment_parts(message.get('payload') or {}):
+            attachment_id = attachment['attachment_id']
+            filename = attachment['filename']
+            mime_type = attachment['mime_type']
+            attachment_size = attachment['attachment_size']
+            decision = parser_adapter_decision_for_mime_type(mime_type)
+            source_id = f'gmail_attachment:{message_id}:{attachment_id}'
+            body_lines = [
+                f'Gmail attachment: {filename}',
+                f'Parent subject: {subject}',
+                f'Mime type: {mime_type}',
+                f'Attachment size: {attachment_size}',
+            ]
+            events.append(
+                SourceEvent(
+                    source_type='gmail_attachment',
+                    source_id=source_id,
+                    source_url=parent_event.source_url,
+                    title=f'Attachment: {filename}',
+                    body='\n'.join(body_lines),
+                    author=parent_event.author,
+                    participants=parent_event.participants,
+                    timestamp=parent_event.timestamp,
+                    permission_level=parent_event.permission_level,
+                    raw_metadata={
+                        'parent_source_id': parent_event.source_id,
+                        'message_id': message_id,
+                        'thread_id': thread_id or None,
+                        'thread_context_key': f'{thread_id}:{message_id}:{attachment_id}'
+                        if thread_id
+                        else f'{message_id}:{attachment_id}',
+                        'attachment_id': attachment_id,
+                        'filename': filename,
+                        'mime_type': mime_type,
+                        'attachment_size': attachment_size,
+                        'account_id': self.config.account_id,
+                        'sync_partition': 'gmail',
+                        'sync_cursor': internal_date,
+                        'parser_name': 'gmail_attachment_metadata',
+                        'parser_status': decision.parser_status,
+                        'parser_status_reason': decision.parser_status_reason,
+                        'document_version': internal_date or attachment_id,
+                        'revision_id': attachment_id,
+                        'content_signature': f'{source_id}:{attachment_size}',
+                        'source_snippet': f'Gmail attachment {filename} ({mime_type})',
+                        'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
+                    },
+                )
+            )
+        return events
 
     def _drive_file_to_source_event(self, file: dict) -> SourceEvent:
         file_id = str(file['id'])
@@ -521,13 +581,8 @@ def _drive_parser_status_for_mime_type(mime_type: str) -> tuple[str, str]:
         return ('metadata_only', 'sheets_export_not_enabled')
     if mime_type == GOOGLE_DRIVE_SLIDES_MIME_TYPE:
         return ('metadata_only', 'slides_export_not_enabled')
-    if mime_type == PDF_MIME_TYPE:
-        return ('metadata_only', 'pdf_parser_not_enabled')
-    if mime_type == DOCX_MIME_TYPE:
-        return ('metadata_only', 'docx_parser_not_enabled')
-    if mime_type in HWP_MIME_TYPES:
-        return ('unsupported', 'hwp_parser_not_decided')
-    return ('metadata_only', 'content_export_not_enabled')
+    decision = parser_adapter_decision_for_mime_type(mime_type)
+    return (decision.parser_status, decision.parser_status_reason)
 
 
 def _drive_exported_text(*, client: GoogleApiClient, file: dict) -> tuple[str, str] | None:
@@ -538,6 +593,9 @@ def _drive_exported_text(*, client: GoogleApiClient, file: dict) -> tuple[str, s
     elif mime_type == GOOGLE_DRIVE_SHEETS_MIME_TYPE:
         export_mime_type = GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE
         parser_name = 'google_drive_sheets_csv_export'
+    elif mime_type == GOOGLE_DRIVE_SLIDES_MIME_TYPE:
+        export_mime_type = GOOGLE_DRIVE_SLIDES_EXPORT_MIME_TYPE
+        parser_name = 'google_drive_slides_text_export'
     else:
         return None
     exporter = getattr(client, 'drive_file_text_export', None)
@@ -628,6 +686,25 @@ def _gmail_payload_text_candidates(payload: dict) -> list[tuple[str, str]]:
     for part in payload.get('parts') or []:
         candidates.extend(_gmail_payload_text_candidates(part))
     return candidates
+
+
+def _gmail_attachment_parts(payload: dict) -> list[dict[str, object]]:
+    attachments: list[dict[str, object]] = []
+    body = payload.get('body') or {}
+    attachment_id = body.get('attachmentId')
+    filename = str(payload.get('filename') or '').strip()
+    if attachment_id and filename:
+        attachments.append(
+            {
+                'attachment_id': str(attachment_id),
+                'filename': filename,
+                'mime_type': str(payload.get('mimeType') or 'application/octet-stream'),
+                'attachment_size': int(body.get('size') or 0),
+            }
+        )
+    for part in payload.get('parts') or []:
+        attachments.extend(_gmail_attachment_parts(part))
+    return attachments
 
 
 def _decode_base64url(value: str) -> str:
