@@ -138,6 +138,7 @@ export function RagReindexControl({ summary }: { summary: RagIndexingSummaryResp
               ? " · 실제 실행은 설정된 비용 가드가 차단합니다."
               : " · 승인 후 실제 재색인을 실행할 수 있습니다."}
           </p>
+          <ParserQualitySummary counts={preview?.parser_status_counts} />
         </div>
       ) : null}
 
@@ -168,6 +169,65 @@ function ReindexStat({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>
   );
+}
+
+function ParserQualitySummary({ counts }: { counts?: Record<string, number> }) {
+  const rows = parserQualityRows(counts);
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-white/60 bg-white/50 p-3" data-testid="rag-parser-quality">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold text-[var(--ink-strong)]">Parser quality</p>
+        <span className="text-[var(--ink-muted)]">
+          {rows.reduce((sum, row) => sum + row.count, 0).toLocaleString()} documents
+        </span>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.status} className="rounded-md bg-white/70 px-2 py-1.5">
+            <p className="text-[var(--ink-muted)]">{row.label}</p>
+            <p className={`mt-1 inline-flex rounded-full px-2 py-0.5 font-semibold ${row.className}`}>
+              {row.count.toLocaleString()}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 leading-5 text-[var(--ink-muted)]">
+        Metadata-only or unsupported documents stay in the audit path, but they should not be treated as full body-parsed evidence.
+      </p>
+    </div>
+  );
+}
+
+function parserQualityRows(counts?: Record<string, number>) {
+  const statusLabels: Record<string, string> = {
+    parsed: "Parsed",
+    metadata_only: "Metadata only",
+    unsupported: "Unsupported",
+  };
+  const statusClasses: Record<string, string> = {
+    parsed: "bg-emerald-50 text-emerald-800",
+    metadata_only: "bg-amber-50 text-amber-800",
+    unsupported: "bg-red-50 text-red-800",
+  };
+
+  return Object.entries(counts ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => {
+      const order = ["parsed", "metadata_only", "unsupported"];
+      const leftIndex = order.indexOf(left);
+      const rightIndex = order.indexOf(right);
+      return (leftIndex === -1 ? order.length : leftIndex) - (rightIndex === -1 ? order.length : rightIndex);
+    })
+    .map(([status, count]) => ({
+      status,
+      count,
+      label: statusLabels[status] ?? status,
+      className: statusClasses[status] ?? "bg-[var(--glass-strong)] text-[var(--ink-strong)]",
+    }));
 }
 
 function formatUsd(value: number) {

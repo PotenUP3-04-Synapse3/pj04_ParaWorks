@@ -136,6 +136,10 @@ test("agent operations previews RAG reindex cost before approved execution", asy
         skipped_document_ids: ["chunk:old"],
         incremental: true,
         storage_backend: "preview",
+        parser_status_counts: {
+          parsed: 1,
+          metadata_only: 1,
+        },
         embedding_budget: {
           embedding_model: "text-embedding-3-small",
           changed_document_count: 2,
@@ -171,6 +175,8 @@ test("agent operations previews RAG reindex cost before approved execution", asy
   await page.getByRole("button", { name: "비용 미리보기" }).click();
   await expect(page.getByTestId("rag-reindex-preview")).toContainText("변경 2개");
   await expect(page.getByTestId("rag-reindex-preview")).toContainText("$0.000024");
+  await expect(page.getByTestId("rag-parser-quality")).toContainText("Parser quality");
+  await expect(page.getByTestId("rag-parser-quality")).toContainText("Metadata only");
   await page.getByRole("button", { name: "승인 후 실행" }).click();
   await expect(page.getByText("rag-index-approved")).toBeVisible();
 });
@@ -226,6 +232,32 @@ test("integration sync shows connector counts", async ({ page }) => {
   await expect(syncMetrics.getByText("Fetched", { exact: true })).toBeVisible();
   await expect(syncMetrics.getByText("Review items", { exact: true })).toBeVisible();
   await expect(syncMetrics.getByText("Skipped", { exact: true })).toBeVisible();
+});
+
+test("Gmail sync shows parser quality counts", async ({ page }) => {
+  await page.route("**/api/v1/integrations/gmail/sync", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        job_id: "gmail-parser-quality-smoke",
+        connector_type: "gmail",
+        status: "complete",
+        created_review_items: 1,
+        fetched_events: 2,
+        skipped_events: 0,
+        parser_status_counts: {
+          metadata_only: 1,
+        },
+      },
+    });
+  });
+
+  await page.goto("/integrations");
+  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
+  await page.getByTestId("gmail-card-actions").getByRole("button").first().click();
+
+  await expect(page.getByTestId("sync-parser-quality")).toContainText("Parser quality");
+  await expect(page.getByTestId("sync-parser-quality")).toContainText("Metadata only");
 });
 
 test("integrations page shows Slack OAuth connection status without secrets", async ({ page }) => {

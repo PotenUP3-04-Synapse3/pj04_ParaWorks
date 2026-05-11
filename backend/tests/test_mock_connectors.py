@@ -24,6 +24,18 @@ def test_all_mock_connectors_return_source_evidence() -> None:
         assert all(event.body for event in events)
 
 
+def test_mock_gmail_connector_includes_attachment_boundary_event() -> None:
+    events = get_mock_connector('gmail').fetch_events()
+
+    attachment = next(event for event in events if event.source_type == 'gmail_attachment')
+    assert attachment.source_id == 'gmail_attachment:gmail-project-alpha-redis-summary:att-budget-pdf'
+    assert attachment.raw_metadata['parent_source_id'] == 'gmail-project-alpha-redis-summary'
+    assert attachment.raw_metadata['parser_name'] == 'gmail_attachment_metadata'
+    assert attachment.raw_metadata['parser_status'] == 'metadata_only'
+    assert attachment.raw_metadata['parser_status_reason'] == 'pdf_parser_not_enabled'
+    assert attachment.raw_metadata['content_signature'].endswith(':2048')
+
+
 def test_fetched_events_do_not_share_mutable_seed_state() -> None:
     first_event = get_mock_connector('slack').fetch_events()[0]
     first_event.participants.append('mutated@example.com')

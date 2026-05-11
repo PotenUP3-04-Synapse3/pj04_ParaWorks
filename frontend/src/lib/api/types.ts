@@ -195,6 +195,7 @@ export type RagReindexResponse = {
   incremental: boolean;
   storage_backend: string;
   embedding_budget: EmbeddingBudgetDecision;
+  parser_status_counts: Record<string, number>;
 };
 
 export type RagIndexingSummaryResponse = {
@@ -415,6 +416,7 @@ export type IntegrationSyncResponse = {
   created_review_items: number;
   fetched_events: number;
   skipped_events: number;
+  parser_status_counts?: Record<string, number>;
 };
 
 export type IntegrationManifest = {

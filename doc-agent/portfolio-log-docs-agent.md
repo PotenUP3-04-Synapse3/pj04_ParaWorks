@@ -551,3 +551,115 @@ uv run pytest backend/tests -q
 ```
 
 Result: 274 passed, 1 skipped.
+
+## Gmail Attachment Ingestion Smoke
+
+Recorded on 2026-05-11.
+
+- Strengthened the local Gmail mock sync so it now includes a
+  `gmail_attachment` source event alongside the parent Gmail body event.
+- Kept the attachment boundary metadata-only: PDF attachment bodies are not
+  downloaded or parsed, and the event records
+  `parser_name="gmail_attachment_metadata"`,
+  `parser_status="metadata_only"`, and
+  `parser_status_reason="pdf_parser_not_enabled"`.
+- Added API-level smoke coverage proving `POST /api/v1/integrations/gmail/sync`
+  persists the attachment as `Source`, `DocumentChunk`, and
+  `DocumentParserRun` records with parent source id, participants, MIME type,
+  content signature, parser status, document version, and revision id.
+- Verified the sync response reports `parser_status_counts` for attachment
+  metadata, making the demo path show parsed vs metadata-only evidence quality.
+
+Portfolio angle:
+
+- Makes the existing Gmail attachment boundary visible in the normal SQLite
+  smoke workflow instead of only in connector unit tests.
+- Shows that attachment evidence enters the same versioned document ingestion,
+  parser audit, Review Queue, and Mail/Document Agent evidence pipeline without
+  live Gmail API calls or paid parsing.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_mock_connectors.py backend/tests/test_mail_document_agent_api.py -q
+```
+
+Result: 8 passed.
+
+```powershell
+uv run ruff check backend/app/connectors/mock.py backend/app/seeds/mock_sources.py backend/tests/test_mock_connectors.py backend/tests/test_mail_document_agent_api.py
+```
+
+Result: all checks passed.
+
+```powershell
+uv run pytest backend/tests/test_mock_connectors.py backend/tests/test_mail_document_agent_api.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_document_ingestion_service.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_rag_indexing.py -q
+```
+
+Result: 49 passed.
+
+## Parser Quality UI Visibility
+
+Recorded on 2026-05-11.
+
+- Added frontend `parser_status_counts` typing for connector sync and RAG
+  reindex responses.
+- Integrations sync results now show a Parser quality breakdown when a
+  connector reports parsed, metadata-only, or unsupported source counts.
+- RAG reindex dry-run preview now shows parser quality counts next to the
+  embedding budget estimate, so operators can see whether indexed evidence is
+  body-parsed or metadata-only before approving a write job.
+- Added Playwright coverage for Gmail parser quality sync results and RAG
+  parser quality preview rendering.
+
+Portfolio angle:
+
+- Moves parser quality from backend-only metadata into visible operator UX.
+- Helps demonstrate that attachment and document evidence can be reviewable
+  without overstating unsupported or metadata-only files as fully parsed
+  company knowledge.
+
+Verification:
+
+```powershell
+npm.cmd exec tsc -- --noEmit
+```
+
+Result: passed.
+
+```powershell
+npm.cmd run build
+```
+
+Result: passed.
+
+## Document Golden Dataset Expansion
+
+Recorded on 2026-05-11.
+
+- Expanded connector golden payloads to cover three distinct Google Drive file types:
+  - Google Docs (pplication/vnd.google-apps.document) with a mocked text export, successfully reporting \parser_status=\parsed\.
+  - Google Sheets (pplication/vnd.google-apps.spreadsheet), demonstrating \parser_status=\metadata_only\.
+  - HWP (pplication/haansofthwp), demonstrating \parser_status=\unsupported\.
+- Updated GoldenGoogleClient to simulate \drive_file_text_export\ when testing textual body exports from Google Drive.
+- Adjusted \_google_event\ helpers to expect a collection of events correctly matching test fixtures.
+
+Portfolio angle:
+
+- Demonstrates robust end-to-end evidence parsing scenarios from raw Connector JSON into robust parser boundaries without risking false positives.
+- Provides immediate regression coverage against Google Drive MIME mapping decisions explicitly added in prior checkpoints.
+
+Verification:
+
+\\\powershell
+uv run pytest backend/tests/test_connector_golden_dataset.py -q
+\\\
+
+Result: 1 passed.
+
+\\\powershell
+uv run pytest backend/tests -q
+\\\
+
+Result: all passed, 1 skipped.
+
