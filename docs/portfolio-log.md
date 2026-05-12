@@ -6,6 +6,23 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-12 Smoke-Only Demo Data Boundary
+
+- Changed the default runtime posture so demo/mock content is not seeded unless
+  `PARAWORKS_SEED_DEMO_DATA=true`.
+- Kept `scripts/start-smoke.ps1` as the smoke/demo entrypoint that explicitly
+  enables demo mode and demo seed data.
+- Updated the pgvector Docker-backed dev startup path to run with
+  `PARAWORKS_DEMO_MODE=false` and `PARAWORKS_SEED_DEMO_DATA=false`, so an empty
+  database remains empty until Slack or Google connectors are installed and
+  synced.
+- Stopped the Review page from showing local fallback review items when the API
+  cannot return real items.
+- Changed Dashboard, Projects, and Timeline sample-only surfaces to render empty
+  states in production-like mode instead of hard-coded ORION/Nova/Atlas data.
+- Verification: `uv run pytest backend/tests -v` passed with 297 passed and 1
+  skipped; `npm run build` passed from `frontend`.
+
 ## 2026-05-11 Sidebar and Workspace Navigation Update
 
 - Simplified the main sidebar by removing separate Decision, History, and

@@ -130,7 +130,7 @@ function formatCost(value: unknown) {
 }
 
 export default function ReviewPage() {
-  const [items, setItems] = useState<ReviewItem[]>(FALLBACK_REVIEW_ITEMS);
+  const [items, setItems] = useState<ReviewItem[]>([]);
   const [editingId, setEditingId] = useState<number>();
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
@@ -157,7 +157,7 @@ export default function ReviewPage() {
       setPreviews(Object.fromEntries(previewPairs));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "검토 항목을 불러오지 못했습니다.");
-      setItems(FALLBACK_REVIEW_ITEMS);
+      setItems([]);
     } finally {
       setLoading(false);
     }

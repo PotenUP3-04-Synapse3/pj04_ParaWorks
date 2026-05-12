@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
 from backend.app.core.profile import profile_avatar_url
-from backend.app.core.session_auth import authenticate_session_cookie, serialize_auth_user
+from backend.app.core.session_auth import (
+    authenticate_session_cookie,
+    serialize_auth_user,
+)
 from backend.app.db.session import get_db
 
 
@@ -39,6 +43,24 @@ USERS = {
         'Workspace Administrator',
         'Platform',
     ),
+    'kjw4work': DemoUser(
+        'kjw4work',
+        'kjw4work@gmail.com',
+        'admin',
+        {'public', 'internal', 'restricted'},
+        'Kim Jongwoo',
+        'COO',
+        'platform',
+    ),
+    'yonghee199702': DemoUser(
+        'yonghee199702',
+        'yonghee199702@gmail.com',
+        'admin',
+        {'public', 'internal', 'restricted'},
+        'Kim Yonghee',
+        'CTO',
+        'platform',
+    ),
     'hanvv-employee': DemoUser(
         'google-hanvv-employee',
         'hanvv3@koreacu.ac.kr',
@@ -57,31 +79,13 @@ USERS = {
         'Product Manager',
         'Product',
     ),
-    'employee-jun': DemoUser(
-        'employee-jun',
-        'jun@paraworks.com',
-        'employee',
-        {'public', 'internal'},
-        'Lee Jun',
-        'Backend Engineer',
-        'Engineering',
-    ),
-    'employee-soyeon': DemoUser(
-        'employee-soyeon',
-        'soyeon@paraworks.com',
-        'employee',
-        {'public'},
-        'Park Soyeon',
-        'Operations Associate',
-        'Operations',
-    ),
 }
 
 
 def get_demo_user(
     request: Request,
-    db: Session = Depends(get_db),
-    x_demo_user: str = Header(default='admin'),
+    db: Annotated[Session, Depends(get_db)],
+    x_demo_user: Annotated[str, Header()] = 'admin',
 ) -> DemoUser:
     settings = get_settings()
     session_user = authenticate_session_cookie(request.cookies.get(settings.auth_session_cookie_name), db, settings)
@@ -144,7 +148,7 @@ def list_demo_users() -> list[dict]:
     return [serialize_demo_user(user) for user in USERS.values()]
 
 
-def require_admin_user(user: DemoUser = Depends(get_demo_user)) -> DemoUser:
+def require_admin_user(user: Annotated[DemoUser, Depends(get_demo_user)]) -> DemoUser:
     if user.role != 'admin':
         raise HTTPException(status_code=403, detail='Admin permission required.')
     return user

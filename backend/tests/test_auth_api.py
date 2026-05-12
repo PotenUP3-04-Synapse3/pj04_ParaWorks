@@ -29,7 +29,7 @@ def test_login_accepts_employee_dummy_account(client) -> None:
     payload = response.json()
     assert payload['user']['role'] == 'reviewer'
     assert payload['user']['department'] == 'Product'
-    assert payload['user']['avatar_url'] == '/profile/mina.png'
+    assert payload['user']['avatar_url'] == '/profile/mina%40paraworks.com.png'
     assert 'internal' in payload['user']['permission_levels']
 
 
@@ -39,10 +39,16 @@ def test_login_options_include_requested_google_seed_accounts(client) -> None:
     assert response.status_code == 200
     users_by_email = {user['email']: user for user in response.json()['users']}
     assert users_by_email['hanvv3@gmail.com']['role'] == 'admin'
-    assert users_by_email['hanvv3@gmail.com']['avatar_url'] is None
+    assert users_by_email['hanvv3@gmail.com']['avatar_url'] == '/profile/hanvv3%40gmail.com.jpg'
     assert 'restricted' in users_by_email['hanvv3@gmail.com']['permission_levels']
+    assert users_by_email['kjw4work@gmail.com']['role'] == 'admin'
+    assert users_by_email['kjw4work@gmail.com']['avatar_url'] == '/profile/kjw4work%40gmail.com.jpg'
+    assert users_by_email['kjw4work@gmail.com']['title'] == 'COO'
+    assert users_by_email['yonghee199702@gmail.com']['role'] == 'admin'
+    assert users_by_email['yonghee199702@gmail.com']['avatar_url'] == '/profile/yonghee199702%40gmail.com.jpg'
+    assert users_by_email['yonghee199702@gmail.com']['title'] == 'CTO'
     assert users_by_email['hanvv3@koreacu.ac.kr']['role'] == 'employee'
-    assert users_by_email['hanvv3@koreacu.ac.kr']['avatar_url'] == '/profile/hanvv3.png'
+    assert users_by_email['hanvv3@koreacu.ac.kr']['avatar_url'] == '/profile/hanvv3%40koreacu.ac.kr.png'
     assert 'internal' in users_by_email['hanvv3@koreacu.ac.kr']['permission_levels']
 
 
@@ -53,6 +59,35 @@ def test_login_accepts_requested_admin_google_seed_account(client) -> None:
     payload = response.json()
     assert payload['user']['email'] == 'hanvv3@gmail.com'
     assert payload['user']['role'] == 'admin'
+    assert payload['user']['avatar_url'] == '/profile/hanvv3%40gmail.com.jpg'
+
+
+def test_login_accepts_requested_kim_jongwoo_google_seed_account(client) -> None:
+    response = client.post('/api/v1/auth/login', json={'email': 'kjw4work@gmail.com'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['user']['id'] == 'kjw4work'
+    assert payload['user']['email'] == 'kjw4work@gmail.com'
+    assert payload['user']['role'] == 'admin'
+    assert payload['user']['name'] == 'Kim Jongwoo'
+    assert payload['user']['title'] == 'COO'
+    assert payload['user']['department'] == 'platform'
+    assert payload['user']['avatar_url'] == '/profile/kjw4work%40gmail.com.jpg'
+
+
+def test_login_accepts_requested_kim_yonghee_google_seed_account(client) -> None:
+    response = client.post('/api/v1/auth/login', json={'email': 'yonghee199702@gmail.com'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['user']['id'] == 'yonghee199702'
+    assert payload['user']['email'] == 'yonghee199702@gmail.com'
+    assert payload['user']['role'] == 'admin'
+    assert payload['user']['name'] == 'Kim Yonghee'
+    assert payload['user']['title'] == 'CTO'
+    assert payload['user']['department'] == 'platform'
+    assert payload['user']['avatar_url'] == '/profile/yonghee199702%40gmail.com.jpg'
 
 
 def test_login_accepts_requested_employee_google_seed_account(client) -> None:
@@ -73,11 +108,13 @@ def test_admin_can_list_demo_users(client) -> None:
     assert 'admin@paraworks.com' in emails
     assert {
         'hanvv3@gmail.com',
+        'kjw4work@gmail.com',
+        'yonghee199702@gmail.com',
         'hanvv3@koreacu.ac.kr',
         'mina@paraworks.com',
-        'jun@paraworks.com',
-        'soyeon@paraworks.com',
     } <= emails
+    assert 'jun@paraworks.com' not in emails
+    assert 'soyeon@paraworks.com' not in emails
 
 
 def test_employee_cannot_list_demo_users(client) -> None:

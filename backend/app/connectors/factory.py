@@ -18,6 +18,10 @@ from backend.app.core.config import Settings
 from backend.app.models import IntegrationConnection
 
 
+class ConnectorNotConfiguredError(RuntimeError):
+    pass
+
+
 def get_configured_connector(connector_type: str, settings: Settings) -> Connector:
     if (
         connector_type == 'slack'
@@ -32,6 +36,11 @@ def get_configured_connector(connector_type: str, settings: Settings) -> Connect
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
+        )
+
+    if not settings.paraworks_demo_mode:
+        raise ConnectorNotConfiguredError(
+            f'{connector_type} connector is not connected. Complete OAuth or configure credentials before syncing.'
         )
 
     if connector_type not in CONNECTOR_TYPES:

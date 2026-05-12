@@ -25,7 +25,7 @@ type Project = {
   tasks: Task[];
 };
 
-const projects: Project[] = [
+const projectSeedData: Project[] = [
   {
     id: "orion",
     name: "프로젝트 ORION",
@@ -80,13 +80,32 @@ const projects: Project[] = [
 const views = ["개요", "간트", "일정표", "보드", "목록"] as const;
 type View = (typeof views)[number];
 
+const projects: Project[] = [];
+
 export default function ProjectsPage() {
-  const [selectedProjectId, setSelectedProjectId] = useState(projects[0].id);
+  const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id ?? "");
   const [view, setView] = useState<View>("간트");
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
     [selectedProjectId],
   );
+  if (!selectedProject) {
+    return (
+      <div className="reference-dashboard space-y-4">
+        <section className="page-heading reference-heading">
+          <div>
+            <p className="text-[13px] font-bold text-[var(--primary-dark)]">Project Workspace</p>
+            <h1>프로젝트</h1>
+            <p>Slack 또는 Google을 연동하면 실제 프로젝트 근거가 표시됩니다.</p>
+          </div>
+          <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
+            <FolderKanban className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+            0개 프로젝트
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="reference-dashboard space-y-4">

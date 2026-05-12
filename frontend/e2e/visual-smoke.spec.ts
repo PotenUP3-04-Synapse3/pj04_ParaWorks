@@ -96,7 +96,7 @@ test("demo login switches the active API user", async ({ page }) => {
 });
 
 test("admin console is blocked for employee accounts", async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "employee-soyeon"));
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "google-hanvv-employee"));
   await page.goto("/admin");
 
   await expect(page.getByRole("heading", { name: "관리자 권한 필요" })).toBeVisible();
@@ -109,8 +109,11 @@ test("admin console lists demo employees and permission levels", async ({ page }
 
   await expect(page.getByRole("heading", { name: "관리자 콘솔" })).toBeVisible();
   await expect(page.getByText("admin@paraworks.com").first()).toBeVisible();
+  await expect(page.getByText("kjw4work@gmail.com")).toBeVisible();
+  await expect(page.getByText("yonghee199702@gmail.com")).toBeVisible();
   await expect(page.getByText("mina@paraworks.com")).toBeVisible();
-  await expect(page.getByText("soyeon@paraworks.com")).toBeVisible();
+  await expect(page.getByText("jun@paraworks.com")).toHaveCount(0);
+  await expect(page.getByText("soyeon@paraworks.com")).toHaveCount(0);
   await expect(page.getByText("restricted").first()).toBeVisible();
 });
 

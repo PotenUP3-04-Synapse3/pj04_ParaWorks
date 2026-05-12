@@ -87,7 +87,7 @@ try {
         return
     }
 
-    $backendCommand = "`$env:DATABASE_URL='$DatabaseUrl'; `$env:REDIS_URL='redis://127.0.0.1:$RedisPort/0'; `$env:PARAWORKS_DEMO_MODE='true'; uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort"
+    $backendCommand = "`$env:DATABASE_URL='$DatabaseUrl'; `$env:REDIS_URL='redis://127.0.0.1:$RedisPort/0'; `$env:PARAWORKS_DEMO_MODE='false'; `$env:PARAWORKS_SEED_DEMO_DATA='false'; uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort"
     $frontendCommand = "npm.cmd run dev -- --hostname localhost --port $FrontendPort"
 
     $backend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory $repoRoot -ArgumentList @("-NoProfile", "-Command", $backendCommand)
