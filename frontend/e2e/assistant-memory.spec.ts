@@ -132,6 +132,26 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
     });
   });
 
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const expectedRoutes = new Set([
+      "GET /api/v1/auth/me",
+      "GET /api/v1/assistant/conversations",
+      "POST /api/v1/assistant/conversations",
+      "GET /api/v1/assistant/conversations/10/messages",
+      "POST /api/v1/assistant/conversations/10/messages",
+      "GET /api/v1/rag/indexing/summary",
+    ]);
+
+    if (expectedRoutes.has(`${request.method()} ${url.pathname}`)) {
+      await route.fallback();
+      return;
+    }
+
+    throw new Error(`Unexpected API call in assistant memory test: ${request.method()} ${url.pathname}`);
+  });
+
   await page.goto("/search");
 
   await expect(page.getByRole("heading", { level: 1, name: "AI 비서와 대화" })).toBeVisible();
@@ -144,10 +164,6 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
   await expect(page.getByText("다음 단계는 회의 전 Redis 작업 상태를 공유하는 것입니다.")).toBeVisible();
 
   const body = page.locator("body");
-  await expect(body).not.toContainText("token");
-  await expect(body).not.toContainText("cache");
+  await expect(body).not.toContainText(/cost|token|cache|토큰|비용|캐시/i);
   await expect(body).not.toContainText("$");
-  await expect(body).not.toContainText("토큰");
-  await expect(body).not.toContainText("비용");
-  await expect(body).not.toContainText("캐시");
 });
