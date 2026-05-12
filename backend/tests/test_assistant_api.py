@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -152,6 +153,39 @@ def test_assistant_rejects_blank_rag_answer_without_storing_assistant_message(
     assert turn_response.status_code == 422
     assert turn_response.json()['detail'] == 'assistant message content is required'
     assert [message.role for message in db_session.query(AssistantMessage).all()] == ['user']
+
+
+def test_assistant_preserves_user_message_when_rag_answer_fails(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def failing_answer(**kwargs):
+        raise RuntimeError('rag unavailable')
+
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', failing_answer)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': 'RAG failure'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    with pytest.raises(RuntimeError, match='rag unavailable'):
+        client.post(
+            f'/api/v1/assistant/conversations/{conversation_id}/messages',
+            json={'content': 'Redis job state'},
+            headers={'X-Demo-User': 'viewer'},
+        )
+
+    messages_response = client.get(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert messages_response.status_code == 200
+    messages = messages_response.json()['messages']
+    assert [message['role'] for message in messages] == ['user']
+    assert messages[0]['content'] == 'Redis job state'
 
 
 def test_assistant_conversations_list_is_user_scoped(client: TestClient) -> None:
