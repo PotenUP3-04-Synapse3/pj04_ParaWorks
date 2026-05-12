@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api/client";
 import type {
   AssistantConversation,
@@ -48,6 +48,9 @@ function SearchPageContent() {
   const [booting, setBooting] = useState(true);
   const [error, setError] = useState<string>();
   const [initialQuerySent, setInitialQuerySent] = useState(false);
+  const loadingRef = useRef(false);
+  const loadMessagesRequestRef = useRef(0);
+  const activeConversationIdRef = useRef<number | undefined>(undefined);
 
   const selectLatestAssistantEvidence = useCallback((nextMessages: AssistantMessage[]) => {
     const latestAssistant = [...nextMessages].reverse().find((message) => message.role === "assistant");
@@ -62,30 +65,41 @@ function SearchPageContent() {
   }, []);
 
   const createConversation = useCallback(async (title?: string) => {
+    const requestId = ++loadMessagesRequestRef.current;
     const response = await apiPost<AssistantConversationCreatedResponse>("/api/v1/assistant/conversations", {
       title: title?.trim() || "새 대화",
     });
-    setActiveConversation(response.conversation);
-    setMessages([]);
-    setSelectedEvidenceMessageId(undefined);
-    moveConversationToTop(response.conversation);
+    if (requestId === loadMessagesRequestRef.current) {
+      activeConversationIdRef.current = response.conversation.id;
+      setActiveConversation(response.conversation);
+      setMessages([]);
+      setSelectedEvidenceMessageId(undefined);
+      moveConversationToTop(response.conversation);
+    }
     return response.conversation;
   }, [moveConversationToTop]);
 
   const loadMessages = useCallback(async (conversation: AssistantConversation) => {
+    const requestId = ++loadMessagesRequestRef.current;
     setError(undefined);
+    activeConversationIdRef.current = conversation.id;
     setActiveConversation(conversation);
     try {
       const response = await apiGet<AssistantMessagesResponse>(
         `/api/v1/assistant/conversations/${conversation.id}/messages`,
       );
+      if (requestId !== loadMessagesRequestRef.current) return [];
+
+      activeConversationIdRef.current = response.conversation.id;
       setActiveConversation(response.conversation);
       setMessages(response.messages);
       moveConversationToTop(response.conversation);
       selectLatestAssistantEvidence(response.messages);
       return response.messages;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "대화 내용을 불러오지 못했습니다.");
+      if (requestId === loadMessagesRequestRef.current) {
+        setError(caught instanceof Error ? caught.message : "대화 내용을 불러오지 못했습니다.");
+      }
       return [];
     }
   }, [moveConversationToTop, selectLatestAssistantEvidence]);
@@ -110,8 +124,9 @@ function SearchPageContent() {
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmedContent = content.trim();
-    if (!trimmedContent) return;
+    if (!trimmedContent || loadingRef.current) return;
 
+    loadingRef.current = true;
     setLoading(true);
     setError(undefined);
     try {
@@ -120,22 +135,39 @@ function SearchPageContent() {
         `/api/v1/assistant/conversations/${conversation.id}/messages`,
         { content: trimmedContent },
       );
-      const nextMessages = [...messages, response.user_message, response.assistant_message];
+      if (activeConversationIdRef.current !== conversation.id) return;
+
+      activeConversationIdRef.current = response.conversation.id;
       setActiveConversation(response.conversation);
-      setMessages(nextMessages);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        response.user_message,
+        response.assistant_message,
+      ]);
       setSelectedEvidenceMessageId(response.assistant_message.id);
       moveConversationToTop(response.conversation);
       setQuery("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "메시지를 보내지 못했습니다.");
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  }, [activeConversation, createConversation, messages, moveConversationToTop]);
+  }, [activeConversation, createConversation, moveConversationToTop]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (loading) return;
     void sendMessage(query);
+  }
+
+  async function handleNewConversation() {
+    try {
+      setError(undefined);
+      await createConversation("새 대화");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "새 대화를 만들지 못했습니다.");
+    }
   }
 
   useEffect(() => {
@@ -205,7 +237,7 @@ function SearchPageContent() {
               type="button"
               title="새 대화"
               aria-label="새 대화"
-              onClick={() => void createConversation("새 대화")}
+              onClick={() => void handleNewConversation()}
               className="row-action h-9 w-9 p-0"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -336,7 +368,7 @@ function AssistantBubble({
             <span className="badge amber">숨겨진 근거 {message.hidden_match_count.toLocaleString()}개</span>
           ) : null}
         </div>
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        <p className="whitespace-pre-wrap break-words">{message.content}</p>
         {isAssistant ? (
           <button
             type="button"
