@@ -8,11 +8,16 @@ import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
 
-SLACK_REQUIRED_HISTORY_SCOPES = (
+SLACK_REQUIRED_SCOPES = (
     'channels:history',
     'groups:history',
     'im:history',
     'mpim:history',
+    'channels:read',
+    'groups:read',
+    'im:read',
+    'mpim:read',
+    'users:read',
 )
 
 
@@ -147,7 +152,7 @@ class SlackConnector:
             display_name='Slack',
             mode='live',
             auth_type='oauth',
-            required_scopes=SLACK_REQUIRED_HISTORY_SCOPES,
+            required_scopes=SLACK_REQUIRED_SCOPES,
             sync_strategy='incremental',
             cost_policy='Fetch source deltas first; embed only changed chunks after review approval.',
         )
@@ -162,7 +167,11 @@ class SlackConnector:
         channel_ids = self.config.channel_ids
         if not channel_ids:
             all_channels = self.client.conversations_list()
-            channel_ids = [c['id'] for c in all_channels if c.get('is_member')]
+            # public/private 채널은 is_member로 확인하고, DM(im/mpim)은 is_im/is_mpim으로 확인합니다.
+            channel_ids = [
+                c['id'] for c in all_channels 
+                if c.get('is_member') or c.get('is_im') or c.get('is_mpim')
+            ]
             
         for channel_id in channel_ids:
             oldest = latest_timestamps_by_partition.get(channel_id)
@@ -227,7 +236,7 @@ class SlackConnector:
                 'thread_parent_text': parent_text,
                 'thread_reply_index': reply_index,
                 'thread_context_window': 'parent_plus_reply' if parent_text else 'single_message',
-                'required_scopes': list(SLACK_REQUIRED_HISTORY_SCOPES),
+                'required_scopes': list(SLACK_REQUIRED_SCOPES),
             },
         )
 

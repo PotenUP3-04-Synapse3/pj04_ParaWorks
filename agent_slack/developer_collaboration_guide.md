@@ -35,6 +35,40 @@
 - **확정 데이터 활용**: 리뷰 큐에서 승인된 슬랙 지식은 `DecisionRecord` 또는 `TimelineEvent` 테이블에 저장됩니다.
 - **RAG 활용**: 승인된 데이터는 김종우님이 관리하시는 벡터 DB 인덱싱 대상에 포함되므로, 데이터 형식(JSON)에 대한 정렬이 필요할 때 언제든 협의 가능합니다.
 
+### 3.3 데이터 인터페이스 정의 (JSON Payload Example)
+Slack Agent의 분석 결과는 아래와 같은 구조화된 데이터로 반환됩니다. 모든 데이터 필드는 `backend/app/agent_runtime/contracts.py`에 정의된 규격을 준수합니다.
+
+```json
+{
+  "candidates": [
+    {
+      "item_type": "decision_record",
+      "title": "벡터 DB 도입 결정",
+      "summary": "금일 회의를 통해 벡터 DB는 pgvector를 사용하기로 확정함.",
+      "source_links": [
+        "https://workspace.slack.com/archives/C123/p1715000001"
+      ],
+      "source_snippets": [
+        "[10:05] 김용희: 벡터 DB는 pgvector로 가는 게 좋겠네요."
+      ],
+      "confidence_score": 0.85,
+      "permission_level": "internal",
+      "uncertainty_reason": null
+    }
+  ],
+  "run_cost": {
+    "model_name": "gpt-4o-mini",
+    "token_usage": {
+      "input_tokens": 1200,
+      "output_tokens": 350,
+      "total_tokens": 1550
+    },
+    "estimated_cost_usd": 0.00039,
+    "cache_hit": false
+  }
+}
+```
+
 ---
 
 ## 4. 공통 준수 사항

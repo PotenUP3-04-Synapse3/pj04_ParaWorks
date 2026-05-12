@@ -33,7 +33,24 @@ def mask_pii(text: str) -> str:
 class CandidateItem(BaseModel):
     title: str = Field(description="지식의 명확한 제목")
     summary: str = Field(description="상세 내용 요약")
-    item_type: str = Field(description="'history_event', 'decision_record', 'todo' 중 하나")
+    
+    # 차원 1: 업무 성격 (분류)
+    category: str = Field(
+        description="업무 분류: 'Project'(프로젝트), 'Operations'(운영/유지보수), 'Administration'(공통/지원), 'Ad-hoc'(단발성 이슈) 중 하나"
+    )
+    
+    # 차원 2: 지식 유형
+    item_type: str = Field(
+        description="지식 유형: 'Decision'(결정사항), 'Todo'(할 일), 'Record'(기록/공유) 중 하나"
+    )
+    
+    # 차원 3: 구체적 토픽/프로젝트명
+    topic_tag: str = Field(description="구체적인 프로젝트명이나 서비스명 (예: '홈페이지 리뉴얼', '인사정책')")
+    
+    # 대시보드 할 일 관리를 위한 추가 정보
+    assignee: Optional[str] = Field(description="할 일(Todo)인 경우 담당자 이름 (없으면 null)")
+    due_date: Optional[str] = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
+    
     source_ts_list: List[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
     source_snippets: List[str] = Field(description="증거가 되는 원문 일부")
 
@@ -192,7 +209,21 @@ def extract_candidate_node(state: SlackAgentState):
         # 여기서는 객체 결과만 받습니다.
         structured_llm = llm.with_structured_output(CandidateList)
         
-        prompt = f"다음 요약본을 바탕으로 보존할 가치가 있는 기업 지식들을 추출하세요. source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으세요:\n{state.summary}"
+        prompt = f"""
+다음 요약본을 바탕으로 보존할 가치가 있는 기업 지식들을 추출하세요. 
+각 항목은 반드시 다음의 카테고리 기준에 따라 분류해야 합니다:
+
+1. Project (프로젝트): 명확한 기한과 목표가 있는 신규 기획/개발 건 (예: 홈페이지 리뉴얼)
+2. Operations (운영/유지보수): 상시 발생하는 서비스 운영 및 관리 (예: DB 모니터링, 정기 배포)
+3. Administration (공통/지원): HR, 재무, 사내 IT 정책 등 지원 업무 (예: SW 라이선스 갱신 논의)
+4. Ad-hoc (단발성 이슈): 특정 카테고리에 묶기 힘든 일회성 문제 (예: 슬랙 로그인 장애 대응)
+
+특히 'Todo' 유형의 경우, 대화 맥락에서 파악 가능한 '담당자(assignee)'와 '마감 기한(due_date)'을 반드시 포함하세요. 
+마감 기한은 YYYY-MM-DD 형식으로 변환하되, 연도가 없으면 현재 연도(2026년)를 기준으로 합니다.
+
+source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으세요:
+{state.summary}
+"""
         parsed_result = structured_llm.invoke(prompt)
         
         if not parsed_result or not hasattr(parsed_result, 'candidate_items'):
@@ -222,7 +253,14 @@ def extract_candidate_node(state: SlackAgentState):
                 source_links=links,
                 source_snippets=item.source_snippets,
                 confidence_score=0.85,
-                permission_level="internal"
+                permission_level="internal",
+                payload_fields={
+                    "category": item.category,
+                    "topic_tag": item.topic_tag,
+                    "original_item_type": item.item_type,
+                    "assignee": item.assignee or "미지정",
+                    "due_date": item.due_date or "기한없음"
+                }
             ))
             
         return {"candidates": final_candidates, "total_prompt_tokens": state.total_prompt_tokens + approx_pt, "total_completion_tokens": state.total_completion_tokens + approx_ct}
@@ -243,7 +281,7 @@ def extract_candidate_node(state: SlackAgentState):
         return {
             "candidates": [ReviewCandidate(
                 title="Fallback Extracted Multi-Item",
-                summary="제미나이 폴백 작동: " + str(res_text)[:100],
+                summary="제미나이 폴백 작동: " + res_text[:100],
                 item_type="history_event",
                 source_links=[],
                 source_snippets=[state.processed_text[:100]],
@@ -294,4 +332,3 @@ def process_daily_slack_sync(channel_id: str, messages: List[dict]):
     # 결과 반환 시 비용 객체 추가
     final_state["run_cost"] = agent_run_cost
     return final_state
-

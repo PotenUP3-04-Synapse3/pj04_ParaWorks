@@ -9,16 +9,11 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from backend.app.connectors.slack import SLACK_REQUIRED_HISTORY_SCOPES, SlackApiError
+from backend.app.connectors.slack import SLACK_REQUIRED_SCOPES, SlackApiError
 from backend.app.core.config import Settings
 from backend.app.models import IntegrationConnection
 
-SLACK_OAUTH_BOT_SCOPES = (
-    *SLACK_REQUIRED_HISTORY_SCOPES,
-    'channels:read',
-    'groups:read',
-    'users:read',
-)
+SLACK_OAUTH_BOT_SCOPES = SLACK_REQUIRED_SCOPES
 
 
 @dataclass(frozen=True)
