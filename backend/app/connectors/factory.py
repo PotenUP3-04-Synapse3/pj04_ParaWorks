@@ -23,7 +23,6 @@ def get_configured_connector(connector_type: str, settings: Settings) -> Connect
         connector_type == 'slack'
         and not settings.paraworks_demo_mode
         and settings.slack_bot_token
-        and settings.slack_channel_ids.strip()
     ):
         channel_ids = _parse_csv(settings.slack_channel_ids)
         return SlackConnector(
@@ -51,7 +50,6 @@ def get_sync_connector(
     if (
         connector_type == 'slack'
         and not settings.paraworks_demo_mode
-        and settings.slack_channel_ids.strip()
     ):
         installed_connector = _get_installed_slack_connector(
             settings=settings,
@@ -65,7 +63,6 @@ def get_sync_connector(
         connector_type == 'slack'
         and not settings.paraworks_demo_mode
         and settings.slack_bot_token
-        and settings.slack_channel_ids.strip()
         and slack_channel_ids_override is not None
     ):
         return SlackConnector(
