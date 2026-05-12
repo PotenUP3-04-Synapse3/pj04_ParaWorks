@@ -1,35 +1,39 @@
 import { expect, test } from "@playwright/test";
 
-test("search page behaves as a persisted AI assistant without cost labels", async ({ page }) => {
-  const conversations = [
-    {
-      id: 10,
-      title: "Redis 질문",
-      summary: "Redis 작업 상태 대화",
-      created_at: "2026-05-12T01:00:00+00:00",
-      updated_at: "2026-05-12T01:00:00+00:00",
-    },
-  ];
+test("search page behaves like a persisted assistant with compact history and folded evidence", async ({ page }) => {
+  const usedConversation = {
+    id: 10,
+    title: "Redis 작업 상태",
+    summary: "이 요약 문장은 히스토리 목록에 직접 노출되면 안 됩니다.",
+    created_at: "2026-05-12T01:00:00+00:00",
+    updated_at: "2026-05-12T01:00:00+00:00",
+  };
+  const emptyConversation = {
+    id: 11,
+    title: "새 대화",
+    summary: null,
+    created_at: "2026-05-12T01:03:00+00:00",
+    updated_at: "2026-05-12T01:03:00+00:00",
+  };
+  const manyCitations = Array.from({ length: 12 }, (_, index) => ({
+    source_id: `gmail-redis-${index + 1}`,
+    source_url: `https://gmail.mock/redis-${index + 1}`,
+    source_type: "gmail",
+    permission_level: "internal",
+    source_snippet: `세부 근거 ${index + 1}: Redis 작업 상태 기록입니다.`,
+    relevance_score: 1 - index * 0.02,
+    matched_terms: ["redis"],
+  }));
   const messages = [
     {
       id: 100,
       conversation_id: 10,
       role: "assistant",
-      content: "Redis는 일시적인 작업 상태 공유에 사용됩니다.",
-      citations: [
-        {
-          source_id: "gmail-redis",
-          source_url: "https://gmail.mock/redis",
-          source_type: "gmail",
-          permission_level: "internal",
-          source_snippet: "Redis 작업 상태 근거",
-          relevance_score: 1,
-          matched_terms: ["redis"],
-        },
-      ],
-      source_ids: ["gmail-redis"],
-      source_links: ["https://gmail.mock/redis"],
-      source_snippets: ["Redis 작업 상태 근거"],
+      content: "Redis는 임시 작업 상태를 빠르게 공유하는 용도로 쓰입니다.",
+      citations: manyCitations,
+      source_ids: manyCitations.map((citation) => citation.source_id),
+      source_links: manyCitations.map((citation) => citation.source_url),
+      source_snippets: manyCitations.map((citation) => citation.source_snippet),
       permission_level: "internal",
       hidden_match_count: 0,
       permission_notice: null,
@@ -38,6 +42,7 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
       created_at: "2026-05-12T01:00:00+00:00",
     },
   ];
+  let createConversationPostCount = 0;
 
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
@@ -58,18 +63,29 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
 
   await page.route("**/api/v1/assistant/conversations", async (route) => {
     if (route.request().method() === "GET") {
-      await route.fulfill({ contentType: "application/json", json: { conversations } });
+      await route.fulfill({
+        contentType: "application/json",
+        json: { conversations: [usedConversation, emptyConversation] },
+      });
       return;
     }
 
-    await route.fulfill({ contentType: "application/json", json: { conversation: conversations[0] } });
+    createConversationPostCount += 1;
+    await route.fulfill({ contentType: "application/json", json: { conversation: emptyConversation } });
   });
 
   await page.route("**/api/v1/assistant/conversations/10/messages", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { conversation: usedConversation, messages },
+    });
+  });
+
+  await page.route("**/api/v1/assistant/conversations/11/messages", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         contentType: "application/json",
-        json: { conversation: conversations[0], messages },
+        json: { conversation: emptyConversation, messages: [] },
       });
       return;
     }
@@ -77,12 +93,12 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
     await route.fulfill({
       contentType: "application/json",
       json: {
-        conversation: conversations[0],
+        conversation: { ...emptyConversation, title: "기획팀 회의 안내" },
         user_message: {
           id: 101,
-          conversation_id: 10,
+          conversation_id: 11,
           role: "user",
-          content: "그 다음 할 일은?",
+          content: "기획팀 회의 일정을 정리해줘",
           citations: [],
           source_ids: [],
           source_links: [],
@@ -92,12 +108,23 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
           permission_notice: null,
           agent_run_id: null,
           metadata: {},
-          created_at: "2026-05-12T01:01:00+00:00",
+          created_at: "2026-05-12T01:04:00+00:00",
         },
         assistant_message: {
-          ...messages[0],
           id: 102,
-          content: "다음 단계는 회의 전 Redis 작업 상태를 공유하는 것입니다.",
+          conversation_id: 11,
+          role: "assistant",
+          content: "기획팀 회의는 목요일 오전 일정으로 정리하면 좋습니다.",
+          citations: [],
+          source_ids: [],
+          source_links: [],
+          source_snippets: [],
+          permission_level: "internal",
+          hidden_match_count: 0,
+          permission_notice: null,
+          agent_run_id: 78,
+          metadata: {},
+          created_at: "2026-05-12T01:04:01+00:00",
         },
       },
     });
@@ -107,7 +134,7 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
     await route.fulfill({
       contentType: "application/json",
       json: {
-        state_counts: { indexed: 1 },
+        state_counts: { indexed: 12 },
         latest_jobs: [
           {
             job_id: "job-1",
@@ -115,7 +142,7 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
             status: "complete",
             message: "indexed",
             progress_pct: 100,
-            indexed_count: 1,
+            indexed_count: 12,
             skipped_count: 0,
             saved_embedding_calls: 0,
             updated_at: "2026-05-12T01:00:00+00:00",
@@ -140,7 +167,8 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
       "GET /api/v1/assistant/conversations",
       "POST /api/v1/assistant/conversations",
       "GET /api/v1/assistant/conversations/10/messages",
-      "POST /api/v1/assistant/conversations/10/messages",
+      "GET /api/v1/assistant/conversations/11/messages",
+      "POST /api/v1/assistant/conversations/11/messages",
       "GET /api/v1/rag/indexing/summary",
     ]);
 
@@ -154,14 +182,24 @@ test("search page behaves as a persisted AI assistant without cost labels", asyn
 
   await page.goto("/search");
 
-  await expect(page.getByRole("heading", { level: 1, name: "AI 비서와 대화" })).toBeVisible();
-  await expect(page.getByText("Redis는 일시적인 작업 상태 공유에 사용됩니다.")).toBeVisible();
-  await page.getByRole("button", { name: "근거 보기" }).click();
-  await expect(page.getByText("Redis 작업 상태 근거").first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "AI 비서" })).toBeVisible();
+  await expect(page.getByText("Redis는 임시 작업 상태를 빠르게 공유하는 용도로 쓰입니다.")).toBeVisible();
+  const history = page.getByLabel("대화 목록");
+  await expect(history).toContainText("Redis 작업 상태");
+  await expect(history).not.toContainText("이 요약 문장");
 
-  await page.getByRole("textbox", { name: "AI 비서에게 질문" }).fill("그 다음 할 일은?");
-  await page.getByRole("button", { name: "보내기" }).click();
-  await expect(page.getByText("다음 단계는 회의 전 Redis 작업 상태를 공유하는 것입니다.")).toBeVisible();
+  await expect(page.getByText("세부 근거 1: Redis 작업 상태 기록입니다.")).toBeHidden();
+  await page.getByRole("button", { name: /근거와 출처 12개/ }).click();
+  await expect(page.getByText("세부 근거 12: Redis 작업 상태 기록입니다.")).toBeVisible();
+
+  await page.getByRole("button", { name: "새 대화 만들기" }).click();
+  await page.getByRole("button", { name: "새 대화 만들기" }).click();
+  await expect(page.getByLabel("대화 목록").getByText("새 대화")).toHaveCount(1);
+  expect(createConversationPostCount).toBe(0);
+
+  await page.getByRole("textbox", { name: "AI 비서에게 질문" }).fill("기획팀 회의 일정을 정리해줘");
+  await page.getByRole("button", { name: "전송" }).click();
+  await expect(page.getByText("기획팀 회의는 목요일 오전 일정으로 정리하면 좋습니다.")).toBeVisible();
 
   const body = page.locator("body");
   await expect(body).not.toContainText(/cost|token|cache|토큰|비용|캐시/i);
