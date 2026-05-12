@@ -38,9 +38,10 @@ def test_append_messages_and_context_window(db_session: Session) -> None:
     viewer = USERS['viewer']
     conversation = create_conversation(db_session, viewer, title='Redis')
     for index in range(8):
-        append_user_message(db_session, conversation, f'사용자 질문 {index}')
+        append_user_message(db_session, viewer, conversation, f'사용자 질문 {index}')
         append_assistant_message(
             db_session,
+            viewer,
             conversation,
             content=f'비서 답변 {index}',
             citations=[],
@@ -69,3 +70,77 @@ def test_append_messages_and_context_window(db_session: Session) -> None:
     assert '사용자 질문 0' not in contextual_question
     assert '비서 답변 7' in contextual_question
     assert contextual_question.count('assistant:') <= RECENT_CONTEXT_MESSAGE_LIMIT // 2 + 1
+
+
+def test_append_user_message_rejects_other_user(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    employee = USERS['employee-jun']
+    conversation = create_conversation(db_session, viewer, title='Viewer private thread')
+
+    with pytest.raises(ValueError, match='assistant conversation not found'):
+        append_user_message(db_session, employee, conversation, '권한 없는 질문')
+
+
+def test_append_assistant_message_rejects_other_user(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    employee = USERS['employee-jun']
+    conversation = create_conversation(db_session, viewer, title='Viewer private thread')
+
+    with pytest.raises(ValueError, match='assistant conversation not found'):
+        append_assistant_message(
+            db_session,
+            employee,
+            conversation,
+            content='권한 없는 답변',
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={},
+        )
+
+
+def test_append_user_message_rejects_blank_content(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    conversation = create_conversation(db_session, viewer, title='Redis')
+
+    with pytest.raises(ValueError, match='assistant message content is required'):
+        append_user_message(db_session, viewer, conversation, '   ')
+
+    assert list_messages(db_session, viewer, conversation.id) == []
+
+
+def test_contextual_question_excludes_matching_current_user_message(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    conversation = create_conversation(db_session, viewer, title='Redis')
+    append_user_message(db_session, viewer, conversation, 'Redis 상태 알려줘')
+    append_assistant_message(
+        db_session,
+        viewer,
+        conversation,
+        content='Redis 작업은 진행 중입니다.',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={},
+    )
+    append_user_message(db_session, viewer, conversation, '그 다음 할 일은?')
+
+    messages = list_messages(db_session, viewer, conversation.id)
+    contextual_question = build_contextual_question(
+        conversation=conversation,
+        messages=messages,
+        new_message='그 다음 할 일은?',
+    )
+
+    assert contextual_question.count('그 다음 할 일은?') == 1
+    assert '현재 질문: 그 다음 할 일은?' in contextual_question
