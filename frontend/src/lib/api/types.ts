@@ -434,6 +434,50 @@ export type AskResponse = {
   };
 };
 
+export type AssistantConversation = {
+  id: number;
+  title: string;
+  summary?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssistantMessage = {
+  id: number;
+  conversation_id: number;
+  role: "user" | "assistant" | string;
+  content: string;
+  citations: RagCitation[];
+  source_ids: string[];
+  source_links: string[];
+  source_snippets: string[];
+  permission_level?: string | null;
+  hidden_match_count: number;
+  permission_notice?: string | null;
+  agent_run_id?: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AssistantConversationsResponse = {
+  conversations: AssistantConversation[];
+};
+
+export type AssistantConversationCreatedResponse = {
+  conversation: AssistantConversation;
+};
+
+export type AssistantMessagesResponse = {
+  conversation: AssistantConversation;
+  messages: AssistantMessage[];
+};
+
+export type AssistantTurnResponse = {
+  conversation: AssistantConversation;
+  user_message: AssistantMessage;
+  assistant_message: AssistantMessage;
+};
+
 export type IntegrationSyncResponse = {
   job_id: string;
   connector_type: string;

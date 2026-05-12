@@ -1,12 +1,31 @@
 "use client";
 
-import { Bot, CheckCircle2, CircleDollarSign, Clock3, Database, FileText, KeyRound, Link2, Search, ShieldAlert, Sparkles } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  Clock3,
+  Database,
+  FileText,
+  Link2,
+  Plus,
+  Send,
+  ShieldAlert,
+  Sparkles,
+} from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api/client";
-import type { AskResponse, RagIndexingJobSummary, RagIndexingSummaryResponse, SearchResponse } from "@/lib/api/types";
-
-const DEFAULT_QUESTION = "Redis 작업 상태는 어떻게 관리되고 있나요?";
+import type {
+  AssistantConversation,
+  AssistantConversationCreatedResponse,
+  AssistantConversationsResponse,
+  AssistantMessage,
+  AssistantMessagesResponse,
+  AssistantTurnResponse,
+  RagCitation,
+  RagIndexingJobSummary,
+  RagIndexingSummaryResponse,
+} from "@/lib/api/types";
 
 export default function SearchPage() {
   return (
@@ -18,43 +37,124 @@ export default function SearchPage() {
 
 function SearchPageContent() {
   const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q")?.trim() || DEFAULT_QUESTION;
+  const initialQuery = searchParams.get("q")?.trim() || "";
+  const [conversations, setConversations] = useState<AssistantConversation[]>([]);
+  const [activeConversation, setActiveConversation] = useState<AssistantConversation>();
+  const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [selectedEvidenceMessageId, setSelectedEvidenceMessageId] = useState<number>();
   const [query, setQuery] = useState(initialQuery);
-  const [searchResponse, setSearchResponse] = useState<SearchResponse>();
-  const [askResponse, setAskResponse] = useState<AskResponse>();
   const [ragIndexing, setRagIndexing] = useState<RagIndexingSummaryResponse>();
   const [loading, setLoading] = useState(false);
+  const [booting, setBooting] = useState(true);
   const [error, setError] = useState<string>();
+  const [initialQuerySent, setInitialQuerySent] = useState(false);
 
-  const runMemoryQuery = useCallback(async (nextQuery: string) => {
-    const trimmedQuery = nextQuery.trim();
-    if (!trimmedQuery) return;
+  const selectLatestAssistantEvidence = useCallback((nextMessages: AssistantMessage[]) => {
+    const latestAssistant = [...nextMessages].reverse().find((message) => message.role === "assistant");
+    setSelectedEvidenceMessageId(latestAssistant?.id);
+  }, []);
+
+  const moveConversationToTop = useCallback((conversation: AssistantConversation) => {
+    setConversations((current) => [
+      conversation,
+      ...current.filter((item) => item.id !== conversation.id),
+    ]);
+  }, []);
+
+  const createConversation = useCallback(async (title?: string) => {
+    const response = await apiPost<AssistantConversationCreatedResponse>("/api/v1/assistant/conversations", {
+      title: title?.trim() || "새 대화",
+    });
+    setActiveConversation(response.conversation);
+    setMessages([]);
+    setSelectedEvidenceMessageId(undefined);
+    moveConversationToTop(response.conversation);
+    return response.conversation;
+  }, [moveConversationToTop]);
+
+  const loadMessages = useCallback(async (conversation: AssistantConversation) => {
+    setError(undefined);
+    setActiveConversation(conversation);
+    try {
+      const response = await apiGet<AssistantMessagesResponse>(
+        `/api/v1/assistant/conversations/${conversation.id}/messages`,
+      );
+      setActiveConversation(response.conversation);
+      setMessages(response.messages);
+      moveConversationToTop(response.conversation);
+      selectLatestAssistantEvidence(response.messages);
+      return response.messages;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "대화 내용을 불러오지 못했습니다.");
+      return [];
+    }
+  }, [moveConversationToTop, selectLatestAssistantEvidence]);
+
+  const loadConversations = useCallback(async () => {
+    setBooting(true);
+    setError(undefined);
+    try {
+      const response = await apiGet<AssistantConversationsResponse>("/api/v1/assistant/conversations");
+      setConversations(response.conversations);
+      if (response.conversations.length > 0) {
+        await loadMessages(response.conversations[0]);
+      } else {
+        await createConversation(initialQuery || "새 대화");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "AI 비서 대화를 준비하지 못했습니다.");
+    } finally {
+      setBooting(false);
+    }
+  }, [createConversation, initialQuery, loadMessages]);
+
+  const sendMessage = useCallback(async (content: string) => {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) return;
 
     setLoading(true);
     setError(undefined);
     try {
-      const [askResult, searchResult] = await Promise.all([
-        apiPost<AskResponse>("/api/v1/ask", { question: trimmedQuery }),
-        apiPost<SearchResponse>("/api/v1/search", { query: trimmedQuery }),
-      ]);
-      setAskResponse(askResult);
-      setSearchResponse(searchResult);
+      const conversation = activeConversation ?? await createConversation(trimmedContent);
+      const response = await apiPost<AssistantTurnResponse>(
+        `/api/v1/assistant/conversations/${conversation.id}/messages`,
+        { content: trimmedContent },
+      );
+      const nextMessages = [...messages, response.user_message, response.assistant_message];
+      setActiveConversation(response.conversation);
+      setMessages(nextMessages);
+      setSelectedEvidenceMessageId(response.assistant_message.id);
+      moveConversationToTop(response.conversation);
+      setQuery("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "회사 메모리 검색에 실패했습니다.");
+      setError(caught instanceof Error ? caught.message : "메시지를 보내지 못했습니다.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeConversation, createConversation, messages, moveConversationToTop]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runMemoryQuery(query);
+    void sendMessage(query);
   }
 
   useEffect(() => {
     setQuery(initialQuery);
-    void runMemoryQuery(initialQuery);
-  }, [initialQuery, runMemoryQuery]);
+    setInitialQuerySent(false);
+  }, [initialQuery]);
+
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (booting || initialQuerySent || !initialQuery || !activeConversation) return;
+
+    setInitialQuerySent(true);
+    if (messages.length === 0) {
+      void sendMessage(initialQuery);
+    }
+  }, [activeConversation, booting, initialQuery, initialQuerySent, messages.length, sendMessage]);
 
   useEffect(() => {
     let active = true;
@@ -70,8 +170,11 @@ function SearchPageContent() {
     };
   }, []);
 
-  const permissionNotice = askResponse?.permission_notice ?? searchResponse?.permission_notice;
-  const answerCitations = askResponse?.citations ?? [];
+  const selectedEvidenceMessage = useMemo(
+    () => messages.find((message) => message.id === selectedEvidenceMessageId)
+      ?? [...messages].reverse().find((message) => message.role === "assistant"),
+    [messages, selectedEvidenceMessageId],
+  );
 
   return (
     <div className="reference-dashboard space-y-4">
@@ -79,150 +182,122 @@ function SearchPageContent() {
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">AI Assistant</p>
           <h1>AI 비서</h1>
-          <p>승인된 회사 기억과 접근 가능한 근거를 바탕으로 업무 질문에 답하고 출처를 함께 보여줍니다.</p>
+          <p>대화를 기억하면서 회사 지식에 기반한 답변과 확인 가능한 근거를 함께 보여줍니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <Bot className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
-          {searchResponse?.retrieval_backend === "pgvector" ? "pgvector search" : "deterministic search"}
+          대화형 검색
         </div>
       </div>
 
       <MemoryFreshnessPanel summary={ragIndexing} />
 
-      <form onSubmit={submit} className="panel reference-panel">
-        <label htmlFor="query" className="text-[13px] font-extrabold">질문</label>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-          <input
-            id="query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="h-11 min-w-0 flex-1 rounded-lg border border-line bg-[var(--glass-elevated)] px-3 text-[13px] outline-none focus:border-[var(--primary)]"
-            placeholder="예: 지난주 Redis 역할 논의가 있었나요?"
-          />
-          <button type="submit" disabled={loading} className="row-action gap-2 px-4 disabled:bg-neutral-300">
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            {loading ? "답변 생성 중" : "AI 비서에게 질문"}
-          </button>
-        </div>
-      </form>
-
-      {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-800">{error}</div> : null}
-
-      {permissionNotice ? (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-900">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <div>
-            <p className="font-extrabold">권한 때문에 숨겨진 근거가 있습니다.</p>
-            <p className="mt-1 text-amber-800">{permissionNotice}</p>
-            {searchResponse?.hidden_match_count ? (
-              <p className="mt-1 text-[12px] text-amber-800">
-                현재 권한에서 숨겨진 근거 {searchResponse.hidden_match_count.toLocaleString()}개
-              </p>
-            ) : null}
-          </div>
-        </div>
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-800">{error}</div>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
-        <article className="panel reference-panel">
-          <div className="flex items-center gap-2 border-b border-line pb-4">
-            <Bot className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
-            <h2 className="text-[15px] font-extrabold">AI 답변</h2>
-          </div>
-
-          <div className="space-y-4 pt-4">
-            {askResponse ? (
-              <>
-                <p className="text-[15px] leading-7">{askResponse.answer}</p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <MetricCard icon={FileText} label="답변 근거" value={`${askResponse.source_links.length.toLocaleString()}개`} />
-                  <MetricCard icon={ShieldAlert} label="숨겨진 근거" value={`${askResponse.hidden_match_count.toLocaleString()}개`} />
-                  <MetricCard icon={KeyRound} label="조회 권한" value={askResponse.permission_level} />
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center gap-2 text-[13px] font-extrabold">
-                    <Link2 className="h-4 w-4" aria-hidden="true" />
-                    답변 근거
-                  </div>
-                  <div className="space-y-2">
-                    {answerCitations.map((citation, index) => (
-                      <a key={`${citation.source_id}-${index}`} href={citation.source_url} target="_blank" rel="noreferrer" className="block rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] hover:bg-[var(--glass-strong)]">
-                        <span className="font-bold text-[var(--primary-dark)]">근거 {index + 1}</span>
-                        <span className="mt-1 block text-[12px] text-muted">{citation.source_id}</span>
-                        <span className="mt-1 block text-[12px] text-muted">
-                          score {citation.relevance_score.toFixed(2)}
-                          {citation.matched_terms.length ? ` · ${citation.matched_terms.join(", ")}` : ""}
-                        </span>
-                        <span className="mt-1 block break-all text-[12px] text-muted">{citation.source_url}</span>
-                      </a>
-                    ))}
-                    {askResponse.source_links.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
-                        현재 권한으로 확인 가능한 답변 근거가 없습니다.
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="rounded-lg border border-dashed border-line bg-surface-soft p-8 text-[13px] text-muted">
-                질문을 입력하면 AI 비서의 답변과 근거가 여기에 표시됩니다.
-              </div>
-            )}
-          </div>
-        </article>
-
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
-              <h2 className="text-[15px] font-extrabold">검색 근거</h2>
+      <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <aside className="panel reference-panel h-fit">
+          <div className="flex items-center justify-between gap-3 border-b border-line pb-4">
+            <div>
+              <h2 className="text-[15px] font-extrabold">대화 목록</h2>
+              <p className="mt-1 text-[12px] text-muted">{conversations.length.toLocaleString()}개 대화</p>
             </div>
-            <span className="text-[12px] text-muted">
-              {searchResponse ? `${searchResponse.results.length}개` : "대기 중"}
-            </span>
+            <button
+              type="button"
+              title="새 대화"
+              aria-label="새 대화"
+              onClick={() => void createConversation("새 대화")}
+              className="row-action h-9 w-9 p-0"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
 
-          {searchResponse?.results.map((result, resultIndex) => (
-            <article key={`${result.id}-${result.source_id ?? resultIndex}`} className="panel reference-panel">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="badge blue">{result.source_type ?? "source"}</span>
-                <span className="badge green">{result.permission_level}</span>
-                <span className="badge violet">score {result.relevance_score.toFixed(2)}</span>
-                {result.parser_status === "metadata_only" && (
-                  <span className="badge amber" title={result.parser_status_reason || "메타데이터만 수집되었습니다"}>
-                    메타데이터 반환 (본문 없음)
-                  </span>
-                )}
-                {result.parser_status === "unsupported" && (
-                  <span className="badge red" title={result.parser_status_reason || "지원되지 않는 파일 형식입니다."}>
-                    미지원 파일 (본문 제외됨)
-                  </span>
-                )}
+          <div className="mt-4 space-y-2">
+            {conversations.map((conversation) => {
+              const selected = conversation.id === activeConversation?.id;
+              return (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => void loadMessages(conversation)}
+                  className={`w-full rounded-lg border p-3 text-left text-[13px] transition ${
+                    selected
+                      ? "border-[var(--primary)] bg-[var(--glass-strong)]"
+                      : "border-line bg-[var(--glass-elevated)] hover:bg-[var(--glass-strong)]"
+                  }`}
+                >
+                  <span className="block truncate font-extrabold">{conversation.title || "새 대화"}</span>
+                  {conversation.summary ? (
+                    <span className="mt-1 block line-clamp-2 text-[12px] leading-5 text-muted">
+                      {conversation.summary}
+                    </span>
+                  ) : null}
+                  <span className="mt-2 block text-[11px] text-muted">{formatDateTime(conversation.updated_at)}</span>
+                </button>
+              );
+            })}
+            {booting ? (
+              <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
+                대화를 불러오는 중입니다.
               </div>
-              {result.matched_terms.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {result.matched_terms.map((term, termIndex) => (
-                    <span key={`${term}-${termIndex}`} className="filter-pill active">{term}</span>
-                  ))}
-                </div>
-              ) : null}
-              <p className="mt-3 text-[13px] leading-6">{result.text}</p>
-              <p className="mt-3 border-l-2 border-line pl-3 text-[13px] leading-6 text-muted">{result.source_snippet}</p>
-              {result.source_url ? (
-                <a href={result.source_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-[13px] font-bold text-[var(--primary-dark)] underline-offset-4 hover:underline">
-                  <FileText className="h-4 w-4" aria-hidden="true" />
-                  원문 열기
-                </a>
-              ) : null}
-            </article>
-          ))}
+            ) : null}
+          </div>
+        </aside>
 
-          {searchResponse && searchResponse.results.length === 0 ? (
-            <div className="panel reference-panel p-8 text-[13px] text-muted">보여줄 수 있는 검색 결과가 없습니다.</div>
-          ) : null}
-        </section>
+        <main className="panel reference-panel flex min-h-[620px] flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+            <div>
+              <h2 className="text-[15px] font-extrabold">AI 비서와 대화</h2>
+              <p className="mt-1 text-[12px] text-muted">
+                {activeConversation?.title || "새 대화"}
+              </p>
+            </div>
+            <span className="badge blue">{messages.length.toLocaleString()}개 메시지</span>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto py-4">
+            {messages.map((message) => (
+              <AssistantBubble
+                key={message.id}
+                message={message}
+                selected={message.id === selectedEvidenceMessage?.id}
+                onSelectEvidence={() => setSelectedEvidenceMessageId(message.id)}
+              />
+            ))}
+            {!booting && messages.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-line bg-surface-soft p-8 text-center text-[13px] text-muted">
+                첫 질문을 입력하면 AI 비서가 답변과 근거를 함께 정리합니다.
+              </div>
+            ) : null}
+          </div>
+
+          <form onSubmit={submit} className="border-t border-line pt-4">
+            <label htmlFor="assistant-query" className="sr-only">AI 비서에게 질문</label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="assistant-query"
+                aria-label="AI 비서에게 질문"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="h-11 min-w-0 flex-1 rounded-lg border border-line bg-[var(--glass-elevated)] px-3 text-[13px] outline-none focus:border-[var(--primary)]"
+                placeholder="예: 최근 Redis 운영 이슈를 정리해줘"
+                disabled={booting}
+              />
+              <button
+                type="submit"
+                disabled={loading || booting || query.trim().length === 0}
+                className="row-action gap-2 px-4 disabled:bg-neutral-300"
+              >
+                <Send className="h-4 w-4" aria-hidden="true" />
+                {loading ? "보내는 중" : "보내기"}
+              </button>
+            </div>
+          </form>
+        </main>
+
+        <EvidencePanel message={selectedEvidenceMessage} />
       </section>
     </div>
   );
@@ -232,16 +307,166 @@ function SearchPageFallback() {
   return <div className="panel reference-panel p-8 text-[13px] text-muted">AI 비서 화면을 준비하고 있습니다.</div>;
 }
 
-type MetricIcon = typeof FileText;
+function AssistantBubble({
+  message,
+  selected,
+  onSelectEvidence,
+}: {
+  message: AssistantMessage;
+  selected: boolean;
+  onSelectEvidence: () => void;
+}) {
+  const isAssistant = message.role === "assistant";
+  const evidenceCount = message.citations.length || message.source_links.length || message.source_snippets.length;
 
-function MetricCard({ icon: Icon, label, value }: { icon: MetricIcon; label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-surface-soft p-3">
-      <div className="flex items-center gap-2 text-[12px] text-muted">
-        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-        {label}
+    <article className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}>
+      <div
+        className={`max-w-[88%] rounded-lg border p-4 text-[13px] leading-6 ${
+          isAssistant
+            ? "border-line bg-[var(--glass-elevated)]"
+            : "border-[var(--primary)] bg-[var(--primary)] text-white"
+        }`}
+      >
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className={isAssistant ? "badge blue" : "rounded-md bg-white/20 px-2 py-1 text-[11px] font-bold"}>
+            {isAssistant ? "AI 비서" : "나"}
+          </span>
+          {message.permission_level ? <span className="badge green">{message.permission_level}</span> : null}
+          {isAssistant ? <span className="badge violet">근거 {evidenceCount.toLocaleString()}개</span> : null}
+          {message.hidden_match_count > 0 ? (
+            <span className="badge amber">숨겨진 근거 {message.hidden_match_count.toLocaleString()}개</span>
+          ) : null}
+        </div>
+        <p className="whitespace-pre-wrap">{message.content}</p>
+        {isAssistant ? (
+          <button
+            type="button"
+            onClick={onSelectEvidence}
+            className={`mt-3 inline-flex items-center gap-1 text-[12px] font-bold underline-offset-4 hover:underline ${
+              selected ? "text-[var(--primary-dark)]" : "text-muted"
+            }`}
+          >
+            <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+            근거 보기
+          </button>
+        ) : null}
       </div>
-      <p className="mt-1 break-words text-[13px] font-extrabold">{value}</p>
+    </article>
+  );
+}
+
+function EvidencePanel({ message }: { message?: AssistantMessage }) {
+  const citations = message?.citations ?? [];
+  const snippets = message?.source_snippets ?? [];
+  const links = message?.source_links ?? [];
+  const hiddenCount = message?.hidden_match_count ?? 0;
+
+  return (
+    <aside className="panel reference-panel h-fit">
+      <div className="flex items-center gap-2 border-b border-line pb-4">
+        <FileText className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+        <h2 className="text-[15px] font-extrabold">근거와 출처</h2>
+      </div>
+
+      {!message ? (
+        <div className="mt-4 rounded-lg border border-dashed border-line bg-surface-soft p-6 text-[13px] text-muted">
+          답변을 선택하면 참조한 근거와 권한 정보를 확인할 수 있습니다.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {message.permission_level ? <span className="badge green">{message.permission_level}</span> : null}
+            <span className="badge violet">근거 {Math.max(citations.length, links.length, snippets.length).toLocaleString()}개</span>
+            {hiddenCount > 0 ? <span className="badge amber">숨겨진 근거 {hiddenCount.toLocaleString()}개</span> : null}
+          </div>
+
+          {message.permission_notice ? (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] leading-5 text-amber-900">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p>{message.permission_notice}</p>
+            </div>
+          ) : null}
+
+          <EvidenceCitationList citations={citations} />
+
+          {snippets.length > 0 ? (
+            <div>
+              <h3 className="mb-2 text-[13px] font-extrabold">원문 발췌</h3>
+              <div className="space-y-2">
+                {snippets.map((snippet, index) => (
+                  <p
+                    key={`${snippet}-${index}`}
+                    className="rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[12px] leading-5 text-muted"
+                  >
+                    {snippet}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {links.length > 0 ? (
+            <div>
+              <h3 className="mb-2 text-[13px] font-extrabold">출처 링크</h3>
+              <div className="space-y-2">
+                {links.map((link, index) => (
+                  <a
+                    key={`${link}-${index}`}
+                    href={link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block break-all rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[12px] font-bold text-[var(--primary-dark)] underline-offset-4 hover:underline"
+                  >
+                    {link}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {citations.length === 0 && snippets.length === 0 && links.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-line bg-surface-soft p-6 text-[13px] text-muted">
+              현재 권한으로 표시할 수 있는 근거가 없습니다.
+            </div>
+          ) : null}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function EvidenceCitationList({ citations }: { citations: RagCitation[] }) {
+  if (citations.length === 0) return null;
+
+  return (
+    <div>
+      <h3 className="mb-2 text-[13px] font-extrabold">인용 근거</h3>
+      <div className="space-y-2">
+        {citations.map((citation, index) => (
+          <a
+            key={`${citation.source_id}-${index}`}
+            href={citation.source_url}
+            target="_blank"
+            rel="noreferrer"
+            className="block rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[12px] hover:bg-[var(--glass-strong)]"
+          >
+            <span className="font-bold text-[var(--primary-dark)]">근거 {index + 1}</span>
+            <span className="mt-1 block break-all text-muted">{citation.source_id}</span>
+            <span className="mt-1 block text-muted">관련도 {citation.relevance_score.toFixed(2)}</span>
+            {citation.matched_terms.length ? (
+              <span className="mt-2 flex flex-wrap gap-1">
+                {citation.matched_terms.map((term, termIndex) => (
+                  <span key={`${term}-${termIndex}`} className="filter-pill active">{term}</span>
+                ))}
+              </span>
+            ) : null}
+            <span className="mt-2 block border-l-2 border-line pl-3 leading-5 text-muted">
+              {citation.source_snippet}
+            </span>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -251,7 +476,6 @@ function MemoryFreshnessPanel({ summary }: { summary?: RagIndexingSummaryRespons
   const indexedCount = summary?.state_counts.indexed ?? 0;
   const state = getFreshnessState(latestJob, indexedCount);
   const Icon = state.icon;
-  const costPolicy = summary?.cost_policy;
 
   return (
     <section className={`rounded-lg border p-4 shadow-sm ${state.tone}`}>
@@ -263,28 +487,19 @@ function MemoryFreshnessPanel({ summary }: { summary?: RagIndexingSummaryRespons
             <p className="mt-1 text-[13px] opacity-85">{state.description}</p>
           </div>
         </div>
-        <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-[12px] font-bold">
-          <Database className="h-4 w-4" aria-hidden="true" />
-          {indexedCount.toLocaleString()}개 기억 사용 가능
-        </span>
-      </div>
-      {costPolicy ? (
-        <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
-          <span className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 font-bold">
-            <CircleDollarSign className="h-4 w-4" aria-hidden="true" />
-            예산{" "}
-            {costPolicy.max_estimated_embedding_cost_usd === null || costPolicy.max_estimated_embedding_cost_usd === undefined
-              ? "unlimited"
-              : `$${costPolicy.max_estimated_embedding_cost_usd.toFixed(3)}`}
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-[12px] font-bold">
+            <Database className="h-4 w-4" aria-hidden="true" />
+            {indexedCount.toLocaleString()}개 기억 사용 가능
           </span>
-          <span className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 font-bold">
-            {costPolicy.embedding_model} · ${costPolicy.embedding_input_cost_per_1m_tokens.toFixed(2)}/1M tokens
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 font-bold">
-            {costPolicy.incremental_hash_skip ? "Hash skip active" : "Hash skip check"}
-          </span>
+          {latestJob ? (
+            <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-[12px] font-bold">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              {latestJob.status}
+            </span>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }
@@ -292,39 +507,39 @@ function MemoryFreshnessPanel({ summary }: { summary?: RagIndexingSummaryRespons
 function getFreshnessState(job: RagIndexingJobSummary | undefined, indexedCount: number) {
   if (!job) {
     return {
-      title: "회사 메모리 준비 전",
-      description: "아직 인덱싱 기록이 없습니다. 먼저 Slack, 메일, 문서를 동기화해 주세요.",
+      title: "회사 기억 준비 중",
+      description: "아직 인덱싱 기록이 없습니다. 연동된 업무 기록이 준비되면 답변 근거로 사용할 수 있습니다.",
       tone: "border-[var(--line-soft)] bg-[var(--glass-elevated)] text-[var(--ink)]",
       icon: Clock3,
     };
   }
   if (job.status === "failed") {
     return {
-      title: "회사 메모리 업데이트 확인 필요",
-      description: "최근 인덱싱 작업이 실패했습니다. 기존 기억은 계속 검색할 수 있지만 운영 확인이 필요합니다.",
+      title: "회사 기억 업데이트 확인 필요",
+      description: "최근 인덱싱 작업이 실패했습니다. 기존 기억은 계속 사용할 수 있지만 최신 반영 상태를 확인해 주세요.",
       tone: "border-red-200 bg-red-50 text-red-900",
       icon: ShieldAlert,
     };
   }
   if (job.status === "queued" || job.status === "running") {
     return {
-      title: "회사 메모리 업데이트 중",
-      description: "새 업무 기록을 반영하고 있습니다. 현재 검색은 마지막 완료된 기억을 기준으로 답변합니다.",
+      title: "회사 기억 업데이트 중",
+      description: "새 업무 기록을 반영하고 있습니다. 현재 답변은 마지막 완료 시점의 기억을 기준으로 합니다.",
       tone: "border-blue-200 bg-blue-50 text-blue-900",
       icon: Clock3,
     };
   }
   if (indexedCount === 0) {
     return {
-      title: "검색 가능한 회사 메모리가 없습니다",
-      description: "권한으로 볼 수 있는 승인 기록이 아직 없습니다. 리뷰 승인 후 다시 검색해 주세요.",
+      title: "검색 가능한 회사 기억이 없습니다",
+      description: "현재 권한으로 볼 수 있는 업무 기록이 아직 없습니다. 연동 상태를 확인한 뒤 다시 질문해 주세요.",
       tone: "border-amber-200 bg-amber-50 text-amber-900",
       icon: ShieldAlert,
     };
   }
   return {
-    title: "회사 메모리가 최신 상태입니다",
-    description: `최근 업데이트: ${formatDateTime(job.updated_at)}. 승인된 기록을 기준으로 답변합니다.`,
+    title: "회사 기억이 최신 상태입니다",
+    description: `최근 업데이트: ${formatDateTime(job.updated_at)}. 접근 가능한 업무 기록을 기준으로 답변합니다.`,
     tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
     icon: CheckCircle2,
   };
