@@ -246,3 +246,43 @@ def test_assistant_conversations_list_is_user_scoped(client: TestClient) -> None
     assert list_response.status_code == 200
     conversations = list_response.json()['conversations']
     assert [conversation['title'] for conversation in conversations] == ['Viewer conversation']
+
+
+def test_assistant_create_reuses_existing_empty_new_conversation(client: TestClient) -> None:
+    first_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '새 대화'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    second_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '새 대화'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json()['conversation']['id'] == first_response.json()['conversation']['id']
+
+
+def test_assistant_create_makes_new_conversation_after_empty_one_is_used(client: TestClient) -> None:
+    first_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '새 대화'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = first_response.json()['conversation']['id']
+    client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'Redis job state'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    second_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '새 대화'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert second_response.status_code == 200
+    assert second_response.json()['conversation']['id'] != conversation_id

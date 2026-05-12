@@ -8,6 +8,7 @@ from backend.app.models import AssistantConversation, AssistantMessage
 
 RECENT_CONTEXT_MESSAGE_LIMIT = 6
 DEFAULT_CONVERSATION_TITLE = '새 대화'
+MAX_CONVERSATION_TITLE_LENGTH = 32
 
 
 def create_conversation(db: Session, user: DemoUser, *, title: str | None = None) -> AssistantConversation:
@@ -28,6 +29,18 @@ def list_conversations(db: Session, user: DemoUser) -> list[AssistantConversatio
             .where(AssistantConversation.user_id == user.id)
             .order_by(AssistantConversation.updated_at.desc(), AssistantConversation.id.desc())
         )
+    )
+
+
+def find_reusable_empty_conversation(db: Session, user: DemoUser) -> AssistantConversation | None:
+    return db.scalar(
+        select(AssistantConversation)
+        .where(
+            AssistantConversation.user_id == user.id,
+            AssistantConversation.title == DEFAULT_CONVERSATION_TITLE,
+            ~AssistantConversation.messages.any(),
+        )
+        .order_by(AssistantConversation.updated_at.desc(), AssistantConversation.id.desc())
     )
 
 
@@ -68,7 +81,7 @@ def append_user_message(
     )
     conversation.updated_at = datetime.now(UTC)
     if conversation.title == DEFAULT_CONVERSATION_TITLE:
-        conversation.title = _conversation_title(normalized_content)
+        conversation.title = summarize_conversation_title(normalized_content)
     db.add(message)
     db.commit()
     db.refresh(message)
@@ -179,6 +192,15 @@ def serialize_message(message: AssistantMessage) -> dict:
 def _conversation_title(value: str | None) -> str:
     normalized = (value or DEFAULT_CONVERSATION_TITLE).strip() or DEFAULT_CONVERSATION_TITLE
     return normalized[:80]
+
+
+def summarize_conversation_title(value: str) -> str:
+    normalized = ' '.join(value.strip().split())
+    if not normalized:
+        return DEFAULT_CONVERSATION_TITLE
+    if len(normalized) <= MAX_CONVERSATION_TITLE_LENGTH:
+        return normalized
+    return f'{normalized[: MAX_CONVERSATION_TITLE_LENGTH - 1].rstrip()}…'
 
 
 def _ensure_owned_conversation(user: DemoUser, conversation: AssistantConversation) -> None:

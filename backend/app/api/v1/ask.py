@@ -28,6 +28,7 @@ def ask_company_memory(
         db=db,
         user=user,
         question=request.question,
+        settings=settings,
         vector_store=vector_store,
     )
     return {

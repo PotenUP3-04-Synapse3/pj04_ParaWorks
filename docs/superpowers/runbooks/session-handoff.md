@@ -1,6 +1,6 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-01
+Updated: 2026-05-12
 
 ## Active Project
 
@@ -25,6 +25,31 @@ The MVP harness keeps real SaaS integrations behind connector contracts and vali
 5. Deterministic extraction creates pending review items.
 6. Review UI exposes evidence, approve/reject/edit/request-more-evidence actions.
 7. Search returns permission-filtered source evidence.
+
+## 2026-05-12 AI 비서 ChatGPT-style Polish and RAG LLM Handoff
+
+- Active branch for this work: `codex/rag-orchestrator-assistant-memory`.
+- `/search` is now the primary AI 비서 surface and should feel closer to a
+  natural ChatGPT-style conversation:
+  - the left history shows compact conversation titles only;
+  - `+` reuses an existing empty `새 대화` instead of creating duplicates;
+  - evidence and source details live inside each assistant message behind a
+    fold/unfold control;
+  - the input composer remains at the bottom of the chat surface while evidence
+    scrolls inside its own bounded panel.
+- Assistant conversations remain database-backed per logged-in user through
+  `assistant_conversations` and `assistant_messages`.
+- In demo mode, RAG answering stays deterministic for smoke tests and cheap
+  demos.
+- In non-demo 진심모드, RAG answering builds a real LangChain model chain:
+  - primary OpenAI model: `gpt-5.4-mini`;
+  - fallback OpenAI model: value from `AGENT_LLM_OPENAI_MODEL` in `.env`;
+  - provider fallback continues through `AGENT_LLM_PROVIDER_ORDER`, including
+    Gemini when `GEMINI_API_KEY` or `GOOGLE_API_KEY` is configured.
+- For another local machine to continue this branch, pull the branch, run
+  `uv sync`, `cd frontend && npm.cmd ci`, then set `.env` for 진심모드 with
+  `PARAWORKS_DEMO_MODE=false`, `OPENAI_API_KEY`, and optional
+  `AGENT_LLM_OPENAI_MODEL` fallback before starting Docker.
 
 ## Latest Session Changes
 

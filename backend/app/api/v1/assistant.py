@@ -9,6 +9,7 @@ from backend.app.assistant.service import (
     append_user_message,
     build_contextual_question,
     create_conversation,
+    find_reusable_empty_conversation,
     get_owned_conversation,
     list_conversations,
     list_messages,
@@ -88,6 +89,11 @@ def create_assistant_conversation(
     db: DbSession,
     user: CurrentUser,
 ) -> dict:
+    if request.title is None or request.title.strip() == '새 대화':
+        reusable_conversation = find_reusable_empty_conversation(db, user)
+        if reusable_conversation is not None:
+            return {'conversation': serialize_conversation(reusable_conversation)}
+
     conversation = create_conversation(db, user, title=request.title)
     return {'conversation': serialize_conversation(conversation)}
 
@@ -138,6 +144,7 @@ def create_assistant_message(
             db=db,
             user=user,
             question=contextual_question,
+            settings=settings,
             vector_store=vector_store,
         )
     except Exception as exc:

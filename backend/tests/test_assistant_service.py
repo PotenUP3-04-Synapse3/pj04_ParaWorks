@@ -2,14 +2,17 @@ import pytest
 from sqlalchemy.orm import Session
 
 from backend.app.assistant.service import (
+    DEFAULT_CONVERSATION_TITLE,
     RECENT_CONTEXT_MESSAGE_LIMIT,
     append_assistant_message,
     append_user_message,
     build_contextual_question,
     create_conversation,
+    find_reusable_empty_conversation,
     get_owned_conversation,
     list_conversations,
     list_messages,
+    summarize_conversation_title,
 )
 from backend.app.core.demo_auth import USERS
 
@@ -191,3 +194,28 @@ def test_contextual_question_excludes_matching_current_user_message(db_session: 
 
     assert contextual_question.count('그 다음 할 일은?') == 1
     assert '현재 질문: 그 다음 할 일은?' in contextual_question
+
+
+def test_finds_only_one_reusable_empty_conversation(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    reusable = create_conversation(db_session, viewer, title=DEFAULT_CONVERSATION_TITLE)
+    filled = create_conversation(db_session, viewer, title=DEFAULT_CONVERSATION_TITLE)
+    append_user_message(db_session, viewer, filled, '이미 사용한 대화입니다')
+
+    empty_conversation = find_reusable_empty_conversation(db_session, viewer)
+
+    assert empty_conversation is not None
+    assert empty_conversation.id == reusable.id
+
+
+def test_first_user_message_sets_short_chat_history_title(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    conversation = create_conversation(db_session, viewer, title=DEFAULT_CONVERSATION_TITLE)
+    question = '이번 주 목요일 오전 회의 일정과 준비할 문서를 기획팀 관점에서 정리해줘'
+
+    append_user_message(db_session, viewer, conversation, question)
+
+    db_session.refresh(conversation)
+    assert conversation.title == summarize_conversation_title(question)
+    assert len(conversation.title) <= 32
+    assert conversation.title.endswith('…')

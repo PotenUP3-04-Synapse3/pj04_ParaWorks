@@ -23,6 +23,27 @@ Portfolio angle:
   evidence-backed AI assistant with memory, permission safety, and operator
   observability.
 
+## 2026-05-12 AI Assistant Chat UX and Sincere-mode RAG LLM
+
+- Reworked `/search` into a more natural chat surface with compact conversation
+  history, duplicate empty-chat prevention, bottom composer, and folded
+  evidence/source panels inside each assistant response.
+- Shortened chat history titles from the first user message so the history list
+  behaves like a conversation list instead of a document summary list.
+- Added a RAG LLM adapter for non-demo 진심모드:
+  - OpenAI primary model: `gpt-5.4-mini`;
+  - `.env` `AGENT_LLM_OPENAI_MODEL` as the OpenAI fallback model;
+  - provider fallback through the configured provider order.
+- Kept demo mode deterministic so tests and cheap demos do not call live LLMs.
+- Updated the session handoff runbook with the active branch and local
+  continuation notes.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from a technical RAG answer page toward a credible
+  AI assistant product surface while preserving evidence, permissions, and
+  operator cost observability.
+
 ## 2026-05-11 Sidebar and Workspace Navigation Update
 
 - Simplified the main sidebar by removing separate Decision, History, and
