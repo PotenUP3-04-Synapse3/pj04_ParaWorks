@@ -32,6 +32,7 @@ router = APIRouter(prefix='/assistant', tags=['assistant'])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
+ASSISTANT_FAILURE_CONTENT = '답변 생성 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.'
 
 
 def require_conversation(db: Session, user: DemoUser, conversation_id: int):
@@ -39,6 +40,36 @@ def require_conversation(db: Session, user: DemoUser, conversation_id: int):
         return get_owned_conversation(db, user, conversation_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail='assistant conversation not found') from exc
+
+
+def append_failed_assistant_message(
+    db: Session,
+    user: DemoUser,
+    conversation,
+    *,
+    reason: str,
+    failure_class: str,
+    agent_run_id: int | None = None,
+):
+    return append_assistant_message(
+        db,
+        user,
+        conversation,
+        content=ASSISTANT_FAILURE_CONTENT,
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level=None,
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=agent_run_id,
+        metadata={
+            'status': 'failed',
+            'failure_reason': reason,
+            'failure_class': failure_class,
+        },
+    )
 
 
 @router.get('/conversations', response_model=AssistantConversationsResponse)
@@ -102,12 +133,26 @@ def create_assistant_message(
         new_message=user_message.content,
     )
     vector_store = build_pgvector_search_store(db=db, settings=settings)
-    answer = answer_question_with_rag(
-        db=db,
-        user=user,
-        question=contextual_question,
-        vector_store=vector_store,
-    )
+    try:
+        answer = answer_question_with_rag(
+            db=db,
+            user=user,
+            question=contextual_question,
+            vector_store=vector_store,
+        )
+    except Exception as exc:
+        append_failed_assistant_message(
+            db,
+            user,
+            conversation,
+            reason='rag_exception',
+            failure_class=exc.__class__.__name__,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail='assistant answer generation failed',
+        ) from exc
+
     try:
         assistant_message = append_assistant_message(
             db,
@@ -129,7 +174,18 @@ def create_assistant_message(
             },
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        append_failed_assistant_message(
+            db,
+            user,
+            conversation,
+            reason='blank_answer',
+            failure_class=exc.__class__.__name__,
+            agent_run_id=answer.agent_run_id,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail='assistant answer generation failed',
+        ) from exc
     return {
         'conversation': serialize_conversation(conversation),
         'user_message': serialize_message(user_message),
