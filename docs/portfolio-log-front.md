@@ -140,8 +140,8 @@ Findings:
 - Employee/reviewer accounts expose these avatar URLs:
   - `hanvv3@koreacu.ac.kr` -> `/profile/hanvv3.png`
   - `mina@paraworks.com` -> `/profile/mina.png`
-  - `jun@paraworks.com` -> `/profile/jun.png`
-  - `soyeon@paraworks.com` -> `/profile/soyeon.png`
+  - `kjw4work@gmail.com` -> `/profile/kjw4work%40gmail.com.jpg`
+  - `yonghee199702@gmail.com` -> `/profile/yonghee199702%40gmail.com.jpg`
 - The Next dev server serves all profile image files with `200 OK`.
 
 Operational note:
@@ -352,3 +352,9 @@ Verification:
 - `npm.cmd run build` passed from `frontend`.
 - Local HTTP smoke returned `200` for `/dashboard`, `/review`,
   `/integrations`, and `/agent-runs`.
+- `feat: add google admins and smoke-only demo data`
+  - Added seeded Google admin accounts for `kjw4work@gmail.com` and `yonghee199702@gmail.com` with public/internal/restricted permission levels.
+  - Changed profile avatars to resolve by full email filename and extension, matching the renamed profile assets.
+  - Removed `jun@paraworks.com` and `soyeon@paraworks.com` from the active login/admin seed list.
+  - Split dummy source/review seeding behind `PARAWORKS_SEED_DEMO_DATA=true`; `scripts/start-smoke.ps1` enables it, while Docker-style local initialization stays empty until real connector syncs ingest data.
+  - Verification: backend suite `295 passed, 1 skipped`; frontend `npm.cmd run build` passed.

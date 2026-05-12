@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
     paraworks_env: str = 'local'
-    paraworks_demo_mode: bool = True
+    paraworks_demo_mode: bool = False
+    paraworks_seed_demo_data: bool = False
     auth_session_cookie_name: str = 'paraworks_session'
     auth_refresh_cookie_name: str = 'paraworks_refresh'
     auth_session_secret: str = 'local-development-session-secret'

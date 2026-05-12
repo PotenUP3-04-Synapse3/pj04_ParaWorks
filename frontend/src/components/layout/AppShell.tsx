@@ -117,9 +117,7 @@ function ShellContent({ children }: { children: ReactNode }) {
     };
     const role = currentUser ? (roleLabels[currentUser.role] ?? currentUser.role) : "여기를 클릭해 로그인하세요";
     const initial = isLoggedIn ? (currentUser?.name?.trim().charAt(0).toUpperCase() || "?") : "!";
-    const avatarFileName = currentUser?.email.split("@", 1)[0]?.trim().toLowerCase();
-    const fallbackAvatarUrl = avatarFileName ? `/profile/${avatarFileName}.png` : null;
-    const avatarUrl = currentUser?.role === "admin" ? null : (currentUser?.avatar_url ?? fallbackAvatarUrl);
+    const avatarUrl = currentUser?.avatar_url ?? null;
     return { name, role, initial, avatarUrl, isLoggedIn };
   }, [currentUser]);
 

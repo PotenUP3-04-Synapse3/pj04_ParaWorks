@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import get_settings
 from backend.app.core.demo_auth import DemoUser
 from backend.app.models.messages import Message, MessageChannel
 from backend.app.models.review import ReviewItem
@@ -106,6 +107,9 @@ def serialize_message(message: Message) -> dict:
 
 
 def ensure_seed_data(db: Session) -> None:
+    if not get_settings().paraworks_seed_demo_data:
+        return
+
     existing = db.scalar(select(MessageChannel.id).limit(1))
     if existing is not None:
         return

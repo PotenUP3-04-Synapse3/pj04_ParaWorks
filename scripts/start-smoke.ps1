@@ -26,6 +26,7 @@ Push-Location $repoRoot
 try {
     $env:DATABASE_URL = $databaseUrl
     $env:PARAWORKS_DEMO_MODE = "true"
+    $env:PARAWORKS_SEED_DEMO_DATA = "true"
     uv run python -m backend.app.db.init_db
 
     $nextDistDir = ".next-smoke"
@@ -34,7 +35,7 @@ try {
         Remove-Item -LiteralPath $nextCache -Recurse -Force
     }
 
-    $backendCommand = "`$env:DATABASE_URL='$databaseUrl'; `$env:PARAWORKS_DEMO_MODE='true'; uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort"
+    $backendCommand = "`$env:DATABASE_URL='$databaseUrl'; `$env:PARAWORKS_DEMO_MODE='true'; `$env:PARAWORKS_SEED_DEMO_DATA='true'; uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort"
     $frontendCommand = "`$env:NEXT_DIST_DIR='$nextDistDir'; npm.cmd run dev -- --hostname $HostAddress --port $FrontendPort"
 
     $backend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory $repoRoot -ArgumentList @("-NoProfile", "-Command", $backendCommand)
