@@ -354,8 +354,8 @@ export default function IntegrationsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-4 sm:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
+        <div className="grid gap-4 sm:grid-cols-2 items-start">
           {visibleManifests.map((manifest) => {
             const visual = integrationVisuals[manifest.type as keyof typeof integrationVisuals] ?? fallbackVisual;
             const Icon = visual.icon;
@@ -389,7 +389,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col ${
                   featured ? "border-[#c9b7d5]" : "border-[var(--line-soft)]"
                 }`}
               >
@@ -475,7 +475,7 @@ export default function IntegrationsPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)] pt-4">
+                <div className="mt-auto pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)]">
                   <span className="text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
                   </span>

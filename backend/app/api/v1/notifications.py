@@ -4,16 +4,19 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import Settings, get_settings
+from backend.app.core.demo_filters import filter_review_items
 from backend.app.db.session import get_db
 from backend.app.models import AgentRun, ReviewItem
 
 router = APIRouter(prefix='/notifications', tags=['notifications'])
 DbSession = Annotated[Session, Depends(get_db)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 @router.get('')
-def list_notifications(db: DbSession) -> dict:
-    review_notifications = _review_notifications(db)
+def list_notifications(db: DbSession, settings: AppSettings) -> dict:
+    review_notifications = _review_notifications(db, settings)
     agent_run_notifications = _agent_run_notifications(db)
     notifications = review_notifications + agent_run_notifications
     return {
@@ -26,9 +29,9 @@ def list_notifications(db: DbSession) -> dict:
     }
 
 
-def _review_notifications(db: Session) -> list[dict]:
-    pending_count = _review_count(db, 'pending_review')
-    needs_more_evidence_count = _review_count(db, 'needs_more_evidence')
+def _review_notifications(db: Session, settings: Settings) -> list[dict]:
+    pending_count = _review_count(db, settings, 'pending_review')
+    needs_more_evidence_count = _review_count(db, settings, 'needs_more_evidence')
     notifications = []
     if pending_count:
         notifications.append(
@@ -81,5 +84,8 @@ def _agent_run_notifications(db: Session) -> list[dict]:
     ]
 
 
-def _review_count(db: Session, status: str) -> int:
-    return len(db.scalars(select(ReviewItem.id).where(ReviewItem.status == status)).all())
+def _review_count(db: Session, settings: Settings, status: str) -> int:
+    if settings.paraworks_demo_mode:
+        return len(db.scalars(select(ReviewItem.id).where(ReviewItem.status == status)).all())
+    items = db.scalars(select(ReviewItem).where(ReviewItem.status == status)).all()
+    return len(filter_review_items(items))

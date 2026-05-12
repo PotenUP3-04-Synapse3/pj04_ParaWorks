@@ -4,21 +4,30 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import Settings, get_settings
+from backend.app.core.demo_filters import filter_review_items
 from backend.app.db.session import get_db
 from backend.app.models import ReviewItem, Source, SyncJob
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 DbSession = Annotated[Session, Depends(get_db)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 @router.get('')
-def get_dashboard(db: DbSession) -> dict:
+def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
     source_counts = dict(
         db.execute(select(Source.source_type, func.count(Source.id)).group_by(Source.source_type)).all()
     )
-    pending_review_count = db.scalar(
-        select(func.count(ReviewItem.id)).where(ReviewItem.status == 'pending_review')
-    )
+    if settings.paraworks_demo_mode:
+        pending_review_count = db.scalar(
+            select(func.count(ReviewItem.id)).where(ReviewItem.status == 'pending_review')
+        )
+    else:
+        pending_review_items = db.scalars(
+            select(ReviewItem).where(ReviewItem.status == 'pending_review')
+        ).all()
+        pending_review_count = len(filter_review_items(pending_review_items))
     recent_jobs = db.scalars(select(SyncJob).order_by(SyncJob.created_at.desc()).limit(5)).all()
 
     return {
