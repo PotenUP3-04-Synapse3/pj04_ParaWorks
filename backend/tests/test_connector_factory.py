@@ -1,6 +1,11 @@
+import pytest
 from sqlalchemy.orm import Session
 
-from backend.app.connectors.factory import get_configured_connector, get_sync_connector
+from backend.app.connectors.factory import (
+    ConnectorNotConfiguredError,
+    get_configured_connector,
+    get_sync_connector,
+)
 from backend.app.connectors.google import GoogleConnector, GoogleWebApiClient
 from backend.app.connectors.mock import MockConnector
 from backend.app.connectors.slack import SlackConnector, SlackWebApiClient
@@ -12,7 +17,7 @@ from backend.app.models import IntegrationConnection
 def test_connector_factory_uses_mock_when_slack_credentials_are_missing() -> None:
     connector = get_configured_connector(
         'slack',
-        Settings(slack_bot_token=None, slack_channel_ids=''),
+        Settings(paraworks_demo_mode=True, slack_bot_token=None, slack_channel_ids=''),
     )
 
     assert isinstance(connector, MockConnector)
@@ -131,7 +136,7 @@ def test_sync_connector_allows_slack_channel_override_for_selected_sync(
     assert connector.config.channel_ids == ['C456']
 
 
-def test_sync_connector_falls_back_to_mock_when_installed_token_is_not_in_vault(
+def test_sync_connector_requires_slack_token_when_installed_token_is_not_in_vault(
     db_session: Session,
 ) -> None:
     db_session.add(
@@ -148,19 +153,17 @@ def test_sync_connector_falls_back_to_mock_when_installed_token_is_not_in_vault(
     )
     db_session.commit()
 
-    connector = get_sync_connector(
-        'slack',
-        Settings(
-            paraworks_demo_mode=False,
-            slack_bot_token=None,
-            slack_channel_ids='C123',
-        ),
-        db=db_session,
-        token_vault=LocalTokenVault(),
-    )
-
-    assert isinstance(connector, MockConnector)
-    assert connector.source_type == 'slack'
+    with pytest.raises(ConnectorNotConfiguredError):
+        get_sync_connector(
+            'slack',
+            Settings(
+                paraworks_demo_mode=False,
+                slack_bot_token=None,
+                slack_channel_ids='C123',
+            ),
+            db=db_session,
+            token_vault=LocalTokenVault(),
+        )
 
 
 def test_sync_connector_uses_installed_google_connection_token_from_vault(
@@ -236,7 +239,7 @@ def test_sync_connector_keeps_google_mock_in_demo_mode_even_with_installed_conne
     assert connector.source_type == 'drive'
 
 
-def test_sync_connector_falls_back_to_mock_when_installed_google_token_is_not_in_vault(
+def test_sync_connector_requires_google_token_when_installed_google_token_is_not_in_vault(
     db_session: Session,
 ) -> None:
     db_session.add(
@@ -252,12 +255,10 @@ def test_sync_connector_falls_back_to_mock_when_installed_google_token_is_not_in
     )
     db_session.commit()
 
-    connector = get_sync_connector(
-        'calendar',
-        Settings(paraworks_demo_mode=False),
-        db=db_session,
-        token_vault=LocalTokenVault(),
-    )
-
-    assert isinstance(connector, MockConnector)
-    assert connector.source_type == 'calendar'
+    with pytest.raises(ConnectorNotConfiguredError):
+        get_sync_connector(
+            'calendar',
+            Settings(paraworks_demo_mode=False),
+            db=db_session,
+            token_vault=LocalTokenVault(),
+        )

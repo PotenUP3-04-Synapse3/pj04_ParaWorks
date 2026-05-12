@@ -196,6 +196,7 @@ try {
     Write-Step "Starting Docker services"
     docker compose up -d postgres redis minio
 
+    $env:PARAWORKS_DATABASE_URL = $DatabaseUrl
     $env:DATABASE_URL = $DatabaseUrl
     $env:REDIS_URL = "redis://127.0.0.1:$RedisPort/0"
     $env:PARAWORKS_DEMO_MODE = "false"
@@ -220,6 +221,7 @@ try {
     $frontendErr = Join-Path $tmpDir "paraworks-frontend.err.log"
 
     $backendCommand = @"
+`$env:PARAWORKS_DATABASE_URL = '$DatabaseUrl'
 `$env:DATABASE_URL = '$DatabaseUrl'
 `$env:REDIS_URL = 'redis://127.0.0.1:$RedisPort/0'
 `$env:PARAWORKS_DEMO_MODE = 'false'

@@ -118,16 +118,18 @@ def parser_adapter_decision_for_mime_type(mime_type: str) -> ParserAdapterDecisi
     if normalized == _PDF_MIME_TYPE:
         return ParserAdapterDecision(
             mime_type=normalized,
-            parser_status='metadata_only',
-            parser_status_reason='pdf_parser_not_enabled',
+            parser_status='parsed',
+            parser_status_reason='',
             candidate_package='pypdf',
+            live_enabled=True,
         )
     if normalized == _DOCX_MIME_TYPE:
         return ParserAdapterDecision(
             mime_type=normalized,
-            parser_status='metadata_only',
-            parser_status_reason='docx_parser_not_enabled',
+            parser_status='parsed',
+            parser_status_reason='',
             candidate_package='python-docx',
+            live_enabled=True,
         )
     if normalized in _HWP_MIME_TYPES:
         return ParserAdapterDecision(

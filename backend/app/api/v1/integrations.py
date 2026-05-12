@@ -22,7 +22,7 @@ from backend.app.agents.slack_agent import (
     build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
-from backend.app.connectors.factory import get_sync_connector
+from backend.app.connectors.factory import ConnectorNotConfiguredError, get_sync_connector
 from backend.app.connectors.google_oauth import (
     GOOGLE_OAUTH_CONNECTOR_TYPES,
     GoogleOAuthConfigurationError,
@@ -66,7 +66,7 @@ SYNC_REQUEST_BODY = Body(default=None)
 
 
 @router.get('')
-def list_integrations() -> list[dict[str, object]]:
+def list_integrations(settings: AppSettings) -> list[dict[str, object]]:
     return [
         {
             'type': manifest.connector_type,
@@ -78,7 +78,7 @@ def list_integrations() -> list[dict[str, object]]:
             'sync_strategy': manifest.sync_strategy,
             'cost_policy': manifest.cost_policy,
         }
-        for manifest in list_connector_manifests()
+        for manifest in list_connector_manifests(demo_mode=settings.paraworks_demo_mode)
     ]
 
 
@@ -192,14 +192,16 @@ def sync_connector(
         if request is not None and request.selected_channel_ids is not None and connector_type == 'slack'
         else None
     )
-    connector = get_sync_connector(
-        connector_type,
-        settings,
-        db=db,
-        slack_channel_ids_override=selected_channel_ids,
-    )
     try:
+        connector = get_sync_connector(
+            connector_type,
+            settings,
+            db=db,
+            slack_channel_ids_override=selected_channel_ids,
+        )
         result = sync_connector_events(db=db, connector=connector)
+    except ConnectorNotConfiguredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     parser_status_counts = getattr(result, 'parser_status_counts', {})

@@ -81,6 +81,15 @@
     "version": "5",
     "headRevisionId": "rev-5"
   },
+  "drive_pdf": {
+    "id": "file-golden-pdf",
+    "name": "Report.pdf",
+    "mimeType": "application/pdf",
+    "webViewLink": "https://drive.google.com/file/d/file-golden-pdf/view",
+    "modifiedTime": "2026-05-01T09:15:00Z",
+    "version": "8",
+    "headRevisionId": "rev-8"
+  },
   "calendar": {
     "id": "event-golden-1",
     "summary": "Launch review",
