@@ -288,6 +288,11 @@ export default function ReviewPage() {
                     <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--ink-muted)]">
                       {item.permission_level}
                     </span>
+                    {item.payload.project_tag ? (
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        {stringField(item.payload.project_tag)}
+                      </span>
+                    ) : null}
                     {isAgentItem ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#21132b] px-2.5 py-1 text-xs font-semibold text-white">
                         <Sparkles className="h-3 w-3" aria-hidden="true" />
@@ -326,6 +331,20 @@ export default function ReviewPage() {
                       <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink-muted)]">
                         {itemSummary(item)}
                       </p>
+                      {/* Render extra structured data if present */}
+                      {Object.entries(item.payload)
+                        .filter(
+                          ([k, v]) =>
+                            ["From", "To", "Subject", "CC", "Date", "Uploader", "Title", "Upload Date", "Link"].includes(k) &&
+                            v &&
+                            typeof v === "string",
+                        )
+                        .map(([k, v]) => (
+                          <div key={k} className="mt-1 flex text-sm text-[var(--ink)]">
+                            <span className="w-24 font-semibold text-[var(--ink-muted)]">{k}</span>
+                            <span className="flex-1 truncate">{String(v)}</span>
+                          </div>
+                        ))}
                     </>
                   )}
 
