@@ -85,20 +85,20 @@ export default async function AgentRunsPage() {
   const jobStatusCounts = countJobStatuses(ragIndexing.latest_jobs);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <div className="reference-dashboard space-y-5">
+      <section className="page-heading reference-heading">
         <div>
-          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Agent Operations</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">AI 실행 관측</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Agent Operations</p>
+          <h1>AI 실행 관측</h1>
+          <p>
             에이전트 실행 비용, 토큰 사용량, 캐시 적중률, RAG 인덱싱 상태를 운영자 관점에서 확인합니다.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+        <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold text-[var(--ink-subtle)]">
           <BarChart3 className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
           {summary.totals.total_runs} audited runs
         </div>
-      </div>
+      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

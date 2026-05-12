@@ -339,20 +339,20 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <div className="reference-dashboard space-y-5">
+      <section className="page-heading reference-heading">
         <div>
-          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Tools</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">연동과 에이전트 도구</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Tools</p>
+          <h1>연동과 에이전트 도구</h1>
+          <p>
             Slack, 메일, 문서, 캘린더 데이터를 공통 ingestion contract로 받아 Review Queue와 RAG 흐름에 연결합니다.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+        <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold text-[var(--ink-subtle)]">
           <PlugZap className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
           Connector contract ready
         </div>
-      </div>
+      </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-4 sm:grid-cols-2">

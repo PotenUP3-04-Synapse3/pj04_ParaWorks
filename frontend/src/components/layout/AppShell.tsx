@@ -17,7 +17,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
-import { LOCAL_DEMO_USERS, apiGet, apiPost, clearStoredDemoUserId, getStoredDemoUserId } from "@/lib/api/client";
+import { apiGet, apiPost, clearStoredDemoUserId } from "@/lib/api/client";
 import type { AuthUserResponse, DemoUser } from "@/lib/api/types";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 
@@ -86,14 +86,8 @@ function ShellContent({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (active) {
-          const storedId = getStoredDemoUserId();
-          const fallbackUser = LOCAL_DEMO_USERS.find((u) => u.id === storedId || u.email === storedId);
-          if (fallbackUser) {
-            setCurrentUser(fallbackUser);
-          } else {
-            setCurrentUser(null);
-            router.push("/login");
-          }
+          setCurrentUser(null);
+          router.push("/login");
         }
       });
 
@@ -237,16 +231,6 @@ function ShellContent({ children }: { children: ReactNode }) {
                     }}
                   >
                     내 계정 정보
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
-                    onClick={() => {
-                      setAccountMenuOpen(false);
-                      router.push("/login");
-                    }}
-                  >
-                    다른 계정으로 전환
                   </button>
                   <div className="my-1 border-t border-line" />
                   <button

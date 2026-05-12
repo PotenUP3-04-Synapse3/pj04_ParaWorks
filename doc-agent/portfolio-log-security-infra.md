@@ -59,6 +59,23 @@ Portfolio angle:
 
 ## Infrastructure and Tooling
 
+### Local Docker Auth Session Alignment
+
+Recorded on 2026-05-12.
+
+Aligned local Docker development with production-like cookie authentication.
+
+- Seeded local Docker databases with portfolio auth users and evidence-backed pending Review Queue items during `init_db`.
+- Allowed local non-smoke mode (`PARAWORKS_DEMO_MODE=false`, `PARAWORKS_ENV=local`) to issue real httpOnly session, refresh, and CSRF cookies for seeded emails such as `admin@paraworks.com` and `hanvv3@gmail.com`.
+- Removed the frontend fallback that treated localStorage-only demo account selection as a successful login when the backend rejected or could not complete login.
+- Confirmed admin-only AgentRun and Admin Console APIs work for seeded admin accounts, and CSRF-protected Ask requests pass when the frontend sends `X-CSRF-Token`.
+
+Verification:
+
+- `uv run pytest backend/tests -q` passed with 289 tests and 1 skipped.
+- `npm.cmd run build` passed.
+- Direct Docker-backed API check confirmed login, `/auth/me`, `/agent-runs`, `/admin/users`, `/review`, and `/ask`.
+
 ### PowerShell Execution Policy Resolution
 
 Recorded on 2026-05-11.

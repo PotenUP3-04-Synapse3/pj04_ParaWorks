@@ -249,3 +249,106 @@ Recommended next frontend tasks:
 3. Add final screenshots and short captions to `docs/portfolio-case-study.md`.
 4. Decide whether the `docker` dependency changes in `pyproject.toml` and
    `uv.lock` belong in the same commit or should be separated.
+
+## 2026-05-12 Account Menu Simplification
+
+- Removed the sidebar account menu's `다른 계정으로 전환` item because it only
+  routed to `/login` and did not differ meaningfully from logout in the current
+  cookie-session flow.
+- Kept `내 계정 정보` and `로그아웃` as the two clear account actions.
+
+Verification:
+
+- `npm.cmd run build` passed.
+
+## 2026-05-12 Enterprise UI Polish Pass
+
+- Applied a restrained production SaaS polish pass without changing navigation,
+  layout structure, information architecture, or interaction flow.
+- Added missing shared UI tokens for soft primary states, hover borders,
+  stronger secondary text, focus rings, and panel-hover elevation.
+- Tightened typography hierarchy by making page titles and operational row
+  titles slightly stronger while keeping compact Korean-first density.
+- Improved enterprise interaction feedback across shared shell/search/buttons,
+  selected sidebar items, metric cards, review rows, activity rows, filter
+  pills, and primary actions.
+- Strengthened evidence/review scanability with calmer panel separation,
+  clearer disabled states, and subtle hover feedback suitable for daily
+  internal operations work.
+
+Verification:
+
+- `npm.cmd run build` passed from `frontend`.
+- Local HTTP smoke returned `200` for `/dashboard`, `/review`, and `/search`.
+- Desktop Playwright page regression was attempted, but did not complete:
+  route inventory is stale for `/documents` and `/projects`, and the local
+  Playwright Chromium binary is missing from the expected cache path.
+
+## 2026-05-12 Admin Console Alignment Pass
+
+- Reworked `/admin` to match the current enterprise console visual system used
+  by Dashboard, Review, and Agent Operations.
+- Replaced older `liquid-*` surfaces with the shared `reference-dashboard`,
+  `page-heading`, `panel`, `source-metric-card`, `activity-toolbar`, and
+  dense table styling.
+- Added admin-specific table, select, permission pill, and status pill styles
+  that preserve the existing user/role/permission workflow while making the
+  page feel like the rest of the operational product.
+- Kept the information architecture unchanged: permission gate, account
+  metrics, user permission management, and audit log remain in the same order.
+
+Verification:
+
+- `npm.cmd run build` passed from `frontend`.
+- Local HTTP smoke returned `200` for `/admin`.
+
+## 2026-05-12 Agent Runs And Integrations Header Alignment
+
+- Aligned `/agent-runs` and `/integrations` page headers with the same
+  `reference-dashboard`, `page-heading`, and `reference-heading` typography
+  pattern used by Dashboard.
+- Replaced page-local `text-sm`/`text-2xl` heading classes with shared `h1`,
+  metadata, and helper text rules so title weight, Korean text sizing, and
+  secondary copy contrast match the rest of the console.
+- Kept page content, cards, operations panels, and workflows unchanged.
+
+Verification:
+
+- `npm.cmd run build` passed from `frontend`.
+- Local HTTP smoke returned `200` for `/agent-runs` and `/integrations`.
+
+## 2026-05-12 Header Eyebrow Consistency
+
+- Changed the Dashboard eyebrow from Korean copy to `My Work Home` so it
+  matches the English eyebrow convention used by the other product pages.
+- Added a shared rule for the first small text above page titles in
+  `page-heading`/`reference-heading` so all menu headers use the same blue
+  eyebrow color without changing body helper text.
+
+Verification:
+
+- `npm.cmd run build` passed from `frontend`.
+
+## 2026-05-12 Premium Enterprise Visual Token Pass
+
+- Refined the global visual tokens toward a quieter premium enterprise SaaS
+  aesthetic without changing page layout, navigation, card composition, or
+  interaction flow.
+- Set the hierarchy to `#ECEEF2` app background, `#F5F6F8` section/control
+  background, and `#FFFFFF` card surfaces.
+- Standardized card depth with the requested low-elevation shadow:
+  `0 1px 2px rgba(16,24,40,0.04), 0 1px 1px rgba(16,24,40,0.02)`.
+- Updated typography contrast tokens to `#101828` primary text, `#667085`
+  supporting text, and `#98A2B3` metadata/subtle labels.
+- Reduced decorative blue usage by moving secondary badges, icons, hover rows,
+  and helper labels back to neutral surfaces while preserving blue for active
+  navigation, primary actions, and important interactive states.
+- Reconnected legacy `liquid-*`, `glass-row`, and `integration-glass-card`
+  classes to the current surface/shadow tokens so older pages share the same
+  enterprise depth system.
+
+Verification:
+
+- `npm.cmd run build` passed from `frontend`.
+- Local HTTP smoke returned `200` for `/dashboard`, `/review`,
+  `/integrations`, and `/agent-runs`.

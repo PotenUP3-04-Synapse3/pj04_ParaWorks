@@ -152,3 +152,31 @@ def test_production_mode_rejects_missing_session_cookie(monkeypatch, db_session:
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()
+
+
+def test_local_production_like_mode_allows_seed_account_session_login(monkeypatch, db_session: Session) -> None:
+    monkeypatch.setenv('PARAWORKS_DEMO_MODE', 'false')
+    monkeypatch.setenv('PARAWORKS_ENV', 'local')
+    get_settings.cache_clear()
+    app = create_app()
+
+    def override_get_db() -> Generator[Session, None, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as production_client:
+            login_response = production_client.post('/api/v1/auth/login', json={'email': 'admin@paraworks.com'})
+            assert login_response.status_code == 200
+            assert login_response.json()['user']['role'] == 'admin'
+            assert 'paraworks_session=' in login_response.headers['set-cookie']
+
+            me_response = production_client.get('/api/v1/auth/me')
+            assert me_response.status_code == 200
+            assert me_response.json()['user']['email'] == 'admin@paraworks.com'
+
+            agent_runs_response = production_client.get('/api/v1/agent-runs')
+            assert agent_runs_response.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
