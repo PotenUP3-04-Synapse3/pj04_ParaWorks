@@ -151,10 +151,8 @@ function SearchPageContent() {
     if (booting || initialQuerySent || !initialQuery || !activeConversation) return;
 
     setInitialQuerySent(true);
-    if (messages.length === 0) {
-      void sendMessage(initialQuery);
-    }
-  }, [activeConversation, booting, initialQuery, initialQuerySent, messages.length, sendMessage]);
+    void sendMessage(initialQuery);
+  }, [activeConversation, booting, initialQuery, initialQuerySent, sendMessage]);
 
   useEffect(() => {
     let active = true;
@@ -181,7 +179,7 @@ function SearchPageContent() {
       <div className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">AI Assistant</p>
-          <h1>AI 비서</h1>
+          <h1>AI 비서와 대화</h1>
           <p>대화를 기억하면서 회사 지식에 기반한 답변과 확인 가능한 근거를 함께 보여줍니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
