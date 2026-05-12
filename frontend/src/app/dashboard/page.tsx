@@ -76,7 +76,12 @@ const reviewItems = [
 
 export default async function DashboardPage() {
   const dashboard = await serverApiGet<DashboardResponse>("/api/v1/dashboard").catch(() => null);
-  const pendingReviewCount = dashboard?.pending_review_count || FALLBACK_PENDING_REVIEW_COUNT;
+  const pendingReviewCount = dashboard?.pending_review_count || 0;
+  
+  const todayTasks = dashboard?.today_todos || [];
+  const reviewItems = dashboard?.pending_items || [];
+  const latestSync = dashboard?.recent_jobs?.[0];
+  const syncDateStr = latestSync ? new Date().toLocaleDateString() : "2026.05.11 월요일";
 
   return (
     <div className="reference-dashboard space-y-4">
@@ -88,15 +93,15 @@ export default async function DashboardPage() {
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <Clock3 className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
-          2026.05.11 월요일
+          {syncDateStr}
         </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-4">
-        <PersonalMetric label="오늘 할 일" value={`${todayTasks.length}건`} detail="높은 우선순위 2건" />
+        <PersonalMetric label="오늘 할 일" value={`${todayTasks.length}건`} detail="분석된 할 일" />
         <PersonalMetric label="내 검토 대기" value={`${pendingReviewCount}건`} detail="검토사항" />
-        <PersonalMetric label="오늘 일정" value={`${upcomingEvents.length}개`} detail="다음 회의 10:30" />
-        <PersonalMetric label="담당 프로젝트" value={`${assignedProjects.length}개`} detail="위험도 높음 1개" />
+        <PersonalMetric label="오늘 일정" value="3개" detail="다음 회의 10:30" />
+        <PersonalMetric label="담당 프로젝트" value="3개" detail="위험도 높음 1개" />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -104,52 +109,60 @@ export default async function DashboardPage() {
           <Panel>
             <div className="panel-header compact">
               <PanelTitle title="오늘 해야 할 업무" count={`${todayTasks.length}건`} />
-              <Link href="/projects" className="text-link">
-                프로젝트 보기
+              <Link href="/review" className="text-link">
+                전체 업무 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
             <div className="mt-3 space-y-3">
-              {todayTasks.map((task) => (
-                <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+              {todayTasks.length > 0 ? todayTasks.map((task) => (
+                <article key={task.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-[15px] font-extrabold text-ink">{task.title}</h2>
-                      <p className="mt-1 text-[12px] font-bold text-muted">{task.project} · {task.source}</p>
+                      <p className="mt-1 text-[12px] font-bold text-muted">{task.category} · 담당: {task.assignee}</p>
                     </div>
-                    <span className={`priority-badge ${task.priority === "높음" ? "danger" : "warning"}`}>
-                      {task.priority}
+                    <span className="priority-badge warning">
+                      {task.category}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] font-bold text-muted">
-                    <span className="badge blue">{task.status}</span>
+                    <span className="badge blue">검토 필요</span>
                     <span className="inline-flex items-center gap-1">
                       <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-                      {task.due}
+                      {task.due_date}까지
                     </span>
                   </div>
                 </article>
-              ))}
+              )) : (
+                <div className="p-12 text-center text-muted font-bold border-2 border-dashed rounded-xl">
+                  추출된 할 일이 없습니다. 슬랙 동기화를 진행해 주세요.
+                </div>
+              )}
             </div>
           </Panel>
 
           <Panel>
             <div className="panel-header compact">
-              <PanelTitle title="검토사항" count={`${reviewItems.length}건`} />
+              <PanelTitle title="검토사항 (신규)" count={`${reviewItems.length}건`} />
               <Link href="/review" className="text-link">
                 전체 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
             <div className="mt-3 grid gap-2">
-              {reviewItems.map(([title, source, due, priority]) => (
-                <div key={title} className="grid gap-2 rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] sm:grid-cols-[1fr_84px_92px_58px] sm:items-center">
-                  <span className="font-extrabold text-ink">{title}</span>
-                  <span className="text-muted">{source}</span>
-                  <span className="text-muted">{due}</span>
-                  <span className={`priority-badge ${priority === "높음" ? "danger" : "warning"}`}>{priority}</span>
+              {reviewItems.length > 0 ? reviewItems.map((item) => (
+                <div key={item.id} className="grid gap-2 rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] sm:grid-cols-[1fr_84px_92px_58px] sm:items-center">
+                  <span className="font-extrabold text-ink">{item.title}</span>
+                  <span className="text-muted">{item.category}</span>
+                  <span className="text-muted">{item.item_type}</span>
+                  <span className={`priority-badge ${item.confidence_score > 0.8 ? "danger" : "warning"}`}>{Math.round(item.confidence_score * 100)}%</span>
                 </div>
-              ))}
+              )) : (
+                <div className="p-8 text-center text-muted font-bold">
+                  새로운 검토 항목이 없습니다.
+                </div>
+              )}
             </div>
           </Panel>
 
