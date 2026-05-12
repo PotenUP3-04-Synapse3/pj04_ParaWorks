@@ -93,11 +93,14 @@ def append_assistant_message(
     metadata: dict,
 ) -> AssistantMessage:
     _ensure_owned_conversation(user, conversation)
+    normalized_content = content.strip()
+    if not normalized_content:
+        raise ValueError('assistant message content is required')
 
     message = AssistantMessage(
         conversation_id=conversation.id,
         role='assistant',
-        content=content,
+        content=normalized_content,
         citations=citations,
         source_ids=source_ids,
         source_links=source_links,
