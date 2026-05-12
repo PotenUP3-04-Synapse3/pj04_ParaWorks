@@ -83,6 +83,7 @@ def test_assistant_message_json_fields_track_mutation_and_keep_independent_defau
     assert stored_messages[0].source_links == ['https://docs.mock/source-1']
     assert stored_messages[0].source_snippets == ['첫 번째 근거']
     assert stored_messages[0].metadata_ == {'retrieval_backend': 'deterministic_lexical'}
+    assert stored_messages[1].id == second_message.id
     assert stored_messages[1].citations == []
     assert stored_messages[1].source_ids == []
     assert stored_messages[1].source_links == []
