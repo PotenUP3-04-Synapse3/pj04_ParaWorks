@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 
-from backend.app.core.session_auth import check_csrf
 from backend.app.api.v1 import (
     admin,
     agent_runs,
     ask,
+    assistant,
     auth,
     dashboard,
     documents,
@@ -19,10 +19,12 @@ from backend.app.api.v1 import (
     search,
     stream,
 )
+from backend.app.core.session_auth import check_csrf
 
 api_router = APIRouter(prefix='/api/v1', dependencies=[Depends(check_csrf)])
 api_router.include_router(admin.router)
 api_router.include_router(agent_runs.router)
+api_router.include_router(assistant.router)
 api_router.include_router(ask.router)
 api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
