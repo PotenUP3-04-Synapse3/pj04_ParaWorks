@@ -8,11 +8,16 @@ import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
 
-SLACK_REQUIRED_HISTORY_SCOPES = (
+SLACK_REQUIRED_SCOPES = (
     'channels:history',
     'groups:history',
     'im:history',
     'mpim:history',
+    'channels:read',
+    'groups:read',
+    'im:read',
+    'mpim:read',
+    'users:read',
 )
 
 
@@ -75,11 +80,14 @@ class SlackWebApiClient:
             'conversations.list',
             'channels',
             {
-                'types': 'public_channel,private_channel',
+                'types': 'public_channel,private_channel,im,mpim',
                 'exclude_archived': 'true',
                 'limit': str(self.page_limit),
             },
         )
+
+    def users_list(self) -> list[dict]:
+        return self._get_paginated_items('users.list', 'members', {'limit': str(self.page_limit)})
 
     def _get_paginated_items(self, method: str, item_key: str, params: dict[str, str]) -> list[dict]:
         items: list[dict] = []
@@ -144,7 +152,7 @@ class SlackConnector:
             display_name='Slack',
             mode='live',
             auth_type='oauth',
-            required_scopes=SLACK_REQUIRED_HISTORY_SCOPES,
+            required_scopes=SLACK_REQUIRED_SCOPES,
             sync_strategy='incremental',
             cost_policy='Fetch source deltas first; embed only changed chunks after review approval.',
         )
@@ -154,7 +162,18 @@ class SlackConnector:
 
     def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
         events: list[SourceEvent] = []
-        for channel_id in self.config.channel_ids:
+        
+        # 설정된 채널 ID가 없으면 봇이 참여 중인 모든 채널을 자동으로 가져옴
+        channel_ids = self.config.channel_ids
+        if not channel_ids:
+            all_channels = self.client.conversations_list()
+            # public/private 채널은 is_member로 확인하고, DM(im/mpim)은 is_im/is_mpim으로 확인합니다.
+            channel_ids = [
+                c['id'] for c in all_channels 
+                if c.get('is_member') or c.get('is_im') or c.get('is_mpim')
+            ]
+            
+        for channel_id in channel_ids:
             oldest = latest_timestamps_by_partition.get(channel_id)
             for message in self.client.conversation_history(channel_id, oldest=oldest):
                 if message.get('type') != 'message' or not message.get('text'):
@@ -217,7 +236,7 @@ class SlackConnector:
                 'thread_parent_text': parent_text,
                 'thread_reply_index': reply_index,
                 'thread_context_window': 'parent_plus_reply' if parent_text else 'single_message',
-                'required_scopes': list(SLACK_REQUIRED_HISTORY_SCOPES),
+                'required_scopes': list(SLACK_REQUIRED_SCOPES),
             },
         )
 
