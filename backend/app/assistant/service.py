@@ -50,15 +50,25 @@ def list_messages(db: Session, user: DemoUser, conversation_id: int) -> list[Ass
     return list(conversation.messages)
 
 
-def append_user_message(db: Session, conversation: AssistantConversation, content: str) -> AssistantMessage:
+def append_user_message(
+    db: Session,
+    user: DemoUser,
+    conversation: AssistantConversation,
+    content: str,
+) -> AssistantMessage:
+    _ensure_owned_conversation(user, conversation)
+    normalized_content = content.strip()
+    if not normalized_content:
+        raise ValueError('assistant message content is required')
+
     message = AssistantMessage(
         conversation_id=conversation.id,
         role='user',
-        content=content.strip(),
+        content=normalized_content,
     )
     conversation.updated_at = datetime.now(UTC)
     if conversation.title == DEFAULT_CONVERSATION_TITLE:
-        conversation.title = _conversation_title(content)
+        conversation.title = _conversation_title(normalized_content)
     db.add(message)
     db.commit()
     db.refresh(message)
@@ -68,6 +78,7 @@ def append_user_message(db: Session, conversation: AssistantConversation, conten
 
 def append_assistant_message(
     db: Session,
+    user: DemoUser,
     conversation: AssistantConversation,
     *,
     content: str,
@@ -81,6 +92,8 @@ def append_assistant_message(
     agent_run_id: int | None,
     metadata: dict,
 ) -> AssistantMessage:
+    _ensure_owned_conversation(user, conversation)
+
     message = AssistantMessage(
         conversation_id=conversation.id,
         role='assistant',
@@ -116,7 +129,8 @@ def build_contextual_question(
         parts.append(f'대화 요약: {conversation.summary}')
 
     # 전체 대화를 보내지 않고 최근 메시지만 사용해 토큰 사용량을 제한한다.
-    recent_messages = messages[-RECENT_CONTEXT_MESSAGE_LIMIT:]
+    context_messages = _exclude_current_user_message(messages, new_message)
+    recent_messages = context_messages[-RECENT_CONTEXT_MESSAGE_LIMIT:]
     if recent_messages:
         parts.append('최근 대화:')
         parts.extend(f'{message.role}: {message.content}' for message in recent_messages)
@@ -162,3 +176,20 @@ def serialize_message(message: AssistantMessage) -> dict:
 def _conversation_title(value: str | None) -> str:
     normalized = (value or DEFAULT_CONVERSATION_TITLE).strip() or DEFAULT_CONVERSATION_TITLE
     return normalized[:80]
+
+
+def _ensure_owned_conversation(user: DemoUser, conversation: AssistantConversation) -> None:
+    if conversation.user_id != user.id:
+        raise ValueError('assistant conversation not found')
+
+
+def _exclude_current_user_message(
+    messages: list[AssistantMessage],
+    new_message: str,
+) -> list[AssistantMessage]:
+    if not messages:
+        return messages
+    latest_message = messages[-1]
+    if latest_message.role == 'user' and latest_message.content.strip() == new_message.strip():
+        return messages[:-1]
+    return messages
