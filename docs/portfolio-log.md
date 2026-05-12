@@ -1,10 +1,27 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-02
+Last updated: 2026-05-12
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-12 AI Assistant Conversation Memory
+
+- Added database-backed, per-user AI assistant conversations for the `AI 비서`
+  surface.
+- Persisted user and assistant messages with citations, source snippets,
+  permission notices, hidden-source counts, and linked AgentRun ids.
+- Kept token, cache, and cost details out of the user-facing assistant flow so
+  cost observability remains in `Agent Runs`.
+- Added regression coverage for user-scoped assistant conversations and the
+  `/search` assistant UX.
+
+Portfolio angle:
+
+- Shows ParaWorks evolving from one-shot RAG search into a product-like
+  evidence-backed AI assistant with memory, permission safety, and operator
+  observability.
 
 ## 2026-05-11 Sidebar and Workspace Navigation Update
 
