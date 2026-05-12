@@ -108,25 +108,28 @@ def create_assistant_message(
         question=contextual_question,
         vector_store=vector_store,
     )
-    assistant_message = append_assistant_message(
-        db,
-        user,
-        conversation,
-        content=answer.answer,
-        citations=answer.citations,
-        source_ids=answer.source_ids,
-        source_links=answer.source_links,
-        source_snippets=answer.source_snippets,
-        permission_level=answer.permission_level,
-        hidden_match_count=answer.hidden_match_count,
-        permission_notice=answer.permission_notice,
-        agent_run_id=answer.agent_run_id,
-        metadata={
-            'agent_name': answer.agent_name,
-            'prompt_version': answer.prompt_version,
-            'question': answer.question,
-        },
-    )
+    try:
+        assistant_message = append_assistant_message(
+            db,
+            user,
+            conversation,
+            content=answer.answer,
+            citations=answer.citations,
+            source_ids=answer.source_ids,
+            source_links=answer.source_links,
+            source_snippets=answer.source_snippets,
+            permission_level=answer.permission_level,
+            hidden_match_count=answer.hidden_match_count,
+            permission_notice=answer.permission_notice,
+            agent_run_id=answer.agent_run_id,
+            metadata={
+                'agent_name': answer.agent_name,
+                'prompt_version': answer.prompt_version,
+                'question': answer.question,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         'conversation': serialize_conversation(conversation),
         'user_message': serialize_message(user_message),

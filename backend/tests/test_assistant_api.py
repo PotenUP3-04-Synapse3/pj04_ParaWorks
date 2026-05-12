@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from backend.app.api.v1 import assistant as assistant_api
 from backend.app.models import AgentRun, AssistantMessage
 from backend.tests.test_rag_orchestrator_service import seed_chunk
 
@@ -109,6 +112,46 @@ def test_assistant_rejects_whitespace_message_without_storing(
     assert turn_response.status_code == 422
     assert turn_response.json()['detail'] == 'assistant message content is required'
     assert db_session.query(AssistantMessage).count() == 0
+
+
+def test_assistant_rejects_blank_rag_answer_without_storing_assistant_message(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    def blank_answer(**kwargs):
+        return SimpleNamespace(
+            answer='   ',
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            agent_name='rag_orchestrator_agent',
+            prompt_version='rag-answer:v1',
+            question=kwargs['question'],
+        )
+
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', blank_answer)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': 'Blank assistant content'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'Redis job state'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 422
+    assert turn_response.json()['detail'] == 'assistant message content is required'
+    assert [message.role for message in db_session.query(AssistantMessage).all()] == ['user']
 
 
 def test_assistant_conversations_list_is_user_scoped(client: TestClient) -> None:
