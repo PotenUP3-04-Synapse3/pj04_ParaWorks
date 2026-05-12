@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.auth.google_identity import (
@@ -30,6 +31,8 @@ from backend.app.core.session_auth import (
     upsert_auth_user_from_demo,
 )
 from backend.app.db.session import get_db
+from backend.app.models import AuthUser
+from backend.app.seeds.auth_users import seed_auth_users
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
@@ -57,10 +60,13 @@ def get_login_options() -> dict:
 @router.post('/login', dependencies=[Depends(rate_limit_auth)])
 def login(request: LoginRequest, response: Response, db: DbSession) -> dict:
     settings = get_settings()
-    if not settings.paraworks_demo_mode:
+    if settings.paraworks_demo_mode:
+        demo_user = authenticate_demo_user(request.email)
+        auth_user = upsert_auth_user_from_demo(db, demo_user)
+    elif settings.paraworks_env == 'local':
+        auth_user = _authenticate_local_seed_user(db, request.email)
+    else:
         raise HTTPException(status_code=403, detail='Demo login is disabled.')
-    demo_user = authenticate_demo_user(request.email)
-    auth_user = upsert_auth_user_from_demo(db, demo_user)
     issue_auth_cookies(response, db, auth_user)
     db.commit()
     return {'user': serialize_auth_user(auth_user)}
@@ -145,3 +151,15 @@ def logout(request: Request, response: Response, db: DbSession) -> dict:
 @router.get('/users')
 def get_users(_: AdminUser) -> dict:
     return {'users': list_demo_users()}
+
+
+def _authenticate_local_seed_user(db: Session, email: str) -> AuthUser:
+    normalized_email = email.strip().lower()
+    if not normalized_email:
+        raise HTTPException(status_code=401, detail='Account not found.')
+
+    seed_auth_users(db)
+    auth_user = db.scalar(select(AuthUser).where(AuthUser.email == normalized_email))
+    if auth_user is None or auth_user.status != 'active':
+        raise HTTPException(status_code=401, detail='Account not found.')
+    return auth_user

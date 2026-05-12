@@ -780,3 +780,36 @@ uv run pytest backend/tests -v
 ```
 
 Result: 287 passed, 1 skipped.
+
+## 2026-05-12 Local Docker Auth and CSRF Update
+
+- Local production-like Docker mode now seeds auth users and pending Review
+  Queue evidence through `backend.app.db.init_db` when `PARAWORKS_ENV=local`.
+- `PARAWORKS_DEMO_MODE=false` no longer leaves local email login unusable in
+  local development: seeded emails can issue real httpOnly session, refresh,
+  and CSRF cookies.
+- The login page no longer redirects to `/dashboard` after a failed backend
+  login by storing only a local demo account id. AppShell also no longer treats
+  localStorage as authenticated state when `/api/v1/auth/me` fails.
+- Root cause fixed for the observed symptoms:
+  - fake localStorage login made the UI enter the app without backend cookies;
+  - unsafe POST routes such as `/api/v1/ask` then failed CSRF validation;
+  - admin-only pages saw the user as unauthenticated/non-admin;
+  - fresh Docker DBs had no seeded Review Queue items.
+- Verification:
+
+```powershell
+uv run pytest backend/tests -q
+cd frontend
+npm.cmd run build
+```
+
+Result: backend 289 passed, 1 skipped; frontend build passed.
+
+Direct Docker-backed API check on a secondary backend port confirmed:
+
+- `admin@paraworks.com` and `hanvv3@gmail.com` login return role `admin`;
+- `/api/v1/agent-runs` and `/api/v1/admin/users` return 200 for those sessions;
+- `/api/v1/review?status=pending_review` returns seeded review items;
+- `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
+  `X-CSRF-Token`.
