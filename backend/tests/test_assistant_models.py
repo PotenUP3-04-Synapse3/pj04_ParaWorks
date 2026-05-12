@@ -47,3 +47,51 @@ def test_assistant_conversation_and_messages_persist(db_session: Session) -> Non
     assert stored.messages[0].content == 'Redis는 일시적인 작업 상태 공유에 사용됩니다.'
     assert stored.messages[0].citations[0]['source_id'] == 'gmail-redis'
     assert stored.messages[0].agent_run_id == 7
+
+
+def test_assistant_message_json_fields_track_mutation_and_keep_independent_defaults(
+    db_session: Session,
+) -> None:
+    conversation = AssistantConversation(user_id='employee-jun')
+    first_message = AssistantMessage(
+        conversation=conversation,
+        role='assistant',
+        content='첫 번째 답변',
+    )
+    second_message = AssistantMessage(
+        conversation=conversation,
+        role='assistant',
+        content='두 번째 답변',
+    )
+    db_session.add(conversation)
+    db_session.commit()
+
+    first_message.citations.append({'source_id': 'source-1'})
+    first_message.source_ids.append('source-1')
+    first_message.source_links.append('https://docs.mock/source-1')
+    first_message.source_snippets.append('첫 번째 근거')
+    first_message.metadata_['retrieval_backend'] = 'deterministic_lexical'
+    db_session.commit()
+    db_session.expire_all()
+
+    stored_messages = db_session.scalars(
+        select(AssistantMessage).order_by(AssistantMessage.id)
+    ).all()
+
+    assert stored_messages[0].citations == [{'source_id': 'source-1'}]
+    assert stored_messages[0].source_ids == ['source-1']
+    assert stored_messages[0].source_links == ['https://docs.mock/source-1']
+    assert stored_messages[0].source_snippets == ['첫 번째 근거']
+    assert stored_messages[0].metadata_ == {'retrieval_backend': 'deterministic_lexical'}
+    assert stored_messages[1].citations == []
+    assert stored_messages[1].source_ids == []
+    assert stored_messages[1].source_links == []
+    assert stored_messages[1].source_snippets == []
+    assert stored_messages[1].metadata_ == {}
+
+
+def test_assistant_conversation_messages_order_has_id_tie_breaker() -> None:
+    order_by = AssistantConversation.messages.property.order_by
+
+    assert AssistantMessage.created_at in order_by
+    assert AssistantMessage.id in order_by
