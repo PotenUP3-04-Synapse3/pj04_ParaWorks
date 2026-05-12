@@ -424,6 +424,7 @@ export type AskResponse = {
   permission_level: string;
   hidden_match_count: number;
   permission_notice?: string | null;
+  agent_run_id?: number | null;
   cache_key: string;
   model_name: string;
   estimated_cost_usd: number;

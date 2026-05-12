@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -115,9 +114,8 @@ def test_assistant_rejects_whitespace_message_without_storing(
     assert db_session.query(AssistantMessage).count() == 0
 
 
-def test_assistant_rejects_blank_rag_answer_without_storing_assistant_message(
+def test_assistant_records_failed_message_when_rag_answer_is_blank(
     client: TestClient,
-    db_session: Session,
     monkeypatch,
 ) -> None:
     def blank_answer(**kwargs):
@@ -130,7 +128,7 @@ def test_assistant_rejects_blank_rag_answer_without_storing_assistant_message(
             permission_level='internal',
             hidden_match_count=0,
             permission_notice=None,
-            agent_run_id=None,
+            agent_run_id=987,
             agent_name='rag_orchestrator_agent',
             prompt_version='rag-answer:v1',
             question=kwargs['question'],
@@ -150,12 +148,34 @@ def test_assistant_rejects_blank_rag_answer_without_storing_assistant_message(
         headers={'X-Demo-User': 'viewer'},
     )
 
-    assert turn_response.status_code == 422
-    assert turn_response.json()['detail'] == 'assistant message content is required'
-    assert [message.role for message in db_session.query(AssistantMessage).all()] == ['user']
+    assert turn_response.status_code == 502
+    assert turn_response.json()['detail'] == 'assistant answer generation failed'
+
+    messages_response = client.get(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert messages_response.status_code == 200
+    messages = messages_response.json()['messages']
+    assert [message['role'] for message in messages] == ['user', 'assistant']
+    assert messages[0]['content'] == 'Redis job state'
+    failed_message = messages[1]
+    assert failed_message['content'] == assistant_api.ASSISTANT_FAILURE_CONTENT
+    assert failed_message['citations'] == []
+    assert failed_message['source_ids'] == []
+    assert failed_message['source_links'] == []
+    assert failed_message['source_snippets'] == []
+    assert failed_message['agent_run_id'] == 987
+    assert failed_message['metadata']['status'] == 'failed'
+    assert failed_message['metadata']['failure_reason'] == 'blank_answer'
+    assert failed_message['metadata']['failure_class'] == 'ValueError'
+    assert 'estimated_cost_usd' not in failed_message
+    assert 'token_usage' not in failed_message
+    assert 'cache_key' not in failed_message
 
 
-def test_assistant_preserves_user_message_when_rag_answer_fails(
+def test_assistant_records_failed_message_when_rag_answer_fails(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -170,12 +190,14 @@ def test_assistant_preserves_user_message_when_rag_answer_fails(
     )
     conversation_id = create_response.json()['conversation']['id']
 
-    with pytest.raises(RuntimeError, match='rag unavailable'):
-        client.post(
-            f'/api/v1/assistant/conversations/{conversation_id}/messages',
-            json={'content': 'Redis job state'},
-            headers={'X-Demo-User': 'viewer'},
-        )
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'Redis job state'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 502
+    assert turn_response.json()['detail'] == 'assistant answer generation failed'
 
     messages_response = client.get(
         f'/api/v1/assistant/conversations/{conversation_id}/messages',
@@ -184,8 +206,24 @@ def test_assistant_preserves_user_message_when_rag_answer_fails(
 
     assert messages_response.status_code == 200
     messages = messages_response.json()['messages']
-    assert [message['role'] for message in messages] == ['user']
+    assert [message['role'] for message in messages] == ['user', 'assistant']
     assert messages[0]['content'] == 'Redis job state'
+    failed_message = messages[1]
+    assert failed_message['content'] == assistant_api.ASSISTANT_FAILURE_CONTENT
+    assert failed_message['citations'] == []
+    assert failed_message['source_ids'] == []
+    assert failed_message['source_links'] == []
+    assert failed_message['source_snippets'] == []
+    assert failed_message['permission_level'] is None
+    assert failed_message['hidden_match_count'] == 0
+    assert failed_message['permission_notice'] is None
+    assert failed_message['agent_run_id'] is None
+    assert failed_message['metadata']['status'] == 'failed'
+    assert failed_message['metadata']['failure_reason'] == 'rag_exception'
+    assert failed_message['metadata']['failure_class'] == 'RuntimeError'
+    assert 'estimated_cost_usd' not in failed_message
+    assert 'token_usage' not in failed_message
+    assert 'cache_key' not in failed_message
 
 
 def test_assistant_conversations_list_is_user_scoped(client: TestClient) -> None:
