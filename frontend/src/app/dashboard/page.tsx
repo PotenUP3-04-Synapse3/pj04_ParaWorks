@@ -6,8 +6,6 @@ import type { DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
-const FALLBACK_PENDING_REVIEW_COUNT = 12;
-
 const todayTasks = [
   {
     title: "ORION 요구사항 변경안 검토",

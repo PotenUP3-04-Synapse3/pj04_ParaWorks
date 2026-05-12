@@ -32,28 +32,28 @@ type NavItem = {
 const navGroups: { items: NavItem[] }[] = [
   {
     items: [
-      { href: "/dashboard", label: "\ub300\uc2dc\ubcf4\ub4dc", icon: Grid2X2 },
-      { href: "/projects", label: "\ud504\ub85c\uc81d\ud2b8", icon: FolderKanban },
-      { href: "/review", label: "\uac80\ud1a0\uc0ac\ud56d", icon: Inbox, badge: 12 },
-      { href: "/timeline", label: "\ud0c0\uc784\ub77c\uc778", icon: GitBranch },
+      { href: "/dashboard", label: "대시보드", icon: Grid2X2 },
+      { href: "/projects", label: "프로젝트", icon: FolderKanban },
+      { href: "/review", label: "검토사항", icon: Inbox },
+      { href: "/timeline", label: "타임라인", icon: GitBranch },
     ],
   },
   {
     items: [
-      { href: "/search", label: "AI \ube44\uc11c", icon: Bot },
+      { href: "/search", label: "AI 비서", icon: Bot },
       {
         href: "/agent-runs",
-        label: "\uc5d0\uc774\uc804\ud2b8 \uc2e4\ud589 \uae30\ub85d",
+        label: "에이전트 실행 기록",
         icon: CalendarClock,
         requiredRole: "admin",
       },
-      { href: "/integrations", label: "\uc5f0\ub3d9 \uad00\ub9ac", icon: Database },
-      { href: "/notifications", label: "\uc54c\ub9bc", icon: Bell, badge: 3 },
+      { href: "/integrations", label: "연동 관리", icon: Database },
+      { href: "/notifications", label: "알림", icon: Bell },
     ],
   },
   {
     items: [
-      { href: "/admin", label: "\uad00\ub9ac\uc790 \ucf58\uc194", icon: Settings, requiredRole: "admin" },
+      { href: "/admin", label: "관리자 콘솔", icon: Settings, requiredRole: "admin" },
     ],
   },
 ];
@@ -71,6 +71,7 @@ function ShellContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
+  const [badgeCounts, setBadgeCounts] = useState<{ review?: number; notifications?: number }>({});
 
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/login/")) {
@@ -91,6 +92,14 @@ function ShellContent({ children }: { children: ReactNode }) {
         }
       });
 
+    // 배지 카운터 로드
+    apiGet<any>("/api/v1/dashboard")
+      .then((res) => active && setBadgeCounts((prev) => ({ ...prev, review: res.pending_review_count || 0 })))
+      .catch(() => {});
+    apiGet<any>("/api/v1/notifications")
+      .then((res) => active && setBadgeCounts((prev) => ({ ...prev, notifications: res.counts?.total || 0 })))
+      .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -100,10 +109,16 @@ function ShellContent({ children }: { children: ReactNode }) {
     () =>
       navGroups
         .map((group) => ({
-          items: group.items.filter((item) => !item.requiredRole || currentUser?.role === item.requiredRole),
+          items: group.items
+            .filter((item) => !item.requiredRole || currentUser?.role === item.requiredRole)
+            .map((item) => {
+              if (item.href === "/review") return { ...item, badge: badgeCounts.review || undefined };
+              if (item.href === "/notifications") return { ...item, badge: badgeCounts.notifications || undefined };
+              return item;
+            }),
         }))
         .filter((group) => group.items.length > 0),
-    [currentUser?.role],
+    [currentUser?.role, badgeCounts],
   );
 
   const accountDisplay = useMemo(() => {
@@ -279,12 +294,12 @@ function ShellContent({ children }: { children: ReactNode }) {
             </form>
 
             <div className="flex shrink-0 items-center gap-3">
-              <button type="button" className="icon-button" aria-label={"\ub3c4\uc6c0\ub9d0"}>
+              <button type="button" className="icon-button" aria-label={"도움말"}>
                 <CircleHelp className="h-[18px] w-[18px]" aria-hidden="true" />
               </button>
-              <Link href="/notifications" className="icon-button notification-button" aria-label={"\uc54c\ub9bc"}>
+              <Link href="/notifications" className="icon-button notification-button" aria-label={"알림"}>
                 <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
-                <span>3</span>
+                {badgeCounts.notifications ? <span>{badgeCounts.notifications}</span> : null}
               </Link>
             </div>
           </div>
