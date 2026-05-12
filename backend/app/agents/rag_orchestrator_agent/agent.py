@@ -47,6 +47,7 @@ class RagAnswer:
     permission_notice: str | None
     cost: AgentRunCost
     cache_key: str
+    agent_run_id: int | None = None
 
 
 class RagOrchestratorModel(Protocol):
