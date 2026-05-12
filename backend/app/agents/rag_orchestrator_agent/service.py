@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -68,28 +68,29 @@ def answer_question_with_rag(
         packet=packet,
         hidden_match_count=hidden_match_count,
     )
-    db.add(
-        AgentRun(
-            agent_name=answer.agent_name,
-            prompt_version=answer.prompt_version,
-            status='complete',
-            source_window=packet.source_window,
-            cache_key=answer.cache_key,
-            model_name=answer.cost.model_name,
-            input_tokens=answer.cost.token_usage.input_tokens,
-            output_tokens=answer.cost.token_usage.output_tokens,
-            total_tokens=answer.cost.token_usage.total_tokens,
-            estimated_cost_usd=answer.cost.estimated_cost_usd,
-            permission_level=answer.permission_level,
-            metadata_={
-                'source_type': packet.source_type,
-                'question': question,
-                'source_count': len(answer.source_links),
-                'hidden_match_count': hidden_match_count,
-                'cache_hit': answer.cost.cache_hit,
-            },
-        )
+    agent_run = AgentRun(
+        agent_name=answer.agent_name,
+        prompt_version=answer.prompt_version,
+        status='complete',
+        source_window=packet.source_window,
+        cache_key=answer.cache_key,
+        model_name=answer.cost.model_name,
+        input_tokens=answer.cost.token_usage.input_tokens,
+        output_tokens=answer.cost.token_usage.output_tokens,
+        total_tokens=answer.cost.token_usage.total_tokens,
+        estimated_cost_usd=answer.cost.estimated_cost_usd,
+        permission_level=answer.permission_level,
+        metadata_={
+            'source_type': packet.source_type,
+            'question': question,
+            'source_count': len(answer.source_links),
+            'hidden_match_count': hidden_match_count,
+            'cache_hit': answer.cost.cache_hit,
+        },
     )
+    db.add(agent_run)
+    db.flush()
+    answer = replace(answer, agent_run_id=agent_run.id)
     db.commit()
     return answer
 

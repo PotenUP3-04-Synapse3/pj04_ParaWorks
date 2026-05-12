@@ -42,6 +42,7 @@ def ask_company_memory(
         'permission_level': answer.permission_level,
         'hidden_match_count': answer.hidden_match_count,
         'permission_notice': answer.permission_notice,
+        'agent_run_id': answer.agent_run_id,
         'cache_key': answer.cache_key,
         'model_name': answer.cost.model_name,
         'estimated_cost_usd': answer.cost.estimated_cost_usd,
