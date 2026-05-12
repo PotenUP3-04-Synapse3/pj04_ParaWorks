@@ -82,7 +82,7 @@ export default async function DashboardPage() {
     <div className="reference-dashboard space-y-4">
       <section className="page-heading reference-heading">
         <div>
-          <p className="text-[13px] font-bold text-[var(--primary-dark)]">내 업무 홈</p>
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">My Work Home</p>
           <h1>대시보드</h1>
           <p>오늘 내가 처리해야 할 업무, 일정, 멘션, 담당 프로젝트를 한곳에서 확인합니다.</p>
         </div>
