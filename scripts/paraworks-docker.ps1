@@ -32,7 +32,7 @@ function Get-ListeningProcessIds {
     param([int[]]$Ports)
     return @(
         Get-NetTCPConnection -LocalPort $Ports -State Listen -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty OwningProcess -Unique
+        Select-Object -ExpandProperty OwningProcess -Unique
     )
 }
 
@@ -223,6 +223,7 @@ try {
 `$env:DATABASE_URL = '$DatabaseUrl'
 `$env:REDIS_URL = 'redis://127.0.0.1:$RedisPort/0'
 `$env:PARAWORKS_DEMO_MODE = 'false'
+`$env:AGENT_LLM_ENABLED = 'true'
 uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort
 "@
 
@@ -241,14 +242,14 @@ npm.cmd run dev -- --hostname 127.0.0.1 --port $FrontendPort
     Wait-HttpOk -Url "http://127.0.0.1:$FrontendPort/login" -TimeoutSeconds 90
 
     $state = [ordered]@{
-        backend_pid = $backend.Id
-        frontend_pid = $frontend.Id
-        backend_port = $BackendPort
+        backend_pid   = $backend.Id
+        frontend_pid  = $frontend.Id
+        backend_port  = $BackendPort
         frontend_port = $FrontendPort
         postgres_port = $PostgresPort
-        redis_port = $RedisPort
-        database_url = $DatabaseUrl
-        started_at = (Get-Date).ToString("o")
+        redis_port    = $RedisPort
+        database_url  = $DatabaseUrl
+        started_at    = (Get-Date).ToString("o")
     }
     $state | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 

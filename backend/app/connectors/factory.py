@@ -59,16 +59,21 @@ def get_sync_connector(
         )
         if installed_connector is not None:
             return installed_connector
+            
+    # 설치된 커넥터가 없거나 토큰이 없는 경우 .env 폴백
     if (
         connector_type == 'slack'
         and not settings.paraworks_demo_mode
         and settings.slack_bot_token
-        and slack_channel_ids_override is not None
     ):
         return SlackConnector(
             config=SlackConnectorConfig(
                 bot_token=settings.slack_bot_token,
-                channel_ids=_clean_channel_ids(slack_channel_ids_override),
+                channel_ids=(
+                    _clean_channel_ids(slack_channel_ids_override)
+                    if slack_channel_ids_override is not None
+                    else _parse_csv(settings.slack_channel_ids)
+                ),
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
