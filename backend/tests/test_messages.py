@@ -1,6 +1,17 @@
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from backend.app.core.config import get_settings
+
+
+@pytest.fixture(autouse=True)
+def enable_message_seed(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv('PARAWORKS_SEED_DEMO_DATA', 'true')
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def test_list_message_channels(client: TestClient) -> None:
@@ -91,3 +102,16 @@ def test_send_unknown_message_to_review_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()['detail'] == 'message not found'
+
+
+def test_message_channels_stay_empty_without_smoke_demo_seed(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+) -> None:
+    monkeypatch.setenv('PARAWORKS_SEED_DEMO_DATA', 'false')
+    get_settings.cache_clear()
+
+    response = client.get('/api/v1/messages/channels')
+
+    assert response.status_code == 200
+    assert response.json()['channels'] == []

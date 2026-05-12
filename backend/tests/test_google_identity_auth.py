@@ -136,6 +136,50 @@ def test_google_identity_callback_accepts_seeded_employee_user(db_session: Sessi
     assert auth_user.role == 'employee'
 
 
+def test_google_identity_callback_accepts_new_seeded_admin_users(db_session: Session) -> None:
+    settings = Settings(google_identity_state_secret='identity-secret')
+    state = GoogleIdentityStateSigner('identity-secret').create(nonce='nonce-1')
+
+    jongwoo = complete_google_identity_login(
+        db=db_session,
+        settings=settings,
+        response=Response(),
+        code='temporary-code',
+        state=state,
+        access=GoogleIdentityAccess(
+            subject='google-sub-kjw',
+            email='kjw4work@gmail.com',
+            email_verified=True,
+            name='Kim Jongwoo',
+        ),
+        cookie_issuer=issue_auth_cookies,
+    )
+
+    assert jongwoo.email == 'kjw4work@gmail.com'
+    assert jongwoo.role == 'admin'
+    assert jongwoo.title == 'COO'
+
+    state = GoogleIdentityStateSigner('identity-secret').create(nonce='nonce-2')
+    yonghee = complete_google_identity_login(
+        db=db_session,
+        settings=settings,
+        response=Response(),
+        code='temporary-code',
+        state=state,
+        access=GoogleIdentityAccess(
+            subject='google-sub-yonghee',
+            email='yonghee199702@gmail.com',
+            email_verified=True,
+            name='Kim Yonghee',
+        ),
+        cookie_issuer=issue_auth_cookies,
+    )
+
+    assert yonghee.email == 'yonghee199702@gmail.com'
+    assert yonghee.role == 'admin'
+    assert yonghee.title == 'CTO'
+
+
 def test_google_identity_callback_rejects_unknown_email(db_session: Session) -> None:
     settings = Settings(google_identity_state_secret='identity-secret')
     state = GoogleIdentityStateSigner('identity-secret').create(nonce='nonce-1')

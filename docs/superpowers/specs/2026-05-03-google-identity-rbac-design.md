@@ -29,10 +29,10 @@ Initial seeded users:
 | Email | Role | Permission levels | Notes |
 | --- | --- | --- | --- |
 | `hanvv3@gmail.com` | `admin` | `public`, `internal`, `restricted` | Workspace owner/admin. |
+| `kjw4work@gmail.com` | `admin` | `public`, `internal`, `restricted` | COO/admin. |
+| `yonghee199702@gmail.com` | `admin` | `public`, `internal`, `restricted` | CTO/admin. |
 | `hanvv3@koreacu.ac.kr` | `employee` | `public`, `internal` | Google login employee account. |
 | `mina@paraworks.com` | `reviewer` | `public`, `internal` | Demo reviewer. |
-| `jun@paraworks.com` | `employee` | `public`, `internal` | Demo engineer. |
-| `soyeon@paraworks.com` | `employee` | `public` | Demo operations user. |
 
 Unknown Google accounts are rejected with an "invite required" response. This is
 safer for an enterprise product than auto-provisioning every Google account.

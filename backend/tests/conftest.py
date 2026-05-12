@@ -7,10 +7,19 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import backend.app.models  # noqa: F401
+from backend.app.core.config import get_settings
 from backend.app.core.rate_limit import _LIMITER_STORAGE
 from backend.app.db.base import Base
 from backend.app.db.session import get_db
 from backend.app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def default_demo_mode(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    monkeypatch.setenv('PARAWORKS_DEMO_MODE', 'true')
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)

@@ -1,13 +1,23 @@
 from pathlib import PurePosixPath
+from urllib.parse import quote
+
+PROFILE_AVATAR_EXTENSIONS = {
+    'hanvv3@gmail.com': 'jpg',
+    'hanvv3@koreacu.ac.kr': 'png',
+    'kjw4work@gmail.com': 'jpg',
+    'mina@paraworks.com': 'png',
+    'yonghee199702@gmail.com': 'jpg',
+}
 
 
 def profile_avatar_url(email: str, role: str) -> str | None:
-    if role == 'admin':
+    normalized_email = email.strip().lower()
+    if not normalized_email:
         return None
 
-    local_part = email.split('@', 1)[0].strip().lower()
-    if not local_part:
+    extension = PROFILE_AVATAR_EXTENSIONS.get(normalized_email)
+    if extension is None:
         return None
 
-    filename = f'{local_part}.png'
+    filename = quote(f'{normalized_email}.{extension}')
     return str(PurePosixPath('/profile') / filename)
