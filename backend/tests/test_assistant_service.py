@@ -114,6 +114,53 @@ def test_append_user_message_rejects_blank_content(db_session: Session) -> None:
     assert list_messages(db_session, viewer, conversation.id) == []
 
 
+def test_append_assistant_message_rejects_blank_content(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    conversation = create_conversation(db_session, viewer, title='Redis')
+
+    with pytest.raises(ValueError, match='assistant message content is required'):
+        append_assistant_message(
+            db_session,
+            viewer,
+            conversation,
+            content='   ',
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={},
+        )
+
+    assert list_messages(db_session, viewer, conversation.id) == []
+
+
+def test_append_assistant_message_strips_content(db_session: Session) -> None:
+    viewer = USERS['viewer']
+    conversation = create_conversation(db_session, viewer, title='Redis')
+
+    message = append_assistant_message(
+        db_session,
+        viewer,
+        conversation,
+        content='  Redis 작업은 진행 중입니다.  ',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={},
+    )
+
+    assert message.content == 'Redis 작업은 진행 중입니다.'
+
+
 def test_contextual_question_excludes_matching_current_user_message(db_session: Session) -> None:
     viewer = USERS['viewer']
     conversation = create_conversation(db_session, viewer, title='Redis')
