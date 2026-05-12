@@ -25,7 +25,7 @@ class AssistantConversation(Base):
     messages: Mapped[list['AssistantMessage']] = relationship(
         back_populates='conversation',
         cascade='all, delete-orphan',
-        order_by='AssistantMessage.created_at',
+        order_by='AssistantMessage.created_at, AssistantMessage.id',
     )
 
 
