@@ -194,21 +194,22 @@ def sync_connector(
         if request is not None and request.selected_channel_ids is not None and connector_type == 'slack'
         else None
     )
-    connector = get_sync_connector(
-        connector_type,
-        settings,
-        db=db,
-        slack_channel_ids_override=selected_channel_ids,
-    )
-    
     agent_review_items = 0
     try:
+        connector = get_sync_connector(
+            connector_type,
+            settings,
+            db=db,
+            slack_channel_ids_override=selected_channel_ids,
+        )
         result = sync_connector_events(db=db, connector=connector)
         
         # Slack 동기화인 경우 에이전트 분석 즉시 트리거 (Phase 1 연동)
         if connector_type == 'slack' and result.status == 'complete':
             agent_review_items = trigger_slack_agent_analysis(db=db, days=7) or 0
             
+    except ConnectorNotConfiguredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     parser_status_counts = getattr(result, 'parser_status_counts', {})
