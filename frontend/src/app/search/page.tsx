@@ -9,7 +9,6 @@ import {
   Link2,
   MessageSquareText,
   PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Send,
   ShieldAlert,
@@ -57,7 +56,7 @@ function SearchPageContent() {
   const [error, setError] = useState<string>();
   const [initialQuerySent, setInitialQuerySent] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<number>();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const loadingRef = useRef(false);
   const creatingConversationRef = useRef(false);
   const loadMessagesRequestRef = useRef(0);
@@ -236,35 +235,31 @@ function SearchPageContent() {
   return (
     <div className="reference-dashboard h-[calc(100vh-7rem)] overflow-hidden">
       <section
-        className={`grid h-full min-h-0 gap-3 transition-[grid-template-columns] duration-300 ease-out ${
-          sidebarCollapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[280px_minmax(0,1fr)]"
+        className={`grid h-full min-h-0 transition-[grid-template-columns,gap] duration-300 ease-out ${
+          sidebarCollapsed ? "gap-0 lg:grid-cols-[0_minmax(0,1fr)]" : "gap-3 lg:grid-cols-[280px_minmax(0,1fr)]"
         }`}
       >
         <aside
           aria-label="대화 목록"
           data-expanded={sidebarCollapsed ? "false" : "true"}
           className={`panel reference-panel group flex h-full min-h-0 flex-col overflow-hidden rounded-2xl transition-all duration-300 ease-out hover:shadow-panel-hover ${
-            sidebarCollapsed ? "w-[72px] px-2 py-3" : "w-full"
+            sidebarCollapsed ? "pointer-events-none w-0 p-0 opacity-0" : "w-full"
           }`}
         >
-          <div className={`flex items-center gap-2 ${sidebarCollapsed ? "flex-col" : "justify-between border-b border-line pb-3"}`}>
-            <div className={`min-w-0 ${sidebarCollapsed ? "sr-only" : ""}`}>
+          <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
+            <div className="min-w-0">
               <p className="text-[12px] font-bold text-[var(--primary-dark)]">AI 비서</p>
               <h2 className="truncate text-[15px] font-extrabold">대화</h2>
             </div>
-            <div className={`flex shrink-0 gap-2 ${sidebarCollapsed ? "flex-col" : ""}`}>
+            <div className="flex shrink-0 gap-2">
               <button
                 type="button"
-                title={sidebarCollapsed ? "대화 목록 펼치기" : "대화 목록 접기"}
-                aria-label={sidebarCollapsed ? "대화 목록 펼치기" : "대화 목록 접기"}
+                title="대화 목록 접기"
+                aria-label="대화 목록 접기"
                 onClick={() => setSidebarCollapsed((current) => !current)}
                 className="row-action h-9 w-9 p-0 transition-transform duration-200 group-hover:scale-105"
               >
-                {sidebarCollapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-                )}
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -279,48 +274,53 @@ function SearchPageContent() {
             </div>
           </div>
 
-          {sidebarCollapsed ? (
-            <div className="mt-4 grid flex-1 place-items-start justify-center">
-              <div className="grid h-10 w-10 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--primary-dark)]">
-                <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+          <div aria-label="대화 히스토리" className="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
+            {conversations.map((conversation) => {
+              const selected = conversation.id === activeConversation?.id;
+              return (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => void loadMessages(conversation)}
+                  className={`w-full truncate rounded-xl px-3 py-2 text-left text-[13px] font-bold transition ${
+                    selected
+                      ? "bg-[var(--primary-soft)] text-[var(--primary-dark)]"
+                      : "text-[var(--ink)] hover:bg-[var(--glass-strong)]"
+                  }`}
+                >
+                  {conversation.title || DEFAULT_CONVERSATION_TITLE}
+                </button>
+              );
+            })}
+            {booting ? (
+              <div className="rounded-xl border border-dashed border-line bg-surface-soft p-3 text-[13px] text-muted">
+                대화를 불러오는 중입니다.
               </div>
-            </div>
-          ) : (
-            <div aria-label="대화 히스토리" className="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
-              {conversations.map((conversation) => {
-                const selected = conversation.id === activeConversation?.id;
-                return (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => void loadMessages(conversation)}
-                    className={`w-full truncate rounded-xl px-3 py-2 text-left text-[13px] font-bold transition ${
-                      selected
-                        ? "bg-[var(--primary-soft)] text-[var(--primary-dark)]"
-                        : "text-[var(--ink)] hover:bg-[var(--glass-strong)]"
-                    }`}
-                  >
-                    {conversation.title || DEFAULT_CONVERSATION_TITLE}
-                  </button>
-                );
-              })}
-              {booting ? (
-                <div className="rounded-xl border border-dashed border-line bg-surface-soft p-3 text-[13px] text-muted">
-                  대화를 불러오는 중입니다.
-                </div>
-              ) : null}
-            </div>
-          )}
+            ) : null}
+          </div>
         </aside>
 
-        <main className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl bg-[var(--surface)] p-0 shadow-panel">
+        <main className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl bg-[var(--surface)] p-0 shadow-panel">
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              title="대화 목록 펼치기"
+              aria-label="대화 목록 펼치기"
+              onClick={() => setSidebarCollapsed(false)}
+              className="group absolute left-4 top-4 z-10 rounded-full outline-none transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+            >
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--primary-dark)] shadow-xs transition group-hover:bg-[var(--primary)] group-hover:text-white group-hover:shadow-panel-hover">
+                <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+              </div>
+            </button>
+          ) : null}
           {error ? (
             <div className="mx-auto mt-4 w-full max-w-3xl rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] text-red-800">
               {error}
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <div className={`min-h-0 flex-1 overflow-y-auto px-4 pb-5 sm:px-6 ${sidebarCollapsed ? "pt-16" : "pt-5"}`}>
             <div className="mx-auto flex max-w-3xl flex-col gap-5">
               {messages.map((message) => (
                 <AssistantBubble
