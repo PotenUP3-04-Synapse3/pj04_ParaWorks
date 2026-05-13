@@ -79,7 +79,8 @@ def preprocess_node(state: SlackAgentState):
     
     combined_text = ""
     for msg in sorted(state.messages, key=lambda x: float(x.get("ts", 0))):
-        user_display = msg.get("user_name", msg.get("user", "Unknown"))
+        # user_name에 '[3기/AI] 김종우'와 같은 전체 이름이 들어있으므로 이를 우선 사용
+        user_display = msg.get("user_name") or msg.get("user", "Unknown")
         text = msg.get("text", "")
         ts_val = msg.get("ts", "0")
         
