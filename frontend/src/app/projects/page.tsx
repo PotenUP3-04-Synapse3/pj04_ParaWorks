@@ -6,12 +6,14 @@ import { apiGet } from "@/lib/api/client";
 import type { ProjectMemory, ProjectsResponse } from "@/lib/api/types";
 
 type Task = {
+  id: string;
   title: string;
   owner: string;
   status: "대기" | "진행 중" | "검토" | "완료";
   start: number;
   span: number;
   date: string;
+  evidenceReason: string;
 };
 
 type Project = {
@@ -162,12 +164,14 @@ export default function ProjectsPage() {
 
 function projectFromMemory(memory: ProjectMemory): Project {
   const tasks = memory.evidence.map((evidence, index) => ({
-    title: evidence.title || evidence.source_snippet || evidence.source_id,
+    id: evidence.id || `${memory.project_key}:${evidence.source_id}:${index}`,
+    title: cleanTaskTitle(evidence.title || evidence.task_summary || evidence.source_snippet, evidence.source_type),
     owner: sourceTypeLabel(evidence.source_type),
     status: taskStatus(evidence.source_type),
     start: Math.min(index + 1, 9),
     span: Math.min(Math.max(2, Math.ceil((evidence.source_snippet.length || 80) / 80)), 4),
     date: formatShortDate(evidence.timestamp),
+    evidenceReason: evidence.evidence_reason,
   }));
   return {
     id: memory.project_key,
@@ -177,10 +181,17 @@ function projectFromMemory(memory: ProjectMemory): Project {
     due: formatShortDate(memory.latest_timestamp),
     progress: Math.min(90, 30 + memory.evidence_count * 15),
     risk: memory.permission_level === "restricted" ? "높음" : memory.evidence_count >= 3 ? "보통" : "낮음",
-    reviewCount: memory.evidence_count,
+    reviewCount: memory.pending_review_count,
     summary: memory.summary,
     tasks,
   };
+}
+
+function cleanTaskTitle(value: string, sourceType: string) {
+  const title = value.trim();
+  if (!title) return `${sourceTypeLabel(sourceType)} evidence`;
+  if (/^slack (message|thread reply) in /i.test(title)) return "Slack 업무 evidence";
+  return title.length > 120 ? `${title.slice(0, 117)}...` : title;
 }
 
 function taskStatus(sourceType: string): Task["status"] {
@@ -228,7 +239,7 @@ function Overview({ project }: { project: Project }) {
         </div>
         <div className="mt-4 grid gap-2">
           {project.tasks.map((task) => (
-            <TaskRow key={task.title} task={task} />
+            <TaskRow key={task.id} task={task} />
           ))}
         </div>
       </div>
@@ -252,7 +263,7 @@ function GanttView({ tasks }: { tasks: Task[] }) {
         ))}
       </div>
       {tasks.map((task) => (
-        <div key={task.title} className="grid grid-cols-[160px_repeat(10,minmax(32px,1fr))] items-center gap-2">
+        <div key={task.id} className="grid grid-cols-[160px_repeat(10,minmax(32px,1fr))] items-center gap-2">
           <div className="min-w-0">
             <p className="truncate text-[13px] font-extrabold text-ink">{task.title}</p>
             <p className="text-[11px] text-muted">{task.owner}</p>
@@ -272,7 +283,7 @@ function CalendarView({ tasks }: { tasks: Task[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-4">
       {tasks.map((task) => (
-        <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+        <article key={task.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
           <p className="text-[12px] font-extrabold text-[var(--primary-dark)]">{task.date}</p>
           <h3 className="mt-2 text-[14px] font-extrabold text-ink">{task.title}</h3>
           <p className="mt-2 text-[12px] text-muted">{task.owner} · {task.status}</p>
@@ -291,7 +302,7 @@ function BoardView({ tasks }: { tasks: Task[] }) {
           <h3 className="text-[13px] font-extrabold text-ink">{column}</h3>
           <div className="mt-3 space-y-2">
             {tasks.filter((task) => task.status === column).map((task) => (
-              <TaskCard key={task.title} task={task} />
+              <TaskCard key={task.id} task={task} />
             ))}
           </div>
         </section>
@@ -310,7 +321,7 @@ function ListView({ tasks }: { tasks: Task[] }) {
         <span>마감</span>
       </div>
       {tasks.map((task) => (
-        <div key={task.title} className="grid grid-cols-[1fr_120px_100px_80px] gap-3 border-b border-line px-4 py-3 text-[13px] last:border-b-0">
+        <div key={task.id} className="grid grid-cols-[1fr_120px_100px_80px] gap-3 border-b border-line px-4 py-3 text-[13px] last:border-b-0">
           <span className="font-bold text-ink">{task.title}</span>
           <span className="text-muted">{task.owner}</span>
           <span className="text-muted">{task.status}</span>

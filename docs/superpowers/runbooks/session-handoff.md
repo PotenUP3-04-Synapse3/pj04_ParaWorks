@@ -1,6 +1,29 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-13
+Updated: 2026-05-14
+
+## 2026-05-14 Project Recognition Handoff
+
+- `/projects` now uses canonical company projects instead of loose source
+  grouping:
+  - `k-tech-pilot` / `K테크 파일럿`
+  - `seed-ir` / `시드 투자 IR`
+- Deterministic project classification lives behind the Review Queue as
+  `project_assignment` candidates. It scans Slack, Gmail, Drive, and Calendar
+  sources for project aliases and intentionally uses no live LLM or token
+  budget.
+- `POST /api/v1/projects/reclassify?dry_run=true` previews candidate counts and
+  cost policy. `dry_run=false` creates pending Review Queue items for approved
+  reviewer handling.
+- `/projects` returns both canonical projects with approved evidence,
+  pending-review counts, and project-scoped `timeline_items`. Legacy labels
+  like `미분류 프로젝트`, `Project Newbiegenie`, and `프로젝트 결과` should not be
+  displayed as projects.
+- `/timeline` now reads `/api/v1/projects` so the top menu is project-scoped
+  and timeline evidence explains why each item is connected.
+- Existing DB rows are not deleted or migrated. Run deterministic reclassify
+  and approve the resulting Review Queue candidates to attach current source
+  data to projects.
 
 ## 2026-05-13 Work Data and Assignment Extraction Handoff
 

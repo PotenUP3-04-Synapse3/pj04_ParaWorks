@@ -3,7 +3,7 @@
 import { ExternalLink, FileClock, GitBranch, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
-import type { KnowledgeItem, KnowledgeResponse } from "@/lib/api/types";
+import type { ProjectTimelineItem, ProjectsResponse } from "@/lib/api/types";
 
 type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
 
@@ -35,13 +35,16 @@ export default function TimelinePage() {
   useEffect(() => {
     let active = true;
 
-    apiGet<KnowledgeResponse>("/api/v1/knowledge")
-      .then((knowledge) => {
+    apiGet<ProjectsResponse>("/api/v1/projects")
+      .then((response) => {
         if (!active) return;
-        const histories = knowledge.timeline_events
-          .filter((item) => item.review_status === "approved")
-          .map(timelineHistoryFromKnowledge);
-        const projects = histories.length > 0 ? [{ id: "company-memory", name: "Company Memory", histories }] : [];
+        const projects = response.projects.map((project) => ({
+          id: project.project_key,
+          name: project.name,
+          histories: project.timeline_items
+            .filter((item) => item.review_status === "approved")
+            .map(timelineHistoryFromProjectItem),
+        }));
         setProjectTimelines(projects);
         setSelectedProjectId((current) => current || projects[0]?.id || "");
       })
@@ -70,8 +73,8 @@ export default function TimelinePage() {
         <section className="page-heading reference-heading">
           <div>
             <p className="text-[13px] font-bold text-[var(--primary-dark)]">Timeline</p>
-            <h1>Timeline</h1>
-            <p>{loading ? "Loading approved company memory." : error || "No approved timeline items yet."}</p>
+            <h1>타임라인</h1>
+            <p>{loading ? "승인된 프로젝트 워크플로우를 불러오고 있습니다." : error || "승인된 프로젝트 타임라인 항목이 아직 없습니다."}</p>
           </div>
           <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
             <GitBranch className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
@@ -87,8 +90,8 @@ export default function TimelinePage() {
       <section className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Timeline</p>
-          <h1>Timeline</h1>
-          <p>Approved review results are loaded from the knowledge API and shown in chronological order.</p>
+            <h1>타임라인</h1>
+          <p>승인된 프로젝트 evidence에 연결된 결정, 히스토리, 할 일을 프로젝트별 워크플로우로 확인합니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <GitBranch className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
@@ -120,12 +123,12 @@ export default function TimelinePage() {
       <section className={`timeline-history-layout ${selectedHistory ? "history-open" : ""}`}>
         <article className="panel reference-panel">
           <div className="border-b border-line pb-4">
-            <h2 className="text-[16px] font-extrabold text-ink">{selectedProject.name} Timeline</h2>
-            <p className="mt-1 text-[13px] text-muted">Open an item to inspect its summary, snippets, and source.</p>
+            <h2 className="text-[16px] font-extrabold text-ink">{selectedProject.name} 워크플로우</h2>
+            <p className="mt-1 text-[13px] text-muted">항목을 열어 어떤 source 문장이 근거인지 확인합니다.</p>
           </div>
 
           <div className="mt-4 space-y-3">
-            {selectedProject.histories.map((item) => (
+            {selectedProject.histories.length > 0 ? selectedProject.histories.map((item) => (
               <article key={item.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -149,7 +152,11 @@ export default function TimelinePage() {
                   History: {item.history}
                 </div>
               </article>
-            ))}
+            )) : (
+              <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
+                이 프로젝트에 승인된 타임라인 항목이 아직 없습니다. Review Queue에서 프로젝트 연결 후보와 업무 후보를 승인하면 여기에 표시됩니다.
+              </div>
+            )}
           </div>
         </article>
 
@@ -181,7 +188,7 @@ export default function TimelinePage() {
               </div>
             ) : (
               <div className="mt-4 rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
-                No source snippets are attached.
+                연결된 source snippet이 없습니다.
               </div>
             )}
 
@@ -201,9 +208,9 @@ export default function TimelinePage() {
   );
 }
 
-function timelineHistoryFromKnowledge(item: KnowledgeItem): TimelineHistory {
+function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
   return {
-    id: `timeline-${item.id}`,
+    id: item.id,
     time: formatTime(item.created_at),
     source: sourceFromLinks(item.source_links),
     title: item.title,
@@ -211,8 +218,8 @@ function timelineHistoryFromKnowledge(item: KnowledgeItem): TimelineHistory {
     history: item.summary || "No approved timeline summary.",
     status: item.review_status === "approved" ? "approved" : "reviewing",
     sourceUrl: item.source_links[0] ?? "",
-    snippets: item.source_snippets.map((snippet, index) => ({
-      author: `Evidence ${index + 1}`,
+    snippets: item.source_snippets.map((snippet) => ({
+      author: `${sourceFromLinks(item.source_links)} evidence · ${item.evidence_reason || "승인된 프로젝트 근거"}`,
       body: snippet,
       time: formatTime(item.created_at),
     })),
