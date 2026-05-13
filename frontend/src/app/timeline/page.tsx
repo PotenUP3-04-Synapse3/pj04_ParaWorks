@@ -21,7 +21,7 @@ type ProjectTimeline = {
   histories: TimelineHistory[];
 };
 
-const projectTimelines: ProjectTimeline[] = [
+const projectTimelineSeedData: ProjectTimeline[] = [
   {
     id: "orion",
     name: "프로젝트 ORION",
@@ -124,13 +124,32 @@ const projectTimelines: ProjectTimeline[] = [
   },
 ];
 
+const projectTimelines: ProjectTimeline[] = [];
+
 export default function TimelinePage() {
-  const [selectedProjectId, setSelectedProjectId] = useState(projectTimelines[0].id);
+  const [selectedProjectId, setSelectedProjectId] = useState(projectTimelines[0]?.id ?? "");
   const selectedProject = useMemo(
     () => projectTimelines.find((project) => project.id === selectedProjectId) ?? projectTimelines[0],
     [selectedProjectId],
   );
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | undefined>();
+  if (!selectedProject) {
+    return (
+      <div className="reference-dashboard space-y-4">
+        <section className="page-heading reference-heading">
+          <div>
+            <p className="text-[13px] font-bold text-[var(--primary-dark)]">Timeline</p>
+            <h1>타임라인</h1>
+            <p>Slack 또는 Google을 연동하면 실제 근거에서 생성된 타임라인이 표시됩니다.</p>
+          </div>
+          <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
+            <GitBranch className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+            0개 히스토리
+          </div>
+        </section>
+      </div>
+    );
+  }
   const selectedHistory = selectedProject.histories.find((history) => history.id === selectedHistoryId);
 
   return (

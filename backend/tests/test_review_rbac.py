@@ -6,7 +6,7 @@ from backend.app.models import ReviewItem
 def test_employee_cannot_approve_review_item(client, db_session: Session) -> None:
     item = _add_review_item(db_session, permission_level='internal')
 
-    response = client.post(f'/api/v1/review/{item.id}/approve', headers={'X-Demo-User': 'jun@paraworks.com'})
+    response = client.post(f'/api/v1/review/{item.id}/approve', headers={'X-Demo-User': 'hanvv3@koreacu.ac.kr'})
 
     assert response.status_code == 403
     assert response.json()['detail'] == 'Review approval permission required.'

@@ -218,8 +218,8 @@ def test_google_connector_maps_gmail_attachments_to_source_events() -> None:
     assert attachment.raw_metadata['mime_type'] == 'application/pdf'
     assert attachment.raw_metadata['attachment_size'] == 2048
     assert attachment.raw_metadata['parser_name'] == 'gmail_attachment_metadata'
-    assert attachment.raw_metadata['parser_status'] == 'metadata_only'
-    assert attachment.raw_metadata['parser_status_reason'] == 'pdf_parser_not_enabled'
+    assert attachment.raw_metadata['parser_status'] == 'parsed'
+    assert attachment.raw_metadata['parser_status_reason'] == ''
     assert attachment.raw_metadata['document_version'] == '1777600800000'
     assert attachment.raw_metadata['content_signature'] == 'gmail_attachment:msg-attach-1:att-1:2048'
 
@@ -368,11 +368,11 @@ def test_google_connector_exports_google_slides_text_into_drive_source_events() 
 @pytest.mark.parametrize(
     ('mime_type', 'expected_status', 'expected_reason'),
     [
-        ('application/pdf', 'metadata_only', 'pdf_parser_not_enabled'),
+        ('application/pdf', 'parsed', ''),
         (
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'metadata_only',
-            'docx_parser_not_enabled',
+            'parsed',
+            '',
         ),
         ('application/x-hwp', 'unsupported', 'hwp_parser_not_decided'),
         ('application/haansofthwp', 'unsupported', 'hwp_parser_not_decided'),

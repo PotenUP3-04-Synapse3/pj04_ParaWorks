@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_auth import DemoUser, get_demo_user
+from backend.app.core.demo_filters import filter_review_items
 from backend.app.core.rbac import ensure_can_review_permission
 from backend.app.db.session import get_db
 from backend.app.knowledge.promotion import (
@@ -20,6 +22,7 @@ from backend.app.services.audit import record_audit_log
 router = APIRouter(prefix='/review', tags=['review'])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -> dict:
@@ -44,6 +47,7 @@ def list_review_items(db: DbSession, status: str = 'pending_review') -> dict:
     items = db.scalars(
         select(ReviewItem).where(ReviewItem.status == status).order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
     ).all()
+
     agent_runs = _agent_runs_by_id(db, items)
     
     # 그룹화 로직

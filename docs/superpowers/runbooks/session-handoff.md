@@ -2,6 +2,33 @@
 
 Updated: 2026-05-01
 
+## 2026-05-12 Demo Data Boundary Update
+
+- Default settings now use `PARAWORKS_DEMO_MODE=false` and
+  `PARAWORKS_SEED_DEMO_DATA=false`.
+- Smoke mode is the only intended path for seeded dummy content:
+  `scripts/start-smoke.ps1` sets both demo mode and seed demo data to true.
+- Docker/pgvector dev mode (`scripts/start-pgvector-dev.ps1`) starts the app
+  with demo mode and seed demo data disabled. With no Slack or Google connection
+  installed, the product should show empty states rather than mock business
+  content.
+- Production-like connector sync must not fall back to mock connectors. It now
+  returns a clear not-connected error until OAuth/credentials are available.
+- The Review page no longer displays hard-coded fallback review items when the
+  API fails or returns no items.
+- Dashboard, Projects, and Timeline no longer render sample ORION/Nova/Atlas
+  items as visible product data when no connector-backed data exists.
+
+Verification from this session:
+
+```powershell
+uv run pytest backend/tests -v
+cd frontend
+npm run build
+```
+
+Result: backend 297 passed, 1 skipped; frontend build passed.
+
 ## Active Project
 
 - Repository: `C:\Users\hanvv\Study\potenup3\pj04_ParaWorks`
@@ -813,3 +840,32 @@ Direct Docker-backed API check on a secondary backend port confirmed:
 - `/api/v1/review?status=pending_review` returns seeded review items;
 - `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
   `X-CSRF-Token`.
+
+## 2026-05-12 Google Admin Accounts and Smoke Data Boundary
+
+- Added two seeded Google identity accounts:
+  - `kjw4work@gmail.com` / id `kjw4work` / admin / COO / platform.
+  - `yonghee199702@gmail.com` / id `yonghee199702` / admin / CTO / platform.
+- Removed `jun@paraworks.com` and `soyeon@paraworks.com` from the active
+  login/admin seed list; future seed runs also delete stale rows for those old
+  seeded accounts.
+- Profile avatars now resolve by full email filename and extension through
+  `backend/app/core/profile.py`.
+- Email-named avatar assets were added to `frontend/public/profile` from
+  `data/profile` so Next.js can serve them.
+- Dummy source/review data is no longer seeded by default in local Docker-style
+  initialization. `init_db` only ingests `SEED_EVENTS` when
+  `PARAWORKS_SEED_DEMO_DATA=true`.
+- `scripts/start-smoke.ps1` sets `PARAWORKS_SEED_DEMO_DATA=true`, so smoke
+  demos still show seeded review/source data.
+- In production-like Docker usage with no real connector syncs, source-backed
+  pages should be empty until Slack or Google data is connected and synced.
+- Verification:
+
+```powershell
+uv run pytest backend/tests -q
+cd frontend
+npm.cmd run build
+```
+
+Result: backend 295 passed, 1 skipped; frontend build passed.
