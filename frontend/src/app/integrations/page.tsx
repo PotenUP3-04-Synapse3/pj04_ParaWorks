@@ -360,12 +360,31 @@ export default function IntegrationsPage() {
     }
   }
 
-  /**
-   * OAuth 연동 과정을 시작합니다. (새 창 또는 현재 창에서 해당 서비스의 인증 페이지로 이동)
-   */
-  function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
+  async function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
     if (!oauth?.install_url) {
       setError(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
+      return;
+    }
+
+    if (oauth.install_url === "__direct_connect__") {
+      try {
+        const connection = await apiPost<IntegrationConnection>("/api/v1/integrations/slack/direct-connect");
+        setConnections((current) => {
+          const filtered = current.filter((item) => item.connector_type !== "slack");
+          return [...filtered, connection];
+        });
+        
+        // 연결 성공 후 런타임 상태 갱신
+        apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
+          .then((status) => {
+            setSlackRuntime(status);
+            setSelectedSlackChannels(status.selected_channel_ids);
+          })
+          .catch(() => undefined);
+          
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Slack 직접 연결에 실패했습니다.");
+      }
       return;
     }
 
