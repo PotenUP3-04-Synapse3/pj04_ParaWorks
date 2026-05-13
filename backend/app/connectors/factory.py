@@ -56,10 +56,15 @@ def get_sync_connector(
     token_vault: LocalTokenVault = LOCAL_TOKEN_VAULT,
     slack_channel_ids_override: list[str] | None = None,
 ) -> Connector:
-    if (
-        connector_type == 'slack'
-        and not settings.paraworks_demo_mode
-    ):
+    # 데모 모드인 경우 무조건 Mock 커넥터 반환 (우선순위 1)
+    if settings.paraworks_demo_mode:
+        if connector_type.startswith('mock-'):
+            connector_type = connector_type.replace('mock-', '')
+        if connector_type in CONNECTOR_TYPES:
+            return get_mock_connector(connector_type)
+
+    # 실제 연동 확인 (설치된 커넥터)
+    if connector_type == 'slack':
         installed_connector = _get_installed_slack_connector(
             settings=settings,
             db=db,
@@ -69,10 +74,9 @@ def get_sync_connector(
         if installed_connector is not None:
             return installed_connector
             
-    # 설치된 커넥터가 없거나 토큰이 없는 경우 .env 폴백
+    # 설치된 커넥터가 없거나 토큰이 없는 경우 .env 폴백 (로컬 개발용)
     if (
         connector_type == 'slack'
-        and not settings.paraworks_demo_mode
         and settings.slack_bot_token
     ):
         return SlackConnector(
@@ -87,7 +91,8 @@ def get_sync_connector(
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
         )
-    if connector_type in GOOGLE_CONNECTOR_TYPES and not settings.paraworks_demo_mode:
+
+    if connector_type in GOOGLE_CONNECTOR_TYPES:
         installed_connector = _get_installed_google_connector(
             connector_type=connector_type,
             db=db,

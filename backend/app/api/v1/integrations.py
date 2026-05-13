@@ -100,8 +100,8 @@ def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
             'credential_status': 'available' if LOCAL_TOKEN_VAULT.resolve(connection.token_ref) else 'missing',
             'masked_bot_token': connection.masked_bot_token,
             'scopes': connection.scopes,
-            'credential_status': 'available',
-            }        for connection in connections
+        }
+        for connection in connections
     ]
 
 
