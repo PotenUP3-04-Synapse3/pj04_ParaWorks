@@ -207,7 +207,13 @@ class SlackConnector:
             target_channel_ids = list(joined_channel_ids)
             
         for channel_id in target_channel_ids:
-            oldest = latest_timestamps_by_partition.get(channel_id)
+            # 7일 전 타임스탬프 계산
+            seven_days_ago = (datetime.now(UTC) - timedelta(days=7)).timestamp()
+            
+            # DB 기록이 없으면 최근 7일치만, 있으면 기록된 시점 이후만 가져옴
+            oldest_val = latest_timestamps_by_partition.get(channel_id)
+            oldest = str(max(float(oldest_val), seven_days_ago)) if oldest_val else str(seven_days_ago)
+            
             for message in self.client.conversation_history(channel_id, oldest=oldest):
                 if message.get('type') != 'message' or not message.get('text'):
                     continue

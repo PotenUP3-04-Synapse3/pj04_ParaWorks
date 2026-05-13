@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, Todo
+from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, Todo, TimelineEvent
 
 
 PROMOTABLE_REVIEW_TYPES = {'decision_record', 'history_event', 'todo'}
@@ -47,6 +47,14 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
                 **base_fields,
             )
         )
+        # 결정사항도 타임라인에 표시
+        db.add(
+            TimelineEvent(
+                title=f"[결정] {normalized['title']}",
+                result_summary=normalized['decision_summary'],
+                **base_fields,
+            )
+        )
         return
 
     if item.item_type == 'history_event':
@@ -55,6 +63,14 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
             HistoryEvent(
                 title=normalized['title'],
                 reason=normalized['reason'],
+                **base_fields,
+            )
+        )
+        # 기록/공유 사항을 타임라인에 표시
+        db.add(
+            TimelineEvent(
+                title=normalized['title'],
+                result_summary=normalized['reason'],
                 **base_fields,
             )
         )
@@ -67,6 +83,14 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
                 title=normalized['title'],
                 priority=normalized['priority'],
                 priority_reason=normalized['priority_reason'],
+                **base_fields,
+            )
+        )
+        # 할 일 생성도 타임라인에 표시
+        db.add(
+            TimelineEvent(
+                title=f"[할 일] {normalized['title']}",
+                result_summary=f"담당자: {item.payload.get('assignee', '미지정')}, 기한: {item.payload.get('due_date', '기한없음')}",
                 **base_fields,
             )
         )
