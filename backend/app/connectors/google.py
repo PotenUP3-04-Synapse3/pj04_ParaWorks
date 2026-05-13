@@ -13,7 +13,7 @@ import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
 from backend.app.documents.parsers import parser_adapter_decision_for_mime_type
-from backend.app.documents.adapters import PdfDocumentParser, DocxDocumentParser
+from backend.app.documents.adapters import PdfDocumentParser, DocxDocumentParser, TextDocumentParser
 
 GoogleQueryParams = dict[str, str | list[str]]
 GOOGLE_TEXT_BODY_LIMIT = 4_000
@@ -365,6 +365,10 @@ class GoogleConnector:
                             parsed = DocxDocumentParser().parse(payload, metadata={})
                             if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
                                 body_lines.append('\n\n'.join(chunk.text for chunk in parsed.chunks))
+                        elif mime_type in ('text/plain', 'text/markdown'):
+                            parsed = TextDocumentParser().parse(payload, metadata={})
+                            if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+                                body_lines.append('\n\n'.join(chunk.text for chunk in parsed.chunks))
                     except Exception:
                         decision = parser_adapter_decision_for_mime_type('application/octet-stream')  # Fallback
             events.append(
@@ -669,6 +673,15 @@ def _drive_exported_text(*, client: GoogleApiClient, file: dict) -> tuple[str, s
         parsed = DocxDocumentParser().parse(payload, metadata={})
         if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
             return ('\n\n'.join(chunk.text for chunk in parsed.chunks), 'python-docx')
+        return None
+    elif mime_type in ('text/plain', 'text/markdown'):
+        downloader = getattr(client, 'drive_file_content_download', None)
+        if not downloader:
+            return None
+        payload = downloader(file_id=str(file['id']))
+        parsed = TextDocumentParser().parse(payload, metadata={})
+        if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+            return ('\n\n'.join(chunk.text for chunk in parsed.chunks), 'built-in-text')
         return None
     else:
         return None
