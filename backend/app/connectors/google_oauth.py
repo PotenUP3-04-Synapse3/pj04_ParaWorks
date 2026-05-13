@@ -15,7 +15,10 @@ from backend.app.models import IntegrationConnection
 
 GOOGLE_IDENTITY_SCOPES = ('openid', 'email')
 GOOGLE_DATA_SCOPES: dict[str, tuple[str, ...]] = {
-    'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
+    'gmail': (
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+    ),
     'drive': ('https://www.googleapis.com/auth/drive.readonly',),
     'calendar': ('https://www.googleapis.com/auth/calendar.readonly',),
 }
