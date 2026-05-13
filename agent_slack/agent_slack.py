@@ -52,7 +52,7 @@ class CandidateItem(BaseModel):
     due_date: Optional[str] = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
     
     source_ts_list: List[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
-    source_snippets: List[str] = Field(description="증거가 되는 원문 일부. 절대로 비워두지 말고 요약본에서 인용한 발언이나 핵심 문장을 1~2개 이상 배열에 문자열로 꼭 담으세요.")
+    source_snippets: List[str] = Field(description="증거가 되는 원문 일부. '[이름] 내용' 포맷으로 작성하세요.")
 
 class CandidateList(BaseModel):
     candidate_items: List[CandidateItem] = Field(description="추출된 지식 후보들의 목록")
@@ -79,7 +79,8 @@ def preprocess_node(state: SlackAgentState):
     
     combined_text = ""
     for msg in sorted(state.messages, key=lambda x: float(x.get("ts", 0))):
-        user_display = msg.get("user_name", msg.get("user", "Unknown"))
+        # user_name에 '[3기/AI] 김종우'와 같은 전체 이름이 들어있으므로 이를 우선 사용
+        user_display = msg.get("user_name") or msg.get("user", "Unknown")
         text = msg.get("text", "")
         ts_val = msg.get("ts", "0")
         
@@ -179,7 +180,14 @@ def summarize_node(state: SlackAgentState):
 
     logger.info(f"[Tool: Summarizer] 필터링된 핵심 맥락 요약 중... (사용 모델: {model})")
     llm = ChatOpenAI(model=model, temperature=0)
-    prompt = f"다음 필터링된 업무 대화록을 주요 안건 위주로 요약하세요. 핵심 결정이나 발언이 있다면 '누가(이름)' 말했는지 명시하고, [TS: ...] 정보는 지우지 말고 꼭 유지하세요:\n\n{state.processed_text}"
+    
+    # 이름 보존을 위한 강력한 지침 추가
+    prompt = (
+        "다음 필터링된 업무 대화록을 주요 안건 위주로 요약하세요.\n"
+        "**중요 원칙**: 대화록에 등장하는 사용자 이름(예: [3기/AI] 김종우)은 절대 줄이거나 변경하지 말고 전체 형식을 그대로 유지하세요.\n"
+        "핵심 결정이나 발언이 있다면 '누가(전체 이름)' 말했는지 명시하고, [TS: ...] 정보는 지우지 말고 꼭 유지하세요:\n\n"
+        f"{state.processed_text}"
+    )
     
     response = llm.invoke(prompt)
     
@@ -204,24 +212,24 @@ def extract_candidate_node(state: SlackAgentState):
     logger.info(f"[Agent: Knowledge Extractor] 다중 지식 후보 추출 시작. (모델: {current_model})")
     try:
         llm = ChatOpenAI(model=current_model, temperature=0)
-        # with_structured_output은 토큰 사용량을 직접 반환하지 않는 경우가 많으므로 일반 invoke로 구현할 수도 있으나,
-        # 최신 langchain에서는 객체 내에 usage_metadata를 포함하거나 콜백으로 잡을 수 있습니다.
-        # 여기서는 객체 결과만 받습니다.
         structured_llm = llm.with_structured_output(CandidateList)
         
+        # 프롬프트에 이름 보존 및 스니펫 형식 지침 강화
         prompt = f"""
 다음 요약본을 바탕으로 보존할 가치가 있는 기업 지식들을 추출하세요. 
-각 항목은 반드시 다음의 카테고리 기준에 따라 분류해야 합니다:
 
-1. Project (프로젝트): 명확한 기한과 목표가 있는 신규 기획/개발 건 (예: 홈페이지 리뉴얼)
-2. Operations (운영/유지보수): 상시 발생하는 서비스 운영 및 관리 (예: DB 모니터링, 정기 배포)
-3. Administration (공통/지원): HR, 재무, 사내 IT 정책 등 지원 업무 (예: SW 라이선스 갱신 논의)
-4. Ad-hoc (단발성 이슈): 특정 카테고리에 묶기 힘든 일회성 문제 (예: 슬랙 로그인 장애 대응)
+**필수 준수 사항**:
+1. 사용자 이름(예: [3기/AI] 김종우)은 절대로 변경하거나 성만 떼지 말고, 대화록에 있는 전체 이름 그대로 사용하세요.
+2. source_snippets 배열에는 지식을 뒷받침하는 핵심 발언 원문을 반드시 '[전체 이름] 내용' 포맷으로 채워 넣으세요.
+3. 지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나만 사용하세요.
 
-지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나로 정확하게 기입하세요 (대소문자 일치).
-source_snippets 배열에는 지식을 뒷받침하는 핵심 발언 원문을 적어도 1개 이상 반드시 채워 넣으세요. 빈 배열([])을 넘기면 안 됩니다.
+카테고리 분류 기준:
+- Project (프로젝트): 명확한 기한과 목표가 있는 신규 기획/개발 건
+- Operations (운영/유지보수): 상시 발생하는 서비스 운영 및 관리
+- Administration (공통/지원): HR, 재무, 사내 IT 정책 등 지원 업무
+- Ad-hoc (단발성 이슈): 특정 카테고리에 묶기 힘든 일회성 문제
 
-특히 'todo' 유형의 경우, 대화 맥락에서 파악 가능한 '담당자(assignee)'와 '마감 기한(due_date)'을 반드시 포함하세요. 
+특히 'todo' 유형은 대화 맥락에서 파악 가능한 '담당자(assignee)'와 '마감 기한(due_date)'을 반드시 포함하세요. 
 마감 기한은 YYYY-MM-DD 형식으로 변환하되, 연도가 없으면 현재 연도(2026년)를 기준으로 합니다.
 
 source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으세요:
@@ -233,7 +241,7 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
             logger.warning("[Agent] 추출된 결과가 없거나 형식이 올바르지 않습니다.")
             return {"candidates": [], "total_prompt_tokens": state.total_prompt_tokens + 100, "total_completion_tokens": state.total_completion_tokens + 100}
 
-        # 기본 토큰 근사치 가산 (with_structured_output 한계 보 보완)
+        # 기본 토큰 근사치 가산 (with_structured_output 한계 보완)
         approx_pt = len(prompt) // 4
         approx_ct = 500
         
@@ -245,7 +253,7 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
         workspace_url = f"{base_url}/archives"
         
         for item in parsed_result.candidate_items:
-            # TS 값을 이용해 딥링크 생성 (Evidence Preserver)
+            # TS 값을 이용해 딥링크 생성
             links = []
             for ts in item.source_ts_list:
                 clean_ts = ts.replace('.', '')
@@ -257,7 +265,7 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
                 safe_type = 'history_event'
                 
             # snippets 안전 처리
-            snippets = item.source_snippets if item.source_snippets else ["근거 발언을 추출하지 못했습니다. (요약본 기반 추론)"]
+            snippets = item.source_snippets if item.source_snippets else ["근거 발언을 추출하지 못했습니다."]
                 
             final_candidates.append(ReviewCandidate(
                 title=item.title,
@@ -279,10 +287,10 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
         return {"candidates": final_candidates, "total_prompt_tokens": state.total_prompt_tokens + approx_pt, "total_completion_tokens": state.total_completion_tokens + approx_ct}
         
     except Exception as e:
-        logger.error(f"[Middleware: Fallback] 기본 모델({current_model}) 실패. Gemini 모델로 폴백합니다. Error: {e}")
+        logger.error(f"[Middleware: Fallback] 기본 모델 실패. Gemini 모델로 폴백합니다. Error: {e}")
         gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro", temperature=0)
         
-        response = gemini_llm.invoke(f"다음 텍스트에서 주요 결정 사항과 할 일을 추출해 JSON 리스트 형식으로만 답해줘: {state.summary}")
+        response = gemini_llm.invoke(f"다음 텍스트에서 주요 결정 사항과 할 일을 추출해 JSON 리스트 형식으로만 답해줘. 사용자 이름은 전체 형식을 유지해줘: {state.summary}")
         
         # 리스트 형태의 content 안전하게 문자열로 변환
         raw_content = response.content
