@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime,timedelta
 from time import sleep as default_sleep
 from typing import Protocol
 
