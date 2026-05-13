@@ -3839,3 +3839,8 @@ Cost/security note:
   - Added `GET /api/v1/projects`, which groups Gmail, Gmail attachment, Drive, and Calendar evidence by `project_key`/`scenario` with permission-aware hidden project accounting.
   - Updated backend test fixtures so CSRF cookies/headers and auth rate-limit state match the current production-like security middleware during tests.
   - Verification: `uv run pytest backend/tests -v` passed with 287 tests and 1 skipped pgvector integration test.
+- `feat: add assistant optimistic turns and email approval drafts`
+  - AI 비서 now shows the user's message immediately while the assistant turn is still running, then reveals the assistant answer with a smooth typing-style stream effect.
+  - Added a modular assistant email action path that detects direct email-send requests without forcing RAG evidence, drafts a business-tone subject/body, and stores the draft as pending approval in assistant message metadata.
+  - Added a Gmail approval endpoint that sends only after explicit user approval and only when an installed Gmail connection already has send-capable OAuth scope.
+  - Verification: `uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q`, `npm.cmd run lint`, `npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop`, and `npm.cmd run build` passed.

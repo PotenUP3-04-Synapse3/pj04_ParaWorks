@@ -51,3 +51,9 @@ class AssistantTurnResponse(BaseModel):
     conversation: AssistantConversationResponse
     user_message: AssistantMessageResponse
     assistant_message: AssistantMessageResponse
+
+
+class AssistantEmailSendResponse(BaseModel):
+    message: AssistantMessageResponse
+    status: str
+    gmail_message_id: str | None = None

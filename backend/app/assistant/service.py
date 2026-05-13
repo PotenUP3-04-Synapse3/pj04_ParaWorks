@@ -63,6 +63,20 @@ def list_messages(db: Session, user: DemoUser, conversation_id: int) -> list[Ass
     return list(conversation.messages)
 
 
+def get_owned_message(db: Session, user: DemoUser, message_id: int) -> AssistantMessage:
+    message = db.scalar(
+        select(AssistantMessage)
+        .join(AssistantConversation)
+        .where(
+            AssistantMessage.id == message_id,
+            AssistantConversation.user_id == user.id,
+        )
+    )
+    if message is None:
+        raise ValueError('assistant message not found')
+    return message
+
+
 def append_user_message(
     db: Session,
     user: DemoUser,
@@ -82,6 +96,24 @@ def append_user_message(
     conversation.updated_at = datetime.now(UTC)
     if conversation.title == DEFAULT_CONVERSATION_TITLE:
         conversation.title = summarize_conversation_title(normalized_content)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    db.refresh(conversation)
+    return message
+
+
+def update_message_metadata(
+    db: Session,
+    user: DemoUser,
+    message: AssistantMessage,
+    metadata: dict,
+) -> AssistantMessage:
+    conversation = get_owned_conversation(db, user, message.conversation_id)
+    _ensure_owned_conversation(user, conversation)
+    # MutableDict 변경 감지를 확실하게 만들기 위해 새 dict 인스턴스로 교체한다.
+    message.metadata_ = dict(metadata)
+    conversation.updated_at = datetime.now(UTC)
     db.add(message)
     db.commit()
     db.refresh(message)

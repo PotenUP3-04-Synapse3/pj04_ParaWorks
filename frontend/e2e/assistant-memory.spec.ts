@@ -50,6 +50,10 @@ test("search page behaves like a persisted assistant with compact history and fo
     },
   ];
   let createConversationPostCount = 0;
+  let releaseAssistantResponse: (() => void) | undefined;
+  const assistantResponseGate = new Promise<void>((resolve) => {
+    releaseAssistantResponse = resolve;
+  });
 
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
@@ -97,6 +101,7 @@ test("search page behaves like a persisted assistant with compact history and fo
       return;
     }
 
+    await assistantResponseGate;
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -204,10 +209,11 @@ test("search page behaves like a persisted assistant with compact history and fo
   expect(createConversationPostCount).toBe(0);
 
   await page.getByRole("button", { name: "기획팀 회의 일정을 정리해줘" }).click();
-  await expect(page.getByText("기획팀 회의는 목요일 오전 일정으로 정리하면 좋습니다.")).toBeVisible();
   const userQuestionBubble = page.locator("article").filter({ hasText: "기획팀 회의 일정을 정리해줘" });
   await expect(userQuestionBubble.getByText("기획팀 회의 일정을 정리해줘")).toBeVisible();
   await expect(userQuestionBubble.locator(".rounded-full.bg-\\[var\\(--primary\\)\\].px-3.py-2")).toBeVisible();
+  releaseAssistantResponse?.();
+  await expect(page.getByText("기획팀 회의는 목요일 오전 일정으로 정리하면 좋습니다.")).toBeVisible();
   await expect(page.getByRole("button", { name: "최근 결정된 사항만 요약해줘" })).toHaveClass(/bg-\[var\(--primary\)\]/);
 
   const body = page.locator("body");

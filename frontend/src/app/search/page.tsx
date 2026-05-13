@@ -21,6 +21,7 @@ import type {
   AssistantConversation,
   AssistantConversationCreatedResponse,
   AssistantConversationsResponse,
+  AssistantEmailSendResponse,
   AssistantMessage,
   AssistantMessagesResponse,
   AssistantTurnResponse,
@@ -34,6 +35,8 @@ const SUGGESTED_QUESTIONS = [
   "내가 확인해야 할 할 일을 알려줘",
   "관련 근거가 있는 문서만 찾아줘",
 ];
+const ASSISTANT_TYPING_INTERVAL_MS = 18;
+const ASSISTANT_TYPING_CHUNK_SIZE = 2;
 
 export default function SearchPage() {
   return (
@@ -56,12 +59,15 @@ function SearchPageContent() {
   const [error, setError] = useState<string>();
   const [initialQuerySent, setInitialQuerySent] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<number>();
+  const [sendingEmailMessageId, setSendingEmailMessageId] = useState<number>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const loadingRef = useRef(false);
   const creatingConversationRef = useRef(false);
   const loadMessagesRequestRef = useRef(0);
   const activeConversationIdRef = useRef<number | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const nextOptimisticMessageIdRef = useRef(-1);
+  const typingTimerRef = useRef<number | undefined>(undefined);
 
   const upsertConversationByUpdatedAt = useCallback((conversation: AssistantConversation) => {
     setConversations((current) => sortConversationsByUpdatedAt([
@@ -84,6 +90,35 @@ function SearchPageContent() {
     }
     return response.conversation;
   }, [upsertConversationByUpdatedAt]);
+
+  const revealAssistantMessage = useCallback((message: AssistantMessage) => {
+    if (typingTimerRef.current !== undefined) {
+      window.clearInterval(typingTimerRef.current);
+    }
+
+    const fullContent = message.content;
+    let visibleLength = 0;
+    // 응답 전문은 받은 뒤에도 한 번에 붙이지 않고 조금씩 늘려 스트리밍처럼 보이게 한다.
+    setMessages((currentMessages) => [
+      ...currentMessages.filter((item) => item.id !== message.id),
+      withTypingContent(message, ""),
+    ]);
+
+    typingTimerRef.current = window.setInterval(() => {
+      visibleLength = Math.min(fullContent.length, visibleLength + ASSISTANT_TYPING_CHUNK_SIZE);
+      const nextContent = fullContent.slice(0, visibleLength);
+      const done = visibleLength >= fullContent.length;
+      setMessages((currentMessages) => currentMessages.map((item) => (
+        item.id === message.id
+          ? (done ? { ...message, content: nextContent } : withTypingContent(message, nextContent))
+          : item
+      )));
+      if (done && typingTimerRef.current !== undefined) {
+        window.clearInterval(typingTimerRef.current);
+        typingTimerRef.current = undefined;
+      }
+    }, ASSISTANT_TYPING_INTERVAL_MS);
+  }, []);
 
   const loadMessages = useCallback(async (conversation: AssistantConversation) => {
     const requestId = ++loadMessagesRequestRef.current;
@@ -136,8 +171,16 @@ function SearchPageContent() {
     loadingRef.current = true;
     setLoading(true);
     setError(undefined);
+    setQuery("");
     try {
       const conversation = activeConversation ?? await createConversation(trimmedContent);
+      const optimisticMessage = createOptimisticUserMessage(
+        conversation.id,
+        trimmedContent,
+        nextOptimisticMessageIdRef.current--,
+      );
+      // 사용자가 보낸 말은 서버 응답을 기다리지 않고 바로 대화창에 올린다.
+      setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
       const response = await apiPost<AssistantTurnResponse>(
         `/api/v1/assistant/conversations/${conversation.id}/messages`,
         { content: trimmedContent },
@@ -146,21 +189,21 @@ function SearchPageContent() {
 
       activeConversationIdRef.current = response.conversation.id;
       setActiveConversation(response.conversation);
-      setMessages((currentMessages) => [
-        ...currentMessages,
+      setMessages((currentMessages) => replaceOptimisticMessage(
+        currentMessages,
+        optimisticMessage.id,
         response.user_message,
-        response.assistant_message,
-      ]);
+      ));
       setOpenEvidenceMessageIds(new Set());
       upsertConversationByUpdatedAt(response.conversation);
-      setQuery("");
+      revealAssistantMessage(response.assistant_message);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "메시지를 보내지 못했습니다.");
     } finally {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [activeConversation, createConversation, upsertConversationByUpdatedAt]);
+  }, [activeConversation, createConversation, revealAssistantMessage, upsertConversationByUpdatedAt]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -212,6 +255,21 @@ function SearchPageContent() {
     }
   }
 
+  async function approveEmailDraft(messageId: number) {
+    setSendingEmailMessageId(messageId);
+    setError(undefined);
+    try {
+      const response = await apiPost<AssistantEmailSendResponse>(`/api/v1/assistant/messages/${messageId}/email/send`);
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        message.id === messageId ? response.message : message
+      )));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "메일을 보내지 못했습니다.");
+    } finally {
+      setSendingEmailMessageId(undefined);
+    }
+  }
+
   useEffect(() => {
     setQuery(initialQuery);
     setInitialQuerySent(false);
@@ -231,6 +289,12 @@ function SearchPageContent() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, loading]);
+
+  useEffect(() => () => {
+    if (typingTimerRef.current !== undefined) {
+      window.clearInterval(typingTimerRef.current);
+    }
+  }, []);
 
   return (
     <div className="reference-dashboard h-[calc(100vh-7rem)] overflow-hidden">
@@ -330,6 +394,8 @@ function SearchPageContent() {
                   onToggleEvidence={() => toggleEvidence(message.id)}
                   copied={copiedMessageId === message.id}
                   onCopy={() => void copyMessage(message)}
+                  sendingEmail={sendingEmailMessageId === message.id}
+                  onApproveEmail={() => void approveEmailDraft(message.id)}
                 />
               ))}
               {!booting && messages.length === 0 ? (
@@ -416,15 +482,21 @@ function AssistantBubble({
   onToggleEvidence,
   copied,
   onCopy,
+  sendingEmail,
+  onApproveEmail,
 }: {
   message: AssistantMessage;
   evidenceOpen: boolean;
   onToggleEvidence: () => void;
   copied: boolean;
   onCopy: () => void;
+  sendingEmail: boolean;
+  onApproveEmail: () => void;
 }) {
   const isAssistant = message.role === "assistant";
   const evidenceCount = evidenceItemCount(message);
+  const isTyping = message.metadata?.ui_status === "typing";
+  const emailDraft = getEmailDraftView(message);
 
   return (
     <article className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}>
@@ -437,11 +509,22 @@ function AssistantBubble({
           }
         >
           {isAssistant ? (
-            <MarkdownContent content={message.content} />
+            <>
+              <MarkdownContent content={message.content} />
+              {isTyping ? <span className="ml-0.5 animate-pulse text-[var(--primary)]">▍</span> : null}
+            </>
           ) : (
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
           )}
         </div>
+
+        {isAssistant && emailDraft ? (
+          <EmailDraftActions
+            status={emailDraft.status}
+            sending={sendingEmail}
+            onApprove={onApproveEmail}
+          />
+        ) : null}
 
         <div className={`mt-1 flex ${isAssistant ? "justify-start" : "justify-end"}`}>
           <button
@@ -473,6 +556,34 @@ function AssistantBubble({
         ) : null}
       </div>
     </article>
+  );
+}
+
+function EmailDraftActions({
+  status,
+  sending,
+  onApprove,
+}: {
+  status: string;
+  sending: boolean;
+  onApprove: () => void;
+}) {
+  if (status === "sent") {
+    return <p className="mt-2 text-[12px] font-bold text-emerald-700">전송 완료</p>;
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-[var(--glass-elevated)] p-3">
+      <p className="text-[12px] font-bold text-muted">승인 전까지 메일은 전송되지 않습니다.</p>
+      <button
+        type="button"
+        onClick={onApprove}
+        disabled={sending}
+        className="rounded-full bg-[var(--primary)] px-3 py-2 text-[12px] font-bold leading-5 text-white transition hover:bg-[var(--primary-dark)] disabled:bg-neutral-300"
+      >
+        {sending ? "전송 중" : "승인하고 보내기"}
+      </button>
+    </div>
   );
 }
 
@@ -659,6 +770,61 @@ function evidenceItemCount(message: AssistantMessage) {
 
 function isDefaultConversation(conversation: AssistantConversation) {
   return conversation.title.trim() === DEFAULT_CONVERSATION_TITLE;
+}
+
+function createOptimisticUserMessage(
+  conversationId: number,
+  content: string,
+  id: number,
+): AssistantMessage {
+  return {
+    id,
+    conversation_id: conversationId,
+    role: "user",
+    content,
+    citations: [],
+    source_ids: [],
+    source_links: [],
+    source_snippets: [],
+    permission_level: null,
+    hidden_match_count: 0,
+    permission_notice: null,
+    agent_run_id: null,
+    metadata: { ui_status: "optimistic" },
+    created_at: new Date().toISOString(),
+  };
+}
+
+function replaceOptimisticMessage(
+  messages: AssistantMessage[],
+  optimisticMessageId: number,
+  persistedMessage: AssistantMessage,
+) {
+  let replaced = false;
+  const nextMessages = messages.map((message) => {
+    if (message.id !== optimisticMessageId) return message;
+    replaced = true;
+    return persistedMessage;
+  });
+  return replaced ? nextMessages : [...nextMessages, persistedMessage];
+}
+
+function withTypingContent(message: AssistantMessage, content: string): AssistantMessage {
+  return {
+    ...message,
+    content,
+    metadata: {
+      ...message.metadata,
+      ui_status: "typing",
+    },
+  };
+}
+
+function getEmailDraftView(message: AssistantMessage): { status: string } | undefined {
+  if (message.metadata?.action_type !== "email_draft") return undefined;
+  return {
+    status: typeof message.metadata.status === "string" ? message.metadata.status : "pending_approval",
+  };
 }
 
 function isReusableActiveConversation(
