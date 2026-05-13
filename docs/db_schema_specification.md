@@ -37,6 +37,8 @@ ParaWorks는 PostgreSQL을 사용하며, 데이터베이스 내에는 다음과 
 | `todos` | `Todo` | 할 일(Action Items) 지식 데이터 |
 | `review_items` | `ReviewItem` | 지식 베이스 등록 전 검토 항목 |
 | `agent_runs` | `AgentRun` | AI 에이전트 실행 기록 및 비용 |
+| `assistant_conversations` | `AssistantConversation` | 로그인 사용자별 AI 비서 대화방 |
+| `assistant_messages` | `AssistantMessage` | AI 비서 대화 메시지와 RAG/액션 메타데이터 |
 | `audit_logs` | `AuditLog` | 시스템 활동 감사 로그 |
 | `vector_index_states` | `VectorIndexState` | 벡터 데이터베이스 인덱싱 상태 |
 | `rag_vector_documents` | (Native SQL) | 벡터 임베딩 저장 테이블 (pgvector) |
