@@ -39,6 +39,7 @@ class LangChainMemoryExtractionModel:
     def extract(self, packet: EvidencePacket) -> MemoryExtractionModelResponse:
         system_prompt = (
             f'You are performing {self.task_name} for ParaWorks. '
+            'The title and summary must be written in Korean. '
             'Use only the provided evidence. '
             'Return one reviewable candidate through the structured schema. '
             f'The item_type must be {self.expected_item_type}.'
@@ -97,6 +98,7 @@ def render_memory_extraction_prompt(
             'source_window': packet.source_window,
             'requirements': [
                 'Use only the provided evidence.',
+                'The title and summary must be written in Korean.',
                 'Preserve uncertainty when evidence is weak.',
                 'Keep payload_fields aligned with the expected item type.',
             ],
