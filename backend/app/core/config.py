@@ -44,8 +44,9 @@ class Settings(BaseSettings):
     rag_embedding_max_estimated_cost_usd: float | None = 0.001
     rag_use_pgvector_search: bool = False
     slack_bot_token: str | None = None
+    slack_user_token: str | None = None
     slack_channel_ids: str = ''
-    slack_workspace_url: str = 'https://slack.com'
+    slack_workspace_url: str = 'https://3aiagent.slack.com'
     slack_client_id: str | None = None
     slack_client_secret: str | None = None
     slack_oauth_redirect_uri: str = 'http://localhost:3000/integrations/slack/callback'
