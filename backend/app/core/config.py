@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     auth_session_cookie_name: str = 'paraworks_session'
     auth_refresh_cookie_name: str = 'paraworks_refresh'
     auth_session_secret: str = 'local-development-session-secret'
-    auth_session_ttl_seconds: int = 900
-    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 14
+    auth_session_ttl_seconds: int = 60 * 60 * 24 * 30
+    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 30
     auth_cookie_secure: bool = False
     auth_csrf_cookie_name: str = 'paraworks_csrf'
     auth_csrf_header_name: str = 'X-CSRF-Token'
