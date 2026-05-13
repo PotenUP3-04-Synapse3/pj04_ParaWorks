@@ -144,35 +144,6 @@ test("search page behaves like a persisted assistant with compact history and fo
     });
   });
 
-  await page.route("**/api/v1/rag/indexing/summary", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        state_counts: { indexed: 12 },
-        latest_jobs: [
-          {
-            job_id: "job-1",
-            connector_type: "rag",
-            status: "complete",
-            message: "indexed",
-            progress_pct: 100,
-            indexed_count: 12,
-            skipped_count: 0,
-            saved_embedding_calls: 0,
-            updated_at: "2026-05-12T01:00:00+00:00",
-          },
-        ],
-        cost_policy: {
-          embedding_model: "text-embedding-3-small",
-          embedding_input_cost_per_1m_tokens: 0.02,
-          max_estimated_embedding_cost_usd: 0.001,
-          preflight_budget_gate: true,
-          incremental_hash_skip: true,
-        },
-      },
-    });
-  });
-
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -184,7 +155,6 @@ test("search page behaves like a persisted assistant with compact history and fo
       "GET /api/v1/assistant/conversations/11/messages",
       "GET /api/v1/assistant/conversations/12/messages",
       "POST /api/v1/assistant/conversations/11/messages",
-      "GET /api/v1/rag/indexing/summary",
     ]);
 
     if (expectedRoutes.has(`${request.method()} ${url.pathname}`)) {
@@ -197,9 +167,16 @@ test("search page behaves like a persisted assistant with compact history and fo
 
   await page.goto("/search");
 
-  await expect(page.getByRole("heading", { level: 1, name: "AI 비서" })).toBeVisible();
-  const history = page.getByLabel("대화 목록");
+  await expect(page.getByText("회사 기억 준비 중")).toHaveCount(0);
+  await expect(page.getByText("ParaWorks RAG")).toHaveCount(0);
+  const history = page.getByRole("complementary", { name: "대화 목록" });
   const historyItems = page.getByLabel("대화 히스토리");
+  await expect(history).toHaveAttribute("data-expanded", "true");
+  await page.getByRole("button", { name: "대화 목록 접기" }).click();
+  await expect(history).toHaveAttribute("data-expanded", "false");
+  await expect(history).toHaveClass(/w-\[72px\]/);
+  await page.getByRole("button", { name: "대화 목록 펼치기" }).click();
+  await expect(history).toHaveAttribute("data-expanded", "true");
   await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
   await history.getByRole("button", { name: "Redis 작업 상태" }).click();
   await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
@@ -211,6 +188,9 @@ test("search page behaves like a persisted assistant with compact history and fo
   await expect(page.getByText("internal", { exact: true })).toHaveCount(0);
   await expect(page.getByText("나", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "복사" })).toBeVisible();
+  const assistantInput = page.getByRole("form", { name: "AI 비서 입력" });
+  await expect(assistantInput).toHaveClass(/bg-white\/80/);
+  await expect(assistantInput).not.toHaveClass(/border-t/);
 
   await expect(page.getByText("세부 근거 1: Redis 작업 상태 기록입니다.")).toBeHidden();
   await page.getByRole("button", { name: /근거와 출처 12개/ }).click();
@@ -225,7 +205,8 @@ test("search page behaves like a persisted assistant with compact history and fo
   await expect(page.getByText("기획팀 회의는 목요일 오전 일정으로 정리하면 좋습니다.")).toBeVisible();
   const userQuestionBubble = page.locator("article").filter({ hasText: "기획팀 회의 일정을 정리해줘" });
   await expect(userQuestionBubble.getByText("기획팀 회의 일정을 정리해줘")).toBeVisible();
-  await expect(userQuestionBubble.locator(".rounded-full")).toBeVisible();
+  await expect(userQuestionBubble.locator(".rounded-full.bg-\\[var\\(--primary\\)\\].px-3.py-2")).toBeVisible();
+  await expect(page.getByRole("button", { name: "최근 결정된 사항만 요약해줘" })).toHaveClass(/bg-\[var\(--primary\)\]/);
 
   const body = page.locator("body");
   await expect(body).not.toContainText(/cost|token|cache|토큰|비용|캐시/i);
