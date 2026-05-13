@@ -27,6 +27,23 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
 
 def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -> dict:
     agent_run_id = _agent_run_id(item)
+    
+    # 에이전트 실행 상세 정보 추출
+    agent_details = {
+        'model_name': 'Unknown',
+        'prompt_version': 'Unknown',
+        'estimated_cost_usd': 0.0,
+        'total_tokens': 0,
+    }
+    
+    if agent_run:
+        agent_details.update({
+            'model_name': agent_run.model_name or 'gpt-4o-mini',
+            'prompt_version': agent_run.prompt_version or 'v1',
+            'estimated_cost_usd': agent_run.estimated_cost_usd or 0.0,
+            'total_tokens': agent_run.total_tokens or 0,
+        })
+
     return {
         'id': item.id,
         'item_type': item.item_type,
@@ -35,6 +52,7 @@ def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -
         'source_snippets': item.source_snippets,
         'source_evidence': _source_evidence_response(item, agent_run),
         'agent_run_id': agent_run_id,
+        'agent_run_details': agent_details, # 상세 정보 추가
         'confidence_score': item.confidence_score,
         'permission_level': item.permission_level,
         'status': item.status,
@@ -307,16 +325,32 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
     agent_run_id = _agent_run_id(item)
     rows: list[dict] = []
 
+    # URL 정규화 맵 생성 (매칭 성공률을 높이기 위해)
+    norm_summary = {}
+    for url, info in evidence_summary.items():
+        norm_url = _normalize_slack_url(url)
+        if norm_url:
+            norm_summary[norm_url] = info
+
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
         
-        # snippets가 links보다 부족할 경우, 마지막 snippet을 재사용하거나 안내 문구 표시
+        # snippets가 links보다 부족할 경우 처리
         if index < len(snippets):
             source_snippet = snippets[index]
         else:
             source_snippet = snippets[-1] if snippets else '원문 발췌 내용이 없습니다.'
             
-        summary = evidence_summary.get(source_url or '') or {}
+        # 1순위: URL 직접 매칭
+        summary = evidence_summary.get(source_url or '')
+        
+        # 2순위: 정규화된 URL 매칭 (슬랙 TS 형식 차이 극복)
+        if not summary and source_url:
+            norm_link = _normalize_slack_url(source_url)
+            if norm_link:
+                summary = norm_summary.get(norm_link)
+        
+        summary = summary or {}
         rows.append(
             {
                 'index': index + 1,
@@ -334,6 +368,16 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
         )
 
     return rows
+
+
+def _normalize_slack_url(url: str | None) -> str | None:
+    """슬랙 URL에서 타임스탬프 부분을 추출하여 정규화합니다."""
+    if not url or '/p' not in url:
+        return None
+    
+    # p 뒤의 숫자만 추출하여 뒤의 0을 제거 (예: p1715000123000000 -> 1715000123)
+    ts_part = url.split('/p')[-1].split('?')[0]
+    return ts_part.rstrip('0')
 
 
 def _agent_evidence_summary_by_url(agent_run: AgentRun | None) -> dict[str, dict]:

@@ -46,26 +46,28 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
     if not results:
         return
 
-    # 2. 채널별로 메시지 그룹화 및 URL -> 작성자 맵 생성
+    # 2. 채널별로 메시지 그룹화 및 TS -> 작성자 맵 생성
     messages_by_channel: Dict[str, List[Dict[str, Any]]] = {}
-    url_to_author: Dict[str, str] = {}
+    ts_to_author: Dict[str, str] = {}
     
     for source, body in results:
         channel_id = source.raw_metadata.get('channel_id', 'unknown')
+        ts = source.raw_metadata.get('ts')
+        
         if channel_id not in messages_by_channel:
             messages_by_channel[channel_id] = []
         
         # agent_slack.py가 기대하는 메시지 포맷으로 변환
         messages_by_channel[channel_id].append({
-            'ts': source.raw_metadata.get('ts', source.created_at.timestamp()),
+            'ts': ts or source.created_at.timestamp(),
             'user': source.author,
-            'text': body, # 조인된 DocumentVersion.body 사용
-            'user_name': source.author # 슬랙의 전체 이름 사용
+            'text': body,
+            'user_name': source.author
         })
         
-        # 근거 보기를 위한 URL -> 작성자 매핑 저장
-        if source.source_url:
-            url_to_author[source.source_url] = source.author
+        # TS를 키로 사용하여 작성자 저장 (URL보다 정확한 매핑을 위해)
+        if ts:
+            ts_to_author[ts] = source.author
 
     # 3. 각 채널별 분석 실행
     total_created = 0
@@ -74,7 +76,7 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
     
     for channel_id, messages in messages_by_channel.items():
         try:
-            # 에이전트 실행 (API 키 전달)
+            # 에이전트 실행
             result = process_daily_slack_sync(
                 channel_id, 
                 messages, 
@@ -82,17 +84,34 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                 gemini_api_key=settings.gemini_api_key or settings.google_api_key
             )
             
-            # AgentRun 기록 저장 (evidence_summary 포함)
             run_cost = result.get('run_cost')
             candidates: List[ReviewCandidate] = result.get('candidates', [])
             
-            # 각 후보가 참조하는 URL들에 대해 작성자 정보를 metadata에 포함
+            # AgentRun 기록 저장 (evidence_summary 포함)
             evidence_summary = []
             for cand in candidates:
                 for url in cand.source_links:
+                    # URL에서 p12345... 형태의 TS 추출 시도
+                    author_name = "Unknown"
+                    if '/p' in url:
+                        # p 뒤의 숫자만 추출 (예: p1715000123 -> 1715000.123)
+                        raw_ts_str = url.split('/p')[-1]
+                        # 10자리(초) + 6자리(마이크로초) 형태를 다시 . 포맷으로 복원 시도
+                        if len(raw_ts_str) >= 10:
+                            possible_ts = f"{raw_ts_str[:10]}.{raw_ts_str[10:]}".rstrip('.')
+                            # 정확히 일치하거나, 앞부분 10자리가 일치하는 작성자 찾기
+                            author_name = ts_to_author.get(possible_ts) or "Unknown"
+                            
+                            # 여전히 Unknown이면 TS 맵 전체에서 검색 (폴백)
+                            if author_name == "Unknown":
+                                for stored_ts, name in ts_to_author.items():
+                                    if stored_ts.replace('.', '') in raw_ts_str:
+                                        author_name = name
+                                        break
+                    
                     evidence_summary.append({
                         'source_url': url,
-                        'author': url_to_author.get(url, "Unknown"),
+                        'author': author_name,
                         'permission_level': cand.permission_level
                     })
 
@@ -129,8 +148,10 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                     'assignee': candidate.payload_fields.get('assignee', '미지정'),
                     'due_date': candidate.payload_fields.get('due_date', '기한없음'),
                     'source_channel_id': channel_id,
-                    'agent_run_id': agent_run.id,
-                    'agent_name': 'slack_agent' # 에이전트 생성 항목임을 명시
+                    'agent_run_id': agent_run.id, # 핵심: AgentRun 연동
+                    'agent_name': 'slack_agent', # 프론트엔드 표시용
+                    'prompt_version': agent_run.prompt_version, # 프론트엔드 표시용
+                    'estimated_cost_usd': agent_run.estimated_cost_usd, # 프론트엔드 표시용
                 }
                 
                 review_item = ReviewItem(
