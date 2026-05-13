@@ -6,9 +6,14 @@ from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
 from backend.app.assistant.email_actions import (
+    EMAIL_ACTION_PROMPT_VERSION,
     assistant_email_draft_content,
-    build_email_draft_from_request,
     email_draft_metadata,
+)
+from backend.app.assistant.email_agent import (
+    EmailActionDecision,
+    build_email_action_agent,
+    render_email_action_context,
 )
 from backend.app.assistant.gmail_sender import GmailDraftSender, GmailSendError
 from backend.app.assistant.service import (
@@ -17,8 +22,8 @@ from backend.app.assistant.service import (
     build_contextual_question,
     create_conversation,
     find_reusable_empty_conversation,
-    get_owned_message,
     get_owned_conversation,
+    get_owned_message,
     list_conversations,
     list_messages,
     serialize_conversation,
@@ -142,7 +147,15 @@ def create_assistant_message(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    email_draft = build_email_draft_from_request(user_message.content)
+    messages = list_messages(db, user, conversation.id)
+    email_decision: EmailActionDecision = build_email_action_agent(settings).decide(
+        conversation_context=render_email_action_context(
+            messages=messages[:-1],
+            max_chars=settings.assistant_email_agent_max_input_chars,
+        ),
+        latest_message=user_message.content,
+    )
+    email_draft = email_decision.to_draft()
     if email_draft is not None:
         assistant_message = append_assistant_message(
             db,
@@ -157,7 +170,11 @@ def create_assistant_message(
             hidden_match_count=0,
             permission_notice=None,
             agent_run_id=None,
-            metadata=email_draft_metadata(email_draft),
+            metadata={
+                **email_draft_metadata(email_draft),
+                'agent_name': 'email_action_agent',
+                'model_name': email_decision.model_name,
+            },
         )
         return {
             'conversation': serialize_conversation(conversation),
@@ -165,7 +182,34 @@ def create_assistant_message(
             'assistant_message': serialize_message(assistant_message),
         }
 
-    messages = list_messages(db, user, conversation.id)
+    if email_decision.action_type == 'needs_clarification' and email_decision.clarification_question:
+        assistant_message = append_assistant_message(
+            db,
+            user,
+            conversation,
+            content=email_decision.clarification_question,
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level=None,
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={
+                'action_type': 'email_clarification',
+                'status': 'needs_input',
+                'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
+                'agent_name': 'email_action_agent',
+                'model_name': email_decision.model_name,
+            },
+        )
+        return {
+            'conversation': serialize_conversation(conversation),
+            'user_message': serialize_message(user_message),
+            'assistant_message': serialize_message(assistant_message),
+        }
+
     contextual_question = build_contextual_question(
         conversation=conversation,
         messages=messages,
