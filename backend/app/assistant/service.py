@@ -9,6 +9,8 @@ from backend.app.models import AssistantConversation, AssistantMessage
 RECENT_CONTEXT_MESSAGE_LIMIT = 6
 DEFAULT_CONVERSATION_TITLE = '새 대화'
 MAX_CONVERSATION_TITLE_LENGTH = 32
+MAX_CONTEXT_MESSAGE_CHARS = 500
+MAX_SUMMARY_LINES = 4
 
 
 def create_conversation(db: Session, user: DemoUser, *, title: str | None = None) -> AssistantConversation:
@@ -173,23 +175,33 @@ def build_contextual_question(
     new_message: str,
 ) -> str:
     parts: list[str] = []
+    seen_context: set[str] = set()
     if conversation.summary:
-        parts.append(f'대화 요약: {conversation.summary}')
+        summary_lines = _dedupe_lines(conversation.summary.splitlines())
+        if summary_lines:
+            seen_context.update(f'assistant:{line}' for line in summary_lines)
+            parts.append(f"대화 요약: {' '.join(summary_lines)}")
 
     # 전체 대화를 보내지 않고 최근 메시지만 사용해 토큰 사용량을 제한한다.
     context_messages = _exclude_current_user_message(messages, new_message)
     recent_messages = context_messages[-RECENT_CONTEXT_MESSAGE_LIMIT:]
     if recent_messages:
         parts.append('최근 대화:')
-        parts.extend(f'{message.role}: {message.content}' for message in recent_messages)
+        for message in recent_messages:
+            content = _compact_context_text(message.content)
+            dedupe_key = f'{message.role}:{content}'
+            if not content or dedupe_key in seen_context:
+                continue
+            seen_context.add(dedupe_key)
+            parts.append(f'{message.role}: {content}')
 
     parts.append(f'현재 질문: {new_message.strip()}')
     return '\n'.join(parts)
 
 
 def update_summary(existing_summary: str | None, latest_answer: str) -> str:
-    summary_basis = f'{existing_summary or ""}\n{latest_answer}'.strip()
-    return summary_basis[:1000]
+    lines = [*(existing_summary or '').splitlines(), latest_answer]
+    return '\n'.join(_dedupe_lines(lines)[-MAX_SUMMARY_LINES:])[:1000]
 
 
 def serialize_conversation(conversation: AssistantConversation) -> dict:
@@ -250,3 +262,22 @@ def _exclude_current_user_message(
     if latest_message.role == 'user' and latest_message.content.strip() == new_message.strip():
         return messages[:-1]
     return messages
+
+
+def _compact_context_text(value: str) -> str:
+    compacted = ' '.join(value.strip().split())
+    if len(compacted) <= MAX_CONTEXT_MESSAGE_CHARS:
+        return compacted
+    return f'{compacted[: MAX_CONTEXT_MESSAGE_CHARS - 1].rstrip()}…'
+
+
+def _dedupe_lines(lines: list[str]) -> list[str]:
+    unique_lines: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        compacted = _compact_context_text(line)
+        if not compacted or compacted in seen:
+            continue
+        seen.add(compacted)
+        unique_lines.append(compacted)
+    return unique_lines
