@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_auth import DemoUser, get_demo_user
+from backend.app.core.demo_filters import filter_review_items
 from backend.app.core.rbac import ensure_can_review_permission
 from backend.app.db.session import get_db
 from backend.app.knowledge.promotion import (
@@ -20,6 +22,7 @@ from backend.app.services.audit import record_audit_log
 router = APIRouter(prefix='/review', tags=['review'])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -> dict:
@@ -40,12 +43,47 @@ def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -
 
 
 @router.get('')
-def list_review_items(db: DbSession, status: str = 'pending_review') -> dict[str, list[dict]]:
+def list_review_items(db: DbSession, status: str = 'pending_review') -> dict:
     items = db.scalars(
         select(ReviewItem).where(ReviewItem.status == status).order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
     ).all()
+
     agent_runs = _agent_runs_by_id(db, items)
-    return {'items': [_review_item_response(item, agent_runs.get(_agent_run_id(item) or -1)) for item in items]}
+    
+    # 그룹화 로직
+    groups: dict[str, dict] = {}
+    for item in items:
+        agent_run = agent_runs.get(_agent_run_id(item) or -1)
+        resp_item = _review_item_response(item, agent_run)
+        
+        # 제목(title)과 타입(item_type)을 기준으로 그룹 키 생성
+        title = item.payload.get('title', f'Review item {item.id}')
+        group_key = f"{item.item_type}:{title}"
+        
+        if group_key not in groups:
+            groups[group_key] = {
+                'group_id': group_key,
+                'title': title,
+                'item_type': item.item_type,
+                'status': item.status,
+                'permission_level': item.permission_level,
+                'items': [],
+                'total_count': 0,
+                'avg_confidence': 0.0,
+            }
+        
+        groups[group_key]['items'].append(resp_item)
+        groups[group_key]['total_count'] += 1
+        groups[group_key]['avg_confidence'] += item.confidence_score
+
+    # 평균 신뢰도 계산 및 리스트 변환
+    result_groups = []
+    for group in groups.values():
+        if group['total_count'] > 0:
+            group['avg_confidence'] /= group['total_count']
+        result_groups.append(group)
+
+    return {'groups': result_groups, 'items': [_review_item_response(item, agent_runs.get(_agent_run_id(item) or -1)) for item in items]}
 
 
 @router.post('/approve-agent-candidates')
@@ -271,7 +309,13 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
 
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
-        source_snippet = snippets[index] if index < len(snippets) else ''
+        
+        # snippets가 links보다 부족할 경우, 마지막 snippet을 재사용하거나 안내 문구 표시
+        if index < len(snippets):
+            source_snippet = snippets[index]
+        else:
+            source_snippet = snippets[-1] if snippets else '원문 발췌 내용이 없습니다.'
+            
         summary = evidence_summary.get(source_url or '') or {}
         rows.append(
             {

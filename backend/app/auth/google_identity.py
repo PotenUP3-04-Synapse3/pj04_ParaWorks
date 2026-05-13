@@ -22,6 +22,7 @@ GOOGLE_IDENTITY_SCOPES = ['openid', 'email', 'profile']
 @dataclass(frozen=True)
 class GoogleIdentityState:
     nonce: str
+    code_verifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class GoogleIdentityLoginUrl:
     redirect_uri: str
     missing_config: list[str]
     configured: bool = True
+    code_verifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -50,8 +52,13 @@ class GoogleIdentityStateSigner:
     def __init__(self, secret: str) -> None:
         self.secret = secret.encode('utf-8')
 
-    def create(self, *, nonce: str | None = None) -> str:
-        payload = {'nonce': nonce or secrets.token_urlsafe(18)}
+    def create(self, *, nonce: str | None = None, code_verifier: str | None = None) -> str:
+        payload = {
+            'nonce': nonce or secrets.token_urlsafe(18),
+        }
+        if code_verifier:
+            payload['code_verifier'] = code_verifier
+
         payload_token = _b64encode(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
         signature = _sign(payload_token, self.secret)
         return f'{payload_token}.{signature}'
@@ -70,7 +77,10 @@ class GoogleIdentityStateSigner:
             payload = json.loads(_b64decode(payload_token))
         except (ValueError, json.JSONDecodeError) as exc:
             raise GoogleIdentityError('Google identity state is malformed') from exc
-        return GoogleIdentityState(nonce=str(payload['nonce']))
+        return GoogleIdentityState(
+            nonce=str(payload['nonce']),
+            code_verifier=payload.get('code_verifier'),
+        )
 
 
 class GoogleIdentityClient:
@@ -89,16 +99,26 @@ class GoogleIdentityClient:
         self.token_url = token_url
         self.userinfo_url = userinfo_url
 
-    def exchange_code(self, *, code: str, redirect_uri: str) -> GoogleIdentityAccess:
+    def exchange_code(
+        self,
+        *,
+        code: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
+    ) -> GoogleIdentityAccess:
+        data = {
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri,
+        }
+        if code_verifier:
+            data['code_verifier'] = code_verifier
+
         response = self.http_client.post(
             self.token_url,
-            data={
-                'client_id': self.client_id,
-                'client_secret': self.client_secret,
-                'code': code,
-                'grant_type': 'authorization_code',
-                'redirect_uri': redirect_uri,
-            },
+            data=data,
         )
         response.raise_for_status()
         token_payload = response.json()
@@ -117,31 +137,55 @@ class GoogleIdentityClient:
         )
 
 
+def pkce_challenge(verifier: str) -> str:
+    """Generates a code_challenge from a code_verifier using S256."""
+    sha256_hash = hashlib.sha256(verifier.encode('ascii')).digest()
+    return base64.urlsafe_b64encode(sha256_hash).decode('ascii').rstrip('=')
+
+
 def build_google_identity_login_url(
     *,
     settings: Settings,
     nonce: str | None = None,
+    redirect_uri: str | None = None,
+    use_pkce: bool = True,
 ) -> GoogleIdentityLoginUrl:
     if not settings.google_client_id:
         raise GoogleIdentityError('GOOGLE_CLIENT_ID is required for Google identity login')
 
-    state = GoogleIdentityStateSigner(settings.google_identity_state_secret).create(nonce=nonce)
-    query = urlencode(
-        {
-            'client_id': settings.google_client_id,
-            'redirect_uri': settings.google_identity_redirect_uri,
-            'response_type': 'code',
-            'scope': ' '.join(GOOGLE_IDENTITY_SCOPES),
-            'prompt': 'select_account',
-            'state': state,
-        }
+    target_redirect_uri = redirect_uri or settings.google_identity_redirect_uri
+    
+    # Non-web URI인 경우 PKCE 강제 사용
+    is_non_web = not (target_redirect_uri.startswith('http://') or target_redirect_uri.startswith('https://'))
+    actual_use_pkce = use_pkce or is_non_web
+    
+    code_verifier = secrets.token_urlsafe(64) if actual_use_pkce else None
+
+    state = GoogleIdentityStateSigner(settings.google_identity_state_secret).create(
+        nonce=nonce,
+        code_verifier=code_verifier,
     )
+    params = {
+        'client_id': settings.google_client_id,
+        'redirect_uri': target_redirect_uri,
+        'response_type': 'code',
+        'scope': ' '.join(GOOGLE_IDENTITY_SCOPES),
+        'prompt': 'select_account',
+        'state': state,
+    }
+
+    if code_verifier:
+        params['code_challenge'] = pkce_challenge(code_verifier)
+        params['code_challenge_method'] = 'S256'
+
+    query = urlencode(params)
     return GoogleIdentityLoginUrl(
         login_url=f'https://accounts.google.com/o/oauth2/v2/auth?{query}',
         state=state,
         required_scopes=list(GOOGLE_IDENTITY_SCOPES),
-        redirect_uri=settings.google_identity_redirect_uri,
+        redirect_uri=target_redirect_uri,
         missing_config=[],
+        code_verifier=code_verifier,
     )
 
 
@@ -167,9 +211,15 @@ def complete_google_identity_login(
     state: str,
     access: GoogleIdentityAccess | None = None,
     cookie_issuer: Callable[[Response, Session, AuthUser, Settings | None], str],
+    redirect_uri: str | None = None,
 ) -> AuthUser:
-    GoogleIdentityStateSigner(settings.google_identity_state_secret).validate(state)
-    access_payload = access or _exchange_google_identity_code(settings=settings, code=code)
+    parsed_state = GoogleIdentityStateSigner(settings.google_identity_state_secret).validate(state)
+    access_payload = access or _exchange_google_identity_code(
+        settings=settings,
+        code=code,
+        code_verifier=parsed_state.code_verifier,
+        redirect_uri=redirect_uri,
+    )
     auth_user = upsert_auth_user_from_google_identity(db, access_payload)
     cookie_issuer(response, db, auth_user, settings)
     db.commit()
@@ -210,17 +260,27 @@ def upsert_auth_user_from_google_identity(db: Session, access: GoogleIdentityAcc
     return auth_user
 
 
-def _exchange_google_identity_code(*, settings: Settings, code: str) -> GoogleIdentityAccess:
+def _exchange_google_identity_code(
+    *,
+    settings: Settings,
+    code: str,
+    code_verifier: str | None = None,
+    redirect_uri: str | None = None,
+) -> GoogleIdentityAccess:
     if not settings.google_client_id or not settings.google_client_secret:
         raise GoogleIdentityError('Google client id and secret are required for identity callback exchange')
     return GoogleIdentityClient(
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
-    ).exchange_code(code=code, redirect_uri=settings.google_identity_redirect_uri)
+    ).exchange_code(
+        code=code,
+        redirect_uri=redirect_uri or settings.google_identity_redirect_uri,
+        code_verifier=code_verifier,
+    )
 
 
 def _sign(payload_token: str, secret: bytes) -> str:
-    digest = hmac.new(secret, payload_token.encode('ascii'), hashlib.sha256).digest()
+    digest = hmac.new(secret, payload_token.encode('utf-8'), hashlib.sha256).digest()
     return _b64encode(digest)
 
 
