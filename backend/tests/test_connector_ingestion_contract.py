@@ -150,6 +150,13 @@ def test_connector_manifests_define_parallel_ingestion_contracts() -> None:
     assert get_connector_manifest('drive').display_name == 'Google Drive'
 
 
+def test_live_gmail_manifest_reports_send_scope_for_approval_actions() -> None:
+    manifests = {manifest.connector_type: manifest for manifest in list_connector_manifests(demo_mode=False)}
+
+    assert 'https://www.googleapis.com/auth/gmail.readonly' in manifests['gmail'].required_scopes
+    assert 'https://www.googleapis.com/auth/gmail.send' in manifests['gmail'].required_scopes
+
+
 def test_sync_connector_events_records_job_and_ingests_review_items(db_session: Session) -> None:
     result = sync_connector_events(db=db_session, connector=ContractConnector())
 
