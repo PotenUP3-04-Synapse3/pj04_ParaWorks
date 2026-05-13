@@ -99,6 +99,65 @@ class DocxDocumentParser:
                 chunks=[]
             )
 
+class TextDocumentParser:
+    parser_name = 'built-in-text'
+
+    def parse(self, payload: bytes, *, metadata: dict[str, object]) -> ParsedDocument:
+        try:
+            # Detect or assume UTF-8 with fallback
+            try:
+                text = payload.decode('utf-8')
+            except UnicodeDecodeError:
+                text = payload.decode('cp949', errors='replace') # Common Korean encoding fallback
+
+            chunks: list[ParsedDocumentChunk] = []
+            chunk_index = 0
+            
+            # Simple chunking by paragraph (double newline)
+            paragraphs = [p.strip() for p in text.replace('\r\n', '\n').split('\n\n') if p.strip()]
+            
+            current_chunk_text = []
+            current_length = 0
+            MAX_LENGTH = 1200
+            
+            def add_chunk():
+                nonlocal chunk_index, current_chunk_text, current_length
+                if current_chunk_text:
+                    full_text = '\n\n'.join(current_chunk_text)
+                    chunks.append(ParsedDocumentChunk(
+                        chunk_index=chunk_index,
+                        text=full_text,
+                        source_snippet=full_text[:240].replace('\n', ' '),
+                    ))
+                    chunk_index += 1
+                    current_chunk_text = []
+                    current_length = 0
+
+            for para in paragraphs:
+                if not para:
+                    continue
+                if current_length + len(para) > MAX_LENGTH and current_length > 0:
+                    add_chunk()
+                current_chunk_text.append(para)
+                current_length += len(para)
+            add_chunk()
+
+            return _build_parsed_document(
+                metadata=metadata,
+                parser_name=self.parser_name,
+                parser_status='parsed',
+                parser_status_reason=None,
+                chunks=chunks
+            )
+        except Exception as e:
+            return _build_parsed_document(
+                metadata=metadata,
+                parser_name=self.parser_name,
+                parser_status='error',
+                parser_status_reason=f'Failed to parse Text/MD: {str(e)}',
+                chunks=[]
+            )
+
 def _build_parsed_document(
     metadata: dict[str, object],
     parser_name: str,

@@ -6,80 +6,39 @@ import type { DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
-const todayTasks = [
-  {
-    title: "ORION 요구사항 변경안 검토",
-    project: "프로젝트 ORION",
-    due: "오늘 14:00",
-    priority: "높음",
-    status: "검토 필요",
-    source: "Slack #project-orion",
-  },
-  {
-    title: "Oracle DB 선정 근거 확인",
-    project: "프로젝트 ORION",
-    due: "오늘 16:00",
-    priority: "높음",
-    status: "진행 중",
-    source: "Gmail 스레드",
-  },
-  {
-    title: "보안 정책 초안 코멘트",
-    project: "Nova 보안 정책",
-    due: "오늘 17:30",
-    priority: "보통",
-    status: "대기",
-    source: "Drive 정책 문서",
-  },
-];
+const todayTasks: any[] = [];
+const upcomingEvents: any[] = [];
+const assignedProjects: any[] = [];
+const personalUpdates: any[] = [];
+const reviewItems: any[] = [];
 
-const upcomingEvents = [
-  ["10:30", "ORION 요구사항 영향도 회의", "김하나 외 5명"],
-  ["13:00", "보안 정책 리뷰", "박지은, 정민철"],
-  ["16:30", "Atlas API 배포 체크", "이준호"],
-];
-
-const assignedProjects = [
-  ["프로젝트 ORION", "68%", "요구사항 변경 검토", "높음"],
-  ["Nova 보안 정책", "54%", "정책 초안 리뷰", "보통"],
-  ["Atlas API 개선", "76%", "성능 개선 실행", "낮음"],
-];
-
-const personalUpdates = [
-  {
-    icon: MessageSquare,
-    title: "김하나님이 #project-orion에서 멘션했습니다.",
-    detail: "권한 분리 요구사항 영향도 확인 요청",
-    time: "8분 전",
-  },
-  {
-    icon: FileText,
-    title: "ORION_PRD_v2.docx가 수정되었습니다.",
-    detail: "내 검토 항목과 연결된 문서 변경",
-    time: "21분 전",
-  },
-  {
-    icon: Bell,
-    title: "검토사항에 새 후보 2건이 배정되었습니다.",
-    detail: "제한 권한 근거 포함, 오늘 처리 권장",
-    time: "35분 전",
-  },
-];
-
-const reviewItems = [
-  ["ORION 요구사항 변경 검토", "Slack", "오늘 14:00", "높음"],
-  ["Oracle DB 선정 근거 확인", "Gmail", "오늘 16:00", "높음"],
-  ["보안 정책 초안 코멘트", "Drive", "내일 10:00", "보통"],
-];
 
 export default async function DashboardPage() {
   const dashboard = await serverApiGet<DashboardResponse>("/api/v1/dashboard").catch(() => null);
   const pendingReviewCount = dashboard?.pending_review_count ?? 0;
-  const visibleTodayTasks: typeof todayTasks = [];
-  const visibleUpcomingEvents: typeof upcomingEvents = [];
-  const visibleAssignedProjects: typeof assignedProjects = [];
-  const visiblePersonalUpdates: typeof personalUpdates = [];
-  const visibleReviewItems: typeof reviewItems = [];
+  const syncDateStr = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+
+  const visibleTodayTasks: any[] = dashboard?.today_todos?.map(todo => ({
+    title: todo.title,
+    category: todo.category,
+    assignee: todo.assignee,
+    due_date: todo.due_date,
+    status: "검토 필요"
+  })) ?? [];
+  const visibleUpcomingEvents: typeof upcomingEvents = upcomingEvents;
+  const visibleAssignedProjects: typeof assignedProjects = assignedProjects;
+  const visiblePersonalUpdates: typeof personalUpdates = personalUpdates;
+  const visibleReviewItems: any[] = dashboard?.pending_items?.map(item => [
+    item.title,
+    item.item_type,
+    "기한 없음",
+    item.confidence_score > 0.8 ? "높음" : "보통"
+  ]) ?? [];
 
   return (
     <div className="reference-dashboard space-y-4">
@@ -113,7 +72,7 @@ export default async function DashboardPage() {
               </Link>
             </div>
             <div className="mt-3 space-y-3">
-              {visibleTodayTasks.map((task) => (
+              {visibleTodayTasks.length > 0 ? visibleTodayTasks.map((task) => (
                 <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -156,7 +115,7 @@ export default async function DashboardPage() {
                   <span className="text-muted">{due}</span>
                   <span className={`priority-badge ${priority === "높음" ? "danger" : "warning"}`}>{priority}</span>
                 </div>
-              )}
+              ))}
             </div>
           </Panel>
 

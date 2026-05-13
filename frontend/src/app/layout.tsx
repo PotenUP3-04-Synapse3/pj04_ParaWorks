@@ -1,3 +1,4 @@
+import React from "react";
 import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppShell";
 import "./globals.css";
@@ -21,7 +22,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" suppressHydrationWarning>
-      <body>
+      <head />
+      <body suppressHydrationWarning>
         {/* 테마를 항상 'light'로 고정하기 위한 초기화 스크립트 (깜빡임 방지) */}
         <script
           dangerouslySetInnerHTML={{

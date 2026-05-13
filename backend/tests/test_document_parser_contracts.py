@@ -173,3 +173,44 @@ def test_pdf_document_parser_returns_error_status_on_invalid_payload() -> None:
     assert 'Failed to parse PDF' in parsed.parser_run.parser_status_reason
     assert parsed.chunks == []
 
+
+def test_text_document_parser_extracts_paragraphs() -> None:
+    from backend.app.documents.adapters import TextDocumentParser
+
+    payload = "First paragraph.\n\nSecond paragraph.".encode('utf-8')
+    metadata = {
+        'source_id': 'drive:text-1',
+        'source_url': 'https://drive.google.com/file/d/text-1/view',
+        'permission_level': 'internal',
+        'mime_type': 'text/plain',
+        'document_version': 'v1',
+    }
+    parsed = TextDocumentParser().parse(payload, metadata=metadata)
+
+    assert parsed.parser_run.parser_name == 'built-in-text'
+    assert parsed.parser_run.parser_status == 'parsed'
+    # Both paragraphs are short enough to fit in one chunk
+    assert len(parsed.chunks) == 1
+    assert 'First paragraph.' in parsed.chunks[0].text
+    assert 'Second paragraph.' in parsed.chunks[0].text
+
+
+def test_markdown_document_parser_extracts_paragraphs() -> None:
+    from backend.app.documents.adapters import TextDocumentParser
+
+    payload = "# Title\n\nContent body.".encode('utf-8')
+    metadata = {
+        'source_id': 'drive:md-1',
+        'source_url': 'https://drive.google.com/file/d/md-1/view',
+        'permission_level': 'internal',
+        'mime_type': 'text/markdown',
+        'document_version': 'v1',
+    }
+    parsed = TextDocumentParser().parse(payload, metadata=metadata)
+
+    assert parsed.parser_run.parser_name == 'built-in-text'
+    assert parsed.parser_run.parser_status == 'parsed'
+    assert len(parsed.chunks) == 1
+    assert '# Title' in parsed.chunks[0].text
+    assert 'Content body.' in parsed.chunks[0].text
+
