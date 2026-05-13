@@ -22,7 +22,7 @@ from backend.app.agents.slack_agent import (
     build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
-from backend.app.connectors.factory import get_sync_connector
+from backend.app.connectors.factory import ConnectorNotConfiguredError, get_sync_connector
 from backend.app.connectors.google_oauth import (
     GOOGLE_OAUTH_CONNECTOR_TYPES,
     GoogleOAuthConfigurationError,
@@ -68,7 +68,7 @@ SYNC_REQUEST_BODY = Body(default=None)
 
 
 @router.get('')
-def list_integrations() -> list[dict[str, object]]:
+def list_integrations(settings: AppSettings) -> list[dict[str, object]]:
     return [
         {
             'type': manifest.connector_type,
@@ -80,7 +80,7 @@ def list_integrations() -> list[dict[str, object]]:
             'sync_strategy': manifest.sync_strategy,
             'cost_policy': manifest.cost_policy,
         }
-        for manifest in list_connector_manifests()
+        for manifest in list_connector_manifests(demo_mode=settings.paraworks_demo_mode)
     ]
 
 
