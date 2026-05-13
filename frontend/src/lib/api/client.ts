@@ -157,3 +157,19 @@ export async function apiPatch<T>(
 
   return parseResponse<T>(response);
 }
+export async function apiDelete<T>(
+  path: string,
+  demoUser?: string,
+): Promise<T> {
+  const response = await fetch(apiUrl(path), {
+    method: "DELETE",
+    headers: {
+      "X-Demo-User": demoUserHeader(demoUser),
+      ...csrfHeader(),
+    },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  return parseResponse<T>(response);
+}

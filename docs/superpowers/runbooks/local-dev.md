@@ -11,14 +11,26 @@ For quick UI demos without Docker, use
 docker compose up -d postgres redis minio
 ```
 
-## Initialize Demo Database Schema
+## Initialize Database Schema
+
+```powershell
+uv run alembic upgrade head
+uv run python scripts/check_db_schema.py
+```
+
+`alembic upgrade head` applies the tracked schema migrations. The schema check
+fails loudly when an existing local database is missing a table or column that a
+newer branch expects.
+
+## Seed Local Demo Data
 
 ```powershell
 uv run python -m backend.app.db.init_db
 ```
 
-This creates the local demo application tables in Postgres before the backend
-starts.
+This keeps local seed users and optional demo data available. It still has a
+`create_all()` fallback for brand-new local databases, but migrations are the
+source of truth for schema changes.
 
 ## Start Backend
 

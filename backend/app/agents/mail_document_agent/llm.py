@@ -36,6 +36,7 @@ class LangChainMailDocumentAgentModel:
             (
                 'system',
                 'You extract one reviewable company history candidate or decision from Gmail/Drive evidence. '
+                'The title and summary must be written in Korean. '
                 'Determine if the evidence is business-related. If it is purely personal/private, set is_business_related=false. '
                 'Extract project tag if applicable. '
                 'Also extract structured info: for Gmail (To, From, Subject, CC, Date, Summary, Link), for Drive (Uploader, Title, Upload Date, Summary, Link). '
@@ -98,6 +99,7 @@ def render_mail_docs_llm_prompt(
             'allowed_item_types': ['history_event', 'decision_record', 'todo'],
             'requirements': [
                 'Use only the provided evidence.',
+                'The title and summary must be written in Korean.',
                 'Identify if it is business related.',
                 'Assign a project_tag if a specific project is mentioned.',
                 'Populate structured_data dictionary with specific fields based on source_type (Gmail or Drive).',

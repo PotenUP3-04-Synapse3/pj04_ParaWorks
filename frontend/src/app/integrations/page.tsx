@@ -16,10 +16,11 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useJobStatus } from "@/hooks/useJobStatus";
-import { apiGet, apiPost } from "@/lib/api/client";
+import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import type {
   AgentReviewResponse,
   GoogleRuntimeStatus,
@@ -339,6 +340,40 @@ export default function IntegrationsPage() {
       setAgentRunningKey(undefined);
     }
   }
+  
+  /**
+   * 연동 해제(Disconnect)를 실행합니다.
+   */
+  async function disconnect(type: string) {
+    if (!confirm(`${type} 연동을 해제하시겠습니까? 관련 자격 증명이 삭제됩니다.`)) {
+      return;
+    }
+
+    setError(undefined);
+    try {
+      await apiDelete(`/api/v1/integrations/${type}`);
+      
+      // 연결 목록 갱신
+      const connectionResult = await apiGet<IntegrationConnection[]>("/api/v1/integrations/connections");
+      setConnections(connectionResult);
+      
+      // 구글 런타임 상태 갱신
+      if (GOOGLE_CONNECTOR_TYPES.includes(type as any)) {
+        setGoogleRuntimeByType((current) => {
+          const next = { ...current };
+          delete next[type];
+          return next;
+        });
+      }
+      
+      // 슬랙 런타임 상태 갱신
+      if (type === "slack") {
+        setSlackRuntime(undefined);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "연동 해제에 실패했습니다.");
+    }
+  }
 
   /**
    * Slack LLM 에이전트(비용이 발생하는 실제 LLM 호출)를 실행합니다.
@@ -542,6 +577,16 @@ export default function IntegrationsPage() {
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
                     </button>
+                    {connection ? (
+                      <button
+                        type="button"
+                        onClick={() => void disconnect(manifest.type)}
+                        className="liquid-control inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        해제
+                      </button>
+                    ) : null}
                     {agentAction ? (
                       <button
                         type="button"
