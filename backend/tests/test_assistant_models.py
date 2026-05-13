@@ -1,0 +1,98 @@
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.app.models import AssistantConversation, AssistantMessage
+
+
+def test_assistant_conversation_and_messages_persist(db_session: Session) -> None:
+    conversation = AssistantConversation(
+        user_id='employee-mina',
+        title='Redis 회의 준비',
+        summary='Redis 관련 이전 대화 요약',
+    )
+    db_session.add(conversation)
+    db_session.flush()
+
+    message = AssistantMessage(
+        conversation_id=conversation.id,
+        role='assistant',
+        content='Redis는 일시적인 작업 상태 공유에 사용됩니다.',
+        citations=[
+            {
+                'source_id': 'gmail-redis',
+                'source_url': 'https://gmail.mock/redis',
+                'permission_level': 'internal',
+            }
+        ],
+        source_ids=['gmail-redis'],
+        source_links=['https://gmail.mock/redis'],
+        source_snippets=['Redis 작업 상태 근거'],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=7,
+        metadata_={'retrieval_backend': 'deterministic_lexical'},
+    )
+    db_session.add(message)
+    db_session.commit()
+
+    stored = db_session.scalar(
+        select(AssistantConversation).where(AssistantConversation.user_id == 'employee-mina')
+    )
+
+    assert stored is not None
+    assert stored.title == 'Redis 회의 준비'
+    assert stored.summary == 'Redis 관련 이전 대화 요약'
+    assert len(stored.messages) == 1
+    assert stored.messages[0].content == 'Redis는 일시적인 작업 상태 공유에 사용됩니다.'
+    assert stored.messages[0].citations[0]['source_id'] == 'gmail-redis'
+    assert stored.messages[0].agent_run_id == 7
+
+
+def test_assistant_message_json_fields_track_mutation_and_keep_independent_defaults(
+    db_session: Session,
+) -> None:
+    conversation = AssistantConversation(user_id='employee-jun')
+    first_message = AssistantMessage(
+        conversation=conversation,
+        role='assistant',
+        content='첫 번째 답변',
+    )
+    second_message = AssistantMessage(
+        conversation=conversation,
+        role='assistant',
+        content='두 번째 답변',
+    )
+    db_session.add(conversation)
+    db_session.commit()
+
+    first_message.citations.append({'source_id': 'source-1'})
+    first_message.source_ids.append('source-1')
+    first_message.source_links.append('https://docs.mock/source-1')
+    first_message.source_snippets.append('첫 번째 근거')
+    first_message.metadata_['retrieval_backend'] = 'deterministic_lexical'
+    db_session.commit()
+    db_session.expire_all()
+
+    stored_messages = db_session.scalars(
+        select(AssistantMessage).order_by(AssistantMessage.id)
+    ).all()
+
+    assert stored_messages[0].citations == [{'source_id': 'source-1'}]
+    assert stored_messages[0].source_ids == ['source-1']
+    assert stored_messages[0].source_links == ['https://docs.mock/source-1']
+    assert stored_messages[0].source_snippets == ['첫 번째 근거']
+    assert stored_messages[0].metadata_ == {'retrieval_backend': 'deterministic_lexical'}
+    assert stored_messages[1].id == second_message.id
+    assert stored_messages[1].citations == []
+    assert stored_messages[1].source_ids == []
+    assert stored_messages[1].source_links == []
+    assert stored_messages[1].source_snippets == []
+    assert stored_messages[1].metadata_ == {}
+
+
+def test_assistant_conversation_messages_order_has_id_tie_breaker() -> None:
+    order_by = AssistantConversation.messages.property.order_by
+
+    assert AssistantMessage.created_at in order_by
+    assert AssistantMessage.id in order_by

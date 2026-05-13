@@ -95,6 +95,7 @@ def test_rag_service_persists_agent_run_metadata(db_session: Session) -> None:
     answer = answer_question_with_rag(db=db_session, user=USERS['viewer'], question='Redis job state')
 
     agent_run = db_session.query(AgentRun).one()
+    assert answer.agent_run_id == agent_run.id
     assert agent_run.agent_name == 'rag_orchestrator_agent'
     assert agent_run.prompt_version == 'rag-answer:v1'
     assert agent_run.status == 'complete'

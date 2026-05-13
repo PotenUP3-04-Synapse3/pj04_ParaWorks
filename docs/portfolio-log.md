@@ -1,6 +1,6 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-02
+Last updated: 2026-05-12
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
@@ -22,6 +22,48 @@ demo story changes.
   states in production-like mode instead of hard-coded ORION/Nova/Atlas data.
 - Verification: `uv run pytest backend/tests -v` passed with 297 passed and 1
   skipped; `npm run build` passed from `frontend`.
+
+## 2026-05-12 AI Assistant Conversation Memory
+
+- Added database-backed, per-user AI assistant conversations for the `AI 비서`
+  surface.
+- Persisted user and assistant messages with citations, source snippets,
+  permission notices, hidden-source counts, and linked AgentRun ids.
+- Kept token, cache, and cost details out of the user-facing assistant flow so
+  cost observability remains in `Agent Runs`.
+- Added regression coverage for user-scoped assistant conversations and the
+  `/search` assistant UX.
+
+Portfolio angle:
+
+- Shows ParaWorks evolving from one-shot RAG search into a product-like
+  evidence-backed AI assistant with memory, permission safety, and operator
+  observability.
+
+## 2026-05-12 AI Assistant Chat UX and Sincere-mode RAG LLM
+
+- Reworked `/search` into a more natural chat surface with compact conversation
+  history, duplicate empty-chat prevention, bottom composer, and folded
+  evidence/source panels inside each assistant response.
+- Continued the chat polish on 2026-05-13 by keeping history ordered by latest
+  updated conversation rather than selected conversation, constraining scrolling
+  to the transcript pane, removing message badges, rendering assistant markdown,
+  adding copy actions, and adding one-click suggested prompts.
+- Shortened chat history titles from the first user message so the history list
+  behaves like a conversation list instead of a document summary list.
+- Added a RAG LLM adapter for non-demo 진심모드:
+  - OpenAI primary model: `gpt-5.4-mini`;
+  - `.env` `AGENT_LLM_OPENAI_MODEL` as the OpenAI fallback model;
+  - provider fallback through the configured provider order.
+- Kept demo mode deterministic so tests and cheap demos do not call live LLMs.
+- Updated the session handoff runbook with the active branch and local
+  continuation notes.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from a technical RAG answer page toward a credible
+  AI assistant product surface while preserving evidence, permissions, and
+  operator cost observability.
 
 ## 2026-05-11 Sidebar and Workspace Navigation Update
 
@@ -3814,3 +3856,8 @@ Cost/security note:
   - Added `GET /api/v1/projects`, which groups Gmail, Gmail attachment, Drive, and Calendar evidence by `project_key`/`scenario` with permission-aware hidden project accounting.
   - Updated backend test fixtures so CSRF cookies/headers and auth rate-limit state match the current production-like security middleware during tests.
   - Verification: `uv run pytest backend/tests -v` passed with 287 tests and 1 skipped pgvector integration test.
+- `feat: add assistant optimistic turns and email approval drafts`
+  - AI 비서 now shows the user's message immediately while the assistant turn is still running, then reveals the assistant answer with a smooth typing-style stream effect.
+  - Added a modular assistant email action path that detects direct email-send requests without forcing RAG evidence, drafts a business-tone subject/body, and stores the draft as pending approval in assistant message metadata.
+  - Added a Gmail approval endpoint that sends only after explicit user approval and only when an installed Gmail connection already has send-capable OAuth scope.
+  - Verification: `uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q`, `npm.cmd run lint`, `npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop`, and `npm.cmd run build` passed.

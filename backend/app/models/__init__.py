@@ -1,4 +1,5 @@
 from backend.app.models.agent_runs import AgentRun
+from backend.app.models.assistant import AssistantConversation, AssistantMessage
 from backend.app.models.audit import AuditLog
 from backend.app.models.auth import AuthUser, RefreshToken
 from backend.app.models.integrations import IntegrationConnection
@@ -23,6 +24,8 @@ from backend.app.models.vector_index import VectorIndexState
 __all__ = [
     'SyncJob',
     'AgentRun',
+    'AssistantConversation',
+    'AssistantMessage',
     'AuditLog',
     'AuthUser',
     'RefreshToken',
