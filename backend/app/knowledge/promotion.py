@@ -35,7 +35,7 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
         'source_snippets': item.source_snippets,
         'confidence_score': item.confidence_score,
         'permission_level': item.permission_level,
-        'review_status': 'approved',
+        'review_status': 'approved', # 승인된 상태로 전송
     }
 
     if item.item_type == 'decision_record':
