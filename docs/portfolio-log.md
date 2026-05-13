@@ -28,6 +28,10 @@ Portfolio angle:
 - Reworked `/search` into a more natural chat surface with compact conversation
   history, duplicate empty-chat prevention, bottom composer, and folded
   evidence/source panels inside each assistant response.
+- Continued the chat polish on 2026-05-13 by keeping history ordered by latest
+  updated conversation rather than selected conversation, constraining scrolling
+  to the transcript pane, removing message badges, rendering assistant markdown,
+  adding copy actions, and adding one-click suggested prompts.
 - Shortened chat history titles from the first user message so the history list
   behaves like a conversation list instead of a document summary list.
 - Added a RAG LLM adapter for non-demo 진심모드:

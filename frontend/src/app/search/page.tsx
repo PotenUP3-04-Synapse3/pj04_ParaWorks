@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Copy,
   Database,
   FileText,
   Link2,
@@ -30,6 +31,12 @@ import type {
 } from "@/lib/api/types";
 
 const DEFAULT_CONVERSATION_TITLE = "새 대화";
+const SUGGESTED_QUESTIONS = [
+  "기획팀 회의 일정을 정리해줘",
+  "최근 결정된 사항만 요약해줘",
+  "내가 확인해야 할 할 일을 알려줘",
+  "관련 근거가 있는 문서만 찾아줘",
+];
 
 export default function SearchPage() {
   return (
@@ -52,17 +59,18 @@ function SearchPageContent() {
   const [booting, setBooting] = useState(true);
   const [error, setError] = useState<string>();
   const [initialQuerySent, setInitialQuerySent] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<number>();
   const loadingRef = useRef(false);
   const creatingConversationRef = useRef(false);
   const loadMessagesRequestRef = useRef(0);
   const activeConversationIdRef = useRef<number | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const moveConversationToTop = useCallback((conversation: AssistantConversation) => {
-    setConversations((current) => [
+  const upsertConversationByUpdatedAt = useCallback((conversation: AssistantConversation) => {
+    setConversations((current) => sortConversationsByUpdatedAt([
       conversation,
       ...current.filter((item) => item.id !== conversation.id),
-    ]);
+    ]));
   }, []);
 
   const createConversation = useCallback(async (title?: string) => {
@@ -75,10 +83,10 @@ function SearchPageContent() {
       setActiveConversation(response.conversation);
       setMessages([]);
       setOpenEvidenceMessageIds(new Set());
-      moveConversationToTop(response.conversation);
+      upsertConversationByUpdatedAt(response.conversation);
     }
     return response.conversation;
-  }, [moveConversationToTop]);
+  }, [upsertConversationByUpdatedAt]);
 
   const loadMessages = useCallback(async (conversation: AssistantConversation) => {
     const requestId = ++loadMessagesRequestRef.current;
@@ -95,7 +103,7 @@ function SearchPageContent() {
       setActiveConversation(response.conversation);
       setMessages(response.messages);
       setOpenEvidenceMessageIds(new Set());
-      moveConversationToTop(response.conversation);
+      upsertConversationByUpdatedAt(response.conversation);
       return response.messages;
     } catch (caught) {
       if (requestId === loadMessagesRequestRef.current) {
@@ -103,14 +111,14 @@ function SearchPageContent() {
       }
       return [];
     }
-  }, [moveConversationToTop]);
+  }, [upsertConversationByUpdatedAt]);
 
   const loadConversations = useCallback(async () => {
     setBooting(true);
     setError(undefined);
     try {
       const response = await apiGet<AssistantConversationsResponse>("/api/v1/assistant/conversations");
-      setConversations(response.conversations);
+      setConversations(sortConversationsByUpdatedAt(response.conversations));
       if (response.conversations.length > 0) {
         await loadMessages(response.conversations[0]);
       } else {
@@ -146,7 +154,7 @@ function SearchPageContent() {
         response.assistant_message,
       ]);
       setOpenEvidenceMessageIds(new Set());
-      moveConversationToTop(response.conversation);
+      upsertConversationByUpdatedAt(response.conversation);
       setQuery("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "메시지를 보내지 못했습니다.");
@@ -154,7 +162,7 @@ function SearchPageContent() {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [activeConversation, createConversation, moveConversationToTop]);
+  }, [activeConversation, createConversation, upsertConversationByUpdatedAt]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,6 +204,16 @@ function SearchPageContent() {
     });
   }
 
+  async function copyMessage(message: AssistantMessage) {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => setCopiedMessageId((current) => current === message.id ? undefined : current), 1600);
+    } catch {
+      setError("메시지를 복사하지 못했습니다.");
+    }
+  }
+
   useEffect(() => {
     setQuery(initialQuery);
     setInitialQuerySent(false);
@@ -234,11 +252,11 @@ function SearchPageContent() {
   const indexedCount = ragIndexing?.state_counts.indexed ?? 0;
 
   return (
-    <div className="reference-dashboard">
-      <section className="grid min-h-[calc(100vh-7rem)] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <div className="reference-dashboard h-[calc(100vh-7rem)] overflow-hidden">
+      <section className="grid h-full min-h-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside
           aria-label="대화 목록"
-          className="panel reference-panel flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden"
+          className="panel reference-panel flex h-full min-h-0 flex-col overflow-hidden"
         >
           <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
             <div>
@@ -257,7 +275,7 @@ function SearchPageContent() {
             </button>
           </div>
 
-          <div className="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
+          <div aria-label="대화 히스토리" className="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
             {conversations.map((conversation) => {
               const selected = conversation.id === activeConversation?.id;
               return (
@@ -283,7 +301,7 @@ function SearchPageContent() {
           </div>
         </aside>
 
-        <main className="panel reference-panel flex min-h-[calc(100vh-7rem)] flex-col overflow-hidden p-0">
+        <main className="panel reference-panel flex h-full min-h-0 flex-col overflow-hidden p-0">
           <header className="border-b border-line px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -306,7 +324,7 @@ function SearchPageContent() {
             </div>
           ) : null}
 
-          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
             <div className="mx-auto flex max-w-3xl flex-col gap-5">
               {messages.map((message) => (
                 <AssistantBubble
@@ -314,6 +332,8 @@ function SearchPageContent() {
                   message={message}
                   evidenceOpen={openEvidenceMessageIds.has(message.id)}
                   onToggleEvidence={() => toggleEvidence(message.id)}
+                  copied={copiedMessageId === message.id}
+                  onCopy={() => void copyMessage(message)}
                 />
               ))}
               {!booting && messages.length === 0 ? (
@@ -338,6 +358,19 @@ function SearchPageContent() {
 
           <form onSubmit={submit} className="border-t border-line bg-[var(--surface)] px-4 py-4 sm:px-6">
             <div className="mx-auto max-w-3xl">
+              <div className="mb-3 flex flex-wrap gap-2">
+                {SUGGESTED_QUESTIONS.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => void sendMessage(question)}
+                    disabled={loading || booting}
+                    className="rounded-full border border-line bg-[var(--glass-elevated)] px-3 py-2 text-[12px] font-bold text-[var(--ink)] transition hover:border-[var(--primary)] hover:text-[var(--primary-dark)] disabled:bg-neutral-100"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
               <label htmlFor="assistant-query" className="sr-only">AI 비서에게 질문</label>
               <div className="flex items-end gap-2 rounded-lg border border-line bg-[var(--glass-elevated)] p-2 shadow-xs focus-within:border-[var(--primary)]">
                 <textarea
@@ -381,10 +414,14 @@ function AssistantBubble({
   message,
   evidenceOpen,
   onToggleEvidence,
+  copied,
+  onCopy,
 }: {
   message: AssistantMessage;
   evidenceOpen: boolean;
   onToggleEvidence: () => void;
+  copied: boolean;
+  onCopy: () => void;
 }) {
   const isAssistant = message.role === "assistant";
   const evidenceCount = evidenceItemCount(message);
@@ -393,22 +430,28 @@ function AssistantBubble({
     <article className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}>
       <div className={`min-w-0 ${isAssistant ? "w-full" : "max-w-[82%]"}`}>
         <div
-          className={`rounded-lg px-4 py-3 text-[14px] leading-7 ${
+          className={`px-4 py-3 text-[14px] leading-7 ${
             isAssistant
-              ? "bg-transparent"
-              : "bg-[var(--primary)] text-white"
+              ? "rounded-lg bg-transparent"
+              : "rounded-full bg-[var(--primary)] text-white"
           }`}
         >
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className={isAssistant ? "badge blue" : "rounded-md bg-white/20 px-2 py-1 text-[11px] font-bold"}>
-              {isAssistant ? "AI 비서" : "나"}
-            </span>
-            {isAssistant && message.permission_level ? <span className="badge green">{message.permission_level}</span> : null}
-            {isAssistant && message.hidden_match_count > 0 ? (
-              <span className="badge amber">숨겨진 근거 {message.hidden_match_count.toLocaleString()}개</span>
-            ) : null}
-          </div>
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          {isAssistant ? (
+            <MarkdownContent content={message.content} />
+          ) : (
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          )}
+        </div>
+
+        <div className={`mt-1 flex ${isAssistant ? "justify-start" : "justify-end"}`}>
+          <button
+            type="button"
+            onClick={onCopy}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-bold text-muted hover:bg-[var(--glass-strong)] hover:text-[var(--ink)]"
+          >
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+            {copied ? "복사됨" : "복사"}
+          </button>
         </div>
 
         {isAssistant && evidenceCount > 0 ? (
@@ -431,6 +474,80 @@ function AssistantBubble({
       </div>
     </article>
   );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const lines = content.split(/\r?\n/);
+  const blocks = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim()) {
+      blocks.push(<div key={`space-${index}`} className="h-2" />);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const className = level === 1
+        ? "text-[18px] font-black"
+        : level === 2
+          ? "text-[16px] font-extrabold"
+          : "text-[14px] font-extrabold";
+      blocks.push(<h3 key={`heading-${index}`} className={`mt-2 break-words ${className}`}>{renderInlineMarkdown(heading[2])}</h3>);
+      continue;
+    }
+
+    if (line.trimStart().startsWith("- ")) {
+      const items = [];
+      let listIndex = index;
+      while (listIndex < lines.length && lines[listIndex].trimStart().startsWith("- ")) {
+        items.push(lines[listIndex].trimStart().slice(2));
+        listIndex += 1;
+      }
+      blocks.push(
+        <ul key={`list-${index}`} className="my-2 list-disc space-y-1 pl-5">
+          {items.map((item, itemIndex) => (
+            <li key={`${item}-${itemIndex}`} className="break-words">{renderInlineMarkdown(item)}</li>
+          ))}
+        </ul>,
+      );
+      index = listIndex - 1;
+      continue;
+    }
+
+    blocks.push(<p key={`paragraph-${index}`} className="whitespace-pre-wrap break-words">{renderInlineMarkdown(line)}</p>);
+  }
+
+  return <div className="space-y-1">{blocks}</div>;
+}
+
+function renderInlineMarkdown(text: string) {
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+  const parts = text.split(pattern);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return <code key={`${part}-${index}`} className="rounded bg-surface-soft px-1 py-0.5 text-[13px]">{part.slice(1, -1)}</code>;
+    }
+    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (link) {
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={link[2]}
+          target="_blank"
+          rel="noreferrer"
+          className="font-bold text-[var(--primary-dark)] underline-offset-4 hover:underline"
+        >
+          {link[1]}
+        </a>
+      );
+    }
+    return part;
+  });
 }
 
 function EvidenceDisclosure({ message }: { message: AssistantMessage }) {
@@ -615,6 +732,13 @@ function isReusableActiveConversation(
   messages: AssistantMessage[],
 ) {
   return Boolean(conversation && isDefaultConversation(conversation) && messages.length === 0);
+}
+
+function sortConversationsByUpdatedAt(conversations: AssistantConversation[]) {
+  return [...conversations].sort((left, right) => {
+    const timeDiff = new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+    return timeDiff || right.id - left.id;
+  });
 }
 
 function formatDateTime(value: string) {
