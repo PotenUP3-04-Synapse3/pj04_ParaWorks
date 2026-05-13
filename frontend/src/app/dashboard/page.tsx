@@ -75,11 +75,23 @@ const reviewItems = [
 export default async function DashboardPage() {
   const dashboard = await serverApiGet<DashboardResponse>("/api/v1/dashboard").catch(() => null);
   const pendingReviewCount = dashboard?.pending_review_count ?? 0;
-  const visibleTodayTasks: typeof todayTasks = [];
-  const visibleUpcomingEvents: typeof upcomingEvents = [];
-  const visibleAssignedProjects: typeof assignedProjects = [];
-  const visiblePersonalUpdates: typeof personalUpdates = [];
-  const visibleReviewItems: typeof reviewItems = [];
+  const syncDateStr = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+
+  const visibleTodayTasks: any[] = todayTasks.map(task => ({
+    ...task,
+    category: task.project,
+    assignee: "나",
+    due_date: task.due
+  }));
+  const visibleUpcomingEvents: typeof upcomingEvents = upcomingEvents;
+  const visibleAssignedProjects: typeof assignedProjects = assignedProjects;
+  const visiblePersonalUpdates: typeof personalUpdates = personalUpdates;
+  const visibleReviewItems: typeof reviewItems = reviewItems;
 
   return (
     <div className="reference-dashboard space-y-4">
@@ -113,7 +125,7 @@ export default async function DashboardPage() {
               </Link>
             </div>
             <div className="mt-3 space-y-3">
-              {visibleTodayTasks.map((task) => (
+              {visibleTodayTasks.length > 0 ? visibleTodayTasks.map((task) => (
                 <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -156,7 +168,7 @@ export default async function DashboardPage() {
                   <span className="text-muted">{due}</span>
                   <span className={`priority-badge ${priority === "높음" ? "danger" : "warning"}`}>{priority}</span>
                 </div>
-              )}
+              ))}
             </div>
           </Panel>
 
