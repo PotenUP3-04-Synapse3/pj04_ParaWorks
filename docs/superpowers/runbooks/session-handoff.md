@@ -33,6 +33,9 @@ Updated: 2026-05-14
   vector, AgentRun, and assistant data.
 - After reset, rerun connector sync, call project reclassify, and approve the
   resulting `project_assignment` Review Queue candidates.
+- Existing DB rows are not deleted or migrated. Run deterministic reclassify
+  and approve the resulting Review Queue candidates to attach current source
+  data to projects.
 
 ## 2026-05-13 Work Data and Assignment Extraction Handoff
 

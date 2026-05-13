@@ -32,6 +32,7 @@ Portfolio angle:
 - Shows ParaWorks moving from connector-data display toward evidence-backed
   project understanding and evidence-grounded assistant answers with human
   review as the trust boundary.
+  project understanding with human review as the trust boundary.
 
 ## 2026-05-12 Smoke-Only Demo Data Boundary
 
