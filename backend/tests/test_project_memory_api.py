@@ -68,6 +68,26 @@ def test_project_classifier_finds_ktech_and_ir_but_excludes_company_rules(
     assert all('00_회사규정' not in candidate.source_title for candidate in candidates)
 
 
+def test_project_classifier_matches_bracketed_ir_gmail_subject(db_session: Session) -> None:
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='gmail',
+                source_id='gmail-bracket-ir',
+                title='[IR] A벤처스 미팅 결과 공유 및 액션 아이템',
+                body='시드 투자 IR 후속 미팅 전까지 피치덱 수정안을 준비한다.',
+            )
+        ],
+    )
+
+    candidates = build_project_assignment_candidates(db_session)
+
+    assert len(candidates) == 1
+    assert candidates[0].project_key == 'seed-ir'
+    assert candidates[0].source_type == 'gmail'
+
+
 def test_projects_reclassify_creates_pending_review_without_tokens(
     client: TestClient,
     db_session: Session,

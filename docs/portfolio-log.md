@@ -20,10 +20,18 @@ demo story changes.
   instead of showing one generic `Company Memory` timeline.
 - Stopped using raw connector titles like `Slack message in C0AUJDZUKA8` as
   task titles and moved project evidence reasons into the UI data model.
+- Removed the deterministic RAG Redis canned-answer branch so local fallback
+  answers now summarize retrieved evidence snippets instead of returning a
+  fixed Redis/PostgreSQL response.
+- Added a local/dev reset utility for connector-derived data that preserves
+  auth users and integration connections while clearing sources, review items,
+  approved knowledge, vector state, AgentRuns, and assistant conversations.
 
 Portfolio angle:
 
 - Shows ParaWorks moving from connector-data display toward evidence-backed
+  project understanding and evidence-grounded assistant answers with human
+  review as the trust boundary.
   project understanding with human review as the trust boundary.
 
 ## 2026-05-12 Smoke-Only Demo Data Boundary

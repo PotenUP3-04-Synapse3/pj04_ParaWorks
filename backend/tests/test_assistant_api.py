@@ -4,6 +4,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.api.v1 import assistant as assistant_api
+from backend.app.assistant.service import (
+    append_assistant_message,
+    build_contextual_question,
+    create_conversation,
+    list_messages,
+    update_summary,
+)
+from backend.app.core.demo_auth import USERS
 from backend.app.models import AgentRun, AssistantMessage
 from backend.tests.test_rag_orchestrator_service import seed_chunk
 
@@ -60,6 +68,40 @@ def test_assistant_message_flow_stores_rag_answer_without_cost_fields(
     assert 'estimated_cost_usd' not in payload['assistant_message']
     assert 'token_usage' not in payload['assistant_message']
     assert 'cache_key' not in payload['assistant_message']
+
+
+def test_assistant_context_deduplicates_repeated_assistant_answers(
+    db_session: Session,
+) -> None:
+    user = USERS['viewer']
+    conversation = create_conversation(db_session, user, title='반복 답변')
+    repeated_answer = 'Redis는 일시적인 작업 상태와 큐 진행 상황을 빠르게 공유하는 데 사용됩니다.'
+    conversation.summary = update_summary(None, repeated_answer)
+    for _ in range(4):
+        append_assistant_message(
+            db_session,
+            user,
+            conversation,
+            content=repeated_answer,
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={},
+        )
+
+    messages = list_messages(db_session, user, conversation.id)
+    contextual_question = build_contextual_question(
+        conversation=conversation,
+        messages=messages,
+        new_message='K테크 일정을 알려줘',
+    )
+
+    assert contextual_question.count(repeated_answer) == 1
 
 
 def test_assistant_email_request_creates_approval_draft_without_rag(

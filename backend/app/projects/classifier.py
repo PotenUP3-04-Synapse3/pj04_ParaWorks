@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -37,6 +38,8 @@ NON_PROJECT_MARKERS = (
     '사내 규정',
     '복리후생',
     '온보딩 가이드',
+    '보안_정책',
+    '정보 보안 정책',
 )
 
 PROJECT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar', 'slack')
@@ -159,7 +162,7 @@ def project_by_key(project_key: str) -> CanonicalProject | None:
 def _contains_alias(lowered_haystack: str, alias: str) -> bool:
     lowered_alias = alias.lower()
     if lowered_alias in {'ir', 'vc'}:
-        return f' {lowered_alias} ' in f' {lowered_haystack.replace("_", " ").replace("-", " ")} '
+        return re.search(rf'(?<![0-9a-z]){re.escape(lowered_alias)}(?![0-9a-z])', lowered_haystack) is not None
     return lowered_alias in lowered_haystack
 
 

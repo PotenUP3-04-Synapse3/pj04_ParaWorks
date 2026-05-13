@@ -21,6 +21,18 @@ Updated: 2026-05-14
   displayed as projects.
 - `/timeline` now reads `/api/v1/projects` so the top menu is project-scoped
   and timeline evidence explains why each item is connected.
+- Deterministic RAG fallback no longer has a hard-coded Redis/PostgreSQL answer.
+  It now formats retrieved evidence snippets, and AgentRun metadata records
+  `retrieval_backend`, `rag_model_mode`, and any fallback reason.
+- Assistant conversation context deduplicates repeated assistant answers so an
+  old bad answer does not keep contaminating later RAG questions.
+- For a clean local/dev rerun, use `uv run python scripts/reset_connector_data.py`
+  for dry-run counts, then `uv run python scripts/reset_connector_data.py
+  --execute --confirm` only in local env. This preserves auth users and
+  integration connections but clears connector-derived source/review/knowledge,
+  vector, AgentRun, and assistant data.
+- After reset, rerun connector sync, call project reclassify, and approve the
+  resulting `project_assignment` Review Queue candidates.
 - Existing DB rows are not deleted or migrated. Run deterministic reclassify
   and approve the resulting Review Queue candidates to attach current source
   data to projects.
