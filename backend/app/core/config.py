@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     google_oauth_state_secret: str = 'local-development-google-state-secret'
     google_identity_redirect_uri: str = 'http://localhost:3000/login/google/callback'
     google_identity_state_secret: str = 'local-development-google-identity-state-secret'
+    google_drive_sync_enabled: bool = True
+    google_drive_sync_interval_seconds: int = 3600  # Default 1 hour
+    gmail_sync_enabled: bool = True
+    gmail_sync_interval_seconds: int = 10  # For testing, recommended 3600 for production
 
     def resolved_database_url(self) -> str:
         if self.paraworks_demo_mode and self.paraworks_demo_database_url:
