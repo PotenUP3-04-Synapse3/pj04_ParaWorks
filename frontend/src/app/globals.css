@@ -238,16 +238,18 @@ button:disabled,
   }
 
   .nav-badge {
-    min-width: 1.5rem;
+    display: inline-grid;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    place-items: center;
     border-radius: 999px;
-    border: 1px solid #fed7aa;
-    background: #fff7ed;
-    color: #c2410c;
-    padding: 0.1rem 0.42rem;
+    background: #ff8a00;
+    color: white;
+    padding: 0 0.34rem;
     text-align: center;
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     font-weight: 800;
-    line-height: 1.25rem;
+    line-height: 1;
   }
 
   .top-search {
@@ -335,17 +337,19 @@ button:disabled,
 
   .notification-button span {
     position: absolute;
-    right: -0.25rem;
-    top: -0.35rem;
-    display: grid;
-    min-width: 1.1rem;
-    height: 1.1rem;
+    right: -0.22rem;
+    top: -0.3rem;
+    display: inline-grid;
+    min-width: 1.15rem;
+    height: 1.15rem;
     place-items: center;
     border-radius: 999px;
-    background: #ef4444;
+    background: #ff8a00;
     color: white;
+    padding: 0 0.34rem;
     font-size: 0.65rem;
     font-weight: 800;
+    line-height: 1;
   }
 
   .page-heading {
@@ -886,12 +890,17 @@ button:disabled,
   }
 
   .reference-panel-title span {
+    display: inline-grid;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    place-items: center;
     border-radius: 999px;
     background: #ff8a00;
     color: white;
-    padding: 0.1rem 0.45rem;
-    font-size: 0.72rem;
+    padding: 0 0.34rem;
+    font-size: 0.65rem;
     font-weight: 800;
+    line-height: 1;
   }
 
   .workflow-panel {

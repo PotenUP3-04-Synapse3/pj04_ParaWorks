@@ -22,6 +22,16 @@ def test_login_accepts_admin_account(client) -> None:
     assert 'HttpOnly' in response.headers['set-cookie']
 
 
+def test_login_issues_month_long_auth_cookies(client) -> None:
+    response = client.post('/api/v1/auth/login', json={'email': 'admin@paraworks.com'})
+
+    assert response.status_code == 200
+    set_cookie = response.headers['set-cookie']
+    assert 'paraworks_session=' in set_cookie
+    assert 'paraworks_refresh=' in set_cookie
+    assert 'paraworks_csrf=' in set_cookie
+    assert set_cookie.count('Max-Age=2592000') >= 3
+
 def test_login_accepts_employee_dummy_account(client) -> None:
     response = client.post('/api/v1/auth/login', json={'email': 'mina@paraworks.com'})
 

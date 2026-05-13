@@ -213,7 +213,10 @@ try {
     Write-Step "Seeding local application data"
     uv run python -m backend.app.db.init_db
 
-    Write-Step "Checking application schema"
+    Write-Step "Checking final database schema"
+    uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+
+    Write-Step "Checking pgvector runtime status"
     uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --expect-app-schema
 
     if ($SkipApp) {
