@@ -78,6 +78,12 @@ OPENAI_EMBEDDING_DIMENSIONS=1536
 RAG_USE_PGVECTOR_SEARCH=false
 ```
 
+`rag_vector_documents.embedding` is intentionally fixed at `vector(1536)` for
+the current embedding path. If `OPENAI_EMBEDDING_DIMENSIONS` or the embedding
+model is changed, run `uv run python scripts/check_db_schema.py` before writes.
+The check compares the configured dimension with the actual PostgreSQL column
+type and fails instead of allowing a silent mismatch.
+
 Keep `RAG_USE_PGVECTOR_SEARCH=false` until the index has been populated and
 verified. Toggle it only for manual vector retrieval checks.
 
@@ -92,8 +98,9 @@ uv run python -m backend.app.db.init_db
 
 `alembic upgrade head` is the source of truth for application schema changes.
 `scripts/check_db_schema.py` verifies that an existing database is not missing
-new tables or columns after a pull. `backend.app.db.init_db` is kept for local
-seed users and optional demo data.
+new tables or columns after a pull, and also verifies the native pgvector table
+and embedding dimension on PostgreSQL. `backend.app.db.init_db` is kept for
+local seed users and optional demo data.
 
 The Docker init scripts also create pgvector support and the vector tables for
 fresh volumes:
