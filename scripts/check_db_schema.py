@@ -14,8 +14,11 @@ if str(PROJECT_ROOT) not in sys.path:
 import backend.app.models  # noqa: E402,F401
 from backend.app.core.config import get_settings  # noqa: E402
 from backend.app.db.base import Base  # noqa: E402
+from backend.app.rag.pgvector_store import PgVectorConfig  # noqa: E402
 
-NATIVE_PGVECTOR_TABLE = 'rag_vector_documents'
+DEFAULT_PGVECTOR_CONFIG = PgVectorConfig()
+NATIVE_PGVECTOR_TABLE = DEFAULT_PGVECTOR_CONFIG.table_name
+DEFAULT_EMBEDDING_DIMENSIONS = DEFAULT_PGVECTOR_CONFIG.embedding_dimensions
 NATIVE_PGVECTOR_COLUMNS = {
     'document_id',
     'text',
@@ -101,10 +104,13 @@ def _check_native_pgvector_table(
         for column_name in missing_columns
     ]
 
-    if engine.dialect.name == 'postgresql' and expected_embedding_dimensions:
+    expected_dimensions = expected_embedding_dimensions or DEFAULT_EMBEDDING_DIMENSIONS
+    if engine.dialect.name == 'postgresql':
         actual_type = _postgres_column_type(engine, NATIVE_PGVECTOR_TABLE, 'embedding')
-        expected_type = f'vector({expected_embedding_dimensions})'
-        if actual_type and actual_type != expected_type:
+        expected_type = f'vector({expected_dimensions})'
+        if actual_type is None:
+            errors.append(f'{NATIVE_PGVECTOR_TABLE}.embedding type could not be inspected')
+        elif actual_type != expected_type:
             errors.append(
                 f'{NATIVE_PGVECTOR_TABLE}.embedding type is {actual_type}, expected {expected_type}'
             )
