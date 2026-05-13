@@ -4,7 +4,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.core.config import get_settings
 from backend.app.db.init_db import init_db
-from backend.app.models import AuthUser, RefreshToken, ReviewItem, Source
+from backend.app.models import AuthUser, DocumentChunk, RefreshToken, ReviewItem, Source
 
 
 def test_init_db_creates_expected_tables_on_fresh_engine() -> None:
@@ -56,7 +56,8 @@ def test_init_db_seeds_demo_data_only_when_smoke_seed_is_enabled(monkeypatch) ->
 
         with Session(engine) as db:
             assert db.query(Source).count() >= 1
-            assert db.query(ReviewItem).filter(ReviewItem.status == 'pending_review').count() >= 1
+            assert db.query(DocumentChunk).count() >= 1
+            assert db.query(ReviewItem).filter(ReviewItem.status == 'pending_review').count() == 0
     finally:
         get_settings.cache_clear()
 

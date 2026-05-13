@@ -16,6 +16,7 @@ data/
 .env
 .env.local
 .env_backup
+.env.example
 
 
 # Test artifacts

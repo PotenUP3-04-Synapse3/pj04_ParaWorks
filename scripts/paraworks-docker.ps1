@@ -204,7 +204,13 @@ try {
     Write-Step "Checking pgvector schema"
     uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --ensure-vector-schema
 
-    Write-Step "Initializing application tables"
+    Write-Step "Applying database migrations"
+    uv run alembic upgrade head
+
+    Write-Step "Checking application schema"
+    uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+
+    Write-Step "Seeding local application data"
     uv run python -m backend.app.db.init_db
 
     Write-Step "Checking application schema"
