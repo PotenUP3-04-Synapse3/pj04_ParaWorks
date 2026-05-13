@@ -1,4 +1,4 @@
-from backend.app.models import AgentRun, ReviewItem
+from backend.app.models import AgentRun, ReviewItem, TimelineEvent, Todo
 
 
 def test_approve_review_item_changes_status(client) -> None:
@@ -117,10 +117,14 @@ def test_review_item_response_includes_structured_source_evidence(client, db_ses
                     'rank': 1,
                     'source_id': 'slack:C123:1710000000.000100',
                     'source_url': 'https://slack.mock/archives/C123/p1710000000000100',
+                    'source_type': 'slack',
                     'timestamp': '1710000000.000100',
                     'author': 'U123',
                     'permission_level': 'internal',
                     'importance_score': 95,
+                    'parser_status': 'parsed',
+                    'section_path': '결정 사항',
+                    'evidence_reason': 'Redis rollout owner를 직접 언급합니다.',
                     'snippet': 'Redis rollout decision needs owner confirmation.',
                 }
             ]
@@ -156,6 +160,7 @@ def test_review_item_response_includes_structured_source_evidence(client, db_ses
             'rank': 1,
             'source_id': 'slack:C123:1710000000.000100',
             'source_url': 'https://slack.mock/archives/C123/p1710000000000100',
+            'source_type': 'slack',
             'source_snippet': 'Redis rollout decision needs owner confirmation.',
             'permission_level': 'internal',
             'confidence_score': 0.91,
@@ -163,6 +168,9 @@ def test_review_item_response_includes_structured_source_evidence(client, db_ses
             'timestamp': '1710000000.000100',
             'author': 'U123',
             'agent_run_id': agent_run.id,
+            'parser_status': 'parsed',
+            'section_path': '결정 사항',
+            'evidence_reason': 'Redis rollout owner를 직접 언급합니다.',
         }
     ]
 
@@ -185,3 +193,35 @@ def test_approve_review_item_rejects_missing_required_fields(client, db_session)
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Review item is missing required fields'
+
+
+def test_approve_todo_promotes_clean_korean_timeline_without_mojibake(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='todo',
+        payload={
+            'title': '고객사 공유본 준비',
+            'priority': 'high',
+            'priority_reason': '금요일까지 고객사 공유본 준비가 필요합니다.',
+            'assignee': '김하나',
+            'due_date': '2026-05-15',
+        },
+        source_links=['https://drive.mock/project-alpha/plan'],
+        source_snippets=['김하나님은 금요일까지 고객사 공유본을 준비해주세요.'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    response = client.post(f'/api/v1/review/{item.id}/approve')
+
+    assert response.status_code == 200
+    todo = db_session.query(Todo).one()
+    timeline = db_session.query(TimelineEvent).one()
+    assert todo.title == '고객사 공유본 준비'
+    assert timeline.title == '[할 일] 고객사 공유본 준비'
+    assert timeline.result_summary == '담당자: 김하나, 기한: 2026-05-15'
+    assert '?' not in timeline.title
+    assert '?' not in timeline.result_summary

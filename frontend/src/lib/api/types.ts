@@ -24,6 +24,20 @@ export type DashboardResponse = {
     due_date: string;
     category: string;
   }[];
+  recent_decisions: {
+    id: number;
+    title: string;
+    summary: string;
+    created_at: string;
+  }[];
+  recent_timeline: {
+    id: number;
+    title: string;
+    summary: string;
+    created_at: string;
+    confidence_score: number;
+    source_links: string[];
+  }[];
 };
 
 export type DemoUser = {
@@ -333,6 +347,7 @@ export type ReviewSourceEvidence = {
   rank: number;
   source_id?: string | null;
   source_url?: string | null;
+  source_type?: string | null;
   source_snippet: string;
   permission_level: string;
   confidence_score: number;
@@ -340,6 +355,9 @@ export type ReviewSourceEvidence = {
   timestamp?: string | null;
   author?: string | null;
   agent_run_id?: number | null;
+  parser_status?: string | null;
+  section_path?: string | null;
+  evidence_reason?: string | null;
 };
 
 export type ReviewItem = {
@@ -510,6 +528,33 @@ export type AssistantEmailSendResponse = {
   message: AssistantMessage;
   status: string;
   gmail_message_id?: string | null;
+};
+
+export type ProjectEvidence = {
+  source_id: string;
+  source_type: string;
+  title: string;
+  source_url: string;
+  source_snippet: string;
+  permission_level: string;
+  timestamp: string;
+};
+
+export type ProjectMemory = {
+  project_key: string;
+  name: string;
+  summary: string;
+  source_types: string[];
+  evidence_count: number;
+  permission_level: string;
+  latest_timestamp: string;
+  evidence: ProjectEvidence[];
+};
+
+export type ProjectsResponse = {
+  project_count: number;
+  hidden_project_count: number;
+  projects: ProjectMemory[];
 };
 
 export type IntegrationSyncResponse = {

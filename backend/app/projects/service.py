@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 
 from backend.app.models import DocumentChunk, Source
 
-PROJECT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar')
+PROJECT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar', 'slack')
 PERMISSION_RANK = {'public': 0, 'internal': 1, 'restricted': 2}
-SOURCE_TYPE_RANK = {'gmail': 0, 'gmail_attachment': 1, 'drive': 2, 'calendar': 3}
+SOURCE_TYPE_RANK = {'gmail': 0, 'gmail_attachment': 1, 'drive': 2, 'calendar': 3, 'slack': 4}
 
 
 @dataclass(frozen=True)

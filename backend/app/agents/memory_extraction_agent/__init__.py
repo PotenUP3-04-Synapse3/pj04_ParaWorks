@@ -30,6 +30,7 @@ from backend.app.agents.memory_extraction_agent.langchain_adapter import (
 from backend.app.agents.memory_extraction_agent.service import (
     DEFAULT_MEMORY_EXTRACTION_AGENTS,
     MEMORY_EXTRACTION_SOURCE_TYPES,
+    build_memory_extraction_agent_preflight,
     build_memory_extraction_evidence_packet,
     create_memory_extraction_review_items,
 )
@@ -61,6 +62,7 @@ __all__ = [
     'TodoAgent',
     'StructuredMemoryExtractionOutput',
     'ValidationAgent',
+    'build_memory_extraction_agent_preflight',
     'build_memory_extraction_evidence_packet',
     'create_memory_extraction_review_items',
     'render_memory_extraction_prompt',

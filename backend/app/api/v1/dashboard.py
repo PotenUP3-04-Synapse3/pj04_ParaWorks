@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_filters import filter_review_items
 from backend.app.db.session import get_db
-from backend.app.models import ReviewItem, Source, SyncJob, Todo
+from backend.app.models import (
+    DecisionRecord,
+    ReviewItem,
+    Source,
+    SyncJob,
+    TimelineEvent,
+)
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -47,6 +53,21 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         .limit(5)
     ).all()
 
+    # 승인된 최근 의사결정 및 타임라인
+    recent_decisions = db.scalars(
+        select(DecisionRecord)
+        .where(DecisionRecord.review_status == 'approved')
+        .order_by(DecisionRecord.created_at.desc())
+        .limit(3)
+    ).all()
+
+    recent_timeline = db.scalars(
+        select(TimelineEvent)
+        .where(TimelineEvent.review_status == 'approved')
+        .order_by(TimelineEvent.created_at.desc())
+        .limit(3)
+    ).all()
+
     return {
         'source_counts': source_counts,
         'pending_review_count': pending_review_count or 0,
@@ -79,5 +100,25 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
                 'category': item.payload.get('category', 'N/A'),
             }
             for item in todo_items
+        ],
+        'recent_decisions': [
+            {
+                'id': d.id,
+                'title': d.title,
+                'summary': d.decision_summary,
+                'created_at': d.created_at.isoformat(),
+            }
+            for d in recent_decisions
+        ],
+        'recent_timeline': [
+            {
+                'id': t.id,
+                'title': t.title,
+                'summary': t.result_summary,
+                'created_at': t.created_at.isoformat(),
+                'confidence_score': t.confidence_score,
+                'source_links': t.source_links,
+            }
+            for t in recent_timeline
         ],
     }

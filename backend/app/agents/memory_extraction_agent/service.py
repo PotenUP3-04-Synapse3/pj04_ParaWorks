@@ -21,7 +21,7 @@ from backend.app.agents.memory_extraction_agent.agent import (
 )
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
-MEMORY_EXTRACTION_SOURCE_TYPES = ('slack', 'gmail', 'drive')
+MEMORY_EXTRACTION_SOURCE_TYPES = ('slack', 'gmail', 'drive', 'calendar')
 DEFAULT_MEMORY_EXTRACTION_AGENTS = (
     TimelineAgent(model=DeterministicTimelineModel()),
     HistoryAgent(model=DeterministicHistoryModel()),
@@ -55,7 +55,9 @@ def build_memory_extraction_evidence_packet(
                 'chunk_id': chunk.id,
                 'source_pk': source.id,
                 'source_type': source.source_type,
+                **_source_quality_metadata(chunk),
             },
+            source_snippet_override=chunk.source_snippet,
         )
         for chunk, source in rows
     ]
@@ -65,6 +67,42 @@ def build_memory_extraction_evidence_packet(
         messages=messages,
         permission_context=permission_context,
     )
+
+
+def build_memory_extraction_agent_preflight(
+    *,
+    db: Session,
+    permission_context: PermissionContext,
+    source_window: str,
+    estimated_output_tokens_per_agent: int = 128,
+    input_cost_per_1m: float = 0.15,
+    output_cost_per_1m: float = 0.60,
+) -> dict[str, object]:
+    packet = build_memory_extraction_evidence_packet(
+        db=db,
+        permission_context=permission_context,
+        source_window=source_window,
+    )
+    input_tokens = _estimate_tokens(packet)
+    output_tokens = estimated_output_tokens_per_agent * len(DEFAULT_MEMORY_EXTRACTION_AGENTS) if packet.messages else 0
+    included_source_types = sorted({
+        str(message.metadata.get('source_type'))
+        for message in packet.messages
+        if message.metadata.get('source_type')
+    })
+    return {
+        'action': 'preview_only',
+        'reason': 'live_llm_execution_not_enabled_for_this_slice',
+        'live_llm_execution': False,
+        'source_window': packet.source_window,
+        'evidence_message_count': len(packet.messages),
+        'included_source_types': included_source_types,
+        'strictest_permission': packet.strictest_permission,
+        'agent_count': len(DEFAULT_MEMORY_EXTRACTION_AGENTS),
+        'estimated_input_tokens': input_tokens,
+        'estimated_output_tokens': output_tokens,
+        'estimated_cost_usd': ((input_tokens * input_cost_per_1m) + (output_tokens * output_cost_per_1m)) / 1_000_000,
+    }
 
 
 def create_memory_extraction_review_items(
@@ -139,3 +177,24 @@ def create_memory_extraction_review_items(
     for review_item in review_items:
         db.refresh(review_item)
     return review_items
+
+
+def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
+    keys = (
+        'parser_name',
+        'parser_status',
+        'parser_status_reason',
+        'mime_type',
+        'section_path',
+        'page_number',
+        'start',
+        'end',
+        'event_context_key',
+        'event_status',
+        'organizer_email',
+    )
+    return {key: chunk.metadata_.get(key) for key in keys if key in chunk.metadata_}
+
+
+def _estimate_tokens(packet: EvidencePacket) -> int:
+    return sum(max(1, len(message.text.strip()) // 4) for message in packet.messages if message.text.strip())

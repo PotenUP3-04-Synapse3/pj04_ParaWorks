@@ -138,6 +138,7 @@ def build_mail_document_evidence_packet(
                 'scenario': source.raw_metadata.get('scenario'),
                 **_source_quality_metadata(chunk),
             },
+            source_snippet_override=chunk.source_snippet,
         )
         for chunk, source in rows
     ]
@@ -148,6 +149,43 @@ def build_mail_document_evidence_packet(
         messages=messages,
         permission_context=permission_context,
     )
+
+
+def build_mail_document_agent_preflight(
+    *,
+    db: Session,
+    permission_context: PermissionContext,
+    source_window: str,
+    input_cost_per_1m: float = 0.15,
+    output_cost_per_1m: float = 0.60,
+    estimated_output_tokens: int = 256,
+) -> dict[str, object]:
+    packet = build_mail_document_evidence_packet(
+        db=db,
+        permission_context=permission_context,
+        source_window=source_window,
+    )
+    input_tokens = _estimate_tokens(packet)
+    included_source_types = sorted({
+        str(message.metadata.get('source_type'))
+        for message in packet.messages
+        if message.metadata.get('source_type')
+    })
+    return {
+        'action': 'preview_only',
+        'reason': 'live_llm_execution_not_enabled_for_this_slice',
+        'live_llm_execution': False,
+        'source_window': packet.source_window,
+        'evidence_message_count': len(packet.messages),
+        'included_source_types': included_source_types,
+        'strictest_permission': packet.strictest_permission,
+        'estimated_input_tokens': input_tokens,
+        'estimated_output_tokens': estimated_output_tokens if packet.messages else 0,
+        'estimated_cost_usd': (
+            (input_tokens * input_cost_per_1m)
+            + ((estimated_output_tokens if packet.messages else 0) * output_cost_per_1m)
+        ) / 1_000_000,
+    }
 
 
 def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
@@ -173,5 +211,12 @@ def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
         'external_domains',
         'has_external_attendees',
         'duration_minutes',
+        'start',
+        'end',
+        'section_path',
     )
     return {key: chunk.metadata_.get(key) for key in keys if key in chunk.metadata_}
+
+
+def _estimate_tokens(packet: EvidencePacket) -> int:
+    return sum(max(1, len(message.text.strip()) // 4) for message in packet.messages if message.text.strip())
