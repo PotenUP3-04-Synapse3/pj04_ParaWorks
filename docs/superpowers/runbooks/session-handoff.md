@@ -1,6 +1,47 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-13
+Updated: 2026-05-14
+
+## 2026-05-14 Project Recognition Handoff
+
+- `/projects` now uses canonical company projects instead of loose source
+  grouping:
+  - `k-tech-pilot` / `K테크 파일럿`
+  - `seed-ir` / `시드 투자 IR`
+- Deterministic project classification lives behind the Review Queue as
+  `project_assignment` candidates. It scans Slack, Gmail, Drive, and Calendar
+  sources for project aliases and intentionally uses no live LLM or token
+  budget.
+- `POST /api/v1/projects/reclassify?dry_run=true` previews candidate counts and
+  cost policy. `dry_run=false` creates pending Review Queue items for approved
+  reviewer handling.
+- `/projects` returns both canonical projects with approved evidence,
+  pending-review counts, and project-scoped `timeline_items`. Legacy labels
+  like `미분류 프로젝트`, `Project Newbiegenie`, and `프로젝트 결과` should not be
+  displayed as projects.
+- `/timeline` now reads `/api/v1/projects` so the top menu is project-scoped
+  and timeline evidence explains why each item is connected.
+- Existing DB rows are not deleted or migrated. Run deterministic reclassify
+  and approve the resulting Review Queue candidates to attach current source
+  data to projects.
+
+## 2026-05-13 Work Data and Assignment Extraction Handoff
+
+- Dashboard recent timeline output now uses real `TimelineEvent` fields:
+  `summary`, `created_at`, `confidence_score`, and `source_links`.
+  Frontend code should not reintroduce `event_time` or `importance`.
+- `/projects` is connected to `GET /api/v1/projects`; the page no longer uses
+  local ORION/Nova/Atlas seed data.
+- Future todo promotion creates clean Korean timeline entries such as
+  `[할 일] ...` and `담당자: ..., 기한: ...`. Existing broken DB rows are not
+  migrated by this slice.
+- Mail/Docs and Memory Extraction deterministic models now detect generic
+  Korean/English work assignment cues from Gmail, Drive, and Calendar evidence.
+  Live LLM execution remains closed; only preflight endpoints were added.
+- Verification completed:
+  `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q`,
+  `uv run ruff check ...`, `npm run lint`, `npm run build`, and
+  `git diff --check`.
 
 ## 2026-05-13 RAG Orchestrator Assistant Handoff
 

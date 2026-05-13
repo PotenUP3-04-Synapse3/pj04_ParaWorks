@@ -343,7 +343,7 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
 
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
-        source_snippet = snippets[index] if index < len(snippets) else snippets[-1] if snippets else '?먮Ц 諛쒖톸 ?댁슜???놁뒿?덈떎.'
+        source_snippet = snippets[index] if index < len(snippets) else snippets[-1] if snippets else '표시할 원문 근거가 없습니다.'
         summary = evidence_summary.get(source_url or '') or {}
         rows.append(
             {
@@ -351,6 +351,7 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
                 'rank': _int_or_default(summary.get('rank'), index + 1),
                 'source_id': summary.get('source_id'),
                 'source_url': source_url,
+                'source_type': summary.get('source_type'),
                 'source_snippet': source_snippet,
                 'permission_level': summary.get('permission_level') or item.permission_level,
                 'confidence_score': item.confidence_score,
@@ -358,6 +359,9 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
                 'timestamp': summary.get('timestamp'),
                 'author': summary.get('author'),
                 'agent_run_id': agent_run_id,
+                'parser_status': summary.get('parser_status'),
+                'section_path': summary.get('section_path'),
+                'evidence_reason': summary.get('evidence_reason'),
             }
         )
 

@@ -44,7 +44,20 @@ export default async function DashboardPage() {
   })) ?? [];
   const visibleUpcomingEvents: UpcomingEvent[] = [];
   const visibleAssignedProjects: AssignedProject[] = [];
-  const visiblePersonalUpdates: PersonalUpdate[] = [];
+  const visiblePersonalUpdates: PersonalUpdate[] = [
+    ...(dashboard?.recent_decisions?.map((d) => ({
+      icon: Sparkles,
+      title: `[의사결정] ${d.title}`,
+      detail: d.summary,
+      time: new Date(d.created_at).toLocaleDateString(),
+    })) ?? []),
+    ...(dashboard?.recent_timeline?.map((t) => ({
+      icon: Clock3,
+      title: `[타임라인] ${t.title}`,
+      detail: `${t.summary} · 신뢰도 ${Math.round(t.confidence_score * 100)}%`,
+      time: new Date(t.created_at).toLocaleDateString(),
+    })) ?? []),
+  ];
   const visibleReviewItems: ReviewListItem[] = dashboard?.pending_items?.map((item) => [
     item.title,
     item.item_type,
