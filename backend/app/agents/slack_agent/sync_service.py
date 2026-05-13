@@ -46,8 +46,10 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
     if not results:
         return
 
-    # 2. 채널별로 메시지 그룹화
+    # 2. 채널별로 메시지 그룹화 및 URL -> 작성자 맵 생성
     messages_by_channel: Dict[str, List[Dict[str, Any]]] = {}
+    url_to_author: Dict[str, str] = {}
+    
     for source, body in results:
         channel_id = source.raw_metadata.get('channel_id', 'unknown')
         if channel_id not in messages_by_channel:
@@ -58,8 +60,12 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
             'ts': source.raw_metadata.get('ts', source.created_at.timestamp()),
             'user': source.author,
             'text': body, # 조인된 DocumentVersion.body 사용
-            'user_name': source.author # 일단 author를 이름으로 사용
+            'user_name': source.author # 슬랙의 전체 이름 사용
         })
+        
+        # 근거 보기를 위한 URL -> 작성자 매핑 저장
+        if source.source_url:
+            url_to_author[source.source_url] = source.author
 
     # 3. 각 채널별 분석 실행
     total_created = 0
@@ -68,11 +74,23 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
             # 에이전트 실행
             result = process_daily_slack_sync(channel_id, messages)
             
-            # AgentRun 기록 저장
+            # AgentRun 기록 저장 (evidence_summary 포함)
             run_cost = result.get('run_cost')
+            candidates: List[ReviewCandidate] = result.get('candidates', [])
+            
+            # 각 후보가 참조하는 URL들에 대해 작성자 정보를 metadata에 포함
+            evidence_summary = []
+            for cand in candidates:
+                for url in cand.source_links:
+                    evidence_summary.append({
+                        'source_url': url,
+                        'author': url_to_author.get(url, "Unknown"),
+                        'permission_level': cand.permission_level
+                    })
+
             agent_run = AgentRun(
                 agent_name='slack_agent_v2',
-                prompt_version='slack-taxonomy:v1',
+                prompt_version='slack-taxonomy:v2',
                 status='complete',
                 source_window=f'slack:last_{days}days:{channel_id}',
                 cache_key=f'sync-{datetime.now(UTC).isoformat()}',
@@ -85,14 +103,14 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                 metadata_={
                     'channel_id': channel_id,
                     'message_count': len(messages),
-                    'is_work_related': result.get('is_work_related', False)
+                    'is_work_related': result.get('is_work_related', False),
+                    'evidence_summary': evidence_summary # 이게 있어야 근거 보기에서 이름이 나옴
                 }
             )
             db.add(agent_run)
             db.flush()
 
             # 4. 분석된 후보들을 ReviewItem으로 저장
-            candidates: List[ReviewCandidate] = result.get('candidates', [])
             for candidate in candidates:
                 # payload_fields에 추가 정보(assignee, due_date, category 등)가 포함되어 있음
                 payload = {
@@ -103,7 +121,8 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                     'assignee': candidate.payload_fields.get('assignee', '미지정'),
                     'due_date': candidate.payload_fields.get('due_date', '기한없음'),
                     'source_channel_id': channel_id,
-                    'agent_run_id': agent_run.id
+                    'agent_run_id': agent_run.id,
+                    'agent_name': 'slack_agent' # 에이전트 생성 항목임을 명시
                 }
                 
                 review_item = ReviewItem(
@@ -114,7 +133,6 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                     source_snippets=candidate.source_snippets,
                     confidence_score=candidate.confidence_score,
                     permission_level=candidate.permission_level
-                    # agent_run_id 제거 (모델에 없음)
                 )
                 db.add(review_item)
                 total_created += 1
