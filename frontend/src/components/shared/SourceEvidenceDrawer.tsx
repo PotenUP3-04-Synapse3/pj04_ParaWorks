@@ -102,12 +102,16 @@ export function SourceEvidenceDrawer({
                       ) : null}
                     </div>
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--ink)]">
+                      {row.author ? (
+                        <span className="mr-1.5 inline-flex items-center rounded-md bg-[var(--workspace-rail-active)]/10 px-1.5 py-0.5 text-xs font-bold text-[var(--workspace-rail-active)]">
+                          {row.author}
+                        </span>
+                      ) : null}
                       {row.source_snippet || "표시할 근거 snippet이 없습니다."}
                     </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[var(--ink-muted)]">
-                      {row.source_id ? <span className="truncate">source: {row.source_id}</span> : null}
-                      {row.author ? <span>author: {row.author}</span> : null}
-                      {row.timestamp ? <span>{row.timestamp}</span> : null}
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-tight">
+                      {row.source_id ? <span className="truncate">Source ID: {row.source_id}</span> : null}
+                      {row.timestamp ? <span>Time: {row.timestamp}</span> : null}
                     </div>
                     {row.source_url ? (
                       <a

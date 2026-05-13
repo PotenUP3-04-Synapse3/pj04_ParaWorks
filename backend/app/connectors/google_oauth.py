@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from backend.app.connectors.slack_oauth import LocalTokenVault, mask_secret
+from backend.app.connectors.slack_oauth import LocalTokenVault, mask_secret, pkce_challenge
 from backend.app.core.config import Settings
 from backend.app.models import IntegrationConnection
 
@@ -30,6 +30,7 @@ GOOGLE_OAUTH_CONNECTOR_TYPES = frozenset(GOOGLE_DATA_SCOPES)
 class GoogleOAuthState:
     connector_type: str
     nonce: str
+    code_verifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class GoogleOAuthInstallUrl:
     state: str
     required_scopes: list[str]
     configured: bool
+    code_verifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,12 +64,21 @@ class GoogleOAuthStateSigner:
     def __init__(self, secret: str) -> None:
         self.secret = secret.encode()
 
-    def create(self, *, connector_type: str, nonce: str | None = None) -> str:
+    def create(
+        self,
+        *,
+        connector_type: str,
+        nonce: str | None = None,
+        code_verifier: str | None = None,
+    ) -> str:
         _validate_google_connector_type(connector_type)
         payload = {
             'connector_type': connector_type,
             'nonce': nonce or secrets.token_urlsafe(18),
         }
+        if code_verifier:
+            payload['code_verifier'] = code_verifier
+
         payload_token = _b64encode(json.dumps(payload, separators=(',', ':')).encode())
         signature = _sign(payload_token, self.secret)
         return f'{payload_token}.{signature}'
@@ -88,6 +99,7 @@ class GoogleOAuthStateSigner:
         return GoogleOAuthState(
             connector_type=connector_type,
             nonce=str(payload['nonce']),
+            code_verifier=payload.get('code_verifier'),
         )
 
 
@@ -107,16 +119,27 @@ class GoogleOAuthClient:
         self.token_url = token_url
         self.userinfo_url = userinfo_url
 
-    def exchange_code(self, *, code: str, redirect_uri: str, scopes: list[str]) -> GoogleOAuthAccess:
+    def exchange_code(
+        self,
+        *,
+        code: str,
+        redirect_uri: str,
+        scopes: list[str],
+        code_verifier: str | None = None,
+    ) -> GoogleOAuthAccess:
+        data = {
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri,
+        }
+        if code_verifier:
+            data['code_verifier'] = code_verifier
+
         response = self.http_client.post(
             self.token_url,
-            data={
-                'client_id': self.client_id,
-                'client_secret': self.client_secret,
-                'code': code,
-                'grant_type': 'authorization_code',
-                'redirect_uri': redirect_uri,
-            },
+            data=data,
         )
         response.raise_for_status()
         token_payload = response.json()
@@ -142,33 +165,49 @@ def build_google_oauth_install_url(
     settings: Settings,
     connector_type: str,
     nonce: str | None = None,
+    redirect_uri: str | None = None,
+    use_pkce: bool = True,
 ) -> GoogleOAuthInstallUrl:
     _validate_google_connector_type(connector_type)
     if not settings.google_client_id:
         raise GoogleOAuthConfigurationError('GOOGLE_CLIENT_ID is required for Google OAuth install URL')
 
+    target_redirect_uri = redirect_uri or settings.google_oauth_redirect_uri
+    
+    # Non-web URI인 경우 PKCE 강제 사용
+    is_non_web = not (target_redirect_uri.startswith('http://') or target_redirect_uri.startswith('https://'))
+    actual_use_pkce = use_pkce or is_non_web
+    
+    code_verifier = secrets.token_urlsafe(64) if actual_use_pkce else None
+
     state = GoogleOAuthStateSigner(settings.google_oauth_state_secret).create(
         connector_type=connector_type,
         nonce=nonce,
+        code_verifier=code_verifier,
     )
     scopes = list(GOOGLE_OAUTH_SCOPES[connector_type])
-    query = urlencode(
-        {
-            'client_id': settings.google_client_id,
-            'redirect_uri': settings.google_oauth_redirect_uri,
-            'response_type': 'code',
-            'scope': ' '.join(scopes),
-            'access_type': 'offline',
-            'prompt': 'consent',
-            'state': state,
-        }
-    )
+    params = {
+        'client_id': settings.google_client_id,
+        'redirect_uri': target_redirect_uri,
+        'response_type': 'code',
+        'scope': ' '.join(scopes),
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'state': state,
+    }
+
+    if code_verifier:
+        params['code_challenge'] = pkce_challenge(code_verifier)
+        params['code_challenge_method'] = 'S256'
+
+    query = urlencode(params)
     return GoogleOAuthInstallUrl(
         connector_type=connector_type,
         install_url=f'https://accounts.google.com/o/oauth2/v2/auth?{query}',
         state=state,
         required_scopes=scopes,
         configured=True,
+        code_verifier=code_verifier,
     )
 
 
@@ -181,6 +220,7 @@ def complete_google_oauth_callback(
     state: str,
     access: GoogleOAuthAccess | None = None,
     token_vault: LocalTokenVault,
+    redirect_uri: str | None = None,
 ) -> IntegrationConnection:
     _validate_google_connector_type(connector_type)
     parsed_state = GoogleOAuthStateSigner(settings.google_oauth_state_secret).validate(state)
@@ -192,6 +232,8 @@ def complete_google_oauth_callback(
         settings=settings,
         code=code,
         scopes=scopes,
+        code_verifier=parsed_state.code_verifier,
+        redirect_uri=redirect_uri,
     )
     persisted_token = access_payload.refresh_token or access_payload.access_token
     token_ref = token_vault.store_token(
@@ -231,6 +273,7 @@ def complete_google_oauth_callback(
         'state_nonce': parsed_state.nonce,
         'scope_count': len(access_payload.scopes),
         'token_kind': 'refresh_token' if access_payload.refresh_token else 'access_token',
+        'pkce_used': parsed_state.code_verifier is not None,
     }
 
     db.commit()
@@ -238,13 +281,25 @@ def complete_google_oauth_callback(
     return connection
 
 
-def _exchange_google_code(*, settings: Settings, code: str, scopes: list[str]) -> GoogleOAuthAccess:
+def _exchange_google_code(
+    *,
+    settings: Settings,
+    code: str,
+    scopes: list[str],
+    code_verifier: str | None = None,
+    redirect_uri: str | None = None,
+) -> GoogleOAuthAccess:
     if not settings.google_client_id or not settings.google_client_secret:
         raise GoogleOAuthConfigurationError('Google OAuth client id and secret are required for callback exchange')
     return GoogleOAuthClient(
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
-    ).exchange_code(code=code, redirect_uri=settings.google_oauth_redirect_uri, scopes=scopes)
+    ).exchange_code(
+        code=code,
+        redirect_uri=redirect_uri or settings.google_oauth_redirect_uri,
+        scopes=scopes,
+        code_verifier=code_verifier,
+    )
 
 
 def _validate_google_connector_type(connector_type: str) -> None:

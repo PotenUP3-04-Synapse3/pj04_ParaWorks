@@ -38,6 +38,7 @@ from backend.app.connectors.slack_oauth import (
     LOCAL_TOKEN_VAULT,
     SlackOAuthConfigurationError,
     build_slack_oauth_install_url,
+    complete_slack_direct_connect,
     complete_slack_oauth_callback,
 )
 from backend.app.core.config import Settings, get_settings
@@ -45,6 +46,7 @@ from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.core.redaction import redact_secret_text
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
+from backend.app.agents.slack_agent.sync_service import trigger_slack_agent_analysis
 from backend.app.models import IntegrationConnection, ReviewItem, Source, SyncJob
 from backend.app.services.audit import record_audit_log
 
@@ -192,19 +194,26 @@ def sync_connector(
         if request is not None and request.selected_channel_ids is not None and connector_type == 'slack'
         else None
     )
+    connector = get_sync_connector(
+        connector_type,
+        settings,
+        db=db,
+        slack_channel_ids_override=selected_channel_ids,
+    )
+    
+    agent_review_items = 0
     try:
-        connector = get_sync_connector(
-            connector_type,
-            settings,
-            db=db,
-            slack_channel_ids_override=selected_channel_ids,
-        )
         result = sync_connector_events(db=db, connector=connector)
-    except ConnectorNotConfiguredError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        
+        # Slack 동기화인 경우 에이전트 분석 즉시 트리거 (Phase 1 연동)
+        if connector_type == 'slack' and result.status == 'complete':
+            agent_review_items = trigger_slack_agent_analysis(db=db, days=7) or 0
+            
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     parser_status_counts = getattr(result, 'parser_status_counts', {})
+
+    total_review_items = result.created_review_items + agent_review_items
 
     record_audit_log(
         db=db,
@@ -215,10 +224,11 @@ def sync_connector(
         metadata={
             'job_id': result.job_id,
             'fetched_events': result.fetched_events,
-            'created_review_items': result.created_review_items,
+            'created_review_items': total_review_items,
             'skipped_events': result.skipped_events,
             'parser_status_counts': parser_status_counts,
             'selected_channel_ids': selected_channel_ids,
+            'agent_generated_items': agent_review_items,
         },
     )
     db.commit()
@@ -227,7 +237,7 @@ def sync_connector(
         'job_id': result.job_id,
         'connector_type': connector_type,
         'status': result.status,
-        'created_review_items': result.created_review_items,
+        'created_review_items': total_review_items,
         'fetched_events': result.fetched_events,
         'skipped_events': result.skipped_events,
         'parser_status_counts': parser_status_counts,
@@ -235,9 +245,12 @@ def sync_connector(
 
 
 @router.get('/slack/oauth/install-url')
-def get_slack_oauth_install_url(settings: AppSettings) -> dict[str, object]:
+def get_slack_oauth_install_url(
+    settings: AppSettings,
+    redirect_uri: str | None = None,
+) -> dict[str, object]:
     try:
-        install = build_slack_oauth_install_url(settings=settings)
+        install = build_slack_oauth_install_url(settings=settings, redirect_uri=redirect_uri)
     except SlackOAuthConfigurationError:
         return {
             'connector_type': 'slack',
@@ -253,22 +266,19 @@ def get_slack_oauth_install_url(settings: AppSettings) -> dict[str, object]:
         'install_url': install.install_url,
         'state': install.state,
         'required_scopes': install.required_scopes,
+        'code_verifier': install.code_verifier,
     }
 
 
-@router.get('/slack/oauth/callback')
-def complete_slack_oauth_install(
-    code: str,
-    state: str,
+@router.post('/slack/direct-connect')
+def complete_slack_direct_install(
     db: DbSession,
     settings: AppSettings,
 ) -> dict[str, object]:
     try:
-        connection = complete_slack_oauth_callback(
+        connection = complete_slack_direct_connect(
             db=db,
             settings=settings,
-            code=code,
-            state=state,
         )
     except SlackOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -285,13 +295,53 @@ def complete_slack_oauth_install(
     }
 
 
+@router.get('/slack/oauth/callback')
+def complete_slack_oauth_install(
+    code: str,
+    state: str,
+    db: DbSession,
+    settings: AppSettings,
+    redirect_uri: str | None = None,
+) -> dict[str, object]:
+    try:
+        connection = complete_slack_oauth_callback(
+            db=db,
+            settings=settings,
+            code=code,
+            state=state,
+            redirect_uri=redirect_uri,
+        )
+    except SlackOAuthConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SlackApiError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        'connector_type': connection.connector_type,
+        'status': connection.status,
+        'workspace_id': connection.workspace_id,
+        'workspace_name': connection.workspace_name,
+        'masked_bot_token': connection.masked_bot_token,
+        'scopes': connection.scopes,
+        'pkce_used': connection.raw_metadata.get('pkce_used', False),
+    }
+
+
 @router.get('/{connector_type}/oauth/install-url')
-def get_google_oauth_install_url(connector_type: str, settings: AppSettings) -> dict[str, object]:
+def get_google_oauth_install_url(
+    connector_type: str,
+    settings: AppSettings,
+    redirect_uri: str | None = None,
+) -> dict[str, object]:
     if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
     try:
-        install = build_google_oauth_install_url(settings=settings, connector_type=connector_type)
+        install = build_google_oauth_install_url(
+            settings=settings,
+            connector_type=connector_type,
+            redirect_uri=redirect_uri,
+        )
     except GoogleOAuthConfigurationError:
         return {
             'connector_type': connector_type,
@@ -309,6 +359,7 @@ def get_google_oauth_install_url(connector_type: str, settings: AppSettings) -> 
         'install_url': install.install_url,
         'state': install.state,
         'required_scopes': install.required_scopes,
+        'code_verifier': install.code_verifier,
     }
 
 
@@ -318,6 +369,7 @@ def complete_google_oauth_install_from_state(
     state: str,
     db: DbSession,
     settings: AppSettings,
+    redirect_uri: str | None = None,
 ) -> dict[str, object]:
     try:
         connector_type = GoogleOAuthStateSigner(settings.google_oauth_state_secret).validate(state).connector_type
@@ -328,6 +380,7 @@ def complete_google_oauth_install_from_state(
             code=code,
             state=state,
             token_vault=LOCAL_TOKEN_VAULT,
+            redirect_uri=redirect_uri,
         )
     except GoogleOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -341,6 +394,7 @@ def complete_google_oauth_install_from_state(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'pkce_used': connection.raw_metadata.get('pkce_used', False),
     }
 
 
@@ -351,6 +405,7 @@ def complete_google_oauth_install(
     state: str,
     db: DbSession,
     settings: AppSettings,
+    redirect_uri: str | None = None,
 ) -> dict[str, object]:
     if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
@@ -363,6 +418,7 @@ def complete_google_oauth_install(
             code=code,
             state=state,
             token_vault=LOCAL_TOKEN_VAULT,
+            redirect_uri=redirect_uri,
         )
     except GoogleOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -376,6 +432,7 @@ def complete_google_oauth_install(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'pkce_used': connection.raw_metadata.get('pkce_used', False),
     }
 
 
