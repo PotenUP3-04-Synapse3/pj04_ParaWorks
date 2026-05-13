@@ -264,7 +264,7 @@ function SearchPageContent() {
         message.id === messageId ? response.message : message
       )));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "메일을 보내지 못했습니다.");
+      setError(caught instanceof Error ? formatEmailSendError(caught.message) : "메일을 보내지 못했습니다.");
     } finally {
       setSendingEmailMessageId(undefined);
     }
@@ -825,6 +825,34 @@ function getEmailDraftView(message: AssistantMessage): { status: string } | unde
   return {
     status: typeof message.metadata.status === "string" ? message.metadata.status : "pending_approval",
   };
+}
+
+function formatEmailSendError(message: string) {
+  if (message.includes("gmail_connection_required")) {
+    return "Gmail 연동이 필요합니다. 연동 관리에서 Gmail을 먼저 연결해 주세요.";
+  }
+  if (message.includes("gmail_send_scope_required")) {
+    return "Gmail 전송 권한이 없습니다. Gmail을 다시 연결해 gmail.send 권한을 승인해 주세요.";
+  }
+  if (message.includes("gmail_token_unavailable")) {
+    return "저장된 Gmail 인증 토큰을 찾을 수 없습니다. Gmail을 다시 연결해 주세요.";
+  }
+  if (message.includes("gmail_refresh_credentials_required")) {
+    return "Google OAuth client id/secret 설정이 없어 Gmail 토큰을 갱신할 수 없습니다.";
+  }
+  if (message.includes("gmail_refresh_failed")) {
+    return "Gmail 인증이 만료되었거나 거절되었습니다. Gmail을 다시 연결한 뒤 보내 주세요.";
+  }
+  if (message.includes("gmail_api_send_failed:403")) {
+    return "Gmail API가 전송을 거절했습니다. gmail.send 권한을 다시 승인했는지 확인해 주세요.";
+  }
+  if (message.includes("gmail_api_send_failed")) {
+    return "Gmail API 전송 요청이 실패했습니다. 잠시 후 다시 시도하거나 Gmail 연동을 다시 확인해 주세요.";
+  }
+  if (message.includes("email draft is not pending approval")) {
+    return "이미 처리된 메일 초안입니다. 최신 초안에서 다시 시도해 주세요.";
+  }
+  return message || "메일을 보내지 못했습니다.";
 }
 
 function isReusableActiveConversation(

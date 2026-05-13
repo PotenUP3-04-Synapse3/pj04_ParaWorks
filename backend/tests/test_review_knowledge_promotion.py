@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, Todo
+from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, TimelineEvent, Todo
 
 
 def seed_review_item(db_session, *, item_type: str, payload: dict) -> ReviewItem:
@@ -84,6 +84,27 @@ def test_approve_todo_promotes_to_knowledge_table(client, db_session) -> None:
     assert todo.source_links == ['https://slack.mock/source-1']
     assert todo.source_snippets == ['source snippet']
     assert todo.review_status == 'approved'
+
+
+def test_approve_timeline_event_promotes_to_timeline_table(client, db_session) -> None:
+    item = seed_review_item(
+        db_session,
+        item_type='timeline_event',
+        payload={
+            'title': 'Customer launch date confirmed',
+            'result_summary': 'Slack evidence confirmed the customer launch date and owner.',
+        },
+    )
+
+    response = client.post(f'/api/v1/review/{item.id}/approve')
+
+    assert response.status_code == 200
+    timeline_event = db_session.scalars(select(TimelineEvent)).one()
+    assert timeline_event.title == 'Customer launch date confirmed'
+    assert timeline_event.result_summary == 'Slack evidence confirmed the customer launch date and owner.'
+    assert timeline_event.source_links == ['https://slack.mock/source-1']
+    assert timeline_event.source_snippets == ['source snippet']
+    assert timeline_event.review_status == 'approved'
 
 
 def test_bulk_approve_agent_candidates_promotes_only_agent_items(client, db_session) -> None:

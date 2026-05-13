@@ -1,3 +1,5 @@
+import pytest
+
 from backend.app.models import ReviewItem, Source, SyncJob
 
 
@@ -183,3 +185,18 @@ def test_google_runtime_status_redacts_refresh_token_sync_messages(client, db_se
     assert '1//refresh-secret' not in message
     assert 'google-client-secret' not in message
     assert message == 'refresh_token=[redacted-secret] client_secret=[redacted-secret]'
+
+
+def test_sync_returns_configuration_error_when_connector_is_not_configured(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.api.v1 import integrations
+    from backend.app.connectors.factory import ConnectorNotConfiguredError
+
+    def raise_not_configured(*args, **kwargs):
+        raise ConnectorNotConfiguredError('Slack connector is not configured.')
+
+    monkeypatch.setattr(integrations, 'get_sync_connector', raise_not_configured)
+
+    response = client.post('/api/v1/integrations/slack/sync')
+
+    assert response.status_code == 409
+    assert response.json()['detail'] == 'Slack connector is not configured.'

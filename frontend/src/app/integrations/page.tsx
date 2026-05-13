@@ -21,6 +21,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useJobStatus } from "@/hooks/useJobStatus";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
+import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
   AgentReviewResponse,
   GoogleRuntimeStatus,
@@ -265,6 +266,42 @@ export default function IntegrationsPage() {
     };
   }, []);
 
+
+  async function refreshDashboardSummary() {
+    try {
+      const summary = await apiGet<DashboardResponse>("/api/v1/dashboard");
+      setDashboardSummary(summary);
+      notifyReviewQueueUpdated();
+    } catch {
+      setDashboardSummary(undefined);
+    }
+  }
+
+  async function refreshRuntimeAfterMutation(type: string) {
+    if (type === "slack") {
+      try {
+        const status = await apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status");
+        setSlackRuntime(status);
+      } catch {
+        setSlackRuntime(undefined);
+      }
+    }
+
+    if (GOOGLE_CONNECTOR_TYPES.includes(type as (typeof GOOGLE_CONNECTOR_TYPES)[number])) {
+      try {
+        const status = await apiGet<GoogleRuntimeStatus>(`/api/v1/integrations/${type}/runtime-status`);
+        setGoogleRuntimeByType((current) => ({ ...current, [type]: status }));
+      } catch {
+        setGoogleRuntimeByType((current) => {
+          const next = { ...current };
+          delete next[type];
+          return next;
+        });
+      }
+    }
+
+    await refreshDashboardSummary();
+  }
   const visibleManifests = useMemo(
     () =>
       manifests.length > 0
@@ -298,13 +335,7 @@ export default function IntegrationsPage() {
       );
       setSyncResult(result);
       setActiveJobId(result.job_id);
-      if (type === "slack") {
-        apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
-          .then((status) => {
-            setSlackRuntime(status);
-          })
-          .catch(() => undefined);
-      }
+      await refreshRuntimeAfterMutation(type);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "동기화에 실패했습니다.");
     } finally {
@@ -334,6 +365,7 @@ export default function IntegrationsPage() {
     try {
       const result = await apiPost<AgentReviewResponse>(path);
       setAgentResult(result);
+      await refreshDashboardSummary();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Agent 실행에 실패했습니다.");
     } finally {
@@ -358,7 +390,7 @@ export default function IntegrationsPage() {
       setConnections(connectionResult);
       
       // 구글 런타임 상태 갱신
-      if (GOOGLE_CONNECTOR_TYPES.includes(type as any)) {
+      if (GOOGLE_CONNECTOR_TYPES.includes(type as (typeof GOOGLE_CONNECTOR_TYPES)[number])) {
         setGoogleRuntimeByType((current) => {
           const next = { ...current };
           delete next[type];
@@ -388,6 +420,7 @@ export default function IntegrationsPage() {
       });
       setAgentResult(result);
       setSlackLlmPreflight(result.preflight);
+      await refreshDashboardSummary();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "실제 LLM Agent 실행에 실패했습니다.");
     } finally {
@@ -698,11 +731,11 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
  */
 function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
   const counts = summary?.source_counts ?? {
-    slack: 128,
-    gmail: 62,
-    drive: 34,
-    calendar: 18,
-    other: 6,
+    slack: 0,
+    gmail: 0,
+    drive: 0,
+    calendar: 0,
+    other: 0,
   };
   const total =
     (counts.slack ?? 0) +

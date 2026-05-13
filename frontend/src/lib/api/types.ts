@@ -353,6 +353,7 @@ export type ReviewItem = {
   confidence_score: number;
   permission_level: string;
   status: ReviewStatus;
+  reviewer_id?: string | null;
 };
 
 export type ReviewPromotionPreview = {
@@ -362,7 +363,19 @@ export type ReviewPromotionPreview = {
   normalized_payload: Record<string, string>;
 };
 
+export type ReviewGroup = {
+  group_id: string;
+  title: string;
+  item_type: string;
+  status: ReviewStatus;
+  permission_level: string;
+  items: ReviewItem[];
+  total_count: number;
+  avg_confidence: number;
+};
+
 export type ReviewResponse = {
+  groups: ReviewGroup[];
   items: ReviewItem[];
 };
 
