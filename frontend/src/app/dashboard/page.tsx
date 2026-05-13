@@ -91,7 +91,7 @@ export default async function DashboardPage() {
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <Clock3 className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
-          2026.05.11 월요일
+          {syncDateStr}
         </div>
       </section>
 
@@ -118,21 +118,25 @@ export default async function DashboardPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-[15px] font-extrabold text-ink">{task.title}</h2>
-                      <p className="mt-1 text-[12px] font-bold text-muted">{task.project} · {task.source}</p>
+                      <p className="mt-1 text-[12px] font-bold text-muted">{task.category} · 담당: {task.assignee}</p>
                     </div>
-                    <span className={`priority-badge ${task.priority === "높음" ? "danger" : "warning"}`}>
-                      {task.priority}
+                    <span className="priority-badge warning">
+                      {task.category}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] font-bold text-muted">
-                    <span className="badge blue">{task.status}</span>
+                    <span className="badge blue">검토 필요</span>
                     <span className="inline-flex items-center gap-1">
                       <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-                      {task.due}
+                      {task.due_date}까지
                     </span>
                   </div>
                 </article>
-              ))}
+              )) : (
+                <div className="p-12 text-center text-muted font-bold border-2 border-dashed rounded-xl">
+                  추출된 할 일이 없습니다. 슬랙 동기화를 진행해 주세요.
+                </div>
+              )}
             </div>
           </Panel>
 
@@ -152,7 +156,7 @@ export default async function DashboardPage() {
                   <span className="text-muted">{due}</span>
                   <span className={`priority-badge ${priority === "높음" ? "danger" : "warning"}`}>{priority}</span>
                 </div>
-              ))}
+              )}
             </div>
           </Panel>
 

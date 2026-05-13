@@ -73,7 +73,10 @@ def login(request: LoginRequest, response: Response, db: DbSession) -> dict:
 
 
 @router.get('/google/login-url')
-def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+def get_google_login_url(
+    settings: Annotated[Settings, Depends(get_settings)],
+    redirect_uri: str | None = None,
+) -> dict:
     missing_config = google_identity_missing_config(settings)
     if missing_config:
         return {
@@ -81,18 +84,18 @@ def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -
             'login_url': None,
             'state': None,
             'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
-            'redirect_uri': settings.google_identity_redirect_uri,
+            'redirect_uri': redirect_uri or settings.google_identity_redirect_uri,
             'missing_config': missing_config,
         }
     try:
-        login_url = build_google_identity_login_url(settings=settings)
+        login_url = build_google_identity_login_url(settings=settings, redirect_uri=redirect_uri)
     except GoogleIdentityError:
         return {
             'configured': False,
             'login_url': None,
             'state': None,
             'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
-            'redirect_uri': settings.google_identity_redirect_uri,
+            'redirect_uri': redirect_uri or settings.google_identity_redirect_uri,
             'missing_config': ['GOOGLE_IDENTITY_CONFIGURATION'],
         }
     return {
@@ -102,6 +105,7 @@ def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -
         'required_scopes': login_url.required_scopes,
         'redirect_uri': login_url.redirect_uri,
         'missing_config': login_url.missing_config,
+        'code_verifier': login_url.code_verifier,
     }
 
 
@@ -112,6 +116,7 @@ def google_login_callback(
     response: Response,
     db: DbSession,
     settings: Annotated[Settings, Depends(get_settings)],
+    redirect_uri: str | None = None,
 ) -> dict:
     try:
         auth_user = complete_google_identity_login(
@@ -121,6 +126,7 @@ def google_login_callback(
             code=code,
             state=state,
             cookie_issuer=issue_auth_cookies,
+            redirect_uri=redirect_uri,
         )
     except GoogleIdentityError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
