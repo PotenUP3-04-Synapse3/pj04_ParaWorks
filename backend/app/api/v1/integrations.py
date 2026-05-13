@@ -7,10 +7,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import EvidencePacket, PermissionContext
+from backend.app.agent_runtime.company_memory import (
+    run_company_memory_agent_orchestration,
+)
 from backend.app.agents.mail_document_agent import (
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
+    build_mail_document_agent_preflight,
     create_mail_document_agent_review_items,
+)
+from backend.app.agents.memory_extraction_agent import (
+    build_memory_extraction_agent_preflight,
 )
 from backend.app.agents.slack_agent import (
     DeterministicSlackAgentModel,
@@ -22,7 +29,11 @@ from backend.app.agents.slack_agent import (
     build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
-from backend.app.connectors.factory import ConnectorNotConfiguredError, get_sync_connector
+from backend.app.agents.slack_agent.sync_service import trigger_slack_agent_analysis
+from backend.app.connectors.factory import (
+    ConnectorNotConfiguredError,
+    get_sync_connector,
+)
 from backend.app.connectors.google_oauth import (
     GOOGLE_OAUTH_CONNECTOR_TYPES,
     GoogleOAuthConfigurationError,
@@ -46,7 +57,6 @@ from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.core.redaction import redact_secret_text
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.agents.slack_agent.sync_service import trigger_slack_agent_analysis
 from backend.app.models import IntegrationConnection, ReviewItem, Source, SyncJob
 from backend.app.services.audit import record_audit_log
 
@@ -204,10 +214,23 @@ def sync_connector(
         )
         result = sync_connector_events(db=db, connector=connector)
         
-        # Slack 동기화인 경우 에이전트 분석 즉시 트리거 (Phase 1 연동)
-        if connector_type == 'slack' and result.status == 'complete':
-            agent_review_items = trigger_slack_agent_analysis(db=db, days=7) or 0
-            
+        # 동기화 성공 시 지식 추출 에이전트 오케스트레이션 트리거
+        if result.status == 'complete':
+            orch_result = run_company_memory_agent_orchestration(
+                db=db,
+                user=user,
+                question=f"Analyze recently synced data from {connector_type}",
+            )
+            agent_review_items = (
+                orch_result.outputs.get('slack_review_items_created', 0) +
+                orch_result.outputs.get('mail_document_review_items_created', 0) +
+                orch_result.outputs.get('memory_review_items_created', 0)
+            )
+
+            # Slack인 경우 기존의 상세 분석도 함께 수행
+            if connector_type == 'slack':
+                agent_review_items += trigger_slack_agent_analysis(db=db, days=7) or 0
+
     except ConnectorNotConfiguredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SlackApiError as exc:
@@ -591,6 +614,24 @@ def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str
         'status': 'complete',
         'created_review_items': len(review_items),
     }
+
+
+@router.get('/mail-docs/agent-review/llm/preflight')
+def get_mail_document_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
+    return build_mail_document_agent_preflight(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window='mail-docs:preflight',
+    )
+
+
+@router.get('/memory-extraction/agent-review/llm/preflight')
+def get_memory_extraction_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
+    return build_memory_extraction_agent_preflight(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window='memory-extraction:preflight',
+    )
 
 
 def _configured_channel_ids(raw_channel_ids: str) -> list[str]:

@@ -3861,3 +3861,9 @@ Cost/security note:
   - Added a modular assistant email action path that detects direct email-send requests without forcing RAG evidence, drafts a business-tone subject/body, and stores the draft as pending approval in assistant message metadata.
   - Added a Gmail approval endpoint that sends only after explicit user approval and only when an installed Gmail connection already has send-capable OAuth scope.
   - Verification: `uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q`, `npm.cmd run lint`, `npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop`, and `npm.cmd run build` passed.
+- `feat: connect work data and harden assignment extraction`
+  - Fixed dashboard timeline data to use real `TimelineEvent` fields and connected `/projects` to the existing permission-aware project memory API instead of empty frontend state.
+  - Repaired future todo-to-timeline promotion copy so generated Korean timeline entries no longer contain mojibake.
+  - Preserved source snippets in Mail/Docs and Memory Extraction evidence packets, added richer Review evidence metadata, and expanded deterministic extraction for Korean/English work assignments from Gmail, Drive, and Calendar evidence.
+  - Added Mail/Docs and Memory Extraction LLM preflight responses that expose evidence counts and estimated cost while keeping live LLM execution closed for this slice.
+  - Verification: `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q` passed with 29 tests; `uv run ruff check ...` fixed and cleared touched backend files; `npm run lint` and `npm run build` passed.

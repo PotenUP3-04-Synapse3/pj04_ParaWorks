@@ -109,7 +109,7 @@ def build_company_memory_cost_plan(
     )
     rag_packet = _build_planning_rag_packet(db=db, user=user, question=question, permission_context=permission_context)
     slack_token_estimate = _estimate_tokens_for_packet(slack_packet)
-    mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'drive'))
+    mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'gmail_attachment', 'drive', 'calendar'))
     question_token_estimate = _estimate_tokens(question)
 
     return {
@@ -149,7 +149,7 @@ def build_company_memory_cost_plan(
 def _collect_evidence_node(db: Session, cost_plan: dict[str, dict[str, float | int | str | None]]):
     def collect_evidence(state: AgentWorkflowState) -> AgentWorkflowState:
         slack_count = _count_chunks(db=db, source_types=('slack',))
-        mail_document_count = _count_chunks(db=db, source_types=('gmail', 'drive'))
+        mail_document_count = _count_chunks(db=db, source_types=('gmail', 'gmail_attachment', 'drive', 'calendar'))
         return state.complete_node(
             'collect_evidence',
             evidence_sources='slack,gmail,drive,approved_knowledge',

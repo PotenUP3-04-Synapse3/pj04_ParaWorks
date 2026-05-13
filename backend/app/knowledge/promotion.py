@@ -1,7 +1,12 @@
 from sqlalchemy.orm import Session
 
-from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, TimelineEvent, Todo
-
+from backend.app.models import (
+    DecisionRecord,
+    HistoryEvent,
+    ReviewItem,
+    TimelineEvent,
+    Todo,
+)
 
 PROMOTABLE_REVIEW_TYPES = {'decision_record', 'history_event', 'timeline_event', 'todo'}
 
@@ -49,7 +54,7 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
         )
         db.add(
             TimelineEvent(
-                title=f"[寃곗젙] {normalized['title']}",
+                title=f"[결정] {normalized['title']}",
                 result_summary=normalized['decision_summary'],
                 **base_fields,
             )
@@ -94,10 +99,10 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
         )
         db.add(
             TimelineEvent(
-                title=f"[???? {normalized['title']}",
+                title=f"[할 일] {normalized['title']}",
                 result_summary=(
-                    f"?대떦?? {item.payload.get('assignee', '誘몄젙')}, "
-                    f"湲고븳: {item.payload.get('due_date', '湲고븳 ?놁쓬')}"
+                    f"담당자: {item.payload.get('assignee') or '미지정'}, "
+                    f"기한: {item.payload.get('due_date') or '기한 없음'}"
                 ),
                 **base_fields,
             )
