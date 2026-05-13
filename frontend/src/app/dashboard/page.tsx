@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, CheckCircle2, Clock3, FileText, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock3, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { serverApiGet } from "@/lib/api/server";
@@ -6,11 +6,23 @@ import type { DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
-const todayTasks: any[] = [];
-const upcomingEvents: any[] = [];
-const assignedProjects: any[] = [];
-const personalUpdates: any[] = [];
-const reviewItems: any[] = [];
+type TodayTask = {
+  title: string;
+  category: string;
+  assignee: string;
+  due_date: string;
+  status: string;
+};
+
+type UpcomingEvent = readonly [time: string, title: string, people: string];
+type AssignedProject = readonly [name: string, progress: string, status: string, risk: string];
+type PersonalUpdate = {
+  icon: typeof Sparkles;
+  title: string;
+  detail: string;
+  time: string;
+};
+type ReviewListItem = readonly [title: string, source: string, due: string, priority: string];
 
 
 export default async function DashboardPage() {
@@ -23,17 +35,17 @@ export default async function DashboardPage() {
     weekday: "long",
   });
 
-  const visibleTodayTasks: any[] = dashboard?.today_todos?.map(todo => ({
+  const visibleTodayTasks: TodayTask[] = dashboard?.today_todos?.map((todo) => ({
     title: todo.title,
     category: todo.category,
     assignee: todo.assignee,
     due_date: todo.due_date,
     status: "검토 필요"
   })) ?? [];
-  const visibleUpcomingEvents: typeof upcomingEvents = upcomingEvents;
-  const visibleAssignedProjects: typeof assignedProjects = assignedProjects;
-  const visiblePersonalUpdates: typeof personalUpdates = personalUpdates;
-  const visibleReviewItems: any[] = dashboard?.pending_items?.map(item => [
+  const visibleUpcomingEvents: UpcomingEvent[] = [];
+  const visibleAssignedProjects: AssignedProject[] = [];
+  const visiblePersonalUpdates: PersonalUpdate[] = [];
+  const visibleReviewItems: ReviewListItem[] = dashboard?.pending_items?.map((item) => [
     item.title,
     item.item_type,
     "기한 없음",
