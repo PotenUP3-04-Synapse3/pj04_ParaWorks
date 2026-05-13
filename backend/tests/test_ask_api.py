@@ -1,7 +1,7 @@
-from backend.app.models import DecisionRecord
+from backend.app.models import AgentRun, DecisionRecord
 
 
-def test_ask_api_answers_with_visible_sources(client) -> None:
+def test_ask_api_answers_with_visible_sources(client, db_session) -> None:
     client.post('/api/v1/integrations/gmail/sync')
 
     response = client.post(
@@ -18,6 +18,8 @@ def test_ask_api_answers_with_visible_sources(client) -> None:
     assert payload['source_ids']
     assert payload['estimated_cost_usd'] > 0
     assert payload['token_usage']['total_tokens'] > 0
+    agent_run = db_session.query(AgentRun).one()
+    assert payload['agent_run_id'] == agent_run.id
 
 
 def test_ask_api_respects_viewer_permissions(client) -> None:

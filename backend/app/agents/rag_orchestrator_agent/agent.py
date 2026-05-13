@@ -30,6 +30,7 @@ class RagModelResponse:
     answer: str
     input_tokens: int
     output_tokens: int
+    model_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class RagAnswer:
     permission_notice: str | None
     cost: AgentRunCost
     cache_key: str
+    agent_run_id: int | None = None
 
 
 class RagOrchestratorModel(Protocol):
@@ -92,12 +94,13 @@ class RagOrchestratorAgent:
         hidden_match_count: int,
     ) -> RagAnswer:
         model_response = self.model.answer(question, packet)
+        model_name = model_response.model_name or RAG_ORCHESTRATOR_AGENT_MODEL_NAME
         token_usage = TokenUsage(
             input_tokens=model_response.input_tokens,
             output_tokens=model_response.output_tokens,
         )
         cost = estimate_agent_run_cost(
-            model_name=RAG_ORCHESTRATOR_AGENT_MODEL_NAME,
+            model_name=model_name,
             token_usage=token_usage,
             input_cost_per_1m=self.input_cost_per_1m,
             output_cost_per_1m=self.output_cost_per_1m,
