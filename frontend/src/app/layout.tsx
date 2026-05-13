@@ -9,6 +9,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Paraworks Company Memory",
   description: "AI-powered enterprise company memory dashboard",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 /**

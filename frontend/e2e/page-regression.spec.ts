@@ -112,7 +112,7 @@ function monitorPageErrors(page: Page) {
       return;
     }
     const text = message.text();
-    if (text.includes("favicon.ico")) {
+    if (text.includes("favicon.ico") || text.includes("favicon.png")) {
       return;
     }
     if (text.includes("403 (Forbidden)")) {

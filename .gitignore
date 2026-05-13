@@ -34,3 +34,6 @@ frontend/tsconfig.tsbuildinfo
 
 # Git worktrees
 .worktrees/
+
+# Secrets
+.tokens.json

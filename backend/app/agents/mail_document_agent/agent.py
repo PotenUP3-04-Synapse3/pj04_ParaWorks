@@ -54,26 +54,26 @@ class DeterministicMailDocumentAgentModel:
     """LLM 없이 규칙 기반으로 정보를 추출하는 테스트용 결정론적 모델"""
     def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
         combined_text = '\n'.join(message.text for message in packet.messages)
-        title = 'Mail and document history candidate'
-        summary = 'Gmail and Drive evidence was summarized into a reviewable company memory candidate.'
+        title = '메일 및 문서 히스토리 후보'
+        summary = 'Gmail 및 Google Drive 증거 데이터가 검토 가능한 회사 메모리 후보로 요약되었습니다.'
         item_type = 'history_event'
 
         # 특정 키워드에 따른 결과 분류 로직
         if 'PostgreSQL' in combined_text and 'Redis' in combined_text:
-            title = 'Redis and PostgreSQL responsibility decision'
-            summary = 'Mail and document evidence indicates Redis handles transient job state while PostgreSQL remains the durable source of record.'
+            title = 'Redis 및 PostgreSQL 역할 분담 결정'
+            summary = '메일 및 문서 증거에 따르면, Redis는 일시적인 작업 상태를 처리하고 PostgreSQL은 영구적인 기록 소스로 유지됩니다.'
             item_type = 'decision'
         elif 'confidential pricing' in combined_text.lower():
-            title = 'Restricted document evidence requires review'
-            summary = 'Drive evidence contains restricted pricing context that should stay behind permission checks.'
+            title = '검토가 필요한 제한된 문서 증거'
+            summary = 'Google Drive 증거에 권한 확인이 필요한 기밀 가격 정보가 포함되어 있습니다.'
             item_type = 'history_event'
         elif 'budget' in combined_text.lower() or 'revenue' in combined_text.lower():
-            title = 'Quarterly budget and revenue strategy updated'
-            summary = 'Parsed document evidence suggests an update to the quarterly budget and hiring plan.'
+            title = '분기별 예산 및 매출 전략 업데이트됨'
+            summary = '파싱된 문서 증거에 따르면 분기별 예산 및 채용 계획이 업데이트되었습니다.'
             item_type = 'history_event'
         elif 'contract review' in combined_text.lower() or 'due friday' in combined_text.lower():
-            title = 'Contract review scheduled'
-            summary = 'Extracted todo item from email/document indicating a contract review needs to be completed by Friday.'
+            title = '계약서 검토 일정 예약됨'
+            summary = '이번 주 금요일까지 계약서 검토를 완료해야 한다는 내용이 이메일/문서에서 추출되었습니다.'
             item_type = 'todo'
         elif packet.messages:
             summary = packet.messages[0].source_snippet
@@ -173,7 +173,7 @@ def _parser_uncertainty_reason(packet: EvidencePacket) -> str | None:
         status = message.metadata.get('parser_status')
         reason = message.metadata.get('parser_status_reason') or 'unknown_reason'
         details.append(f'{message.source_id}={status}({reason})')
-    return f"Some document evidence is not body-parsed: {', '.join(details)}"
+    return f"일부 문서 증거가 본문 파싱되지 않았습니다: {', '.join(details)}"
 
 
 def _parser_uncertainty_confidence(packet: EvidencePacket) -> float:

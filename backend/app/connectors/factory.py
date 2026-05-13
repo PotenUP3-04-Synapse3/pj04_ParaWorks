@@ -97,6 +97,7 @@ def get_sync_connector(
             connector_type=connector_type,
             db=db,
             token_vault=token_vault,
+            settings=settings,
         )
         if installed_connector is not None:
             return installed_connector
@@ -164,6 +165,7 @@ def _get_installed_google_connector(
     connector_type: str,
     db: Session | None,
     token_vault: LocalTokenVault,
+    settings: Settings,
 ) -> GoogleConnector | None:
     if db is None:
         return None
@@ -183,6 +185,21 @@ def _get_installed_google_connector(
     oauth_token = token_vault.resolve(connection.token_ref)
     if not oauth_token:
         return None
+
+    # kjw: If it's a refresh token, we MUST exchange it for an access token before sync.
+    # Otherwise, Google APIs will reject "Bearer <refresh_token>" calls.
+    if connection.raw_metadata.get('token_kind') == 'refresh_token':
+        from backend.app.connectors.google_oauth import GoogleOAuthClient
+        try:
+            client = GoogleOAuthClient(
+                client_id=settings.google_client_id,
+                client_secret=settings.google_client_secret,
+            )
+            access = client.refresh_access_token(refresh_token=oauth_token)
+            oauth_token = access.access_token
+        except Exception:
+            # Fallback to stored token and let it fail normally in the connector
+            pass
 
     return GoogleConnector(
         config=GoogleConnectorConfig(

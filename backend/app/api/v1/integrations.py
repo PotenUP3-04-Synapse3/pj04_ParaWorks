@@ -437,6 +437,39 @@ def complete_google_oauth_install(
     }
 
 
+@router.delete('/{connector_type}')
+def disconnect_connector(
+    connector_type: str,
+    db: DbSession,
+    user: CurrentUser,
+) -> dict[str, str]:
+    connection = db.scalar(
+        select(IntegrationConnection)
+        .where(IntegrationConnection.connector_type == connector_type)
+        .order_by(IntegrationConnection.id.desc())
+    )
+    if not connection:
+        raise HTTPException(status_code=404, detail='Connection not found')
+
+    # Remove token from vault
+    LOCAL_TOKEN_VAULT.remove_token(connection.token_ref)
+    
+    # Remove from database
+    db.delete(connection)
+    db.commit()
+
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='integration.disconnect',
+        target_type='connector',
+        target_id=connector_type,
+        metadata={'workspace_name': connection.workspace_name},
+    )
+
+    return {'status': 'disconnected', 'connector_type': connector_type}
+
+
 @router.post('/slack/agent-review')
 def run_slack_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | str]:
     agent = SlackAgent(model=DeterministicSlackAgentModel())
