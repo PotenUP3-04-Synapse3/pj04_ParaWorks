@@ -292,6 +292,7 @@ def complete_slack_direct_install(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'credential_status': 'available',
     }
 
 
