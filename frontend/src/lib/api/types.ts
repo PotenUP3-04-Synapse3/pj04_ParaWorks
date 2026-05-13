@@ -10,6 +10,20 @@ export type DashboardResponse = {
   source_counts: Record<string, number>;
   pending_review_count: number;
   recent_jobs: SyncJob[];
+  pending_items: {
+    id: number;
+    title: string;
+    item_type: string;
+    category: string;
+    confidence_score: number;
+  }[];
+  today_todos: {
+    id: number;
+    title: string;
+    assignee: string;
+    due_date: string;
+    category: string;
+  }[];
 };
 
 export type DemoUser = {

@@ -18,6 +18,10 @@ from backend.app.core.config import Settings
 from backend.app.models import IntegrationConnection
 
 
+class ConnectorNotConfiguredError(RuntimeError):
+    pass
+
+
 def get_configured_connector(connector_type: str, settings: Settings) -> Connector:
     if (
         connector_type == 'slack'
@@ -32,6 +36,11 @@ def get_configured_connector(connector_type: str, settings: Settings) -> Connect
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
+        )
+
+    if not settings.paraworks_demo_mode:
+        raise ConnectorNotConfiguredError(
+            f'{connector_type} connector is not connected. Complete OAuth or configure credentials before syncing.'
         )
 
     if connector_type not in CONNECTOR_TYPES:
@@ -59,16 +68,21 @@ def get_sync_connector(
         )
         if installed_connector is not None:
             return installed_connector
+            
+    # 설치된 커넥터가 없거나 토큰이 없는 경우 .env 폴백
     if (
         connector_type == 'slack'
         and not settings.paraworks_demo_mode
         and settings.slack_bot_token
-        and slack_channel_ids_override is not None
     ):
         return SlackConnector(
             config=SlackConnectorConfig(
                 bot_token=settings.slack_bot_token,
-                channel_ids=_clean_channel_ids(slack_channel_ids_override),
+                channel_ids=(
+                    _clean_channel_ids(slack_channel_ids_override)
+                    if slack_channel_ids_override is not None
+                    else _parse_csv(settings.slack_channel_ids)
+                ),
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),

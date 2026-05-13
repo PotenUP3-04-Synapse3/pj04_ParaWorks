@@ -62,9 +62,7 @@ export default function AccountPage() {
 
   const accountDisplay = useMemo(() => {
     const name = user?.name ?? "";
-    const localPart = user?.email.split("@", 1)[0]?.trim().toLowerCase();
-    const fallbackAvatarUrl = localPart ? `/profile/${localPart}.png` : null;
-    const avatarUrl = user?.role === "admin" ? null : (user?.avatar_url ?? fallbackAvatarUrl);
+    const avatarUrl = user?.avatar_url ?? null;
     const initial = name.trim().charAt(0).toUpperCase() || "?";
     return {
       avatarUrl,

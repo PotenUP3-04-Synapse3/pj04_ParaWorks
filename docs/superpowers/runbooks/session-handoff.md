@@ -2,6 +2,33 @@
 
 Updated: 2026-05-12
 
+## 2026-05-12 Demo Data Boundary Update
+
+- Default settings now use `PARAWORKS_DEMO_MODE=false` and
+  `PARAWORKS_SEED_DEMO_DATA=false`.
+- Smoke mode is the only intended path for seeded dummy content:
+  `scripts/start-smoke.ps1` sets both demo mode and seed demo data to true.
+- Docker/pgvector dev mode (`scripts/start-pgvector-dev.ps1`) starts the app
+  with demo mode and seed demo data disabled. With no Slack or Google connection
+  installed, the product should show empty states rather than mock business
+  content.
+- Production-like connector sync must not fall back to mock connectors. It now
+  returns a clear not-connected error until OAuth/credentials are available.
+- The Review page no longer displays hard-coded fallback review items when the
+  API fails or returns no items.
+- Dashboard, Projects, and Timeline no longer render sample ORION/Nova/Atlas
+  items as visible product data when no connector-backed data exists.
+
+Verification from this session:
+
+```powershell
+uv run pytest backend/tests -v
+cd frontend
+npm run build
+```
+
+Result: backend 297 passed, 1 skipped; frontend build passed.
+
 ## Active Project
 
 - Repository: `C:\Users\hanvv\Study\potenup3\pj04_ParaWorks`
@@ -847,35 +874,3 @@ Direct Docker-backed API check on a secondary backend port confirmed:
 - `/api/v1/review?status=pending_review` returns seeded review items;
 - `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
   `X-CSRF-Token`.
-
-## 2026-05-13 AI Assistant Email Action Update
-
-- `/search` now renders user messages optimistically before the assistant API
-  finishes, then reveals assistant responses with a typing-style stream effect.
-- Direct email-send prompts such as `partner@example.com에 오늘 회의 취소됐다고
-  메일 보내줘` are routed to an assistant email action instead of
-  evidence-only RAG.
-  - The action creates a business-tone draft with inferred subject/body.
-  - The assistant message metadata stores `action_type=email_draft`,
-    `status=pending_approval`, and the draft payload.
-  - The frontend renders an approval button; no email is sent before the user
-    clicks approval.
-- `POST /api/v1/assistant/messages/{message_id}/email/send` sends the approved
-  draft through Gmail only if a connected Gmail OAuth token is available and
-  already has `https://www.googleapis.com/auth/gmail.send`.
-- Important follow-up: the current Google OAuth install scope was not expanded
-  to `gmail.send` in this session because that permission broadening needs
-  explicit user approval. Without that scope, approval returns
-  `gmail_send_scope_required`.
-- Verification:
-
-```powershell
-uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q
-cd frontend
-npm.cmd run lint
-npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop
-npm.cmd run build
-```
-
-Result: backend assistant tests, frontend lint, targeted Playwright, and
-frontend build passed.

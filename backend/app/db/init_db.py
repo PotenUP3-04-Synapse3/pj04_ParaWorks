@@ -18,7 +18,10 @@ def init_db(engine_override: Engine | None = None) -> None:
         with Session(target_engine) as db:
             seed_auth_users(db)
             db.commit()
+    if settings.paraworks_seed_demo_data:
+        with Session(target_engine) as db:
             ingest_events(db, SEED_EVENTS)
+            db.commit()
 
 
 def main() -> None:
