@@ -69,10 +69,18 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
 
     # 3. 각 채널별 분석 실행
     total_created = 0
+    from backend.app.core.config import get_settings
+    settings = get_settings()
+    
     for channel_id, messages in messages_by_channel.items():
         try:
-            # 에이전트 실행
-            result = process_daily_slack_sync(channel_id, messages)
+            # 에이전트 실행 (API 키 전달)
+            result = process_daily_slack_sync(
+                channel_id, 
+                messages, 
+                openai_api_key=settings.openai_api_key,
+                gemini_api_key=settings.gemini_api_key or settings.google_api_key
+            )
             
             # AgentRun 기록 저장 (evidence_summary 포함)
             run_cost = result.get('run_cost')
