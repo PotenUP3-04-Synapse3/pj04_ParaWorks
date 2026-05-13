@@ -25,7 +25,10 @@ GOOGLE_DRIVE_SLIDES_MIME_TYPE = 'application/vnd.google-apps.presentation'
 GOOGLE_DRIVE_SLIDES_EXPORT_MIME_TYPE = 'text/plain'
 
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
-    'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
+    'gmail': (
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+    ),
     'drive': ('https://www.googleapis.com/auth/drive.readonly',),
     'calendar': ('https://www.googleapis.com/auth/calendar.readonly',),
 }

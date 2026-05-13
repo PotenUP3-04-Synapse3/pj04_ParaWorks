@@ -15,7 +15,10 @@ from backend.app.models import IntegrationConnection
 
 GOOGLE_IDENTITY_SCOPES = ('openid', 'email')
 GOOGLE_DATA_SCOPES: dict[str, tuple[str, ...]] = {
-    'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
+    'gmail': (
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+    ),
     'drive': ('https://www.googleapis.com/auth/drive.readonly',),
     'calendar': ('https://www.googleapis.com/auth/calendar.readonly',),
 }
@@ -157,6 +160,42 @@ class GoogleOAuthClient:
             account_id=str(userinfo.get('sub') or userinfo.get('email')),
             account_name=str(userinfo.get('email') or userinfo.get('name') or 'Google Workspace'),
             scopes=_parse_scope_string(str(token_payload.get('scope') or ' '.join(scopes))),
+        )
+
+    def refresh_access_token(
+        self,
+        *,
+        refresh_token: str,
+        scopes: list[str] | None = None,
+    ) -> GoogleOAuthAccess:
+        data = {
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token',
+        }
+        response = self.http_client.post(
+            self.token_url,
+            data=data,
+        )
+        response.raise_for_status()
+        token_payload = response.json()
+        access_token = str(token_payload['access_token'])
+
+        # Refresh response might not include a new refresh token or user info
+        userinfo_response = self.http_client.get(
+            self.userinfo_url,
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+        userinfo_response.raise_for_status()
+        userinfo = userinfo_response.json()
+
+        return GoogleOAuthAccess(
+            access_token=access_token,
+            refresh_token=token_payload.get('refresh_token') or refresh_token,
+            account_id=str(userinfo.get('sub') or userinfo.get('email')),
+            account_name=str(userinfo.get('email') or userinfo.get('name') or 'Google Workspace'),
+            scopes=_parse_scope_string(str(token_payload.get('scope') or ('' if scopes is None else ' '.join(scopes)))),
         )
 
 
