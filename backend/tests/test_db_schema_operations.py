@@ -1,0 +1,97 @@
+from pathlib import Path
+
+from sqlalchemy import create_engine
+
+from backend.app.db.base import Base
+from scripts.check_db_schema import check_schema
+
+
+def test_alembic_operational_files_exist() -> None:
+    assert Path('alembic.ini').is_file()
+    assert Path('backend/migrations/env.py').is_file()
+    assert Path('backend/migrations/script.py.mako').is_file()
+    assert Path('backend/migrations/versions/0001_create_current_schema.py').is_file()
+
+
+def test_schema_checker_reports_missing_model_tables() -> None:
+    engine = create_engine('sqlite:///:memory:')
+
+    result = check_schema(engine, include_native_pgvector=False)
+
+    assert not result.ok
+    assert 'auth_users' in result.missing_tables
+    assert 'assistant_conversations' in result.missing_tables
+
+
+def test_schema_checker_accepts_sqlalchemy_metadata_tables() -> None:
+    engine = create_engine('sqlite:///:memory:')
+    Base.metadata.create_all(bind=engine)
+
+    result = check_schema(engine, include_native_pgvector=False)
+
+    assert result.ok
+    assert result.missing_tables == []
+    assert result.missing_columns == {}
+
+
+class FakePostgresEngine:
+    dialect = type('Dialect', (), {'name': 'postgresql'})()
+
+
+class FakeSchemaInspector:
+    def get_table_names(self) -> list[str]:
+        return [*Base.metadata.tables, 'rag_vector_documents']
+
+    def get_columns(self, table_name: str) -> list[dict[str, str]]:
+        if table_name == 'rag_vector_documents':
+            return [
+                {'name': 'document_id'},
+                {'name': 'text'},
+                {'name': 'source_url'},
+                {'name': 'source_snippet'},
+                {'name': 'permission_level'},
+                {'name': 'metadata_json'},
+                {'name': 'embedding'},
+                {'name': 'updated_at'},
+            ]
+        return [{'name': column.name} for column in Base.metadata.tables[table_name].columns]
+
+
+def test_schema_checker_reports_pgvector_embedding_dimension_mismatch(monkeypatch) -> None:
+    engine = FakePostgresEngine()
+
+    monkeypatch.setattr('scripts.check_db_schema.inspect', lambda _engine: FakeSchemaInspector())
+    monkeypatch.setattr(
+        'scripts.check_db_schema._postgres_column_type',
+        lambda _engine, _table_name, _column_name: 'vector(3072)',
+    )
+
+    result = check_schema(
+        engine,
+        include_native_pgvector=True,
+        expected_embedding_dimensions=1536,
+    )
+
+    assert not result.ok
+    assert (
+        'rag_vector_documents.embedding type is vector(3072), expected vector(1536)'
+        in result.native_pgvector_errors
+    )
+
+
+def test_schema_checker_uses_default_pgvector_dimension_when_not_overridden(monkeypatch) -> None:
+    engine = FakePostgresEngine()
+
+    monkeypatch.setattr('scripts.check_db_schema.inspect', lambda _engine: FakeSchemaInspector())
+    monkeypatch.setattr(
+        'scripts.check_db_schema._postgres_column_type',
+        lambda _engine, _table_name, _column_name: 'vector(3072)',
+    )
+
+    result = check_schema(engine, include_native_pgvector=True)
+
+    assert not result.ok
+    assert (
+        'rag_vector_documents.embedding type is vector(3072), expected vector(1536)'
+        in result.native_pgvector_errors
+    )
