@@ -235,8 +235,10 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
         approx_ct = 500
         
         final_candidates = []
-        # 환경 변수에서 워크스페이스 URL 로드 (없으면 기본값 사용)
-        base_url = os.environ.get("SLACK_WORKSPACE_URL", "https://your-workspace.slack.com").rstrip('/')
+        # 중앙 설정 시스템에서 워크스페이스 URL 로드
+        from backend.app.core.config import get_settings
+        settings = get_settings()
+        base_url = settings.slack_workspace_url.rstrip('/')
         workspace_url = f"{base_url}/archives"
         
         for item in parsed_result.candidate_items:
