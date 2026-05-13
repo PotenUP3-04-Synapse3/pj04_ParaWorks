@@ -15,6 +15,7 @@ from backend.app.agents.mail_document_agent.agent import (
 )
 from backend.app.agents.mail_document_agent.service import (
     MAIL_DOCUMENT_SOURCE_TYPES,
+    build_mail_document_agent_preflight,
     build_mail_document_evidence_packet,
     create_mail_document_agent_review_items,
 )
@@ -29,6 +30,7 @@ __all__ = [
     'MailDocumentAgent',
     'MailDocumentAgentModel',
     'MailDocumentAgentModelResponse',
+    'build_mail_document_agent_preflight',
     'build_mail_document_evidence_packet',
     'create_mail_document_agent_review_items',
 ]

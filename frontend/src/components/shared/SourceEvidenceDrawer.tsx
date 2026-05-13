@@ -95,6 +95,16 @@ export function SourceEvidenceDrawer({
                       <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
                         신뢰도 {Math.round(row.confidence_score * 100)}%
                       </span>
+                      {row.source_type ? (
+                        <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                          {sourceTypeLabel(row.source_type)}
+                        </span>
+                      ) : null}
+                      {row.parser_status ? (
+                        <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                          parser {row.parser_status}
+                        </span>
+                      ) : null}
                       {row.importance_score > 0 ? (
                         <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
                           중요도 {row.importance_score}
@@ -109,6 +119,12 @@ export function SourceEvidenceDrawer({
                       ) : null}
                       {row.source_snippet || "표시할 근거 snippet이 없습니다."}
                     </p>
+                    {row.evidence_reason || row.section_path ? (
+                      <div className="mt-3 rounded-md border border-[var(--line-soft)] bg-[var(--glass-strong)] px-3 py-2 text-xs leading-5 text-[var(--ink-muted)]">
+                        {row.evidence_reason ? <p>{row.evidence_reason}</p> : null}
+                        {row.section_path ? <p className="mt-1 font-semibold">위치: {row.section_path}</p> : null}
+                      </div>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-tight">
                       {row.source_id ? <span className="truncate">Source ID: {row.source_id}</span> : null}
                       {row.timestamp ? <span>Time: {row.timestamp}</span> : null}
@@ -151,6 +167,7 @@ function fallbackEvidenceRows(
     rank: index + 1,
     source_id: null,
     source_url: links[index] ?? null,
+    source_type: null,
     source_snippet: snippets[index] ?? "",
     permission_level: "unknown",
     confidence_score: 0,
@@ -158,5 +175,17 @@ function fallbackEvidenceRows(
     timestamp: null,
     author: null,
     agent_run_id: agentRunId ?? null,
+    parser_status: null,
+    section_path: null,
+    evidence_reason: null,
   }));
+}
+
+function sourceTypeLabel(sourceType: string) {
+  if (sourceType === "gmail") return "Gmail";
+  if (sourceType === "gmail_attachment") return "Gmail 첨부";
+  if (sourceType === "drive") return "Drive";
+  if (sourceType === "calendar") return "Calendar";
+  if (sourceType === "slack") return "Slack";
+  return sourceType;
 }

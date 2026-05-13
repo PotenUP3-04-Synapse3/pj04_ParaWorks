@@ -128,3 +128,64 @@ def test_deterministic_mail_document_agent_marks_unsupported_evidence_uncertain(
     assert candidate.uncertainty_reason == (
         'Some document evidence is not body-parsed: drive-hwp-1=unsupported(hwp_parser_not_decided)'
     )
+
+
+def test_deterministic_mail_document_agent_extracts_generic_korean_work_assignment() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:gmail',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-task-1',
+                source_url='https://gmail.mock/task-1',
+                text='Subject: 고객사 공유본 요청\n\n김하나님, 금요일까지 고객사 공유본을 준비해주세요.',
+                author='lead@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+                source_snippet_override='김하나님, 금요일까지 고객사 공유본을 준비해주세요.',
+            ),
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.item_type == 'todo'
+    assert candidate.title == '고객사 공유본 요청'
+    assert candidate.summary == '김하나님, 금요일까지 고객사 공유본을 준비해주세요.'
+    assert candidate.source_snippets == ['김하나님, 금요일까지 고객사 공유본을 준비해주세요.']
+    assert candidate.payload_fields['assignee'] == '김하나'
+    assert candidate.payload_fields['due_date'] == '금요일'
+    assert candidate.payload_fields['task_summary'] == '김하나님, 금요일까지 고객사 공유본을 준비해주세요.'
+    assert candidate.payload_fields['evidence_reason']
+
+
+def test_deterministic_mail_document_agent_extracts_drive_only_assignment() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:drive',
+        messages=[
+            EvidenceMessage(
+                source_id='drive-plan-1',
+                source_url='https://drive.mock/project-alpha/plan',
+                text='프로젝트 Alpha 실행 계획\n\n담당: 이준호\n업무: 제안서 초안 검토\n기한: 2026-05-20',
+                author='owner@example.com',
+                timestamp='2026-05-13T10:00:00+09:00',
+                permission_level='restricted',
+                metadata={'source_type': 'drive', 'parser_status': 'parsed'},
+                source_snippet_override='담당: 이준호 업무: 제안서 초안 검토 기한: 2026-05-20',
+            ),
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.item_type == 'todo'
+    assert candidate.permission_level == 'restricted'
+    assert candidate.payload_fields['assignee'] == '이준호'
+    assert candidate.payload_fields['due_date'] == '2026-05-20'
+    assert '제안서 초안 검토' in candidate.summary
