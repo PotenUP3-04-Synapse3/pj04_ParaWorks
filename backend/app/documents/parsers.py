@@ -104,6 +104,8 @@ def _content_hash(payload: dict[str, object]) -> str:
 
 _PDF_MIME_TYPE = 'application/pdf'
 _DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+_TEXT_PLAIN_MIME_TYPE = 'text/plain'
+_MARKDOWN_MIME_TYPE = 'text/markdown'
 _HWP_MIME_TYPES = frozenset(
     {
         'application/x-hwp',
@@ -129,6 +131,14 @@ def parser_adapter_decision_for_mime_type(mime_type: str) -> ParserAdapterDecisi
             parser_status='parsed',
             parser_status_reason='',
             candidate_package='python-docx',
+            live_enabled=True,
+        )
+    if normalized in (_TEXT_PLAIN_MIME_TYPE, _MARKDOWN_MIME_TYPE):
+        return ParserAdapterDecision(
+            mime_type=normalized,
+            parser_status='parsed',
+            parser_status_reason='',
+            candidate_package='built-in',
             live_enabled=True,
         )
     if normalized in _HWP_MIME_TYPES:
