@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from backend.app.connectors.base import ConnectorManifest
+from backend.app.connectors.google import GOOGLE_CONNECTOR_SCOPES
 from backend.app.connectors.mock import MOCK_CONNECTOR_MANIFESTS
 
 
@@ -21,4 +22,5 @@ def get_connector_manifest(connector_type: str, *, demo_mode: bool = True) -> Co
 def _manifest_for_mode(manifest: ConnectorManifest, *, demo_mode: bool) -> ConnectorManifest:
     if demo_mode:
         return manifest
-    return replace(manifest, mode='live')
+    live_scopes = GOOGLE_CONNECTOR_SCOPES.get(manifest.connector_type, manifest.required_scopes)
+    return replace(manifest, mode='live', required_scopes=live_scopes)
