@@ -69,6 +69,8 @@ class SlackAgentState(BaseModel):
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
     error: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
 
 def calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
     return (prompt_tokens / 1_000_000 * COST_PER_1M_INPUT) + (completion_tokens / 1_000_000 * COST_PER_1M_OUTPUT)
@@ -101,7 +103,7 @@ def preprocess_node(state: SlackAgentState):
 # 5. 노드 구현: 업무 필터링 (Tool: Work Filter / Middleware: Context Compression)
 def classify_work_node(state: SlackAgentState):
     logger.info("[Tool: Work Filter] 저비용 모델로 업무 관련 메시지 선별 중...")
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=state.openai_api_key)
     
     # 메시지 리스트에서 인덱스와 본문만 추출하여 프롬프트 구성
     simple_list = ""
@@ -179,7 +181,7 @@ def summarize_node(state: SlackAgentState):
         logger.info(f"[Middleware: Model Switching] 압축 후에도 내용이 방대하여 고성능 모델({model})을 사용합니다.")
 
     logger.info(f"[Tool: Summarizer] 필터링된 핵심 맥락 요약 중... (사용 모델: {model})")
-    llm = ChatOpenAI(model=model, temperature=0)
+    llm = ChatOpenAI(model=model, temperature=0, api_key=state.openai_api_key)
     
     # 이름 보존을 위한 강력한 지침 추가
     prompt = (
@@ -211,7 +213,7 @@ def extract_candidate_node(state: SlackAgentState):
     current_model = state.model_name
     logger.info(f"[Agent: Knowledge Extractor] 다중 지식 후보 추출 시작. (모델: {current_model})")
     try:
-        llm = ChatOpenAI(model=current_model, temperature=0)
+        llm = ChatOpenAI(model=current_model, temperature=0, api_key=state.openai_api_key)
         structured_llm = llm.with_structured_output(CandidateList)
         
         # 프롬프트에 이름 보존 및 스니펫 형식 지침 강화
@@ -221,7 +223,7 @@ def extract_candidate_node(state: SlackAgentState):
 **필수 준수 사항**:
 1. 사용자 이름(예: [3기/AI] 김종우)은 절대로 변경하거나 성만 떼지 말고, 대화록에 있는 전체 이름 그대로 사용하세요.
 2. source_snippets 배열에는 지식을 뒷받침하는 핵심 발언 원문을 반드시 '[전체 이름] 내용' 포맷으로 채워 넣으세요.
-3. 지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나만 사용하세요.
+3. 지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나로 정확하게 기입하세요 (대소문자 일치).
 
 카테고리 분류 기준:
 - Project (프로젝트): 명확한 기한과 목표가 있는 신규 기획/개발 건
@@ -288,7 +290,7 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
         
     except Exception as e:
         logger.error(f"[Middleware: Fallback] 기본 모델 실패. Gemini 모델로 폴백합니다. Error: {e}")
-        gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro", temperature=0)
+        gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro", temperature=0, google_api_key=state.gemini_api_key)
         
         response = gemini_llm.invoke(f"다음 텍스트에서 주요 결정 사항과 할 일을 추출해 JSON 리스트 형식으로만 답해줘. 사용자 이름은 전체 형식을 유지해줘: {state.summary}")
         
@@ -329,9 +331,14 @@ def build_slack_agent_graph():
     return workflow.compile()
 
 # 9. 실행 엔트리포인트
-def process_daily_slack_sync(channel_id: str, messages: List[dict]):
+def process_daily_slack_sync(channel_id: str, messages: List[dict], openai_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
     app = build_slack_agent_graph()
-    initial_state = SlackAgentState(channel_id=channel_id, messages=messages)
+    initial_state = SlackAgentState(
+        channel_id=channel_id, 
+        messages=messages,
+        openai_api_key=openai_api_key,
+        gemini_api_key=gemini_api_key
+    )
     
     final_state = app.invoke(initial_state)
     
