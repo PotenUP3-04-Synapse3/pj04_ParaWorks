@@ -171,12 +171,14 @@ test("search page behaves like a persisted assistant with compact history and fo
   await expect(page.getByText("ParaWorks RAG")).toHaveCount(0);
   const history = page.getByRole("complementary", { name: "대화 목록" });
   const historyItems = page.getByLabel("대화 히스토리");
-  await expect(history).toHaveAttribute("data-expanded", "true");
-  await page.getByRole("button", { name: "대화 목록 접기" }).click();
   await expect(history).toHaveAttribute("data-expanded", "false");
-  await expect(history).toHaveClass(/w-\[72px\]/);
+  await expect(history).toHaveClass(/w-0/);
+  await expect(history).not.toHaveClass(/w-\[72px\]/);
+  const floatingHistoryButton = page.getByRole("button", { name: "대화 목록 펼치기" });
+  await expect(floatingHistoryButton.locator("div.rounded-full")).toBeVisible();
   await page.getByRole("button", { name: "대화 목록 펼치기" }).click();
   await expect(history).toHaveAttribute("data-expanded", "true");
+  await expect(history).toHaveClass(/w-full/);
   await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
   await history.getByRole("button", { name: "Redis 작업 상태" }).click();
   await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
