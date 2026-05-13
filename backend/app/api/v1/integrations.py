@@ -100,8 +100,8 @@ def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
             'credential_status': 'available' if LOCAL_TOKEN_VAULT.resolve(connection.token_ref) else 'missing',
             'masked_bot_token': connection.masked_bot_token,
             'scopes': connection.scopes,
-        }
-        for connection in connections
+            'credential_status': 'available',
+            }        for connection in connections
     ]
 
 
@@ -292,6 +292,7 @@ def complete_slack_direct_install(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'credential_status': 'available',
     }
 
 
