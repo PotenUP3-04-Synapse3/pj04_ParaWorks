@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -11,10 +12,12 @@ from backend.app.agent_runtime import (
     estimate_agent_run_cost,
 )
 
+# 메일 및 문서 에이전트의 상수 정의
 MAIL_DOCUMENT_AGENT_NAME = 'mail_document_agent'
 MAIL_DOCUMENT_AGENT_PROMPT_VERSION = 'mail-document-history:v1'
 MAIL_DOCUMENT_AGENT_MODEL_NAME = 'fake-mail-document-agent-model'
 
+# 에이전트의 명세(Manifest) 정의: 소유자, 권한, 기능 등을 기술
 MAIL_DOCUMENT_AGENT_MANIFEST = AgentManifest(
     name=MAIL_DOCUMENT_AGENT_NAME,
     owner='Developer B',
@@ -28,46 +31,70 @@ MAIL_DOCUMENT_AGENT_MANIFEST = AgentManifest(
 
 @dataclass(frozen=True)
 class MailDocumentAgentModelResponse:
+    """에이전트 모델의 추출 결과 데이터 구조"""
     title: str
     summary: str
     item_type: str
     confidence_score: float
     input_tokens: int
     output_tokens: int
+    model_name: str | None = None
     uncertainty_reason: str | None = None
+    is_business_related: bool = True
+    project_tag: str | None = None
+    structured_data: dict[str, str] | None = None
 
 
 class MailDocumentAgentModel(Protocol):
+    """에이전트 모델이 구현해야 할 인터페이스(프로토콜)"""
     def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
         raise NotImplementedError
 
 
 class DeterministicMailDocumentAgentModel:
+    """LLM 없이 규칙 기반으로 정보를 추출하는 테스트용 결정론적 모델"""
     def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
         combined_text = '\n'.join(message.text for message in packet.messages)
-        title = 'Mail and document history candidate'
-        summary = 'Gmail and Drive evidence was summarized into a reviewable company memory candidate.'
+        title = '메일 및 문서 히스토리 후보'
+        summary = 'Gmail 및 Google Drive 증거 데이터가 검토 가능한 회사 메모리 후보로 요약되었습니다.'
         item_type = 'history_event'
+        structured_data: dict[str, str] = {}
 
+        assignment = _extract_assignment(packet)
+        if assignment:
+            title = assignment.get('title') or '업무 지시 후보'
+            summary = assignment.get('task_summary') or assignment.get('evidence_sentence') or summary
+            item_type = 'todo'
+            structured_data = assignment
+
+        # 특정 키워드에 따른 결과 분류 로직
         if 'PostgreSQL' in combined_text and 'Redis' in combined_text:
-            title = 'Redis and PostgreSQL responsibility decision'
-            summary = 'Mail and document evidence indicates Redis handles transient job state while PostgreSQL remains the durable source of record.'
-            item_type = 'decision'
+            title = 'Redis 및 PostgreSQL 역할 분담 결정'
+            summary = '메일 및 문서 증거에 따르면, Redis는 일시적인 작업 상태를 처리하고 PostgreSQL은 영구적인 기록 소스로 유지됩니다.'
+            item_type = 'decision_record'
+            structured_data = {'decision_summary': summary, **structured_data}
         elif 'confidential pricing' in combined_text.lower():
-            title = 'Restricted document evidence requires review'
-            summary = 'Drive evidence contains restricted pricing context that should stay behind permission checks.'
+            title = '검토가 필요한 제한된 문서 증거'
+            summary = 'Google Drive 증거에 권한 확인이 필요한 기밀 가격 정보가 포함되어 있습니다.'
             item_type = 'history_event'
         elif 'budget' in combined_text.lower() or 'revenue' in combined_text.lower():
-            title = 'Quarterly budget and revenue strategy updated'
-            summary = 'Parsed document evidence suggests an update to the quarterly budget and hiring plan.'
+            title = '분기별 예산 및 매출 전략 업데이트됨'
+            summary = '파싱된 문서 증거에 따르면 분기별 예산 및 채용 계획이 업데이트되었습니다.'
             item_type = 'history_event'
         elif 'contract review' in combined_text.lower() or 'due friday' in combined_text.lower():
-            title = 'Contract review scheduled'
-            summary = 'Extracted todo item from email/document indicating a contract review needs to be completed by Friday.'
+            title = '계약서 검토 일정 예약됨'
+            summary = '이번 주 금요일까지 계약서 검토를 완료해야 한다는 내용이 이메일/문서에서 추출되었습니다.'
             item_type = 'todo'
+            structured_data = {
+                **structured_data,
+                'task_summary': summary,
+                'due_date': structured_data.get('due_date') or '금요일',
+                'evidence_reason': structured_data.get('evidence_reason') or '기한이 포함된 업무 지시 표현이 있습니다.',
+            }
         elif packet.messages:
             summary = packet.messages[0].source_snippet
 
+        # 토큰 사용량 및 신뢰도 계산 (모의 계산)
         input_tokens = max(1, len(combined_text) // 4)
         output_tokens = max(32, len(summary) // 4)
         confidence_score = 0.8
@@ -83,29 +110,46 @@ class DeterministicMailDocumentAgentModel:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             uncertainty_reason=uncertainty_reason,
+            is_business_related=True,
+            project_tag='General',
+            structured_data=structured_data,
         )
 
 
 @dataclass(frozen=True)
 class MailDocumentAgent:
+    """메일 및 문서 데이터를 처리하여 검토 후보를 생성하는 에이전트 클래스"""
     model: MailDocumentAgentModel
     input_cost_per_1m: float = 0.15
     output_cost_per_1m: float = 0.60
 
     def run(self, packet: EvidencePacket) -> AgentRunResult:
+        """증거 패킷을 입력받아 모델을 실행하고 결과를 AgentRunResult로 반환"""
         model_response = self.model.extract(packet)
-        candidate = ReviewCandidate(
-            item_type=model_response.item_type,
-            title=model_response.title,
-            summary=model_response.summary,
-            source_links=packet.source_links,
-            source_snippets=packet.source_snippets,
-            confidence_score=model_response.confidence_score,
-            permission_level=packet.strictest_permission,
-            uncertainty_reason=model_response.uncertainty_reason,
-        )
-        candidate.validate_evidence()
 
+        candidates = []
+        if model_response.is_business_related:
+            payload_fields = dict(model_response.structured_data or {})
+            if model_response.project_tag:
+                payload_fields['project_tag'] = model_response.project_tag
+
+            # 검토 큐(Review Queue)에 들어갈 후보 생성
+            candidate = ReviewCandidate(
+                item_type=_normalized_item_type(model_response.item_type),
+                title=model_response.title,
+                summary=model_response.summary,
+                source_links=packet.source_links,
+                source_snippets=packet.source_snippets,
+                confidence_score=model_response.confidence_score,
+                permission_level=packet.strictest_permission,
+                uncertainty_reason=model_response.uncertainty_reason,
+                payload_fields=payload_fields,
+            )
+            # 증거 데이터 유효성 검증 (증거 없는 후보 생성 방지)
+            candidate.validate_evidence()
+            candidates.append(candidate)
+
+        # 비용 및 토큰 사용량 기록
         token_usage = TokenUsage(
             input_tokens=model_response.input_tokens,
             output_tokens=model_response.output_tokens,
@@ -117,18 +161,20 @@ class MailDocumentAgent:
             output_cost_per_1m=self.output_cost_per_1m,
             cache_hit=False,
         )
+        # 캐싱을 위한 키 생성
         cache_key = build_evidence_cache_key(packet, MAIL_DOCUMENT_AGENT_PROMPT_VERSION)
 
         return AgentRunResult(
             agent_name=MAIL_DOCUMENT_AGENT_NAME,
             prompt_version=MAIL_DOCUMENT_AGENT_PROMPT_VERSION,
-            candidates=[candidate],
+            candidates=candidates,
             cost=cost,
             cache_key=cache_key,
         )
 
 
 def _parser_uncertainty_reason(packet: EvidencePacket) -> str | None:
+    """문서 파싱 상태가 불완전한 경우 그 이유를 추출하는 헬퍼 함수"""
     uncertain_messages = [
         message
         for message in packet.messages
@@ -147,11 +193,127 @@ def _parser_uncertainty_reason(packet: EvidencePacket) -> str | None:
 
 
 def _parser_uncertainty_confidence(packet: EvidencePacket) -> float:
+    """파싱 상태에 따라 신뢰도 점수를 조정하는 헬퍼 함수"""
     statuses = {
         str(message.metadata.get('parser_status'))
         for message in packet.messages
         if message.metadata.get('source_type') == 'drive'
     }
     if 'unsupported' in statuses:
-        return 0.3
-    return 0.42
+        return 0.3 # 지원되지 않는 형식인 경우 낮은 신뢰도
+    return 0.42 # 일반적인 파싱 오류/제한 사항인 경우 중간 신뢰도
+
+
+def _normalized_item_type(item_type: str) -> str:
+    if item_type == 'decision':
+        return 'decision_record'
+    return item_type
+
+
+def _extract_assignment(packet: EvidencePacket) -> dict[str, str]:
+    for message in packet.messages:
+        text = message.text.strip()
+        if not _looks_like_work_assignment(text):
+            continue
+        sentence = _assignment_sentence(text)
+        assignee = _extract_assignee(text)
+        due_date = _extract_due_date(text, message.metadata)
+        task_summary = _extract_task_summary(text, sentence)
+        title = _extract_subject(text) or task_summary or '업무 지시 후보'
+        fields = {
+            'title': title[:200],
+            'task_summary': (task_summary or sentence or text[:160]).strip()[:500],
+            'evidence_sentence': (sentence or message.source_snippet).strip()[:500],
+            'evidence_reason': '담당자, 기한, 요청/검토/준비 같은 업무 지시 표현이 원문에 포함되어 있습니다.',
+            'source_type': str(message.metadata.get('source_type') or packet.source_type),
+        }
+        if assignee:
+            fields['assignee'] = assignee
+        if due_date:
+            fields['due_date'] = due_date
+        project_tag = _extract_project_tag(text)
+        if project_tag:
+            fields['project_tag'] = project_tag
+        return fields
+    return {}
+
+
+def _looks_like_work_assignment(text: str) -> bool:
+    lowered = text.lower()
+    cues = (
+        '담당',
+        '요청',
+        '검토',
+        '준비',
+        '완료',
+        '기한',
+        '까지',
+        'todo',
+        'due',
+        'owner',
+        'assign',
+        'review by',
+        'please',
+    )
+    return any(cue in lowered for cue in cues)
+
+
+def _assignment_sentence(text: str) -> str:
+    paragraphs = [
+        line.strip()
+        for line in re.split(r'[\n\r]+', text)
+        if line.strip() and not line.strip().lower().startswith('subject:')
+    ]
+    for paragraph in paragraphs:
+        if _looks_like_work_assignment(paragraph):
+            return paragraph
+    sentences = [part.strip() for part in re.split(r'(?<=[.!?。])\s+', text) if part.strip()]
+    for sentence in sentences:
+        if _looks_like_work_assignment(sentence):
+            return sentence
+    return paragraphs[0] if paragraphs else ''
+
+
+def _extract_subject(text: str) -> str:
+    match = re.search(r'(?im)^subject:\s*(.+)$', text)
+    return match.group(1).strip() if match else ''
+
+
+def _extract_assignee(text: str) -> str:
+    label_match = re.search(r'(?:담당|owner|assignee)\s*[:：]\s*([^\n,]+)', text, re.IGNORECASE)
+    if label_match:
+        return _clean_assignee(label_match.group(1))
+    nim_match = re.search(r'([가-힣A-Za-z0-9._+-]{2,40})님[,은는\s]', text)
+    if nim_match:
+        return _clean_assignee(nim_match.group(1))
+    return ''
+
+
+def _clean_assignee(value: str) -> str:
+    return re.sub(r'(님|께서|은|는)$', '', value.strip()).strip()
+
+
+def _extract_due_date(text: str, metadata: dict) -> str:
+    label_match = re.search(r'(?:기한|마감|due(?: date)?)\s*[:：]\s*([^\n,]+)', text, re.IGNORECASE)
+    if label_match:
+        return label_match.group(1).strip()
+    until_match = re.search(r'((?:\d{4}[-./]\d{1,2}[-./]\d{1,2})|(?:이번\s*)?[월화수목금토일]요일|오늘|내일)\s*까지', text)
+    if until_match:
+        return until_match.group(1).strip()
+    start = metadata.get('start')
+    if isinstance(start, str) and start:
+        return start[:10]
+    return ''
+
+
+def _extract_task_summary(text: str, fallback_sentence: str) -> str:
+    task_match = re.search(r'(?:업무|task)\s*[:：]\s*([^\n]+)', text, re.IGNORECASE)
+    if task_match:
+        return task_match.group(1).strip()
+    cleaned = re.sub(r'(?im)^subject:\s*.+$', '', fallback_sentence).strip()
+    return cleaned or fallback_sentence
+
+
+def _extract_project_tag(text: str) -> str:
+    match = re.search(r'(프로젝트\s*[A-Za-z0-9가-힣_-]+|Project\s+[A-Za-z0-9가-힣_-]+)', text, re.IGNORECASE)
+    return match.group(1).strip() if match else ''

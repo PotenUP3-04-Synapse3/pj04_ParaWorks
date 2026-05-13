@@ -1,15 +1,19 @@
 "use client";
 
 import { BarChart3, CalendarDays, CheckCircle2, FolderKanban, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiGet } from "@/lib/api/client";
+import type { ProjectMemory, ProjectsResponse } from "@/lib/api/types";
 
 type Task = {
+  id: string;
   title: string;
   owner: string;
   status: "대기" | "진행 중" | "검토" | "완료";
   start: number;
   span: number;
   date: string;
+  evidenceReason: string;
 };
 
 type Project = {
@@ -25,68 +29,57 @@ type Project = {
   tasks: Task[];
 };
 
-const projects: Project[] = [
-  {
-    id: "orion",
-    name: "프로젝트 ORION",
-    owner: "김하나",
-    status: "요구사항 변경 검토",
-    due: "2026.05.22",
-    progress: 68,
-    risk: "높음",
-    reviewCount: 7,
-    summary: "고객사 요구사항 변경, DB 선정 근거, 공유본 작성을 같은 프로젝트 계획에서 관리합니다.",
-    tasks: [
-      { title: "요구사항 변경안 정리", owner: "김하나", status: "검토", start: 1, span: 3, date: "05.13" },
-      { title: "Oracle DB 선정 근거 확정", owner: "이준호", status: "진행 중", start: 3, span: 4, date: "05.16" },
-      { title: "고객사 공유본 작성", owner: "최유리", status: "대기", start: 6, span: 3, date: "05.20" },
-      { title: "최종 승인 회의", owner: "박지은", status: "대기", start: 9, span: 2, date: "05.22" },
-    ],
-  },
-  {
-    id: "nova",
-    name: "Nova 보안 정책",
-    owner: "박지은",
-    status: "정책 초안 리뷰",
-    due: "2026.05.17",
-    progress: 54,
-    risk: "보통",
-    reviewCount: 4,
-    summary: "보안 점검 결과와 정책 초안을 일정표, 보드, 검토 항목으로 나누어 추적합니다.",
-    tasks: [
-      { title: "정책 초안 리뷰", owner: "박지은", status: "진행 중", start: 1, span: 2, date: "05.12" },
-      { title: "권한 영향 범위 확인", owner: "정민철", status: "검토", start: 3, span: 2, date: "05.14" },
-      { title: "운영팀 공지 작성", owner: "최유리", status: "대기", start: 5, span: 3, date: "05.16" },
-    ],
-  },
-  {
-    id: "atlas",
-    name: "Atlas API 개선",
-    owner: "이준호",
-    status: "성능 개선 실행",
-    due: "2026.05.29",
-    progress: 76,
-    risk: "낮음",
-    reviewCount: 2,
-    summary: "성능 병목, 캐시 정책, 릴리스 노트를 한 프로젝트 보드에서 확인합니다.",
-    tasks: [
-      { title: "병목 구간 정리", owner: "이준호", status: "완료", start: 1, span: 2, date: "05.12" },
-      { title: "캐시 정책 적용", owner: "정민철", status: "진행 중", start: 3, span: 5, date: "05.20" },
-      { title: "릴리스 노트 준비", owner: "김하나", status: "대기", start: 8, span: 2, date: "05.27" },
-    ],
-  },
-];
-
 const views = ["개요", "간트", "일정표", "보드", "목록"] as const;
 type View = (typeof views)[number];
 
 export default function ProjectsPage() {
-  const [selectedProjectId, setSelectedProjectId] = useState(projects[0].id);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [view, setView] = useState<View>("간트");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    apiGet<ProjectsResponse>("/api/v1/projects")
+      .then((response) => {
+        if (!active) return;
+        const mappedProjects = response.projects.map(projectFromMemory);
+        setProjects(mappedProjects);
+        setSelectedProjectId((current) => current || mappedProjects[0]?.id || "");
+      })
+      .catch((caught) => {
+        if (active) setError(caught instanceof Error ? caught.message : "프로젝트 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
-    [selectedProjectId],
+    [projects, selectedProjectId],
   );
+  if (!selectedProject) {
+    return (
+      <div className="reference-dashboard space-y-4">
+        <section className="page-heading reference-heading">
+          <div>
+            <p className="text-[13px] font-bold text-[var(--primary-dark)]">Project Workspace</p>
+            <h1>프로젝트</h1>
+            <p>{loading ? "프로젝트 evidence를 불러오고 있습니다." : error || "Slack 또는 Google을 연동하면 실제 프로젝트 근거가 표시됩니다."}</p>
+          </div>
+          <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
+            <FolderKanban className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+            0개 프로젝트
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="reference-dashboard space-y-4">
@@ -169,6 +162,60 @@ export default function ProjectsPage() {
   );
 }
 
+function projectFromMemory(memory: ProjectMemory): Project {
+  const tasks = memory.evidence.map((evidence, index) => ({
+    id: evidence.id || `${memory.project_key}:${evidence.source_id}:${index}`,
+    title: cleanTaskTitle(evidence.title || evidence.task_summary || evidence.source_snippet, evidence.source_type),
+    owner: sourceTypeLabel(evidence.source_type),
+    status: taskStatus(evidence.source_type),
+    start: Math.min(index + 1, 9),
+    span: Math.min(Math.max(2, Math.ceil((evidence.source_snippet.length || 80) / 80)), 4),
+    date: formatShortDate(evidence.timestamp),
+    evidenceReason: evidence.evidence_reason,
+  }));
+  return {
+    id: memory.project_key,
+    name: memory.name,
+    owner: memory.source_types.map(sourceTypeLabel).join(", ") || "Source",
+    status: `${memory.evidence_count.toLocaleString()}개 evidence 연결`,
+    due: formatShortDate(memory.latest_timestamp),
+    progress: Math.min(90, 30 + memory.evidence_count * 15),
+    risk: memory.permission_level === "restricted" ? "높음" : memory.evidence_count >= 3 ? "보통" : "낮음",
+    reviewCount: memory.pending_review_count,
+    summary: memory.summary,
+    tasks,
+  };
+}
+
+function cleanTaskTitle(value: string, sourceType: string) {
+  const title = value.trim();
+  if (!title) return `${sourceTypeLabel(sourceType)} evidence`;
+  if (/^slack (message|thread reply) in /i.test(title)) return "Slack 업무 evidence";
+  return title.length > 120 ? `${title.slice(0, 117)}...` : title;
+}
+
+function taskStatus(sourceType: string): Task["status"] {
+  if (sourceType === "calendar") return "대기";
+  if (sourceType === "drive") return "검토";
+  if (sourceType === "slack") return "진행 중";
+  return "대기";
+}
+
+function sourceTypeLabel(sourceType: string) {
+  if (sourceType === "gmail") return "Gmail";
+  if (sourceType === "gmail_attachment") return "Gmail 첨부";
+  if (sourceType === "drive") return "Drive";
+  if (sourceType === "calendar") return "Calendar";
+  if (sourceType === "slack") return "Slack";
+  return sourceType;
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "기한 없음";
+  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(date);
+}
+
 function ProjectMetric({ icon: Icon, label, value }: { icon: typeof FolderKanban; label: string; value: string }) {
   return (
     <div className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
@@ -192,7 +239,7 @@ function Overview({ project }: { project: Project }) {
         </div>
         <div className="mt-4 grid gap-2">
           {project.tasks.map((task) => (
-            <TaskRow key={task.title} task={task} />
+            <TaskRow key={task.id} task={task} />
           ))}
         </div>
       </div>
@@ -216,7 +263,7 @@ function GanttView({ tasks }: { tasks: Task[] }) {
         ))}
       </div>
       {tasks.map((task) => (
-        <div key={task.title} className="grid grid-cols-[160px_repeat(10,minmax(32px,1fr))] items-center gap-2">
+        <div key={task.id} className="grid grid-cols-[160px_repeat(10,minmax(32px,1fr))] items-center gap-2">
           <div className="min-w-0">
             <p className="truncate text-[13px] font-extrabold text-ink">{task.title}</p>
             <p className="text-[11px] text-muted">{task.owner}</p>
@@ -236,7 +283,7 @@ function CalendarView({ tasks }: { tasks: Task[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-4">
       {tasks.map((task) => (
-        <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+        <article key={task.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
           <p className="text-[12px] font-extrabold text-[var(--primary-dark)]">{task.date}</p>
           <h3 className="mt-2 text-[14px] font-extrabold text-ink">{task.title}</h3>
           <p className="mt-2 text-[12px] text-muted">{task.owner} · {task.status}</p>
@@ -255,7 +302,7 @@ function BoardView({ tasks }: { tasks: Task[] }) {
           <h3 className="text-[13px] font-extrabold text-ink">{column}</h3>
           <div className="mt-3 space-y-2">
             {tasks.filter((task) => task.status === column).map((task) => (
-              <TaskCard key={task.title} task={task} />
+              <TaskCard key={task.id} task={task} />
             ))}
           </div>
         </section>
@@ -274,7 +321,7 @@ function ListView({ tasks }: { tasks: Task[] }) {
         <span>마감</span>
       </div>
       {tasks.map((task) => (
-        <div key={task.title} className="grid grid-cols-[1fr_120px_100px_80px] gap-3 border-b border-line px-4 py-3 text-[13px] last:border-b-0">
+        <div key={task.id} className="grid grid-cols-[1fr_120px_100px_80px] gap-3 border-b border-line px-4 py-3 text-[13px] last:border-b-0">
           <span className="font-bold text-ink">{task.title}</span>
           <span className="text-muted">{task.owner}</span>
           <span className="text-muted">{task.status}</span>

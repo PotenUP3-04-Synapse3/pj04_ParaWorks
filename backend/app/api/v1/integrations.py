@@ -7,10 +7,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import EvidencePacket, PermissionContext
+from backend.app.agent_runtime.company_memory import (
+    run_company_memory_agent_orchestration,
+)
 from backend.app.agents.mail_document_agent import (
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
+    build_mail_document_agent_preflight,
     create_mail_document_agent_review_items,
+)
+from backend.app.agents.memory_extraction_agent import (
+    build_memory_extraction_agent_preflight,
 )
 from backend.app.agents.slack_agent import (
     DeterministicSlackAgentModel,
@@ -22,7 +29,11 @@ from backend.app.agents.slack_agent import (
     build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
-from backend.app.connectors.factory import get_sync_connector
+from backend.app.agents.slack_agent.sync_service import trigger_slack_agent_analysis
+from backend.app.connectors.factory import (
+    ConnectorNotConfiguredError,
+    get_sync_connector,
+)
 from backend.app.connectors.google_oauth import (
     GOOGLE_OAUTH_CONNECTOR_TYPES,
     GoogleOAuthConfigurationError,
@@ -38,6 +49,7 @@ from backend.app.connectors.slack_oauth import (
     LOCAL_TOKEN_VAULT,
     SlackOAuthConfigurationError,
     build_slack_oauth_install_url,
+    complete_slack_direct_connect,
     complete_slack_oauth_callback,
 )
 from backend.app.core.config import Settings, get_settings
@@ -66,7 +78,7 @@ SYNC_REQUEST_BODY = Body(default=None)
 
 
 @router.get('')
-def list_integrations() -> list[dict[str, object]]:
+def list_integrations(settings: AppSettings) -> list[dict[str, object]]:
     return [
         {
             'type': manifest.connector_type,
@@ -78,7 +90,7 @@ def list_integrations() -> list[dict[str, object]]:
             'sync_strategy': manifest.sync_strategy,
             'cost_policy': manifest.cost_policy,
         }
-        for manifest in list_connector_manifests()
+        for manifest in list_connector_manifests(demo_mode=settings.paraworks_demo_mode)
     ]
 
 
@@ -192,17 +204,40 @@ def sync_connector(
         if request is not None and request.selected_channel_ids is not None and connector_type == 'slack'
         else None
     )
-    connector = get_sync_connector(
-        connector_type,
-        settings,
-        db=db,
-        slack_channel_ids_override=selected_channel_ids,
-    )
+    agent_review_items = 0
     try:
+        connector = get_sync_connector(
+            connector_type,
+            settings,
+            db=db,
+            slack_channel_ids_override=selected_channel_ids,
+        )
         result = sync_connector_events(db=db, connector=connector)
+        
+        # 동기화 성공 시 지식 추출 에이전트 오케스트레이션 트리거
+        if result.status == 'complete':
+            orch_result = run_company_memory_agent_orchestration(
+                db=db,
+                user=user,
+                question=f"Analyze recently synced data from {connector_type}",
+            )
+            agent_review_items = (
+                orch_result.outputs.get('slack_review_items_created', 0) +
+                orch_result.outputs.get('mail_document_review_items_created', 0) +
+                orch_result.outputs.get('memory_review_items_created', 0)
+            )
+
+            # Slack인 경우 기존의 상세 분석도 함께 수행
+            if connector_type == 'slack':
+                agent_review_items += trigger_slack_agent_analysis(db=db, days=7) or 0
+
+    except ConnectorNotConfiguredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     parser_status_counts = getattr(result, 'parser_status_counts', {})
+
+    total_review_items = result.created_review_items + agent_review_items
 
     record_audit_log(
         db=db,
@@ -213,10 +248,11 @@ def sync_connector(
         metadata={
             'job_id': result.job_id,
             'fetched_events': result.fetched_events,
-            'created_review_items': result.created_review_items,
+            'created_review_items': total_review_items,
             'skipped_events': result.skipped_events,
             'parser_status_counts': parser_status_counts,
             'selected_channel_ids': selected_channel_ids,
+            'agent_generated_items': agent_review_items,
         },
     )
     db.commit()
@@ -225,7 +261,7 @@ def sync_connector(
         'job_id': result.job_id,
         'connector_type': connector_type,
         'status': result.status,
-        'created_review_items': result.created_review_items,
+        'created_review_items': total_review_items,
         'fetched_events': result.fetched_events,
         'skipped_events': result.skipped_events,
         'parser_status_counts': parser_status_counts,
@@ -233,9 +269,12 @@ def sync_connector(
 
 
 @router.get('/slack/oauth/install-url')
-def get_slack_oauth_install_url(settings: AppSettings) -> dict[str, object]:
+def get_slack_oauth_install_url(
+    settings: AppSettings,
+    redirect_uri: str | None = None,
+) -> dict[str, object]:
     try:
-        install = build_slack_oauth_install_url(settings=settings)
+        install = build_slack_oauth_install_url(settings=settings, redirect_uri=redirect_uri)
     except SlackOAuthConfigurationError:
         return {
             'connector_type': 'slack',
@@ -251,22 +290,19 @@ def get_slack_oauth_install_url(settings: AppSettings) -> dict[str, object]:
         'install_url': install.install_url,
         'state': install.state,
         'required_scopes': install.required_scopes,
+        'code_verifier': install.code_verifier,
     }
 
 
-@router.get('/slack/oauth/callback')
-def complete_slack_oauth_install(
-    code: str,
-    state: str,
+@router.post('/slack/direct-connect')
+def complete_slack_direct_install(
     db: DbSession,
     settings: AppSettings,
 ) -> dict[str, object]:
     try:
-        connection = complete_slack_oauth_callback(
+        connection = complete_slack_direct_connect(
             db=db,
             settings=settings,
-            code=code,
-            state=state,
         )
     except SlackOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -280,16 +316,57 @@ def complete_slack_oauth_install(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'credential_status': 'available',
+    }
+
+
+@router.get('/slack/oauth/callback')
+def complete_slack_oauth_install(
+    code: str,
+    state: str,
+    db: DbSession,
+    settings: AppSettings,
+    redirect_uri: str | None = None,
+) -> dict[str, object]:
+    try:
+        connection = complete_slack_oauth_callback(
+            db=db,
+            settings=settings,
+            code=code,
+            state=state,
+            redirect_uri=redirect_uri,
+        )
+    except SlackOAuthConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SlackApiError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        'connector_type': connection.connector_type,
+        'status': connection.status,
+        'workspace_id': connection.workspace_id,
+        'workspace_name': connection.workspace_name,
+        'masked_bot_token': connection.masked_bot_token,
+        'scopes': connection.scopes,
+        'pkce_used': connection.raw_metadata.get('pkce_used', False),
     }
 
 
 @router.get('/{connector_type}/oauth/install-url')
-def get_google_oauth_install_url(connector_type: str, settings: AppSettings) -> dict[str, object]:
+def get_google_oauth_install_url(
+    connector_type: str,
+    settings: AppSettings,
+    redirect_uri: str | None = None,
+) -> dict[str, object]:
     if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
 
     try:
-        install = build_google_oauth_install_url(settings=settings, connector_type=connector_type)
+        install = build_google_oauth_install_url(
+            settings=settings,
+            connector_type=connector_type,
+            redirect_uri=redirect_uri,
+        )
     except GoogleOAuthConfigurationError:
         return {
             'connector_type': connector_type,
@@ -307,6 +384,7 @@ def get_google_oauth_install_url(connector_type: str, settings: AppSettings) -> 
         'install_url': install.install_url,
         'state': install.state,
         'required_scopes': install.required_scopes,
+        'code_verifier': install.code_verifier,
     }
 
 
@@ -316,6 +394,7 @@ def complete_google_oauth_install_from_state(
     state: str,
     db: DbSession,
     settings: AppSettings,
+    redirect_uri: str | None = None,
 ) -> dict[str, object]:
     try:
         connector_type = GoogleOAuthStateSigner(settings.google_oauth_state_secret).validate(state).connector_type
@@ -326,6 +405,7 @@ def complete_google_oauth_install_from_state(
             code=code,
             state=state,
             token_vault=LOCAL_TOKEN_VAULT,
+            redirect_uri=redirect_uri,
         )
     except GoogleOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -339,6 +419,7 @@ def complete_google_oauth_install_from_state(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'pkce_used': connection.raw_metadata.get('pkce_used', False),
     }
 
 
@@ -349,6 +430,7 @@ def complete_google_oauth_install(
     state: str,
     db: DbSession,
     settings: AppSettings,
+    redirect_uri: str | None = None,
 ) -> dict[str, object]:
     if connector_type not in GOOGLE_OAUTH_CONNECTOR_TYPES:
         raise HTTPException(status_code=404, detail='Connector not found')
@@ -361,6 +443,7 @@ def complete_google_oauth_install(
             code=code,
             state=state,
             token_vault=LOCAL_TOKEN_VAULT,
+            redirect_uri=redirect_uri,
         )
     except GoogleOAuthConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -374,7 +457,41 @@ def complete_google_oauth_install(
         'workspace_name': connection.workspace_name,
         'masked_bot_token': connection.masked_bot_token,
         'scopes': connection.scopes,
+        'pkce_used': connection.raw_metadata.get('pkce_used', False),
     }
+
+
+@router.delete('/{connector_type}')
+def disconnect_connector(
+    connector_type: str,
+    db: DbSession,
+    user: CurrentUser,
+) -> dict[str, str]:
+    connection = db.scalar(
+        select(IntegrationConnection)
+        .where(IntegrationConnection.connector_type == connector_type)
+        .order_by(IntegrationConnection.id.desc())
+    )
+    if not connection:
+        raise HTTPException(status_code=404, detail='Connection not found')
+
+    # Remove token from vault
+    LOCAL_TOKEN_VAULT.remove_token(connection.token_ref)
+    
+    # Remove from database
+    db.delete(connection)
+    db.commit()
+
+    record_audit_log(
+        db=db,
+        actor=user,
+        action='integration.disconnect',
+        target_type='connector',
+        target_id=connector_type,
+        metadata={'workspace_name': connection.workspace_name},
+    )
+
+    return {'status': 'disconnected', 'connector_type': connector_type}
 
 
 @router.post('/slack/agent-review')
@@ -497,6 +614,24 @@ def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str
         'status': 'complete',
         'created_review_items': len(review_items),
     }
+
+
+@router.get('/mail-docs/agent-review/llm/preflight')
+def get_mail_document_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
+    return build_mail_document_agent_preflight(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window='mail-docs:preflight',
+    )
+
+
+@router.get('/memory-extraction/agent-review/llm/preflight')
+def get_memory_extraction_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
+    return build_memory_extraction_agent_preflight(
+        db=db,
+        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        source_window='memory-extraction:preflight',
+    )
 
 
 def _configured_channel_ids(raw_channel_ids: str) -> list[str]:

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ScrollText, ShieldCheck, UserCog, UsersRound } from "lucide-react";
+import { AlertTriangle, LockKeyhole, ScrollText, ShieldCheck, UserCog, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPatch } from "@/lib/api/client";
@@ -117,24 +117,27 @@ export default function AdminPage() {
   }, [users]);
 
   if (loading) {
-    return <div className="liquid-surface rounded-lg p-6 text-sm text-[var(--ink-muted)]">{text.loading}</div>;
+    return <div className="panel reference-panel text-sm text-muted">{text.loading}</div>;
   }
 
   if (error) {
     return (
-      <div className="space-y-5">
-        <section className="liquid-surface rounded-lg p-6">
+      <div className="reference-dashboard space-y-5">
+        <section className="panel reference-panel">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
+            <span className="source-icon calendar">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            </span>
             <div>
-              <h1 className="text-2xl font-semibold tracking-normal">{error}</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">{text.permissionDescription}</p>
+              <p className="text-[13px] font-bold text-[var(--primary-dark)]">Workspace Admin</p>
+              <h1 className="mt-1 text-2xl font-extrabold tracking-normal text-ink">{error}</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{text.permissionDescription}</p>
             </div>
           </div>
         </section>
         <Link
           href="/login"
-          className="liquid-primary inline-flex h-11 items-center justify-center rounded-[24px] px-5 text-sm font-semibold"
+          className="primary-action w-fit px-5"
         >
           {text.loginAsAdmin}
         </Link>
@@ -143,57 +146,66 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="liquid-surface rounded-lg p-5 md:p-7">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Workspace Admin</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal">{text.title}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">{text.description}</p>
-          </div>
-          <div className="liquid-primary inline-flex w-fit items-center gap-2 rounded-[24px] px-4 py-3 text-sm font-semibold">
-            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Admin verified
-          </div>
+    <div className="reference-dashboard space-y-5">
+      <section className="page-heading reference-heading">
+        <div>
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Workspace Admin</p>
+          <h1>{text.title}</h1>
+          <p>{text.description}</p>
+        </div>
+        <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold text-[var(--ink-subtle)]">
+          <ShieldCheck className="h-4 w-4 text-[var(--success)]" aria-hidden="true" />
+          Admin verified
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <MetricCard label={text.total} value={metrics.total} icon={UsersRound} />
-        <MetricCard label={text.admins} value={metrics.adminCount} icon={ShieldCheck} />
-        <MetricCard label={text.employees} value={metrics.employeeCount} icon={UserCog} />
-        <MetricCard label={text.restrictedAccess} value={metrics.restrictedCount} icon={ShieldCheck} />
+      <section className="grid gap-3 md:grid-cols-4">
+        <MetricCard label={text.total} value={metrics.total} icon={UsersRound} detail="registered users" />
+        <MetricCard label={text.admins} value={metrics.adminCount} icon={ShieldCheck} detail="workspace admins" />
+        <MetricCard label={text.employees} value={metrics.employeeCount} icon={UserCog} detail="non-admin accounts" />
+        <MetricCard label={text.restrictedAccess} value={metrics.restrictedCount} icon={LockKeyhole} detail="restricted scope" />
       </section>
 
-      <section className="liquid-surface overflow-hidden rounded-lg">
-        <div className="border-b border-[var(--line-soft)] px-5 py-4">
-          <h2 className="text-base font-semibold">{text.usersAndPermissions}</h2>
-          <p className="mt-1 text-sm text-[var(--ink-muted)]">{text.permissionNote}</p>
+      <section className="panel reference-panel overflow-hidden p-0">
+        <div className="activity-toolbar px-5 py-4">
+          <div>
+            <div className="reference-panel-title">
+              <h2>{text.usersAndPermissions}</h2>
+              <span>{users.length.toLocaleString("ko-KR")}</span>
+            </div>
+            <p className="mt-1 text-[13px] leading-5 text-muted">{text.permissionNote}</p>
+          </div>
+          <div className="toolbar-actions">
+            <button type="button" aria-disabled="true">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              RBAC active
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="text-xs uppercase text-[var(--ink-muted)]">
-              <tr className="border-b border-[var(--line-soft)]">
-                <th className="px-5 py-3 font-semibold">{text.account}</th>
-                <th className="px-5 py-3 font-semibold">{text.role}</th>
-                <th className="px-5 py-3 font-semibold">{text.status}</th>
-                <th className="px-5 py-3 font-semibold">{text.department}</th>
-                <th className="px-5 py-3 font-semibold">{text.scope}</th>
+          <table className="admin-table w-full min-w-[900px] text-left text-sm">
+            <thead>
+              <tr>
+                <th>{text.account}</th>
+                <th>{text.role}</th>
+                <th>{text.status}</th>
+                <th>{text.department}</th>
+                <th>{text.scope}</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="border-b border-[var(--line-soft)] last:border-0">
-                  <td className="px-5 py-4">
-                    <p className="font-semibold text-[var(--ink-strong)]">{user.name}</p>
-                    <p className="text-xs text-[var(--ink-muted)]">{user.email}</p>
+                <tr key={user.id}>
+                  <td>
+                    <p className="font-extrabold text-ink">{user.name}</p>
+                    <p className="mt-1 text-xs text-muted">{user.email}</p>
                   </td>
-                  <td className="px-5 py-4">
+                  <td>
                     <select
                       value={user.role}
                       disabled={savingUserId === user.id}
                       onChange={(event) => void updateUser(user, { role: event.target.value })}
-                      className="liquid-control rounded-full px-3 py-2 text-xs font-semibold outline-none"
+                      className="admin-select"
                       aria-label={`${user.email} role`}
                     >
                       {ROLE_OPTIONS.map((role) => (
@@ -203,12 +215,12 @@ export default function AdminPage() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-5 py-4">
+                  <td>
                     <select
                       value={user.status ?? "active"}
                       disabled={savingUserId === user.id}
                       onChange={(event) => void updateUser(user, { status: event.target.value })}
-                      className="liquid-control rounded-full px-3 py-2 text-xs font-semibold outline-none"
+                      className="admin-select"
                       aria-label={`${user.email} status`}
                     >
                       {STATUS_OPTIONS.map((status) => (
@@ -218,11 +230,11 @@ export default function AdminPage() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-5 py-4 text-[var(--ink-muted)]">
-                    <p className="font-medium text-[var(--ink-strong)]">{user.department}</p>
-                    <p className="text-xs">{user.title}</p>
+                  <td>
+                    <p className="font-bold text-ink">{user.department}</p>
+                    <p className="mt-1 text-xs text-muted">{user.title}</p>
                   </td>
-                  <td className="px-5 py-4">
+                  <td>
                     <div className="flex flex-wrap gap-2">
                       {PERMISSION_OPTIONS.map((level) => {
                         const enabled = user.permission_levels.includes(level);
@@ -235,10 +247,10 @@ export default function AdminPage() {
                           key={level}
                           disabled={savingUserId === user.id}
                           onClick={() => void updateUser(user, { permission_levels: nextLevels })}
-                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                          className={`admin-permission-pill ${
                             enabled
-                              ? "liquid-primary border-transparent"
-                              : "border-[var(--line-soft)] text-[var(--ink-muted)]"
+                              ? "active"
+                              : ""
                           }`}
                         >
                           {level}
@@ -254,55 +266,58 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section className="liquid-surface overflow-hidden rounded-lg">
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--line-soft)] px-5 py-4">
+      <section className="panel reference-panel overflow-hidden p-0">
+        <div className="activity-toolbar px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold">{text.auditLogs}</h2>
-            <p className="mt-1 text-sm text-[var(--ink-muted)]">{text.auditNote}</p>
+            <div className="reference-panel-title">
+              <h2>{text.auditLogs}</h2>
+              <span>{auditLogs.length.toLocaleString("ko-KR")}</span>
+            </div>
+            <p className="mt-1 text-[13px] leading-5 text-muted">{text.auditNote}</p>
           </div>
-          <div className="liquid-control hidden items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold md:inline-flex">
+          <div className="hidden items-center gap-2 rounded-lg border border-line bg-surface-soft px-3 py-2 text-xs font-bold text-[var(--ink-subtle)] md:inline-flex">
             <ScrollText className="h-4 w-4" aria-hidden="true" />
             {auditLogs.length.toLocaleString()}
           </div>
         </div>
         {auditLogs.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="text-xs uppercase text-[var(--ink-muted)]">
-                <tr className="border-b border-[var(--line-soft)]">
-                  <th className="px-5 py-3 font-semibold">{text.action}</th>
-                  <th className="px-5 py-3 font-semibold">{text.target}</th>
-                  <th className="px-5 py-3 font-semibold">{text.actor}</th>
-                  <th className="px-5 py-3 font-semibold">{text.status}</th>
-                  <th className="px-5 py-3 font-semibold">{text.time}</th>
+            <table className="admin-table w-full min-w-[860px] text-left text-sm">
+              <thead>
+                <tr>
+                  <th>{text.action}</th>
+                  <th>{text.target}</th>
+                  <th>{text.actor}</th>
+                  <th>{text.status}</th>
+                  <th>{text.time}</th>
                 </tr>
               </thead>
               <tbody>
                 {auditLogs.map((log) => (
-                  <tr key={log.id} className="border-b border-[var(--line-soft)] last:border-0">
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-[var(--ink-strong)]">{formatAction(log.action)}</p>
-                      <p className="text-xs text-[var(--ink-muted)]">{metadataSummary(log.metadata)}</p>
+                  <tr key={log.id}>
+                    <td>
+                      <p className="font-extrabold text-ink">{formatAction(log.action)}</p>
+                      <p className="mt-1 text-xs text-muted">{metadataSummary(log.metadata)}</p>
                     </td>
-                    <td className="px-5 py-4 text-[var(--ink-muted)]">
-                      <p className="font-medium text-[var(--ink-strong)]">{log.target_type}</p>
-                      <p className="text-xs">{log.target_id ?? "-"}</p>
+                    <td>
+                      <p className="font-bold text-ink">{log.target_type}</p>
+                      <p className="mt-1 text-xs text-muted">{log.target_id ?? "-"}</p>
                     </td>
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-[var(--ink-strong)]">{log.actor_email}</p>
-                      <p className="text-xs text-[var(--ink-muted)]">{log.actor_role}</p>
+                    <td>
+                      <p className="font-bold text-ink">{log.actor_email}</p>
+                      <p className="mt-1 text-xs text-muted">{log.actor_role}</p>
                     </td>
-                    <td className="px-5 py-4">
-                      <span className="liquid-control rounded-full px-3 py-1 text-xs font-semibold">{log.status}</span>
+                    <td>
+                      <span className="admin-status-pill">{log.status}</span>
                     </td>
-                    <td className="px-5 py-4 text-xs text-[var(--ink-muted)]">{formatDate(log.created_at)}</td>
+                    <td className="text-xs text-muted">{formatDate(log.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p className="px-5 py-6 text-sm text-[var(--ink-muted)]">{text.noAuditLogs}</p>
+          <p className="px-5 py-6 text-sm text-muted">{text.noAuditLogs}</p>
         )}
       </section>
     </div>
@@ -311,14 +326,17 @@ export default function AdminPage() {
 
 type MetricIcon = typeof ShieldCheck;
 
-function MetricCard({ label, value, icon: Icon }: { label: string; value: number; icon: MetricIcon }) {
+function MetricCard({ label, value, icon: Icon, detail }: { label: string; value: number; icon: MetricIcon; detail: string }) {
   return (
-    <article className="liquid-surface rounded-[26px] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-[var(--ink-muted)]">{label}</p>
-        <Icon className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
+    <article className="source-metric-card min-h-[7rem]">
+      <div>
+        <p>{label}</p>
+        <span className="source-logo blue">
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
       </div>
-      <p className="mt-2 text-2xl font-semibold">{value.toLocaleString()}</p>
+      <b>{value.toLocaleString("ko-KR")}</b>
+      <p>{detail}</p>
     </article>
   );
 }

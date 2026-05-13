@@ -18,12 +18,15 @@ from backend.app.core.config import Settings
 from backend.app.models import IntegrationConnection
 
 
+class ConnectorNotConfiguredError(RuntimeError):
+    pass
+
+
 def get_configured_connector(connector_type: str, settings: Settings) -> Connector:
     if (
         connector_type == 'slack'
         and not settings.paraworks_demo_mode
         and settings.slack_bot_token
-        and settings.slack_channel_ids.strip()
     ):
         channel_ids = _parse_csv(settings.slack_channel_ids)
         return SlackConnector(
@@ -33,6 +36,11 @@ def get_configured_connector(connector_type: str, settings: Settings) -> Connect
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
+        )
+
+    if not settings.paraworks_demo_mode:
+        raise ConnectorNotConfiguredError(
+            f'{connector_type} connector is not connected. Complete OAuth or configure credentials before syncing.'
         )
 
     if connector_type not in CONNECTOR_TYPES:
@@ -48,11 +56,15 @@ def get_sync_connector(
     token_vault: LocalTokenVault = LOCAL_TOKEN_VAULT,
     slack_channel_ids_override: list[str] | None = None,
 ) -> Connector:
-    if (
-        connector_type == 'slack'
-        and not settings.paraworks_demo_mode
-        and settings.slack_channel_ids.strip()
-    ):
+    # 데모 모드인 경우 무조건 Mock 커넥터 반환 (우선순위 1)
+    if settings.paraworks_demo_mode:
+        if connector_type.startswith('mock-'):
+            connector_type = connector_type.replace('mock-', '')
+        if connector_type in CONNECTOR_TYPES:
+            return get_mock_connector(connector_type)
+
+    # 실제 연동 확인 (설치된 커넥터)
+    if connector_type == 'slack':
         installed_connector = _get_installed_slack_connector(
             settings=settings,
             db=db,
@@ -61,26 +73,31 @@ def get_sync_connector(
         )
         if installed_connector is not None:
             return installed_connector
+            
+    # 설치된 커넥터가 없거나 토큰이 없는 경우 .env 폴백 (로컬 개발용)
     if (
         connector_type == 'slack'
-        and not settings.paraworks_demo_mode
         and settings.slack_bot_token
-        and settings.slack_channel_ids.strip()
-        and slack_channel_ids_override is not None
     ):
         return SlackConnector(
             config=SlackConnectorConfig(
                 bot_token=settings.slack_bot_token,
-                channel_ids=_clean_channel_ids(slack_channel_ids_override),
+                channel_ids=(
+                    _clean_channel_ids(slack_channel_ids_override)
+                    if slack_channel_ids_override is not None
+                    else _parse_csv(settings.slack_channel_ids)
+                ),
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
         )
-    if connector_type in GOOGLE_CONNECTOR_TYPES and not settings.paraworks_demo_mode:
+
+    if connector_type in GOOGLE_CONNECTOR_TYPES:
         installed_connector = _get_installed_google_connector(
             connector_type=connector_type,
             db=db,
             token_vault=token_vault,
+            settings=settings,
         )
         if installed_connector is not None:
             return installed_connector
@@ -148,6 +165,7 @@ def _get_installed_google_connector(
     connector_type: str,
     db: Session | None,
     token_vault: LocalTokenVault,
+    settings: Settings,
 ) -> GoogleConnector | None:
     if db is None:
         return None
@@ -167,6 +185,21 @@ def _get_installed_google_connector(
     oauth_token = token_vault.resolve(connection.token_ref)
     if not oauth_token:
         return None
+
+    # kjw: If it's a refresh token, we MUST exchange it for an access token before sync.
+    # Otherwise, Google APIs will reject "Bearer <refresh_token>" calls.
+    if connection.raw_metadata.get('token_kind') == 'refresh_token':
+        from backend.app.connectors.google_oauth import GoogleOAuthClient
+        try:
+            client = GoogleOAuthClient(
+                client_id=settings.google_client_id,
+                client_secret=settings.google_client_secret,
+            )
+            access = client.refresh_access_token(refresh_token=oauth_token)
+            oauth_token = access.access_token
+        except Exception:
+            # Fallback to stored token and let it fail normally in the connector
+            pass
 
     return GoogleConnector(
         config=GoogleConnectorConfig(

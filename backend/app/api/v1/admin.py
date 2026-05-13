@@ -5,11 +5,19 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.core.demo_auth import DemoUser, USERS, find_demo_user, require_admin_user
-from backend.app.core.rbac import validate_permission_levels, validate_role, validate_status
-from backend.app.core.session_auth import serialize_auth_user, upsert_auth_user_from_demo
+from backend.app.core.demo_auth import DemoUser, find_demo_user, require_admin_user
+from backend.app.core.rbac import (
+    validate_permission_levels,
+    validate_role,
+    validate_status,
+)
+from backend.app.core.session_auth import (
+    serialize_auth_user,
+    upsert_auth_user_from_demo,
+)
 from backend.app.db.session import get_db
 from backend.app.models import AuditLog, AuthUser
+from backend.app.seeds.auth_users import seed_auth_users
 from backend.app.services.audit import record_audit_log, serialize_audit_log
 
 router = APIRouter(prefix='/admin', tags=['admin'])
@@ -81,8 +89,7 @@ def update_admin_user(
 
 
 def _ensure_seed_auth_users(db: Session) -> None:
-    for demo_user in USERS.values():
-        upsert_auth_user_from_demo(db, demo_user)
+    seed_auth_users(db)
 
 
 def _get_or_seed_auth_user(db: Session, external_id: str) -> AuthUser:

@@ -7,12 +7,15 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
     paraworks_env: str = 'local'
-    paraworks_demo_mode: bool = True
+    paraworks_demo_mode: bool = False
+    paraworks_seed_demo_data: bool = False
+    paraworks_database_url: str | None = None
+    paraworks_demo_database_url: str | None = None
     auth_session_cookie_name: str = 'paraworks_session'
     auth_refresh_cookie_name: str = 'paraworks_refresh'
     auth_session_secret: str = 'local-development-session-secret'
-    auth_session_ttl_seconds: int = 900
-    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 14
+    auth_session_ttl_seconds: int = 60 * 60 * 24 * 30
+    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 30
     auth_cookie_secure: bool = False
     auth_csrf_cookie_name: str = 'paraworks_csrf'
     auth_csrf_header_name: str = 'X-CSRF-Token'
@@ -38,11 +41,18 @@ class Settings(BaseSettings):
     agent_llm_max_output_tokens: int = 512
     agent_llm_temperature: float = 0.2
     agent_llm_timeout_seconds: float = 30.0
+    assistant_email_agent_enabled: bool = True
+    assistant_email_agent_model: str = 'gpt-4.1-nano'
+    assistant_email_agent_max_input_chars: int = 2500
+    assistant_email_agent_max_output_tokens: int = 256
+    assistant_email_agent_temperature: float = 0.0
+    assistant_email_agent_timeout_seconds: float = 12.0
     rag_embedding_max_estimated_cost_usd: float | None = 0.001
     rag_use_pgvector_search: bool = False
     slack_bot_token: str | None = None
+    slack_user_token: str | None = None
     slack_channel_ids: str = ''
-    slack_workspace_url: str = 'https://slack.com'
+    slack_workspace_url: str = 'https://3aiagent.slack.com'
     slack_client_id: str | None = None
     slack_client_secret: str | None = None
     slack_oauth_redirect_uri: str = 'http://localhost:3000/integrations/slack/callback'
@@ -53,6 +63,17 @@ class Settings(BaseSettings):
     google_oauth_state_secret: str = 'local-development-google-state-secret'
     google_identity_redirect_uri: str = 'http://localhost:3000/login/google/callback'
     google_identity_state_secret: str = 'local-development-google-identity-state-secret'
+    google_drive_sync_enabled: bool = True
+    google_drive_sync_interval_seconds: int = 3600  # Default 1 hour
+    gmail_sync_enabled: bool = True
+    gmail_sync_interval_seconds: int = 10  # For testing, recommended 3600 for production
+
+    def resolved_database_url(self) -> str:
+        if self.paraworks_demo_mode and self.paraworks_demo_database_url:
+            return self.paraworks_demo_database_url
+        if not self.paraworks_demo_mode and self.paraworks_database_url:
+            return self.paraworks_database_url
+        return self.database_url
 
 
 @lru_cache

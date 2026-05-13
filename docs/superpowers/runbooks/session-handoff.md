@@ -1,6 +1,138 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-01
+Updated: 2026-05-14
+
+## 2026-05-14 Project Recognition Handoff
+
+- `/projects` now uses canonical company projects instead of loose source
+  grouping:
+  - `k-tech-pilot` / `K테크 파일럿`
+  - `seed-ir` / `시드 투자 IR`
+- Deterministic project classification lives behind the Review Queue as
+  `project_assignment` candidates. It scans Slack, Gmail, Drive, and Calendar
+  sources for project aliases and intentionally uses no live LLM or token
+  budget.
+- `POST /api/v1/projects/reclassify?dry_run=true` previews candidate counts and
+  cost policy. `dry_run=false` creates pending Review Queue items for approved
+  reviewer handling.
+- `/projects` returns both canonical projects with approved evidence,
+  pending-review counts, and project-scoped `timeline_items`. Legacy labels
+  like `미분류 프로젝트`, `Project Newbiegenie`, and `프로젝트 결과` should not be
+  displayed as projects.
+- `/timeline` now reads `/api/v1/projects` so the top menu is project-scoped
+  and timeline evidence explains why each item is connected.
+- Existing DB rows are not deleted or migrated. Run deterministic reclassify
+  and approve the resulting Review Queue candidates to attach current source
+  data to projects.
+
+## 2026-05-13 Work Data and Assignment Extraction Handoff
+
+- Dashboard recent timeline output now uses real `TimelineEvent` fields:
+  `summary`, `created_at`, `confidence_score`, and `source_links`.
+  Frontend code should not reintroduce `event_time` or `importance`.
+- `/projects` is connected to `GET /api/v1/projects`; the page no longer uses
+  local ORION/Nova/Atlas seed data.
+- Future todo promotion creates clean Korean timeline entries such as
+  `[할 일] ...` and `담당자: ..., 기한: ...`. Existing broken DB rows are not
+  migrated by this slice.
+- Mail/Docs and Memory Extraction deterministic models now detect generic
+  Korean/English work assignment cues from Gmail, Drive, and Calendar evidence.
+  Live LLM execution remains closed; only preflight endpoints were added.
+- Verification completed:
+  `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q`,
+  `uv run ruff check ...`, `npm run lint`, `npm run build`, and
+  `git diff --check`.
+
+## 2026-05-13 RAG Orchestrator Assistant Handoff
+
+- Active branch: `codex/rag-orchestrator-assistant-memory`.
+- Latest pushed commit before this handoff update:
+  `506b257 fix: surface Gmail send failures`.
+- Current local serious mode status:
+  - backend: `http://127.0.0.1:8000`
+  - frontend: `http://127.0.0.1:3000`
+  - backend health returned `demo_mode=false`.
+- Gmail runtime status checked during the session:
+  - Gmail integration was connected;
+  - credential status was available for `hanvv3@koreacu.ac.kr`.
+- Email-send approval flow investigation:
+  - `/search` already calls
+    `POST /api/v1/assistant/messages/{messageId}/email/send` when a user
+    approves a pending email draft.
+  - The backend send path goes through
+    `backend/app/assistant/gmail_sender.py`.
+  - The sender requires a connected Gmail integration, `gmail.send` scope, a
+    stored token in `.tokens.json`, and refresh-token credentials when the
+    access token is expired.
+  - The local backend had been running without reload, so changed backend code
+    required a server restart before the send endpoint could reflect updates.
+- Implemented in commit `506b257`:
+  - Added focused tests in `backend/tests/test_gmail_sender.py`.
+  - Gmail API send failures now surface as explicit `GmailSendError` codes such
+    as `gmail_api_send_failed:403` instead of becoming opaque runtime errors.
+  - Gmail refresh failures now surface as explicit error codes such as
+    `gmail_refresh_failed:{status}` and `gmail_refresh_unreachable`.
+  - `/search` maps backend email-send error codes to Korean user-facing
+    messages so the user can tell whether the problem is missing connection,
+    missing `gmail.send` scope, missing token, refresh failure, or Gmail API
+    rejection.
+- Verification completed for that commit:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_gmail_sender.py -q
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+git diff --check
+```
+
+Result:
+
+- backend targeted tests: 14 passed;
+- frontend lint: passed with an existing warning in
+  `frontend/src/app/projects/page.tsx` about unused `projectSeedData`;
+- frontend build: passed;
+- whitespace check: passed.
+
+Next recommended steps:
+
+1. Reproduce the approve-send flow in the browser after logging in with the
+   Gmail-connected account.
+2. If sending still fails, capture the backend response body from the
+   `/api/v1/assistant/messages/{messageId}/email/send` request. The new error
+   code should now point to the exact missing OAuth/token/Gmail API condition.
+3. If the error is `gmail_send_scope_required`, reconnect Gmail after the
+   expanded `gmail.send` scope change so Google issues a token with send
+   permission.
+4. If the error is `gmail_api_send_failed:403`, check Google Cloud OAuth app
+   verification/test-user status and Gmail API enablement.
+
+## 2026-05-12 Demo Data Boundary Update
+
+- Default settings now use `PARAWORKS_DEMO_MODE=false` and
+  `PARAWORKS_SEED_DEMO_DATA=false`.
+- Smoke mode is the only intended path for seeded dummy content:
+  `scripts/start-smoke.ps1` sets both demo mode and seed demo data to true.
+- Docker/pgvector dev mode (`scripts/start-pgvector-dev.ps1`) starts the app
+  with demo mode and seed demo data disabled. With no Slack or Google connection
+  installed, the product should show empty states rather than mock business
+  content.
+- Production-like connector sync must not fall back to mock connectors. It now
+  returns a clear not-connected error until OAuth/credentials are available.
+- The Review page no longer displays hard-coded fallback review items when the
+  API fails or returns no items.
+- Dashboard, Projects, and Timeline no longer render sample ORION/Nova/Atlas
+  items as visible product data when no connector-backed data exists.
+
+Verification from this session:
+
+```powershell
+uv run pytest backend/tests -v
+cd frontend
+npm run build
+```
+
+Result: backend 297 passed, 1 skipped; frontend build passed.
 
 ## Active Project
 
@@ -25,6 +157,40 @@ The MVP harness keeps real SaaS integrations behind connector contracts and vali
 5. Deterministic extraction creates pending review items.
 6. Review UI exposes evidence, approve/reject/edit/request-more-evidence actions.
 7. Search returns permission-filtered source evidence.
+
+## 2026-05-12 AI 비서 ChatGPT-style Polish and RAG LLM Handoff
+
+- Active branch for this work: `codex/rag-orchestrator-assistant-memory`.
+- `/search` is now the primary AI 비서 surface and should feel closer to a
+  natural ChatGPT-style conversation:
+  - the left history shows compact conversation titles only;
+  - `+` reuses an existing empty `새 대화` instead of creating duplicates;
+  - evidence and source details live inside each assistant message behind a
+    fold/unfold control;
+  - the input composer remains at the bottom of the chat surface while evidence
+    scrolls inside its own bounded panel.
+- Assistant conversations remain database-backed per logged-in user through
+  `assistant_conversations` and `assistant_messages`.
+- In demo mode, RAG answering stays deterministic for smoke tests and cheap
+  demos.
+- In non-demo 진심모드, RAG answering builds a real LangChain model chain:
+  - primary OpenAI model: `gpt-5.4-mini`;
+  - fallback OpenAI model: value from `AGENT_LLM_OPENAI_MODEL` in `.env`;
+  - provider fallback continues through `AGENT_LLM_PROVIDER_ORDER`, including
+    Gemini when `GEMINI_API_KEY` or `GOOGLE_API_KEY` is configured.
+- For another local machine to continue this branch, pull the branch, run
+  `uv sync`, `cd frontend && npm.cmd ci`, then set `.env` for 진심모드 with
+  `PARAWORKS_DEMO_MODE=false`, `OPENAI_API_KEY`, and optional
+  `AGENT_LLM_OPENAI_MODEL` fallback before starting Docker.
+- Additional 2026-05-13 UI refinements:
+  - conversation history order is based on `updated_at`, not click selection;
+  - only the chat transcript pane scrolls when the viewport is short;
+  - user messages render as rounded full pills without a `나` label;
+  - assistant role/permission badges were removed from message bodies;
+  - assistant answers render basic markdown and both user/assistant messages
+    expose a small copy action;
+  - recommended rounded-full prompt chips above the composer send immediately
+    when clicked.
 
 ## Latest Session Changes
 
@@ -780,3 +946,36 @@ uv run pytest backend/tests -v
 ```
 
 Result: 287 passed, 1 skipped.
+
+## 2026-05-12 Local Docker Auth and CSRF Update
+
+- Local production-like Docker mode now seeds auth users and pending Review
+  Queue evidence through `backend.app.db.init_db` when `PARAWORKS_ENV=local`.
+- `PARAWORKS_DEMO_MODE=false` no longer leaves local email login unusable in
+  local development: seeded emails can issue real httpOnly session, refresh,
+  and CSRF cookies.
+- The login page no longer redirects to `/dashboard` after a failed backend
+  login by storing only a local demo account id. AppShell also no longer treats
+  localStorage as authenticated state when `/api/v1/auth/me` fails.
+- Root cause fixed for the observed symptoms:
+  - fake localStorage login made the UI enter the app without backend cookies;
+  - unsafe POST routes such as `/api/v1/ask` then failed CSRF validation;
+  - admin-only pages saw the user as unauthenticated/non-admin;
+  - fresh Docker DBs had no seeded Review Queue items.
+- Verification:
+
+```powershell
+uv run pytest backend/tests -q
+cd frontend
+npm.cmd run build
+```
+
+Result: backend 289 passed, 1 skipped; frontend build passed.
+
+Direct Docker-backed API check on a secondary backend port confirmed:
+
+- `admin@paraworks.com` and `hanvv3@gmail.com` login return role `admin`;
+- `/api/v1/agent-runs` and `/api/v1/admin/users` return 200 for those sessions;
+- `/api/v1/review?status=pending_review` returns seeded review items;
+- `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
+  `X-CSRF-Token`.

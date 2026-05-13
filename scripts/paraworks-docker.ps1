@@ -32,7 +32,7 @@ function Get-ListeningProcessIds {
     param([int[]]$Ports)
     return @(
         Get-NetTCPConnection -LocalPort $Ports -State Listen -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty OwningProcess -Unique
+        Select-Object -ExpandProperty OwningProcess -Unique
     )
 }
 
@@ -196,6 +196,7 @@ try {
     Write-Step "Starting Docker services"
     docker compose up -d postgres redis minio
 
+    $env:PARAWORKS_DATABASE_URL = $DatabaseUrl
     $env:DATABASE_URL = $DatabaseUrl
     $env:REDIS_URL = "redis://127.0.0.1:$RedisPort/0"
     $env:PARAWORKS_DEMO_MODE = "false"
@@ -203,10 +204,19 @@ try {
     Write-Step "Checking pgvector schema"
     uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --ensure-vector-schema
 
-    Write-Step "Initializing application tables"
-    uv run python -m backend.app.db.init_db
+    Write-Step "Applying database migrations"
+    uv run alembic upgrade head
 
     Write-Step "Checking application schema"
+    uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+
+    Write-Step "Seeding local application data"
+    uv run python -m backend.app.db.init_db
+
+    Write-Step "Checking final database schema"
+    uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+
+    Write-Step "Checking pgvector runtime status"
     uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --expect-app-schema
 
     if ($SkipApp) {
@@ -220,9 +230,11 @@ try {
     $frontendErr = Join-Path $tmpDir "paraworks-frontend.err.log"
 
     $backendCommand = @"
+`$env:PARAWORKS_DATABASE_URL = '$DatabaseUrl'
 `$env:DATABASE_URL = '$DatabaseUrl'
 `$env:REDIS_URL = 'redis://127.0.0.1:$RedisPort/0'
 `$env:PARAWORKS_DEMO_MODE = 'false'
+`$env:AGENT_LLM_ENABLED = 'true'
 uv run uvicorn backend.app.main:app --host $HostAddress --port $BackendPort
 "@
 
@@ -241,14 +253,14 @@ npm.cmd run dev -- --hostname 127.0.0.1 --port $FrontendPort
     Wait-HttpOk -Url "http://127.0.0.1:$FrontendPort/login" -TimeoutSeconds 90
 
     $state = [ordered]@{
-        backend_pid = $backend.Id
-        frontend_pid = $frontend.Id
-        backend_port = $BackendPort
+        backend_pid   = $backend.Id
+        frontend_pid  = $frontend.Id
+        backend_port  = $BackendPort
         frontend_port = $FrontendPort
         postgres_port = $PostgresPort
-        redis_port = $RedisPort
-        database_url = $DatabaseUrl
-        started_at = (Get-Date).ToString("o")
+        redis_port    = $RedisPort
+        database_url  = $DatabaseUrl
+        started_at    = (Get-Date).ToString("o")
     }
     $state | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 

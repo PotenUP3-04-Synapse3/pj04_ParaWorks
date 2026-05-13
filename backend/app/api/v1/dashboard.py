@@ -4,22 +4,69 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import Settings, get_settings
+from backend.app.core.demo_filters import filter_review_items
 from backend.app.db.session import get_db
-from backend.app.models import ReviewItem, Source, SyncJob
+from backend.app.models import (
+    DecisionRecord,
+    ReviewItem,
+    Source,
+    SyncJob,
+    TimelineEvent,
+)
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 DbSession = Annotated[Session, Depends(get_db)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 @router.get('')
-def get_dashboard(db: DbSession) -> dict:
+def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
     source_counts = dict(
         db.execute(select(Source.source_type, func.count(Source.id)).group_by(Source.source_type)).all()
     )
-    pending_review_count = db.scalar(
-        select(func.count(ReviewItem.id)).where(ReviewItem.status == 'pending_review')
-    )
+    if settings.paraworks_demo_mode:
+        pending_review_count = db.scalar(
+            select(func.count(ReviewItem.id)).where(ReviewItem.status == 'pending_review')
+        )
+    else:
+        pending_review_items = db.scalars(
+            select(ReviewItem).where(ReviewItem.status == 'pending_review')
+        ).all()
+        pending_review_count = len(filter_review_items(pending_review_items))
     recent_jobs = db.scalars(select(SyncJob).order_by(SyncJob.created_at.desc()).limit(5)).all()
+    
+    # 최근 검토 대기 항목 3개
+    pending_items = db.scalars(
+        select(ReviewItem)
+        .where(ReviewItem.status == 'pending_review')
+        .order_by(ReviewItem.id.desc())
+        .limit(3)
+    ).all()
+
+    # 오늘의 할 일 (Todo 타입의 검토 대기 항목 포함)
+    todo_items = db.scalars(
+        select(ReviewItem)
+        .where(ReviewItem.item_type == 'todo')
+        .where(ReviewItem.status == 'pending_review')
+        .order_by(ReviewItem.id.desc())
+        .limit(5)
+    ).all()
+
+    # 승인된 최근 의사결정 및 타임라인
+    recent_decisions = db.scalars(
+        select(DecisionRecord)
+        .where(DecisionRecord.review_status == 'approved')
+        .order_by(DecisionRecord.created_at.desc())
+        .limit(3)
+    ).all()
+
+    recent_timeline = db.scalars(
+        select(TimelineEvent)
+        .where(TimelineEvent.review_status == 'approved')
+        .order_by(TimelineEvent.created_at.desc())
+        .limit(3)
+    ).all()
 
     return {
         'source_counts': source_counts,
@@ -33,5 +80,45 @@ def get_dashboard(db: DbSession) -> dict:
                 'progress_pct': job.progress_pct,
             }
             for job in recent_jobs
+        ],
+        'pending_items': [
+            {
+                'id': item.id,
+                'title': item.payload.get('title', 'Untitled'),
+                'item_type': item.item_type,
+                'category': item.payload.get('category', 'Ad-hoc'),
+                'confidence_score': item.confidence_score,
+            }
+            for item in pending_items
+        ],
+        'today_todos': [
+            {
+                'id': item.id,
+                'title': item.payload.get('title', 'Untitled'),
+                'assignee': item.payload.get('assignee', '미지정'),
+                'due_date': item.payload.get('due_date', '기한없음'),
+                'category': item.payload.get('category', 'N/A'),
+            }
+            for item in todo_items
+        ],
+        'recent_decisions': [
+            {
+                'id': d.id,
+                'title': d.title,
+                'summary': d.decision_summary,
+                'created_at': d.created_at.isoformat(),
+            }
+            for d in recent_decisions
+        ],
+        'recent_timeline': [
+            {
+                'id': t.id,
+                'title': t.title,
+                'summary': t.result_summary,
+                'created_at': t.created_at.isoformat(),
+                'confidence_score': t.confidence_score,
+                'source_links': t.source_links,
+            }
+            for t in recent_timeline
         ],
     }

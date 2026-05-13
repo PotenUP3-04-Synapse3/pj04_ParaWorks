@@ -6,7 +6,6 @@ from backend.app.documents.service import (
     parsed_document_from_source_event,
     persist_parsed_document,
 )
-from backend.app.knowledge.extractor import build_review_payloads
 from backend.app.models import (
     DocumentChunk,
     ReviewItem,
@@ -61,12 +60,10 @@ def ingest_events(db: Session, events: list[SourceEvent]) -> int:
             )
         )
 
-    review_payloads = build_review_payloads(created_chunks)
-    for payload in review_payloads:
-        db.add(ReviewItem(status='pending_review', **payload))
-
     db.commit()
-    return len(review_payloads)
+    # 룰 기반 추출기를 제거하였으므로 생성된 ReviewItem 개수는 0으로 반환합니다. 
+    # 실제 리뷰 아이템은 AI Agent를 통해 별도로 생성됩니다.
+    return 0
 
 
 def _same_content_signature(source: Source, event: SourceEvent) -> bool:
