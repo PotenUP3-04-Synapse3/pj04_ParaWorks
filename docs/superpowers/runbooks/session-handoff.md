@@ -1,6 +1,70 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-12
+Updated: 2026-05-13
+
+## 2026-05-13 RAG Orchestrator Assistant Handoff
+
+- Active branch: `codex/rag-orchestrator-assistant-memory`.
+- Latest pushed commit before this handoff update:
+  `506b257 fix: surface Gmail send failures`.
+- Current local serious mode status:
+  - backend: `http://127.0.0.1:8000`
+  - frontend: `http://127.0.0.1:3000`
+  - backend health returned `demo_mode=false`.
+- Gmail runtime status checked during the session:
+  - Gmail integration was connected;
+  - credential status was available for `hanvv3@koreacu.ac.kr`.
+- Email-send approval flow investigation:
+  - `/search` already calls
+    `POST /api/v1/assistant/messages/{messageId}/email/send` when a user
+    approves a pending email draft.
+  - The backend send path goes through
+    `backend/app/assistant/gmail_sender.py`.
+  - The sender requires a connected Gmail integration, `gmail.send` scope, a
+    stored token in `.tokens.json`, and refresh-token credentials when the
+    access token is expired.
+  - The local backend had been running without reload, so changed backend code
+    required a server restart before the send endpoint could reflect updates.
+- Implemented in commit `506b257`:
+  - Added focused tests in `backend/tests/test_gmail_sender.py`.
+  - Gmail API send failures now surface as explicit `GmailSendError` codes such
+    as `gmail_api_send_failed:403` instead of becoming opaque runtime errors.
+  - Gmail refresh failures now surface as explicit error codes such as
+    `gmail_refresh_failed:{status}` and `gmail_refresh_unreachable`.
+  - `/search` maps backend email-send error codes to Korean user-facing
+    messages so the user can tell whether the problem is missing connection,
+    missing `gmail.send` scope, missing token, refresh failure, or Gmail API
+    rejection.
+- Verification completed for that commit:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_gmail_sender.py -q
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+git diff --check
+```
+
+Result:
+
+- backend targeted tests: 14 passed;
+- frontend lint: passed with an existing warning in
+  `frontend/src/app/projects/page.tsx` about unused `projectSeedData`;
+- frontend build: passed;
+- whitespace check: passed.
+
+Next recommended steps:
+
+1. Reproduce the approve-send flow in the browser after logging in with the
+   Gmail-connected account.
+2. If sending still fails, capture the backend response body from the
+   `/api/v1/assistant/messages/{messageId}/email/send` request. The new error
+   code should now point to the exact missing OAuth/token/Gmail API condition.
+3. If the error is `gmail_send_scope_required`, reconnect Gmail after the
+   expanded `gmail.send` scope change so Google issues a token with send
+   permission.
+4. If the error is `gmail_api_send_failed:403`, check Google Cloud OAuth app
+   verification/test-user status and Gmail API enablement.
 
 ## 2026-05-12 Demo Data Boundary Update
 
