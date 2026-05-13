@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import UTC, datetime, timedelta
 from typing import List, Dict, Any
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,15 +27,25 @@ except ImportError:
 def trigger_slack_agent_analysis(db: Session, days: int = 7):
     """
     최근 N일간의 슬랙 데이터를 분석하여 지식 후보(ReviewItem)를 생성합니다.
+    ID 기반 중복 체크를 통해 이미 분석된 메시지는 완벽하게 제외합니다.
     """
     if process_daily_slack_sync is None:
         print("[!] Error: agent_slack.agent_slack module not found.")
         return
 
-    # 1. 최근 N일간의 Slack 데이터 및 본문(body) 조회 (Document join 필요)
-    start_date = datetime.now(UTC) - timedelta(days=days)
+    # 1. 이미 존재하는 ReviewItem들의 source_id 수집 (중복 분석 방지)
+    existing_items = db.execute(
+        select(ReviewItem.payload)
+        .where(ReviewItem.created_at >= datetime.now(UTC) - timedelta(days=days))
+    ).scalars().all()
     
-    # Source와 DocumentVersion을 조인하여 본문 데이터를 함께 가져옴
+    processed_source_ids = set()
+    for p in existing_items:
+        if isinstance(p, dict) and 'source_ids' in p:
+            processed_source_ids.update(p['source_ids'])
+
+    # 2. 최근 N일간의 Slack 데이터 조회
+    start_date = datetime.now(UTC) - timedelta(days=days)
     results = db.execute(
         select(Source, DocumentVersion.body)
         .join(Document, Source.id == Document.source_id)
@@ -46,30 +57,40 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
     if not results:
         return
 
-    # 2. 채널별로 메시지 그룹화 및 TS -> 작성자 맵 생성
+    # 3. 채널별 메시지 그룹화 및 ID 기반 필터링
     messages_by_channel: Dict[str, List[Dict[str, Any]]] = {}
-    ts_to_author: Dict[str, str] = {}
+    id_to_author: Dict[str, str] = {}
     
+    skipped_count = 0
     for source, body in results:
+        # ID 기반 중복 체크 (가장 확실함)
+        if source.source_id in processed_source_ids:
+            skipped_count += 1
+            continue
+
         channel_id = source.raw_metadata.get('channel_id', 'unknown')
-        ts = source.raw_metadata.get('ts')
-        
         if channel_id not in messages_by_channel:
             messages_by_channel[channel_id] = []
         
-        # agent_slack.py가 기대하는 메시지 포맷으로 변환
         messages_by_channel[channel_id].append({
-            'ts': ts or source.created_at.timestamp(),
+            'ts': source.raw_metadata.get('ts'),
+            'source_id': source.source_id,
             'user': source.author,
             'text': body,
             'user_name': source.author
         })
         
-        # TS를 키로 사용하여 작성자 저장 (URL보다 정확한 매핑을 위해)
-        if ts:
-            ts_to_author[ts] = source.author
+        # ID -> 작성자 매핑 저장
+        id_to_author[source.source_id] = source.author
 
-    # 3. 각 채널별 분석 실행
+    if skipped_count > 0:
+        print(f"[*] Skipping {skipped_count} already analyzed Slack messages (ID-based).")
+
+    if not messages_by_channel:
+        print("[*] No new Slack messages to analyze.")
+        return 0
+
+    # 4. 각 채널별 분석 실행
     total_created = 0
     from backend.app.core.config import get_settings
     settings = get_settings()
@@ -87,40 +108,12 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
             run_cost = result.get('run_cost')
             candidates: List[ReviewCandidate] = result.get('candidates', [])
             
-            # AgentRun 기록 저장 (evidence_summary 포함)
-            evidence_summary = []
-            for cand in candidates:
-                for url in cand.source_links:
-                    # URL에서 p12345... 형태의 TS 추출 시도
-                    author_name = "Unknown"
-                    if '/p' in url:
-                        # p 뒤의 숫자만 추출 (예: p1715000123 -> 1715000.123)
-                        raw_ts_str = url.split('/p')[-1]
-                        # 10자리(초) + 6자리(마이크로초) 형태를 다시 . 포맷으로 복원 시도
-                        if len(raw_ts_str) >= 10:
-                            possible_ts = f"{raw_ts_str[:10]}.{raw_ts_str[10:]}".rstrip('.')
-                            # 정확히 일치하거나, 앞부분 10자리가 일치하는 작성자 찾기
-                            author_name = ts_to_author.get(possible_ts) or "Unknown"
-                            
-                            # 여전히 Unknown이면 TS 맵 전체에서 검색 (폴백)
-                            if author_name == "Unknown":
-                                for stored_ts, name in ts_to_author.items():
-                                    if stored_ts.replace('.', '') in raw_ts_str:
-                                        author_name = name
-                                        break
-                    
-                    evidence_summary.append({
-                        'source_url': url,
-                        'author': author_name,
-                        'permission_level': cand.permission_level
-                    })
-
             agent_run = AgentRun(
                 agent_name='slack_agent_v2',
-                prompt_version='slack-taxonomy:v2',
+                prompt_version='slack-taxonomy:v3',
                 status='complete',
-                source_window=f'slack:last_{days}days:{channel_id}',
-                cache_key=f'sync-{datetime.now(UTC).isoformat()}',
+                source_window=f'slack:{channel_id}',
+                cache_key=f'sync-{uuid4().hex}',
                 model_name=result.get('model_name', 'gpt-4o-mini'),
                 input_tokens=run_cost.token_usage.input_tokens if run_cost else 0,
                 output_tokens=run_cost.token_usage.output_tokens if run_cost else 0,
@@ -129,17 +122,27 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                 permission_level='internal',
                 metadata_={
                     'channel_id': channel_id,
-                    'message_count': len(messages),
-                    'is_work_related': result.get('is_work_related', False),
-                    'evidence_summary': evidence_summary # 이게 있어야 근거 보기에서 이름이 나옴
+                    'is_work_related': result.get('is_work_related', False)
                 }
             )
             db.add(agent_run)
             db.flush()
 
-            # 4. 분석된 후보들을 ReviewItem으로 저장
+            # 5. 분석된 후보들을 ReviewItem으로 저장
             for candidate in candidates:
-                # payload_fields에 추가 정보(assignee, due_date, category 등)가 포함되어 있음
+                source_ids = []
+                source_authors = []
+                for url in candidate.source_links:
+                    # URL에서 p 뒤의 숫자 10자리.6자리 추출 (슬랙 ID 규칙)
+                    if '/p' in url:
+                        raw_ts = url.split('/p')[-1].split('?')[0]
+                        if len(raw_ts) >= 16:
+                            # 1715000123456789 -> 1715000123.456789
+                            formatted_ts = f"{raw_ts[:10]}.{raw_ts[10:]}"
+                            sid = f"{channel_id}:{formatted_ts}"
+                            source_ids.append(sid)
+                            source_authors.append(id_to_author.get(sid, "Unknown"))
+
                 payload = {
                     'title': candidate.title,
                     'summary': candidate.summary,
@@ -147,11 +150,12 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                     'topic_tag': candidate.payload_fields.get('topic_tag', 'N/A'),
                     'assignee': candidate.payload_fields.get('assignee', '미지정'),
                     'due_date': candidate.payload_fields.get('due_date', '기한없음'),
-                    'source_channel_id': channel_id,
-                    'agent_run_id': agent_run.id, # 핵심: AgentRun 연동
-                    'agent_name': 'slack_agent', # 프론트엔드 표시용
-                    'prompt_version': agent_run.prompt_version, # 프론트엔드 표시용
-                    'estimated_cost_usd': agent_run.estimated_cost_usd, # 프론트엔드 표시용
+                    'agent_run_id': agent_run.id,
+                    'agent_name': 'slack_agent',
+                    'prompt_version': agent_run.prompt_version,
+                    'estimated_cost_usd': agent_run.estimated_cost_usd,
+                    'source_ids': source_ids, # 중복 체크를 위한 고유 ID 저장
+                    'source_authors': source_authors # 작성자 이름 직접 저장
                 }
                 
                 review_item = ReviewItem(

@@ -293,10 +293,16 @@ class SlackConnector:
         )
 
 
-def _slack_permalink(workspace_url: str, channel_id: str, timestamp: str) -> str:
+def build_slack_permalink(workspace_url: str, channel_id: str, timestamp: str) -> str:
+    """슬랙 메시지 이동을 위한 표준 16자리 p-타임스탬프 URL을 생성합니다."""
     normalized_workspace = workspace_url.rstrip('/')
+    # 점(.)을 제거하고 16자리가 되도록 뒤를 0으로 채움 (슬랙 표준)
     permalink_ts = timestamp.replace('.', '').ljust(16, '0')
     return f'{normalized_workspace}/archives/{channel_id}/p{permalink_ts}'
+
+
+def _slack_permalink(workspace_url: str, channel_id: str, timestamp: str) -> str:
+    return build_slack_permalink(workspace_url, channel_id, timestamp)
 
 
 def _resolve_mentions(text: str, user_map: dict[str, str]) -> str:

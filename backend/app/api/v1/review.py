@@ -318,51 +318,38 @@ def _agent_runs_by_id(db: Session, items: list[ReviewItem]) -> dict[int, AgentRu
 
 
 def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> list[dict]:
-    evidence_summary = _agent_evidence_summary_by_url(agent_run)
     links = item.source_links or []
     snippets = item.source_snippets or []
+    # 베이킹된 정보 로드
+    source_authors = item.payload.get('source_authors', [])
+    source_ids = item.payload.get('source_ids', [])
+    
     evidence_count = max(len(links), len(snippets))
     agent_run_id = _agent_run_id(item)
     rows: list[dict] = []
 
-    # URL 정규화 맵 생성 (매칭 성공률을 높이기 위해)
-    norm_summary = {}
-    for url, info in evidence_summary.items():
-        norm_url = _normalize_slack_url(url)
-        if norm_url:
-            norm_summary[norm_url] = info
-
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
+        source_id = source_ids[index] if index < len(source_ids) else None
+        author = source_authors[index] if index < len(source_authors) else "Unknown"
         
-        # snippets가 links보다 부족할 경우 처리
         if index < len(snippets):
             source_snippet = snippets[index]
         else:
             source_snippet = snippets[-1] if snippets else '원문 발췌 내용이 없습니다.'
             
-        # 1순위: URL 직접 매칭
-        summary = evidence_summary.get(source_url or '')
-        
-        # 2순위: 정규화된 URL 매칭 (슬랙 TS 형식 차이 극복)
-        if not summary and source_url:
-            norm_link = _normalize_slack_url(source_url)
-            if norm_link:
-                summary = norm_summary.get(norm_link)
-        
-        summary = summary or {}
         rows.append(
             {
                 'index': index + 1,
-                'rank': _int_or_default(summary.get('rank'), index + 1),
-                'source_id': summary.get('source_id'),
+                'rank': index + 1,
+                'source_id': source_id,
                 'source_url': source_url,
                 'source_snippet': source_snippet,
-                'permission_level': summary.get('permission_level') or item.permission_level,
+                'permission_level': item.permission_level,
                 'confidence_score': item.confidence_score,
-                'importance_score': _int_or_default(summary.get('importance_score'), 0),
-                'timestamp': summary.get('timestamp'),
-                'author': summary.get('author'),
+                'importance_score': 0,
+                'timestamp': None,
+                'author': author,
                 'agent_run_id': agent_run_id,
             }
         )
@@ -375,8 +362,13 @@ def _normalize_slack_url(url: str | None) -> str | None:
     if not url or '/p' not in url:
         return None
     
-    # p 뒤의 숫자만 추출하여 뒤의 0을 제거 (예: p1715000123000000 -> 1715000123)
+    # p 뒤의 숫자만 추출
     ts_part = url.split('/p')[-1].split('?')[0]
+    
+    # 만약 16자리 숫자라면 (표준 규격), 이를 . 포맷으로 변환하여 매칭 확률을 극대화
+    if len(ts_part) == 16 and ts_part.isdigit():
+        return f"{ts_part[:10]}.{ts_part[10:]}".rstrip('0').rstrip('.')
+        
     return ts_part.rstrip('0')
 
 

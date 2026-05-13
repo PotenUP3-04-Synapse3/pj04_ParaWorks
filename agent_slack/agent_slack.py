@@ -251,6 +251,7 @@ def extract_candidate_node(state: SlackAgentState):
         final_candidates = []
         # 중앙 설정 시스템에서 워크스페이스 URL 로드
         from backend.app.core.config import get_settings
+        from backend.app.connectors.slack import build_slack_permalink
         settings = get_settings()
         base_url = settings.slack_workspace_url.rstrip('/')
         
@@ -258,11 +259,8 @@ def extract_candidate_node(state: SlackAgentState):
             # TS 값을 이용해 딥링크 생성
             links = []
             for ts in item.source_ts_list:
-                # TS 형식이 숫자.숫자 인지 확인
-                if '.' in ts:
-                    clean_ts = ts.replace('.', '')
-                    # 슬랙 archives URL 형식: .../archives/CHANNEL_ID/p1234567890123456
-                    links.append(f"{base_url}/archives/{state.channel_id}/p{clean_ts}")
+                # 표준화된 퍼머링크 생성 함수 사용 (16자리 포맷 보장)
+                links.append(build_slack_permalink(base_url, state.channel_id, ts))
 
             # item_type 안전 처리
             safe_type = item.item_type.strip().lower()

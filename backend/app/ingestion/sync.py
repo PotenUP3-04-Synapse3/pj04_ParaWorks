@@ -76,17 +76,17 @@ def _latest_cursors_by_partition(db: Session, source_type: str) -> dict[str, str
     sources = db.scalars(select(Source).where(Source.source_type == source_type)).all()
     for source in sources:
         raw_metadata = source.raw_metadata or {}
-        partition = raw_metadata.get('sync_partition')
-        cursor = raw_metadata.get('sync_cursor')
-        if not isinstance(partition, str) or not isinstance(cursor, str) or not cursor:
-            partition = raw_metadata.get('channel_id')
-            cursor = raw_metadata.get('ts')
+        partition = raw_metadata.get('sync_partition') or raw_metadata.get('channel_id')
+        cursor = raw_metadata.get('sync_cursor') or raw_metadata.get('ts')
+        
         if not isinstance(partition, str) or not isinstance(cursor, str) or not cursor:
             continue
+            
         cursor_value = _cursor_sort_key(cursor)
         previous = latest.get(partition)
         if previous is None or cursor_value > previous[0]:
             latest[partition] = (cursor_value, cursor)
+            
     return {partition: cursor for partition, (_, cursor) in latest.items()}
 
 
