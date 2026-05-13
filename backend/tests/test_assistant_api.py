@@ -62,6 +62,77 @@ def test_assistant_message_flow_stores_rag_answer_without_cost_fields(
     assert 'cache_key' not in payload['assistant_message']
 
 
+def test_assistant_email_request_creates_approval_draft_without_rag(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def fail_if_rag_runs(**kwargs):
+        raise AssertionError('메일 작성 요청은 RAG 근거 확인 없이 액션 초안으로 라우팅되어야 합니다.')
+
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '메일 작성'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'partner@example.com에 오늘 회의 취소됐다고 메일 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['role'] == 'assistant'
+    assert '메일 초안을 작성했습니다' in assistant_message['content']
+    assert '회의 취소 안내' in assistant_message['content']
+    assert assistant_message['citations'] == []
+    assert assistant_message['metadata']['action_type'] == 'email_draft'
+    assert assistant_message['metadata']['status'] == 'pending_approval'
+    assert assistant_message['metadata']['email_draft']['to'] == ['partner@example.com']
+    assert assistant_message['metadata']['email_draft']['subject'] == '회의 취소 안내'
+
+
+def test_assistant_email_draft_requires_approval_endpoint_before_send(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    class FakeGmailDraftSender:
+        def __init__(self, **kwargs):
+            pass
+
+        def send(self, **kwargs):
+            return SimpleNamespace(message_id='gmail-sent-1')
+
+    monkeypatch.setattr(assistant_api, 'GmailDraftSender', FakeGmailDraftSender)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '메일 승인'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+    draft_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'partner@example.com에 오늘 회의 취소됐다고 메일 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    draft_message = draft_response.json()['assistant_message']
+
+    send_response = client.post(
+        f"/api/v1/assistant/messages/{draft_message['id']}/email/send",
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert send_response.status_code == 200
+    payload = send_response.json()
+    assert payload['status'] == 'sent'
+    assert payload['gmail_message_id'] == 'gmail-sent-1'
+    assert payload['message']['metadata']['status'] == 'sent'
+    assert payload['message']['metadata']['gmail_message_id'] == 'gmail-sent-1'
+
+
 def test_assistant_lists_persisted_messages(client: TestClient, db_session: Session) -> None:
     seed_chunk(
         db_session,

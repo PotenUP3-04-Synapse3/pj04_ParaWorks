@@ -1,20 +1,29 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
+from backend.app.assistant.email_actions import (
+    assistant_email_draft_content,
+    build_email_draft_from_request,
+    email_draft_metadata,
+)
+from backend.app.assistant.gmail_sender import GmailDraftSender, GmailSendError
 from backend.app.assistant.service import (
     append_assistant_message,
     append_user_message,
     build_contextual_question,
     create_conversation,
     find_reusable_empty_conversation,
+    get_owned_message,
     get_owned_conversation,
     list_conversations,
     list_messages,
     serialize_conversation,
     serialize_message,
+    update_message_metadata,
 )
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_auth import DemoUser, get_demo_user
@@ -24,6 +33,7 @@ from backend.app.schemas.assistant import (
     AssistantConversationCreatedResponse,
     AssistantConversationCreateRequest,
     AssistantConversationsResponse,
+    AssistantEmailSendResponse,
     AssistantMessageCreateRequest,
     AssistantMessagesResponse,
     AssistantTurnResponse,
@@ -132,6 +142,29 @@ def create_assistant_message(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    email_draft = build_email_draft_from_request(user_message.content)
+    if email_draft is not None:
+        assistant_message = append_assistant_message(
+            db,
+            user,
+            conversation,
+            content=assistant_email_draft_content(email_draft),
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level=None,
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata=email_draft_metadata(email_draft),
+        )
+        return {
+            'conversation': serialize_conversation(conversation),
+            'user_message': serialize_message(user_message),
+            'assistant_message': serialize_message(assistant_message),
+        }
+
     messages = list_messages(db, user, conversation.id)
     contextual_question = build_contextual_question(
         conversation=conversation,
@@ -197,4 +230,50 @@ def create_assistant_message(
         'conversation': serialize_conversation(conversation),
         'user_message': serialize_message(user_message),
         'assistant_message': serialize_message(assistant_message),
+    }
+
+
+@router.post('/messages/{message_id}/email/send', response_model=AssistantEmailSendResponse)
+def send_assistant_email_draft(
+    message_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    settings: AppSettings,
+) -> dict:
+    try:
+        message = get_owned_message(db, user, message_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail='assistant message not found') from exc
+
+    metadata = dict(message.metadata_ or {})
+    draft = metadata.get('email_draft')
+    if metadata.get('action_type') != 'email_draft' or not isinstance(draft, dict):
+        raise HTTPException(status_code=422, detail='assistant message is not an email draft')
+    if metadata.get('status') == 'sent':
+        return {'message': serialize_message(message), 'status': 'sent'}
+    if metadata.get('status') != 'pending_approval':
+        raise HTTPException(status_code=409, detail='email draft is not pending approval')
+
+    try:
+        result = GmailDraftSender(settings=settings).send(
+            db=db,
+            to=[str(item) for item in draft.get('to', [])],
+            subject=str(draft.get('subject') or ''),
+            body=str(draft.get('body') or ''),
+        )
+    except GmailSendError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # 전송 결과는 원본 초안 메시지 metadata에 기록해 승인 이력을 남긴다.
+    next_metadata = {
+        **metadata,
+        'status': 'sent',
+        'sent_at': datetime.now(UTC).isoformat(),
+        'gmail_message_id': result.message_id,
+    }
+    updated_message = update_message_metadata(db, user, message, next_metadata)
+    return {
+        'message': serialize_message(updated_message),
+        'status': 'sent',
+        'gmail_message_id': result.message_id,
     }

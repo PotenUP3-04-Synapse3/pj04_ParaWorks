@@ -479,6 +479,12 @@ export type AssistantTurnResponse = {
   assistant_message: AssistantMessage;
 };
 
+export type AssistantEmailSendResponse = {
+  message: AssistantMessage;
+  status: string;
+  gmail_message_id?: string | null;
+};
+
 export type IntegrationSyncResponse = {
   job_id: string;
   connector_type: string;

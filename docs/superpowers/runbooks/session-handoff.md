@@ -847,3 +847,35 @@ Direct Docker-backed API check on a secondary backend port confirmed:
 - `/api/v1/review?status=pending_review` returns seeded review items;
 - `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
   `X-CSRF-Token`.
+
+## 2026-05-13 AI Assistant Email Action Update
+
+- `/search` now renders user messages optimistically before the assistant API
+  finishes, then reveals assistant responses with a typing-style stream effect.
+- Direct email-send prompts such as `partner@example.com에 오늘 회의 취소됐다고
+  메일 보내줘` are routed to an assistant email action instead of
+  evidence-only RAG.
+  - The action creates a business-tone draft with inferred subject/body.
+  - The assistant message metadata stores `action_type=email_draft`,
+    `status=pending_approval`, and the draft payload.
+  - The frontend renders an approval button; no email is sent before the user
+    clicks approval.
+- `POST /api/v1/assistant/messages/{message_id}/email/send` sends the approved
+  draft through Gmail only if a connected Gmail OAuth token is available and
+  already has `https://www.googleapis.com/auth/gmail.send`.
+- Important follow-up: the current Google OAuth install scope was not expanded
+  to `gmail.send` in this session because that permission broadening needs
+  explicit user approval. Without that scope, approval returns
+  `gmail_send_scope_required`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q
+cd frontend
+npm.cmd run lint
+npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop
+npm.cmd run build
+```
+
+Result: backend assistant tests, frontend lint, targeted Playwright, and
+frontend build passed.
