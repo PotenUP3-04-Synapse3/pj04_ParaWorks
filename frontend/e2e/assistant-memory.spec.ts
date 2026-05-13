@@ -15,6 +15,13 @@ test("search page behaves like a persisted assistant with compact history and fo
     created_at: "2026-05-12T01:03:00+00:00",
     updated_at: "2026-05-12T01:03:00+00:00",
   };
+  const latestConversation = {
+    id: 12,
+    title: "기획팀 회의",
+    summary: "최신 대화 요약입니다.",
+    created_at: "2026-05-12T01:05:00+00:00",
+    updated_at: "2026-05-12T01:05:00+00:00",
+  };
   const manyCitations = Array.from({ length: 12 }, (_, index) => ({
     source_id: `gmail-redis-${index + 1}`,
     source_url: `https://gmail.mock/redis-${index + 1}`,
@@ -29,7 +36,7 @@ test("search page behaves like a persisted assistant with compact history and fo
       id: 100,
       conversation_id: 10,
       role: "assistant",
-      content: "Redis는 임시 작업 상태를 빠르게 공유하는 용도로 쓰입니다.",
+      content: "**Redis**는 임시 작업 상태를 빠르게 공유하는 용도로 쓰입니다.\n\n- 큐 진행 상황 공유\n- PostgreSQL 기록 보존",
       citations: manyCitations,
       source_ids: manyCitations.map((citation) => citation.source_id),
       source_links: manyCitations.map((citation) => citation.source_url),
@@ -65,7 +72,7 @@ test("search page behaves like a persisted assistant with compact history and fo
     if (route.request().method() === "GET") {
       await route.fulfill({
         contentType: "application/json",
-        json: { conversations: [usedConversation, emptyConversation] },
+        json: { conversations: [latestConversation, emptyConversation, usedConversation] },
       });
       return;
     }
@@ -130,6 +137,13 @@ test("search page behaves like a persisted assistant with compact history and fo
     });
   });
 
+  await page.route("**/api/v1/assistant/conversations/12/messages", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { conversation: latestConversation, messages: [] },
+    });
+  });
+
   await page.route("**/api/v1/rag/indexing/summary", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -168,6 +182,7 @@ test("search page behaves like a persisted assistant with compact history and fo
       "POST /api/v1/assistant/conversations",
       "GET /api/v1/assistant/conversations/10/messages",
       "GET /api/v1/assistant/conversations/11/messages",
+      "GET /api/v1/assistant/conversations/12/messages",
       "POST /api/v1/assistant/conversations/11/messages",
       "GET /api/v1/rag/indexing/summary",
     ]);
@@ -183,10 +198,19 @@ test("search page behaves like a persisted assistant with compact history and fo
   await page.goto("/search");
 
   await expect(page.getByRole("heading", { level: 1, name: "AI 비서" })).toBeVisible();
-  await expect(page.getByText("Redis는 임시 작업 상태를 빠르게 공유하는 용도로 쓰입니다.")).toBeVisible();
   const history = page.getByLabel("대화 목록");
+  const historyItems = page.getByLabel("대화 히스토리");
+  await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
+  await history.getByRole("button", { name: "Redis 작업 상태" }).click();
+  await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
   await expect(history).toContainText("Redis 작업 상태");
   await expect(history).not.toContainText("이 요약 문장");
+  await expect(page.locator("strong").filter({ hasText: "Redis" })).toBeVisible();
+  await expect(page.getByText("큐 진행 상황 공유")).toBeVisible();
+  await expect(page.locator(".badge").filter({ hasText: "AI 비서" })).toHaveCount(0);
+  await expect(page.getByText("internal", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("나", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "복사" })).toBeVisible();
 
   await expect(page.getByText("세부 근거 1: Redis 작업 상태 기록입니다.")).toBeHidden();
   await page.getByRole("button", { name: /근거와 출처 12개/ }).click();
@@ -197,9 +221,11 @@ test("search page behaves like a persisted assistant with compact history and fo
   await expect(page.getByLabel("대화 목록").getByText("새 대화")).toHaveCount(1);
   expect(createConversationPostCount).toBe(0);
 
-  await page.getByRole("textbox", { name: "AI 비서에게 질문" }).fill("기획팀 회의 일정을 정리해줘");
-  await page.getByRole("button", { name: "전송" }).click();
+  await page.getByRole("button", { name: "기획팀 회의 일정을 정리해줘" }).click();
   await expect(page.getByText("기획팀 회의는 목요일 오전 일정으로 정리하면 좋습니다.")).toBeVisible();
+  const userQuestionBubble = page.locator("article").filter({ hasText: "기획팀 회의 일정을 정리해줘" });
+  await expect(userQuestionBubble.getByText("기획팀 회의 일정을 정리해줘")).toBeVisible();
+  await expect(userQuestionBubble.locator(".rounded-full")).toBeVisible();
 
   const body = page.locator("body");
   await expect(body).not.toContainText(/cost|token|cache|토큰|비용|캐시/i);

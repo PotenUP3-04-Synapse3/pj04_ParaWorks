@@ -50,6 +50,15 @@ The MVP harness keeps real SaaS integrations behind connector contracts and vali
   `uv sync`, `cd frontend && npm.cmd ci`, then set `.env` for 진심모드 with
   `PARAWORKS_DEMO_MODE=false`, `OPENAI_API_KEY`, and optional
   `AGENT_LLM_OPENAI_MODEL` fallback before starting Docker.
+- Additional 2026-05-13 UI refinements:
+  - conversation history order is based on `updated_at`, not click selection;
+  - only the chat transcript pane scrolls when the viewport is short;
+  - user messages render as rounded full pills without a `나` label;
+  - assistant role/permission badges were removed from message bodies;
+  - assistant answers render basic markdown and both user/assistant messages
+    expose a small copy action;
+  - recommended rounded-full prompt chips above the composer send immediately
+    when clicked.
 
 ## Latest Session Changes
 
