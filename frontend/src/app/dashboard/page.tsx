@@ -77,7 +77,7 @@ export default async function DashboardPage() {
         <div className="space-y-4">
           <Panel>
             <div className="panel-header compact">
-              <PanelTitle title="오늘 해야 할 업무" count={`${visibleTodayTasks.length}건`} />
+              <PanelTitle title="오늘 해야 할 업무" count={`${visibleTodayTasks.length}`} />
               <Link href="/projects" className="text-link">
                 프로젝트 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
 
           <Panel>
             <div className="panel-header compact">
-              <PanelTitle title="검토사항" count={`${visibleReviewItems.length}건`} />
+              <PanelTitle title="검토사항" count={`${visibleReviewItems.length}`} />
               <Link href="/review" className="text-link">
                 전체 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
