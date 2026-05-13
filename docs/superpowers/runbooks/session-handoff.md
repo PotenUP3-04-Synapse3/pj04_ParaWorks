@@ -1,6 +1,6 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-01
+Updated: 2026-05-12
 
 ## 2026-05-12 Demo Data Boundary Update
 
@@ -52,6 +52,40 @@ The MVP harness keeps real SaaS integrations behind connector contracts and vali
 5. Deterministic extraction creates pending review items.
 6. Review UI exposes evidence, approve/reject/edit/request-more-evidence actions.
 7. Search returns permission-filtered source evidence.
+
+## 2026-05-12 AI 비서 ChatGPT-style Polish and RAG LLM Handoff
+
+- Active branch for this work: `codex/rag-orchestrator-assistant-memory`.
+- `/search` is now the primary AI 비서 surface and should feel closer to a
+  natural ChatGPT-style conversation:
+  - the left history shows compact conversation titles only;
+  - `+` reuses an existing empty `새 대화` instead of creating duplicates;
+  - evidence and source details live inside each assistant message behind a
+    fold/unfold control;
+  - the input composer remains at the bottom of the chat surface while evidence
+    scrolls inside its own bounded panel.
+- Assistant conversations remain database-backed per logged-in user through
+  `assistant_conversations` and `assistant_messages`.
+- In demo mode, RAG answering stays deterministic for smoke tests and cheap
+  demos.
+- In non-demo 진심모드, RAG answering builds a real LangChain model chain:
+  - primary OpenAI model: `gpt-5.4-mini`;
+  - fallback OpenAI model: value from `AGENT_LLM_OPENAI_MODEL` in `.env`;
+  - provider fallback continues through `AGENT_LLM_PROVIDER_ORDER`, including
+    Gemini when `GEMINI_API_KEY` or `GOOGLE_API_KEY` is configured.
+- For another local machine to continue this branch, pull the branch, run
+  `uv sync`, `cd frontend && npm.cmd ci`, then set `.env` for 진심모드 with
+  `PARAWORKS_DEMO_MODE=false`, `OPENAI_API_KEY`, and optional
+  `AGENT_LLM_OPENAI_MODEL` fallback before starting Docker.
+- Additional 2026-05-13 UI refinements:
+  - conversation history order is based on `updated_at`, not click selection;
+  - only the chat transcript pane scrolls when the viewport is short;
+  - user messages render as rounded full pills without a `나` label;
+  - assistant role/permission badges were removed from message bodies;
+  - assistant answers render basic markdown and both user/assistant messages
+    expose a small copy action;
+  - recommended rounded-full prompt chips above the composer send immediately
+    when clicked.
 
 ## Latest Session Changes
 
@@ -840,32 +874,3 @@ Direct Docker-backed API check on a secondary backend port confirmed:
 - `/api/v1/review?status=pending_review` returns seeded review items;
 - `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
   `X-CSRF-Token`.
-
-## 2026-05-12 Google Admin Accounts and Smoke Data Boundary
-
-- Added two seeded Google identity accounts:
-  - `kjw4work@gmail.com` / id `kjw4work` / admin / COO / platform.
-  - `yonghee199702@gmail.com` / id `yonghee199702` / admin / CTO / platform.
-- Removed `jun@paraworks.com` and `soyeon@paraworks.com` from the active
-  login/admin seed list; future seed runs also delete stale rows for those old
-  seeded accounts.
-- Profile avatars now resolve by full email filename and extension through
-  `backend/app/core/profile.py`.
-- Email-named avatar assets were added to `frontend/public/profile` from
-  `data/profile` so Next.js can serve them.
-- Dummy source/review data is no longer seeded by default in local Docker-style
-  initialization. `init_db` only ingests `SEED_EVENTS` when
-  `PARAWORKS_SEED_DEMO_DATA=true`.
-- `scripts/start-smoke.ps1` sets `PARAWORKS_SEED_DEMO_DATA=true`, so smoke
-  demos still show seeded review/source data.
-- In production-like Docker usage with no real connector syncs, source-backed
-  pages should be empty until Slack or Google data is connected and synced.
-- Verification:
-
-```powershell
-uv run pytest backend/tests -q
-cd frontend
-npm.cmd run build
-```
-
-Result: backend 295 passed, 1 skipped; frontend build passed.
