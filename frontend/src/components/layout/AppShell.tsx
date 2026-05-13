@@ -18,7 +18,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, clearStoredDemoUserId } from "@/lib/api/client";
-import type { AuthUserResponse, DemoUser } from "@/lib/api/types";
+import { REVIEW_QUEUE_UPDATED_EVENT } from "@/lib/reviewQueueEvents";
+import type { AuthUserResponse, DashboardResponse, DemoUser, NotificationsResponse } from "@/lib/api/types";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 
 /**
@@ -87,6 +88,21 @@ function ShellContent({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
   const [badgeCounts, setBadgeCounts] = useState<{ review?: number; notifications?: number }>({});
 
+  useEffect(() => {
+    function refreshBadgeCounts() {
+      apiGet<DashboardResponse>("/api/v1/dashboard")
+        .then((res) => setBadgeCounts((prev) => ({ ...prev, review: res.pending_review_count || 0 })))
+        .catch(() => undefined);
+
+      apiGet<NotificationsResponse>("/api/v1/notifications")
+        .then((res) => setBadgeCounts((prev) => ({ ...prev, notifications: res.counts?.total || 0 })))
+        .catch(() => undefined);
+    }
+
+    window.addEventListener(REVIEW_QUEUE_UPDATED_EVENT, refreshBadgeCounts);
+    return () => window.removeEventListener(REVIEW_QUEUE_UPDATED_EVENT, refreshBadgeCounts);
+  }, []);
+
   // 페이지 로드 시 및 경로 변경 시 인증 상태 및 배지 카운트 확인
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/login/")) {
@@ -110,12 +126,12 @@ function ShellContent({ children }: { children: ReactNode }) {
       });
 
     // 대시보드 배지(검토 대기 건수) 로드
-    apiGet<any>("/api/v1/dashboard")
+    apiGet<DashboardResponse>("/api/v1/dashboard")
       .then((res) => active && setBadgeCounts((prev) => ({ ...prev, review: res.pending_review_count || 0 })))
       .catch(() => {});
       
     // 알림 배지 카운트 로드
-    apiGet<any>("/api/v1/notifications")
+    apiGet<NotificationsResponse>("/api/v1/notifications")
       .then((res) => active && setBadgeCounts((prev) => ({ ...prev, notifications: res.counts?.total || 0 })))
       .catch(() => {});
 
