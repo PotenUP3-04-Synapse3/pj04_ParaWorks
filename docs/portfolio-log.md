@@ -1,10 +1,30 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-12
+Last updated: 2026-05-14
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-14 Project Recognition and Timeline Workflow Boundary
+
+- Replaced loose `/projects` source grouping with two canonical company
+  projects: `K테크 파일럿` and `시드 투자 IR`.
+- Added deterministic, zero-token project classification that creates
+  `project_assignment` Review Queue candidates from Slack, Gmail, Drive, and
+  Calendar source evidence.
+- Changed `/projects` to show only approved project assignments, so legacy
+  smoke/demo labels such as `Project Newbiegenie`, `프로젝트 결과`, and
+  `미분류 프로젝트` no longer appear as business projects.
+- Updated `/timeline` to consume project-scoped workflow data from `/projects`
+  instead of showing one generic `Company Memory` timeline.
+- Stopped using raw connector titles like `Slack message in C0AUJDZUKA8` as
+  task titles and moved project evidence reasons into the UI data model.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from connector-data display toward evidence-backed
+  project understanding with human review as the trust boundary.
 
 ## 2026-05-12 Smoke-Only Demo Data Boundary
 

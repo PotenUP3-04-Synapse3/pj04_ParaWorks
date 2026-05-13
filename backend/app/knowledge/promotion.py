@@ -139,6 +139,16 @@ def _normalized_payload_for_item(item: ReviewItem) -> dict[str, str]:
             'priority_reason': _string_payload(item, 'priority_reason') or _string_payload(item, 'summary'),
         }
 
+    if item.item_type == 'project_assignment':
+        return {
+            'title': _string_payload(item, 'title'),
+            'summary': _string_payload(item, 'summary'),
+            'project_key': _string_payload(item, 'project_key'),
+            'project_name': _string_payload(item, 'project_name'),
+            'source_id': _string_payload(item, 'source_id'),
+            'evidence_reason': _string_payload(item, 'evidence_reason'),
+        }
+
     return {
         'title': _string_payload(item, 'title'),
         'summary': _string_payload(item, 'summary'),
@@ -154,6 +164,8 @@ def _required_fields_for_type(item_type: str) -> tuple[str, ...]:
         return ('title', 'result_summary')
     if item_type == 'todo':
         return ('title', 'priority', 'priority_reason')
+    if item_type == 'project_assignment':
+        return ('title', 'project_key', 'project_name', 'source_id', 'evidence_reason')
     return ()
 
 

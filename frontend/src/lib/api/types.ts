@@ -531,6 +531,7 @@ export type AssistantEmailSendResponse = {
 };
 
 export type ProjectEvidence = {
+  id: string;
   source_id: string;
   source_type: string;
   title: string;
@@ -538,6 +539,22 @@ export type ProjectEvidence = {
   source_snippet: string;
   permission_level: string;
   timestamp: string;
+  task_summary: string;
+  evidence_reason: string;
+};
+
+export type ProjectTimelineItem = {
+  id: string;
+  item_type: string;
+  title: string;
+  summary: string;
+  source_links: string[];
+  source_snippets: string[];
+  confidence_score: number;
+  permission_level: string;
+  review_status: string;
+  created_at: string;
+  evidence_reason: string;
 };
 
 export type ProjectMemory = {
@@ -548,12 +565,15 @@ export type ProjectMemory = {
   evidence_count: number;
   permission_level: string;
   latest_timestamp: string;
+  pending_review_count: number;
   evidence: ProjectEvidence[];
+  timeline_items: ProjectTimelineItem[];
 };
 
 export type ProjectsResponse = {
   project_count: number;
   hidden_project_count: number;
+  hidden_evidence_count?: number;
   projects: ProjectMemory[];
 };
 
