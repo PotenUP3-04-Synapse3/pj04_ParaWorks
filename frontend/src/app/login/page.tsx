@@ -108,7 +108,7 @@ export default function LoginPage() {
             <span className="brand-wordmark">paraworks</span>
           </div>
           <div>
-            <h1>회사 모든 기록을 연결해, 더 나은 일의 흐름을 만듭니다.</h1>
+            <h1>회사 모든 기록을 연결하여, <br />더 나은 일의 흐름을 만듭니다.</h1>
             <p>모든 팀과 데이터가 하나로 연결되는 스마트 협업 플랫폼</p>
           </div>
           <div className="login-cube-scene" aria-hidden="true">

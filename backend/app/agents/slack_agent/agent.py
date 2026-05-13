@@ -51,18 +51,18 @@ class SlackAgentModel(Protocol):
 class DeterministicSlackAgentModel:
     def extract(self, packet: EvidencePacket) -> SlackAgentModelResponse:
         combined_text = '\n'.join(message.text for message in packet.messages)
-        title = 'Slack timeline candidate'
-        summary = 'Slack evidence was summarized into a reviewable company history candidate.'
+        title = '슬랙 타임라인 후보'
+        summary = '슬랙 증거 데이터가 검토 가능한 회사 히스토리 후보로 요약되었습니다.'
 
         if 'Redis' in combined_text or 'redis' in combined_text:
-            title = 'Redis queue decision captured'
-            summary = 'The Slack discussion indicates Redis should support queue and job progress workflows.'
+            title = 'Redis 큐 관련 결정사항 추출됨'
+            summary = '슬랙 논의 결과, Redis가 큐 및 작업 진행 워크플로우를 지원해야 함을 확인했습니다.'
         elif 'scope' in combined_text.lower():
-            title = 'MVP scope follow-up captured'
-            summary = 'The Slack discussion records an MVP scope follow-up that should be reviewed.'
+            title = 'MVP 스코프 팔로업 추출됨'
+            summary = '검토가 필요한 MVP 스코프 관련 팔로업 내용이 슬랙 논의에서 확인되었습니다.'
         elif packet.messages:
             first_message = packet.messages[0].source_snippet
-            title = 'Slack history candidate'
+            title = '슬랙 히스토리 후보'
             summary = first_message
 
         input_tokens = max(1, len(combined_text) // 4)

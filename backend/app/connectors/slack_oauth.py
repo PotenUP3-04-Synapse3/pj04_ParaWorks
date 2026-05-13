@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import secrets
 from dataclasses import dataclass
 from urllib.parse import urlencode
@@ -142,12 +143,30 @@ class SlackOAuthClient:
 
 
 class LocalTokenVault:
-    def __init__(self) -> None:
+    def __init__(self, storage_path: str = '.tokens.json') -> None:
+        self.storage_path = storage_path
         self._secrets: dict[str, str] = {}
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            if os.path.exists(self.storage_path):
+                with open(self.storage_path, 'r') as f:
+                    self._secrets = json.load(f)
+        except Exception:
+            self._secrets = {}
+
+    def _save(self) -> None:
+        try:
+            with open(self.storage_path, 'w') as f:
+                json.dump(self._secrets, f, indent=2)
+        except Exception:
+            pass
 
     def store_token(self, *, connector_type: str, workspace_id: str, token: str, token_kind: str) -> str:
         token_ref = f'local:{connector_type}:{workspace_id}:{token_kind}'
         self._secrets[token_ref] = token
+        self._save()
         return token_ref
 
     def store_bot_token(self, *, connector_type: str, workspace_id: str, token: str) -> str:
@@ -168,6 +187,13 @@ class LocalTokenVault:
 
     def resolve(self, token_ref: str) -> str | None:
         return self._secrets.get(token_ref)
+
+    def remove_token(self, token_ref: str) -> bool:
+        if token_ref in self._secrets:
+            del self._secrets[token_ref]
+            self._save()
+            return True
+        return False
 
 
 LOCAL_TOKEN_VAULT = LocalTokenVault()
