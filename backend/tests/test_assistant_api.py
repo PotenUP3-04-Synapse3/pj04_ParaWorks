@@ -4,6 +4,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.api.v1 import assistant as assistant_api
+from backend.app.assistant.service import (
+    append_assistant_message,
+    build_contextual_question,
+    create_conversation,
+    list_messages,
+    update_summary,
+)
+from backend.app.core.demo_auth import USERS
 from backend.app.models import AgentRun, AssistantMessage
 from backend.tests.test_rag_orchestrator_service import seed_chunk
 
@@ -19,7 +27,7 @@ def test_assistant_conversation_api_is_user_scoped(client: TestClient) -> None:
 
     other_user_response = client.get(
         f'/api/v1/assistant/conversations/{conversation_id}/messages',
-        headers={'X-Demo-User': 'employee-jun'},
+        headers={'X-Demo-User': 'hanvv-employee'},
     )
 
     assert other_user_response.status_code == 404
@@ -62,13 +70,57 @@ def test_assistant_message_flow_stores_rag_answer_without_cost_fields(
     assert 'cache_key' not in payload['assistant_message']
 
 
+def test_assistant_context_deduplicates_repeated_assistant_answers(
+    db_session: Session,
+) -> None:
+    user = USERS['viewer']
+    conversation = create_conversation(db_session, user, title='반복 답변')
+    repeated_answer = 'Redis는 일시적인 작업 상태와 큐 진행 상황을 빠르게 공유하는 데 사용됩니다.'
+    conversation.summary = update_summary(None, repeated_answer)
+    for _ in range(4):
+        append_assistant_message(
+            db_session,
+            user,
+            conversation,
+            content=repeated_answer,
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={},
+        )
+
+    messages = list_messages(db_session, user, conversation.id)
+    contextual_question = build_contextual_question(
+        conversation=conversation,
+        messages=messages,
+        new_message='K테크 일정을 알려줘',
+    )
+
+    assert contextual_question.count(repeated_answer) == 1
+
+
 def test_assistant_email_request_creates_approval_draft_without_rag(
     client: TestClient,
     monkeypatch,
 ) -> None:
+    class FakeEmailActionAgent:
+        def decide(self, **kwargs):
+            return assistant_api.EmailActionDecision(
+                action_type='email_draft',
+                to=['partner@example.com'],
+                subject='회의 취소 안내',
+                body='안녕하세요.\n\n오늘 회의가 취소되었습니다.\n\n감사합니다.',
+            )
+
     def fail_if_rag_runs(**kwargs):
         raise AssertionError('메일 작성 요청은 RAG 근거 확인 없이 액션 초안으로 라우팅되어야 합니다.')
 
+    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: FakeEmailActionAgent())
     monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
     create_response = client.post(
         '/api/v1/assistant/conversations',
@@ -95,10 +147,67 @@ def test_assistant_email_request_creates_approval_draft_without_rag(
     assert assistant_message['metadata']['email_draft']['subject'] == '회의 취소 안내'
 
 
+def test_assistant_email_agent_uses_conversation_context_without_rag(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    class FakeEmailActionAgent:
+        def decide(self, **kwargs):
+            if kwargs['latest_message'] != '그 분에게 오늘 회의 취소됐다고 메일 보내줘':
+                return assistant_api.EmailActionDecision(action_type='not_email')
+            assert kwargs['latest_message'] == '그 분에게 오늘 회의 취소됐다고 메일 보내줘'
+            assert 'partner@example.com' in kwargs['conversation_context']
+            return assistant_api.EmailActionDecision(
+                action_type='email_draft',
+                to=['partner@example.com'],
+                subject='회의 취소 안내',
+                body='안녕하세요.\n\n오늘 회의가 취소되었습니다.\n\n감사합니다.',
+            )
+
+    def fail_if_rag_runs(**kwargs):
+        raise AssertionError('메일 의도를 sub-agent가 판단하면 RAG로 가지 않아야 합니다.')
+
+    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: FakeEmailActionAgent())
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '메일 맥락'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+    client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'partner@example.com은 협력사 담당자입니다.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': '그 분에게 오늘 회의 취소됐다고 메일 보내줘'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['metadata']['action_type'] == 'email_draft'
+    assert assistant_message['metadata']['prompt_version'] == assistant_api.EMAIL_ACTION_PROMPT_VERSION
+    assert assistant_message['metadata']['email_draft']['to'] == ['partner@example.com']
+    assert assistant_message['metadata']['email_draft']['subject'] == '회의 취소 안내'
+
+
 def test_assistant_email_draft_requires_approval_endpoint_before_send(
     client: TestClient,
     monkeypatch,
 ) -> None:
+    class FakeEmailActionAgent:
+        def decide(self, **kwargs):
+            return assistant_api.EmailActionDecision(
+                action_type='email_draft',
+                to=['partner@example.com'],
+                subject='회의 취소 안내',
+                body='안녕하세요.\n\n오늘 회의가 취소되었습니다.\n\n감사합니다.',
+            )
+
     class FakeGmailDraftSender:
         def __init__(self, **kwargs):
             pass
@@ -106,6 +215,7 @@ def test_assistant_email_draft_requires_approval_endpoint_before_send(
         def send(self, **kwargs):
             return SimpleNamespace(message_id='gmail-sent-1')
 
+    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: FakeEmailActionAgent())
     monkeypatch.setattr(assistant_api, 'GmailDraftSender', FakeGmailDraftSender)
     create_response = client.post(
         '/api/v1/assistant/conversations',
@@ -306,7 +416,7 @@ def test_assistant_conversations_list_is_user_scoped(client: TestClient) -> None
     client.post(
         '/api/v1/assistant/conversations',
         json={'title': 'Employee conversation'},
-        headers={'X-Demo-User': 'employee-jun'},
+        headers={'X-Demo-User': 'hanvv-employee'},
     )
 
     list_response = client.get(

@@ -1,6 +1,123 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-12
+Updated: 2026-05-14
+
+## 2026-05-14 Project Recognition Handoff
+
+- `/projects` now uses canonical company projects instead of loose source
+  grouping:
+  - `k-tech-pilot` / `K테크 파일럿`
+  - `seed-ir` / `시드 투자 IR`
+- Deterministic project classification lives behind the Review Queue as
+  `project_assignment` candidates. It scans Slack, Gmail, Drive, and Calendar
+  sources for project aliases and intentionally uses no live LLM or token
+  budget.
+- `POST /api/v1/projects/reclassify?dry_run=true` previews candidate counts and
+  cost policy. `dry_run=false` creates pending Review Queue items for approved
+  reviewer handling.
+- `/projects` returns both canonical projects with approved evidence,
+  pending-review counts, and project-scoped `timeline_items`. Legacy labels
+  like `미분류 프로젝트`, `Project Newbiegenie`, and `프로젝트 결과` should not be
+  displayed as projects.
+- `/timeline` now reads `/api/v1/projects` so the top menu is project-scoped
+  and timeline evidence explains why each item is connected.
+- Deterministic RAG fallback no longer has a hard-coded Redis/PostgreSQL answer.
+  It now formats retrieved evidence snippets, and AgentRun metadata records
+  `retrieval_backend`, `rag_model_mode`, and any fallback reason.
+- Assistant conversation context deduplicates repeated assistant answers so an
+  old bad answer does not keep contaminating later RAG questions.
+- For a clean local/dev rerun, use `uv run python scripts/reset_connector_data.py`
+  for dry-run counts, then `uv run python scripts/reset_connector_data.py
+  --execute --confirm` only in local env. This preserves auth users and
+  integration connections but clears connector-derived source/review/knowledge,
+  vector, AgentRun, and assistant data.
+- After reset, rerun connector sync, call project reclassify, and approve the
+  resulting `project_assignment` Review Queue candidates.
+- Existing DB rows are not deleted or migrated. Run deterministic reclassify
+  and approve the resulting Review Queue candidates to attach current source
+  data to projects.
+
+## 2026-05-13 Work Data and Assignment Extraction Handoff
+
+- Dashboard recent timeline output now uses real `TimelineEvent` fields:
+  `summary`, `created_at`, `confidence_score`, and `source_links`.
+  Frontend code should not reintroduce `event_time` or `importance`.
+- `/projects` is connected to `GET /api/v1/projects`; the page no longer uses
+  local ORION/Nova/Atlas seed data.
+- Future todo promotion creates clean Korean timeline entries such as
+  `[할 일] ...` and `담당자: ..., 기한: ...`. Existing broken DB rows are not
+  migrated by this slice.
+- Mail/Docs and Memory Extraction deterministic models now detect generic
+  Korean/English work assignment cues from Gmail, Drive, and Calendar evidence.
+  Live LLM execution remains closed; only preflight endpoints were added.
+- Verification completed:
+  `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q`,
+  `uv run ruff check ...`, `npm run lint`, `npm run build`, and
+  `git diff --check`.
+
+## 2026-05-13 RAG Orchestrator Assistant Handoff
+
+- Active branch: `codex/rag-orchestrator-assistant-memory`.
+- Latest pushed commit before this handoff update:
+  `506b257 fix: surface Gmail send failures`.
+- Current local serious mode status:
+  - backend: `http://127.0.0.1:8000`
+  - frontend: `http://127.0.0.1:3000`
+  - backend health returned `demo_mode=false`.
+- Gmail runtime status checked during the session:
+  - Gmail integration was connected;
+  - credential status was available for `hanvv3@koreacu.ac.kr`.
+- Email-send approval flow investigation:
+  - `/search` already calls
+    `POST /api/v1/assistant/messages/{messageId}/email/send` when a user
+    approves a pending email draft.
+  - The backend send path goes through
+    `backend/app/assistant/gmail_sender.py`.
+  - The sender requires a connected Gmail integration, `gmail.send` scope, a
+    stored token in `.tokens.json`, and refresh-token credentials when the
+    access token is expired.
+  - The local backend had been running without reload, so changed backend code
+    required a server restart before the send endpoint could reflect updates.
+- Implemented in commit `506b257`:
+  - Added focused tests in `backend/tests/test_gmail_sender.py`.
+  - Gmail API send failures now surface as explicit `GmailSendError` codes such
+    as `gmail_api_send_failed:403` instead of becoming opaque runtime errors.
+  - Gmail refresh failures now surface as explicit error codes such as
+    `gmail_refresh_failed:{status}` and `gmail_refresh_unreachable`.
+  - `/search` maps backend email-send error codes to Korean user-facing
+    messages so the user can tell whether the problem is missing connection,
+    missing `gmail.send` scope, missing token, refresh failure, or Gmail API
+    rejection.
+- Verification completed for that commit:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_gmail_sender.py -q
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+git diff --check
+```
+
+Result:
+
+- backend targeted tests: 14 passed;
+- frontend lint: passed with an existing warning in
+  `frontend/src/app/projects/page.tsx` about unused `projectSeedData`;
+- frontend build: passed;
+- whitespace check: passed.
+
+Next recommended steps:
+
+1. Reproduce the approve-send flow in the browser after logging in with the
+   Gmail-connected account.
+2. If sending still fails, capture the backend response body from the
+   `/api/v1/assistant/messages/{messageId}/email/send` request. The new error
+   code should now point to the exact missing OAuth/token/Gmail API condition.
+3. If the error is `gmail_send_scope_required`, reconnect Gmail after the
+   expanded `gmail.send` scope change so Google issues a token with send
+   permission.
+4. If the error is `gmail_api_send_failed:403`, check Google Cloud OAuth app
+   verification/test-user status and Gmail API enablement.
 
 ## 2026-05-12 Demo Data Boundary Update
 

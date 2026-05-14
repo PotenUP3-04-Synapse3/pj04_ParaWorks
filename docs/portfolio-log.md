@@ -1,10 +1,38 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-12
+Last updated: 2026-05-14
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-14 Project Recognition and Timeline Workflow Boundary
+
+- Replaced loose `/projects` source grouping with two canonical company
+  projects: `K테크 파일럿` and `시드 투자 IR`.
+- Added deterministic, zero-token project classification that creates
+  `project_assignment` Review Queue candidates from Slack, Gmail, Drive, and
+  Calendar source evidence.
+- Changed `/projects` to show only approved project assignments, so legacy
+  smoke/demo labels such as `Project Newbiegenie`, `프로젝트 결과`, and
+  `미분류 프로젝트` no longer appear as business projects.
+- Updated `/timeline` to consume project-scoped workflow data from `/projects`
+  instead of showing one generic `Company Memory` timeline.
+- Stopped using raw connector titles like `Slack message in C0AUJDZUKA8` as
+  task titles and moved project evidence reasons into the UI data model.
+- Removed the deterministic RAG Redis canned-answer branch so local fallback
+  answers now summarize retrieved evidence snippets instead of returning a
+  fixed Redis/PostgreSQL response.
+- Added a local/dev reset utility for connector-derived data that preserves
+  auth users and integration connections while clearing sources, review items,
+  approved knowledge, vector state, AgentRuns, and assistant conversations.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from connector-data display toward evidence-backed
+  project understanding and evidence-grounded assistant answers with human
+  review as the trust boundary.
+  project understanding with human review as the trust boundary.
 
 ## 2026-05-12 Smoke-Only Demo Data Boundary
 
@@ -3861,3 +3889,9 @@ Cost/security note:
   - Added a modular assistant email action path that detects direct email-send requests without forcing RAG evidence, drafts a business-tone subject/body, and stores the draft as pending approval in assistant message metadata.
   - Added a Gmail approval endpoint that sends only after explicit user approval and only when an installed Gmail connection already has send-capable OAuth scope.
   - Verification: `uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q`, `npm.cmd run lint`, `npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop`, and `npm.cmd run build` passed.
+- `feat: connect work data and harden assignment extraction`
+  - Fixed dashboard timeline data to use real `TimelineEvent` fields and connected `/projects` to the existing permission-aware project memory API instead of empty frontend state.
+  - Repaired future todo-to-timeline promotion copy so generated Korean timeline entries no longer contain mojibake.
+  - Preserved source snippets in Mail/Docs and Memory Extraction evidence packets, added richer Review evidence metadata, and expanded deterministic extraction for Korean/English work assignments from Gmail, Drive, and Calendar evidence.
+  - Added Mail/Docs and Memory Extraction LLM preflight responses that expose evidence counts and estimated cost while keeping live LLM execution closed for this slice.
+  - Verification: `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q` passed with 29 tests; `uv run ruff check ...` fixed and cleared touched backend files; `npm run lint` and `npm run build` passed.

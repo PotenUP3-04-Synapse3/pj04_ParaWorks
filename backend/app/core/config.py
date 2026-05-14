@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     auth_session_cookie_name: str = 'paraworks_session'
     auth_refresh_cookie_name: str = 'paraworks_refresh'
     auth_session_secret: str = 'local-development-session-secret'
-    auth_session_ttl_seconds: int = 900
-    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 14
+    auth_session_ttl_seconds: int = 60 * 60 * 24 * 30
+    auth_refresh_ttl_seconds: int = 60 * 60 * 24 * 30
     auth_cookie_secure: bool = False
     auth_csrf_cookie_name: str = 'paraworks_csrf'
     auth_csrf_header_name: str = 'X-CSRF-Token'
@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     agent_llm_max_output_tokens: int = 512
     agent_llm_temperature: float = 0.2
     agent_llm_timeout_seconds: float = 30.0
+    assistant_email_agent_enabled: bool = True
+    assistant_email_agent_model: str = 'gpt-4.1-nano'
+    assistant_email_agent_max_input_chars: int = 2500
+    assistant_email_agent_max_output_tokens: int = 256
+    assistant_email_agent_temperature: float = 0.0
+    assistant_email_agent_timeout_seconds: float = 12.0
     rag_embedding_max_estimated_cost_usd: float | None = 0.001
     rag_use_pgvector_search: bool = False
     slack_bot_token: str | None = None

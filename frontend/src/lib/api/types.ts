@@ -24,6 +24,20 @@ export type DashboardResponse = {
     due_date: string;
     category: string;
   }[];
+  recent_decisions: {
+    id: number;
+    title: string;
+    summary: string;
+    created_at: string;
+  }[];
+  recent_timeline: {
+    id: number;
+    title: string;
+    summary: string;
+    created_at: string;
+    confidence_score: number;
+    source_links: string[];
+  }[];
 };
 
 export type DemoUser = {
@@ -333,6 +347,7 @@ export type ReviewSourceEvidence = {
   rank: number;
   source_id?: string | null;
   source_url?: string | null;
+  source_type?: string | null;
   source_snippet: string;
   permission_level: string;
   confidence_score: number;
@@ -340,6 +355,9 @@ export type ReviewSourceEvidence = {
   timestamp?: string | null;
   author?: string | null;
   agent_run_id?: number | null;
+  parser_status?: string | null;
+  section_path?: string | null;
+  evidence_reason?: string | null;
 };
 
 export type ReviewItem = {
@@ -353,6 +371,7 @@ export type ReviewItem = {
   confidence_score: number;
   permission_level: string;
   status: ReviewStatus;
+  reviewer_id?: string | null;
 };
 
 export type ReviewPromotionPreview = {
@@ -362,7 +381,19 @@ export type ReviewPromotionPreview = {
   normalized_payload: Record<string, string>;
 };
 
+export type ReviewGroup = {
+  group_id: string;
+  title: string;
+  item_type: string;
+  status: ReviewStatus;
+  permission_level: string;
+  items: ReviewItem[];
+  total_count: number;
+  avg_confidence: number;
+};
+
 export type ReviewResponse = {
+  groups: ReviewGroup[];
   items: ReviewItem[];
 };
 
@@ -497,6 +528,53 @@ export type AssistantEmailSendResponse = {
   message: AssistantMessage;
   status: string;
   gmail_message_id?: string | null;
+};
+
+export type ProjectEvidence = {
+  id: string;
+  source_id: string;
+  source_type: string;
+  title: string;
+  source_url: string;
+  source_snippet: string;
+  permission_level: string;
+  timestamp: string;
+  task_summary: string;
+  evidence_reason: string;
+};
+
+export type ProjectTimelineItem = {
+  id: string;
+  item_type: string;
+  title: string;
+  summary: string;
+  source_links: string[];
+  source_snippets: string[];
+  confidence_score: number;
+  permission_level: string;
+  review_status: string;
+  created_at: string;
+  evidence_reason: string;
+};
+
+export type ProjectMemory = {
+  project_key: string;
+  name: string;
+  summary: string;
+  source_types: string[];
+  evidence_count: number;
+  permission_level: string;
+  latest_timestamp: string;
+  pending_review_count: number;
+  evidence: ProjectEvidence[];
+  timeline_items: ProjectTimelineItem[];
+};
+
+export type ProjectsResponse = {
+  project_count: number;
+  hidden_project_count: number;
+  hidden_evidence_count?: number;
+  projects: ProjectMemory[];
 };
 
 export type IntegrationSyncResponse = {

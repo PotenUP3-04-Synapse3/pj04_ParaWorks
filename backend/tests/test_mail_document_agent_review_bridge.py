@@ -40,7 +40,10 @@ def seed_chunk(
     source_id: str,
     permission_level: str,
     metadata: dict | None = None,
+    text: str | None = None,
+    source_snippet: str | None = None,
 ) -> None:
+    body = text or f'{source_type} body'
     source = Source(
         source_type=source_type,
         source_id=source_id,
@@ -57,7 +60,7 @@ def seed_chunk(
     db.add(document)
     db.flush()
 
-    version = DocumentVersion(document_id=document.id, version='v1', body=f'{source_type} body')
+    version = DocumentVersion(document_id=document.id, version='v1', body=body)
     db.add(version)
     db.flush()
 
@@ -66,8 +69,8 @@ def seed_chunk(
             version_id=version.id,
             source_id=source.id,
             chunk_index=0,
-            text=f'{source_type} body',
-            source_snippet=f'{source_type} body',
+            text=body,
+            source_snippet=source_snippet or body,
             permission_level=permission_level,
             metadata_={'source_url': source.source_url, 'source_type': source_type, **(metadata or {})},
         )
@@ -222,3 +225,34 @@ def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Ses
     assert message.metadata['event_context_key'] == 'event-1:2026-05-01T10:00:00Z'
     assert message.metadata['event_status'] == 'confirmed'
     assert message.metadata['organizer_email'] == 'lead@example.com'
+
+
+def test_mail_document_evidence_packet_preserves_chunk_snippet_and_calendar_due_metadata(db_session: Session) -> None:
+    seed_chunk(
+        db_session,
+        'calendar',
+        'calendar-alpha-deadline',
+        'internal',
+        text='프로젝트 Alpha 공유본 마감 회의입니다. 김하나님이 고객사 공유본을 준비합니다.',
+        source_snippet='김하나님 고객사 공유본 준비 일정',
+        metadata={
+            'event_context_key': 'event-deadline:2026-05-20T09:00:00Z',
+            'event_status': 'confirmed',
+            'organizer_email': 'lead@example.com',
+            'start': '2026-05-20T09:00:00+09:00',
+            'end': '2026-05-20T09:30:00+09:00',
+            'section_path': '일정',
+        },
+    )
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mail-docs-calendar:2026-05-01',
+    )
+
+    message = packet.messages[0]
+    assert message.source_snippet == '김하나님 고객사 공유본 준비 일정'
+    assert message.metadata['source_type'] == 'calendar'
+    assert message.metadata['start'] == '2026-05-20T09:00:00+09:00'
+    assert message.metadata['section_path'] == '일정'

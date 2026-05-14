@@ -7,7 +7,6 @@ import {
   FileSearch,
   Pencil,
   RefreshCw,
-  ShieldCheck,
   Sparkles,
   XCircle,
   ChevronDown,
@@ -17,29 +16,16 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
+import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
   ReviewItem,
+  ReviewGroup,
   ReviewEvidenceRequest,
   ReviewItemUpdate,
   ReviewPromotionPreview,
+  ReviewResponse,
 } from "@/lib/api/types";
 
-// 타입 확장
-type ReviewGroup = {
-  group_id: string;
-  title: string;
-  item_type: string;
-  status: string;
-  permission_level: string;
-  items: ReviewItem[];
-  total_count: number;
-  avg_confidence: number;
-};
-
-type ReviewResponse = {
-  groups: ReviewGroup[];
-  items: ReviewItem[];
-};
 
 function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -49,11 +35,6 @@ function numberField(value: unknown) {
   return typeof value === "number" ? value : undefined;
 }
 
-function recordField(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
 
 function itemTitle(item: ReviewItem | ReviewGroup) {
   if ('payload' in item) {
@@ -155,27 +136,20 @@ export default function ReviewPage() {
     setError(undefined);
 
     try {
-      const updated = await apiPost<ReviewItem>(`/api/v1/review/${item.id}/${action}`, body);
-      
-      // 로컬 상태 업데이트: 해당 항목 제거
-      setGroups((current) => 
-        current.map(group => ({
-          ...group,
-          items: group.items.filter(i => i.id !== updated.id)
-        })).filter(group => group.items.length > 0)
-      );
+      await apiPost<ReviewItem>(`/api/v1/review/${item.id}/${action}`, body);
+      await loadItems();
+      notifyReviewQueueUpdated();
 
       if (action === "request-more-evidence") {
         setEvidenceRequestId(undefined);
         setEvidenceRequestNote("");
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "검토 작업에 실패했습니다.");
+      setError(caught instanceof Error ? caught.message : "Review action failed.");
     } finally {
       setPendingAction(undefined);
     }
   }
-
   async function saveEdit(item: ReviewItem) {
     const key = summaryKey(item);
     const update: ReviewItemUpdate = {
@@ -190,24 +164,16 @@ export default function ReviewPage() {
     setError(undefined);
 
     try {
-      const updated = await apiPatch<ReviewItem>(`/api/v1/review/${item.id}`, update);
-      const preview = await apiGet<ReviewPromotionPreview>(`/api/v1/review/${item.id}/promotion-preview`);
-      
-      setGroups((current) =>
-        current.map(group => ({
-          ...group,
-          items: group.items.map(i => i.id === updated.id ? updated : i)
-        }))
-      );
-      setPreviews((current) => ({ ...current, [updated.id]: preview }));
+      await apiPatch<ReviewItem>(`/api/v1/review/${item.id}`, update);
+      await loadItems();
+      notifyReviewQueueUpdated();
       setEditingId(undefined);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "검토 항목 수정에 실패했습니다.");
+      setError(caught instanceof Error ? caught.message : "Failed to update review item.");
     } finally {
       setPendingAction(undefined);
     }
   }
-
   const totalAgentItems = groups.reduce((acc, g) => acc + g.items.filter(i => Boolean(i.payload.agent_name)).length, 0);
 
   return (

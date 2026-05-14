@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, CheckCircle2, Clock3, FileText, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock3, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { serverApiGet } from "@/lib/api/server";
@@ -6,11 +6,23 @@ import type { DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
-const todayTasks: any[] = [];
-const upcomingEvents: any[] = [];
-const assignedProjects: any[] = [];
-const personalUpdates: any[] = [];
-const reviewItems: any[] = [];
+type TodayTask = {
+  title: string;
+  category: string;
+  assignee: string;
+  due_date: string;
+  status: string;
+};
+
+type UpcomingEvent = readonly [time: string, title: string, people: string];
+type AssignedProject = readonly [name: string, progress: string, status: string, risk: string];
+type PersonalUpdate = {
+  icon: typeof Sparkles;
+  title: string;
+  detail: string;
+  time: string;
+};
+type ReviewListItem = readonly [title: string, source: string, due: string, priority: string];
 
 
 export default async function DashboardPage() {
@@ -23,17 +35,30 @@ export default async function DashboardPage() {
     weekday: "long",
   });
 
-  const visibleTodayTasks: any[] = dashboard?.today_todos?.map(todo => ({
+  const visibleTodayTasks: TodayTask[] = dashboard?.today_todos?.map((todo) => ({
     title: todo.title,
     category: todo.category,
     assignee: todo.assignee,
     due_date: todo.due_date,
     status: "검토 필요"
   })) ?? [];
-  const visibleUpcomingEvents: typeof upcomingEvents = upcomingEvents;
-  const visibleAssignedProjects: typeof assignedProjects = assignedProjects;
-  const visiblePersonalUpdates: typeof personalUpdates = personalUpdates;
-  const visibleReviewItems: any[] = dashboard?.pending_items?.map(item => [
+  const visibleUpcomingEvents: UpcomingEvent[] = [];
+  const visibleAssignedProjects: AssignedProject[] = [];
+  const visiblePersonalUpdates: PersonalUpdate[] = [
+    ...(dashboard?.recent_decisions?.map((d) => ({
+      icon: Sparkles,
+      title: `[의사결정] ${d.title}`,
+      detail: d.summary,
+      time: new Date(d.created_at).toLocaleDateString(),
+    })) ?? []),
+    ...(dashboard?.recent_timeline?.map((t) => ({
+      icon: Clock3,
+      title: `[타임라인] ${t.title}`,
+      detail: `${t.summary} · 신뢰도 ${Math.round(t.confidence_score * 100)}%`,
+      time: new Date(t.created_at).toLocaleDateString(),
+    })) ?? []),
+  ];
+  const visibleReviewItems: ReviewListItem[] = dashboard?.pending_items?.map((item) => [
     item.title,
     item.item_type,
     "기한 없음",
@@ -65,7 +90,7 @@ export default async function DashboardPage() {
         <div className="space-y-4">
           <Panel>
             <div className="panel-header compact">
-              <PanelTitle title="오늘 해야 할 업무" count={`${visibleTodayTasks.length}건`} />
+              <PanelTitle title="오늘 해야 할 업무" count={`${visibleTodayTasks.length}`} />
               <Link href="/projects" className="text-link">
                 프로젝트 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -101,7 +126,7 @@ export default async function DashboardPage() {
 
           <Panel>
             <div className="panel-header compact">
-              <PanelTitle title="검토사항" count={`${visibleReviewItems.length}건`} />
+              <PanelTitle title="검토사항" count={`${visibleReviewItems.length}`} />
               <Link href="/review" className="text-link">
                 전체 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />

@@ -46,12 +46,17 @@ class GmailDraftSender:
             raise GmailSendError('gmail_token_unavailable')
 
         access_token = self._access_token(connection=connection, stored_token=stored_token)
-        response = self.http_client.post(
-            'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
-            headers={'Authorization': f'Bearer {access_token}'},
-            json={'raw': _raw_gmail_message(to=to, subject=subject, body=body)},
-        )
-        response.raise_for_status()
+        try:
+            response = self.http_client.post(
+                'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+                headers={'Authorization': f'Bearer {access_token}'},
+                json={'raw': _raw_gmail_message(to=to, subject=subject, body=body)},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise GmailSendError(f'gmail_api_send_failed:{exc.response.status_code}') from exc
+        except httpx.RequestError as exc:
+            raise GmailSendError('gmail_api_send_unreachable') from exc
         payload = response.json()
         return GmailSendResult(message_id=str(payload.get('id') or 'sent'))
 
@@ -62,17 +67,24 @@ class GmailDraftSender:
         if not self.settings.google_client_id or not self.settings.google_client_secret:
             raise GmailSendError('gmail_refresh_credentials_required')
 
-        response = self.http_client.post(
-            'https://oauth2.googleapis.com/token',
-            data={
-                'client_id': self.settings.google_client_id,
-                'client_secret': self.settings.google_client_secret,
-                'grant_type': 'refresh_token',
-                'refresh_token': stored_token,
-            },
-        )
-        response.raise_for_status()
-        return str(response.json()['access_token'])
+        try:
+            response = self.http_client.post(
+                'https://oauth2.googleapis.com/token',
+                data={
+                    'client_id': self.settings.google_client_id,
+                    'client_secret': self.settings.google_client_secret,
+                    'grant_type': 'refresh_token',
+                    'refresh_token': stored_token,
+                },
+            )
+            response.raise_for_status()
+            return str(response.json()['access_token'])
+        except httpx.HTTPStatusError as exc:
+            raise GmailSendError(f'gmail_refresh_failed:{exc.response.status_code}') from exc
+        except (KeyError, ValueError) as exc:
+            raise GmailSendError('gmail_refresh_response_invalid') from exc
+        except httpx.RequestError as exc:
+            raise GmailSendError('gmail_refresh_unreachable') from exc
 
 
 def _latest_connected_gmail_connection(db: Session) -> IntegrationConnection | None:
