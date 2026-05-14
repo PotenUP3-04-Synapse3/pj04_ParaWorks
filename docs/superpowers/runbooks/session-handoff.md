@@ -1213,3 +1213,26 @@ uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_ag
 
 Result: targeted RED tests failed before implementation, then passed after the
 change; wider assistant/RAG tests passed with 43 tests; ruff passed.
+
+## 2026-05-14 Email Continuation Context and Docker Startup Order
+
+- Fixed the AI Assistant email draft path where recipient-only follow-ups such
+  as `kjw4work@gmail.com` caused the draft composer to ask for content again.
+- `render_email_action_context()` now preserves complete JSON message rows
+  instead of slicing the serialized JSON mid-string. This keeps recent user and
+  assistant messages readable for the low-cost email sub-agents.
+- Added `render_recent_assistant_context_for_email()` so the draft composer
+  receives recent assistant answers as explicit body-source context for phrases
+  like "이 내용으로" or "최근 결정된 사항만 요약해서 보내줘".
+- `scripts/paraworks-docker.ps1` now waits for backend `/health` before starting
+  the frontend, avoiding transient frontend `ECONNREFUSED 127.0.0.1:8000`
+  startup noise.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py backend/tests/test_paraworks_docker_script.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_agent.py backend/app/assistant/email_actions.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_paraworks_docker_script.py
+```
+
+Result: 47 tests passed; ruff passed; PowerShell parser check for
+`scripts/paraworks-docker.ps1` passed.

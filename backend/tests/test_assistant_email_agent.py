@@ -1,7 +1,13 @@
+import json
+from types import SimpleNamespace
+
 from backend.app.assistant.email_agent import (
     EmailIntentDecision,
     LangChainEmailDraftComposerModel,
     LangChainEmailIntentGateModel,
+    render_email_action_context,
+    render_email_draft_prompt,
+    render_recent_assistant_context_for_email,
 )
 
 
@@ -72,3 +78,45 @@ def test_email_draft_composer_receives_rag_context_when_required() -> None:
     assert 'Create a concise Korean business email draft' in system_prompt
     assert 'Never send email directly' in system_prompt
     assert 'Project Alpha launch is Friday.' in user_prompt
+
+
+def test_email_context_preserves_complete_recent_messages_within_budget() -> None:
+    messages = [
+        SimpleNamespace(role='assistant', content='older answer ' * 80),
+        SimpleNamespace(role='user', content='최근 결정된 사항만 요약해서 종우님한테 이메일 보내줘.'),
+        SimpleNamespace(role='assistant', content='최근 결정사항: NDA 준비, 보안 교육 자료 준비, 5/18 온보딩 시작.'),
+        SimpleNamespace(role='user', content='kjw4work@gmail.com'),
+    ]
+
+    rendered = render_email_action_context(messages=messages, max_chars=180)
+    rows = json.loads(rendered)
+
+    assert rows[-1]['content'] == 'kjw4work@gmail.com'
+    assert rows[-2]['content'] == '최근 결정사항: NDA 준비, 보안 교육 자료 준비, 5/18 온보딩 시작.'
+    assert all('role' in row and 'content' in row for row in rows)
+
+
+def test_recent_assistant_context_supplies_email_body_material() -> None:
+    messages = [
+        SimpleNamespace(role='user', content='최근 결정된 사항만 요약해줘'),
+        SimpleNamespace(role='assistant', content='최근 결정사항: NDA 준비, 보안 교육 자료 준비, 5/18 온보딩 시작.'),
+        SimpleNamespace(role='user', content='kjw4work@gmail.com'),
+    ]
+
+    context = render_recent_assistant_context_for_email(messages=messages, max_chars=500)
+
+    assert '최근 결정사항' in context
+    assert '5/18 온보딩 시작' in context
+
+
+def test_email_draft_prompt_allows_recipient_only_continuation_with_prior_context() -> None:
+    prompt = render_email_draft_prompt(
+        conversation_context='[{"role":"assistant","content":"최근 결정사항: NDA 준비, 보안 교육 자료 준비"}]',
+        latest_message='kjw4work@gmail.com',
+        intent=EmailIntentDecision(email_intent=True, intent_type='send'),
+        rag_context='Previous assistant answer:\n최근 결정사항: NDA 준비, 보안 교육 자료 준비',
+        max_input_chars=1000,
+    )
+
+    assert 'If the latest message only provides a recipient or address' in prompt
+    assert 'Previous assistant answer' in prompt

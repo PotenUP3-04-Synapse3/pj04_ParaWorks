@@ -3960,3 +3960,13 @@ Cost/security note:
     answer first and passes that answer/source context to the draft composer.
   - Verification: targeted email-agent/API tests passed, wider assistant/RAG
     backend tests passed with 43 tests, and ruff passed on touched files.
+- `fix: preserve assistant email continuation context`
+  - Fixed recipient-only email follow-ups by preserving complete recent
+    conversation JSON rows and passing recent assistant answers as explicit
+    draft source context to the email draft composer.
+  - This supports flows like "recent decisions only" -> "send this to
+    kjw4work@gmail.com" without asking for the same email content again.
+  - Adjusted `scripts/paraworks-docker.ps1` to wait for backend health before
+    starting the frontend, reducing startup `ECONNREFUSED` proxy noise.
+  - Verification: assistant/RAG/script tests passed with 47 tests; ruff and
+    PowerShell parser checks passed.

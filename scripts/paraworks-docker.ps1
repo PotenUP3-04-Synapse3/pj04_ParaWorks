@@ -246,10 +246,11 @@ npm.cmd run dev -- --hostname 127.0.0.1 --port $FrontendPort
     Write-Step "Starting backend"
     $backend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory $repoRoot -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr -ArgumentList @("-NoProfile", "-Command", $backendCommand)
 
+    Wait-HttpOk -Url "http://$HostAddress`:$BackendPort/health" -TimeoutSeconds 60
+
     Write-Step "Starting frontend"
     $frontend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory (Join-Path $repoRoot "frontend") -RedirectStandardOutput $frontendOut -RedirectStandardError $frontendErr -ArgumentList @("-NoProfile", "-Command", $frontendCommand)
 
-    Wait-HttpOk -Url "http://$HostAddress`:$BackendPort/health" -TimeoutSeconds 60
     Wait-HttpOk -Url "http://127.0.0.1:$FrontendPort/login" -TimeoutSeconds 90
 
     $state = [ordered]@{

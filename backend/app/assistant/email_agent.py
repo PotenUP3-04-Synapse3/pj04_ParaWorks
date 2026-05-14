@@ -260,18 +260,40 @@ def build_email_draft_composer(settings: Settings) -> EmailDraftComposer | NoopE
 
 
 def render_email_action_context(*, messages: list[Any], max_chars: int) -> str:
-    # 최근 대화만 짧게 잘라 저가 모델 호출 비용을 일정하게 제한한다.
-    rows = [
-        {
-            'role': getattr(message, 'role', ''),
-            'content': getattr(message, 'content', ''),
+    # 최근 대화를 완성된 JSON row 단위로 담아 모델이 잘린 JSON을 해석하지 않게 한다.
+    selected_rows: list[dict[str, str]] = []
+    for message in reversed(messages[-12:]):
+        row = {
+            'role': str(getattr(message, 'role', '')),
+            'content': str(getattr(message, 'content', '')),
         }
-        for message in messages[-8:]
-    ]
-    rendered = json.dumps(rows, ensure_ascii=False)
-    if len(rendered) <= max_chars:
-        return rendered
-    return rendered[-max_chars:]
+        candidate = [row, *selected_rows]
+        rendered = json.dumps(candidate, ensure_ascii=False)
+        if len(rendered) > max_chars and selected_rows:
+            break
+        if len(rendered) > max_chars:
+            row['content'] = row['content'][-max(80, max_chars // 2):]
+            candidate = [row]
+        selected_rows = candidate
+    return json.dumps(selected_rows, ensure_ascii=False)
+
+
+def render_recent_assistant_context_for_email(*, messages: list[Any], max_chars: int) -> str:
+    # "이 내용으로" 같은 지시가 이전 AI 답변을 이메일 본문 재료로 참조할 수 있게 보존한다.
+    chunks = []
+    for message in reversed(messages):
+        if getattr(message, 'role', '') != 'assistant':
+            continue
+        content = str(getattr(message, 'content', '')).strip()
+        if not content:
+            continue
+        chunks.append(f'Previous assistant answer:\n{content}')
+        rendered = '\n\n'.join(reversed(chunks))
+        if len(rendered) >= max_chars:
+            return rendered[-max_chars:]
+        if len(chunks) >= 3:
+            break
+    return '\n\n'.join(reversed(chunks))[-max_chars:]
 
 
 def render_email_intent_prompt(
@@ -333,6 +355,8 @@ def render_email_draft_prompt(
             'For a complete email request, return action_type=email_draft.',
             'If recipient or content is still missing, return action_type=needs_clarification.',
             'Use rag_context as the factual content source when it is provided.',
+            'If the latest message only provides a recipient or address, use conversation_context and rag_context as the email body source.',
+            'If the user says "this content", "that summary", or similar continuation, use the latest relevant assistant answer from rag_context.',
             'Never invent a recipient that is not in latest_message or conversation_context.',
             'Write a concise Korean business subject and body.',
             'Never send email directly; this draft always requires user approval.',
