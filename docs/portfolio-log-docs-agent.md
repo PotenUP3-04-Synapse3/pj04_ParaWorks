@@ -1,6 +1,6 @@
 # Document Agent Portfolio Log
 
-Last updated: 2026-05-11
+Last updated: 2026-05-14
 
 This file records Document Agent specific product, architecture, verification,
 and demo evidence. Do not store Document Agent progress entries in
@@ -18,6 +18,43 @@ and demo evidence. Do not store Document Agent progress entries in
   modified in place when the Document Agent work needs to integrate with them.
 - Document Agent portfolio and project records belong in this file.
 - Target git branch: `/agent_docs`.
+
+## Mail/Document Agent LLM Review Queue Quality
+
+Recorded on 2026-05-14.
+
+- Changed the shared agent LLM default model to `gpt-5.4-mini` and aligned
+  Mail/Document LLM preflight metadata with that default.
+- Hardened Mail/Document LLM output parsing so string `"false"` does not become
+  business-related truth, and LLM `structured_data` cannot overwrite reserved
+  ReviewItem fields such as title, summary, source ids, AgentRun id, or cost.
+- Upgraded Mail/Document ReviewItems to preserve action-oriented payload fields
+  such as `business_context`, `task_summary`, `recommended_next_step`,
+  `assignee`, `due_date`, `counterparty`, `source_subject`, and
+  `summary_quality`.
+- Changed Mail/Docs paid LLM review generation to create source-grouped
+  ReviewItems: Gmail with attachments stays grouped, while Drive and Calendar
+  evidence stays source-local.
+- Improved Review Queue approval so the API returns promotion results with
+  created knowledge record ids, created timeline ids, project key, and next
+  routes. The frontend now surfaces a post-approval navigation CTA.
+- Updated the Review Queue frontend to show Mail/Docs 업무 판단 before the raw
+  summary and keep original mail/document text inside source evidence.
+- Strengthened permission filtering so both Source and DocumentChunk permission
+  levels must be allowed before evidence enters the Mail/Docs agent.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py -q
+uv run ruff check backend/app/agents/mail_document_agent backend/app/agents/slack_agent/llm.py backend/app/api/v1/integrations.py backend/app/api/v1/review.py backend/app/knowledge/promotion.py backend/app/core/config.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+Result: backend targeted suite passed with 51 tests, ruff passed, TypeScript
+check passed, and frontend production build passed.
 
 ## Google Connector and Ingestion Foundation
 

@@ -15,7 +15,7 @@ from backend.app.knowledge.promotion import (
     promote_review_item,
     validate_review_item_for_approval,
 )
-from backend.app.models import AgentRun, ReviewItem, Source, Document, DocumentChunk
+from backend.app.models import AgentRun, ReviewItem
 from backend.app.schemas.review import ReviewEvidenceRequest, ReviewItemUpdate
 from backend.app.services.audit import record_audit_log
 
@@ -225,7 +225,7 @@ def approve_review_item(
     item.status = 'approved'
     item.reviewer_id = user.id
     item.reviewed_at = datetime.now(UTC)
-    promote_review_item(db, item)
+    promotion_result = promote_review_item(db, item)
     record_audit_log(
         db=db,
         actor=user,
@@ -239,7 +239,9 @@ def approve_review_item(
     )
     db.commit()
     db.refresh(item)
-    return _review_item_response(item, _agent_run_for_item(db, item))
+    response = _review_item_response(item, _agent_run_for_item(db, item))
+    response['promotion_result'] = promotion_result
+    return response
 
 
 @router.post('/{item_id}/request-more-evidence')
@@ -293,14 +295,17 @@ def reject_review_item(
 
     item.status = 'rejected'
     
-    # Phase 2: 반려 시 데이터 폐기 (Delete on Rejection)
-    # 연결된 Source들을 찾아 삭제 (Cascade 설정을 통해 하위 항목도 삭제됨)
-    source_ids = item.payload.get('source_ids', [])
-    sources = []
-    if source_ids:
-        sources = db.scalars(select(Source).where(Source.source_id.in_(source_ids))).all()
-        for src in sources:
-            db.delete(src)
+    # Rejecting an AI candidate must not delete connector evidence.
+    raw_source_ids = item.payload.get('source_ids', [])
+    source_ids = (
+        [
+            source_id.strip()
+            for source_id in raw_source_ids
+            if isinstance(source_id, str) and source_id.strip()
+        ]
+        if isinstance(raw_source_ids, list)
+        else []
+    )
 
     record_audit_log(
         db=db,
@@ -310,8 +315,8 @@ def reject_review_item(
         target_id=item.id,
         metadata={
             'item_type': item.item_type,
-            'source_ids': source_ids,
-            'purged_source_count': len(sources)
+            'source_ids_preserved': source_ids,
+            'rejected_review_item_id': item.id,
         },
     )
     db.commit()

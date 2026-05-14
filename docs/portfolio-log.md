@@ -3947,6 +3947,13 @@ Cost/security note:
   - Tightened live Gmail collection with a business-focused query window and spam/trash/social/promotions/forums exclusions, plus explicit Gmail message `content_signature` metadata for safer dedupe.
   - Verification: 63 targeted Google/Mail-Document/connector runtime tests passed; ruff passed on touched backend files.
 
+- `feat: harden mail document operating mvp`
+  - Added permission-filtered Mail/Document evidence packets, grouped manual/orchestrated ReviewItem generation, and source-id preservation through review rejection so rejecting AI candidates no longer deletes connector evidence.
+  - Added Slack-style Mail/Docs live LLM preflight and explicit paid-run endpoint using existing `AGENT_LLM_*` settings; sync remains deterministic/cost-safe and live LLM is only user-triggered.
+  - Stored operational details in `AgentRun.metadata_`, `AuditLog.metadata_`, and API responses without adding log-path environment variables; legacy Slack sync now uses a module logger instead of `print()`.
+  - Hardened RAG indexing against malformed approved `payload.source_ids` and included approved `TimelineEvent` rows as knowledge documents.
+  - Verification: `63` targeted backend tests passed; ruff passed on touched backend paths; frontend TypeScript check and Next production build passed.
+
 - `fix: connect slack sync to agent_slack llm pipeline`
   - Slack sync 후 `Redis 큐 관련 결정사항 추출됨` 1건만 생성되던 원인이 sync 경로의 결정론/fake Slack Agent 호출임을 확인했다.
   - 운영형 local/prod 모드와 provider key가 있는 경우 `/api/v1/integrations/slack/sync`가 `agent_slack.process_daily_slack_sync()` 기반 분석 경로를 타도록 연결했다.

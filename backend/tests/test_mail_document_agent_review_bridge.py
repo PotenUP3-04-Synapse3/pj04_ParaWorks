@@ -7,6 +7,7 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgentModelResponse,
     build_mail_document_evidence_packet,
     create_mail_document_agent_review_items,
+    create_mail_document_agent_review_items_for_changed_sources,
 )
 from backend.app.models import (
     AgentRun,
@@ -34,6 +35,45 @@ class FakeMailDocumentModel:
         )
 
 
+class FlexibleMailDocumentModel:
+    def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
+        return MailDocumentAgentModelResponse(
+            title='Grouped source review',
+            summary='Grouped mail/document evidence produced one review candidate.',
+            item_type='history_event',
+            confidence_score=0.82,
+            input_tokens=100,
+            output_tokens=40,
+        )
+
+
+class StructuredOverrideMailDocumentModel:
+    def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
+        return MailDocumentAgentModelResponse(
+            title='K테크 1개월 파일럿 제안 검토 및 회신',
+            summary='K테크 솔루션즈가 ParaWorks 1개월 파일럿 도입을 제안했습니다.',
+            item_type='todo',
+            confidence_score=0.91,
+            input_tokens=120,
+            output_tokens=60,
+            model_name='gpt-5.4-mini',
+            structured_data={
+                'title': 'RE: [논의] K테크 솔루션즈 파일럿 제안 검토 요청',
+                'summary': 'From: "김종우" <kjw4work@gmail.com> Date: Wed, 13 May 2026',
+                'source_ids': ['malicious-source-override'],
+                'agent_run_id': '99999',
+                'estimated_cost_usd': '999',
+                'business_context': 'K테크 솔루션즈가 ParaWorks 파일럿 도입에 관심을 보였습니다.',
+                'action_required': 'true',
+                'task_summary': '1개월 파일럿 제안의 범위와 성공 기준을 검토합니다.',
+                'recommended_next_step': '파일럿 범위, 성공 지표, 일정 초안을 정리해 회신합니다.',
+                'counterparty': 'K테크 솔루션즈',
+                'source_subject': '[논의] K테크 솔루션즈 파일럿 제안 검토 요청',
+                'summary_quality': 'actionable',
+            },
+        )
+
+
 def seed_chunk(
     db: Session,
     source_type: str,
@@ -51,7 +91,7 @@ def seed_chunk(
         title=f'{source_type} evidence',
         author='owner@example.com',
         permission_level=permission_level,
-        raw_metadata={'ts': '2026-04-30T10:00:00+00:00', 'scenario': 'agent-bridge-test'},
+        raw_metadata={'ts': '2026-04-30T10:00:00+00:00', 'scenario': 'agent-bridge-test', **(metadata or {})},
     )
     db.add(source)
     db.flush()
@@ -87,7 +127,11 @@ def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session:
     created = create_mail_document_agent_review_items(
         db=db_session,
         agent=agent,
-        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        permission_context=PermissionContext(
+            user_id='demo-admin',
+            role='admin',
+            allowed_permission_levels=('public', 'internal', 'restricted'),
+        ),
         source_window='mail-docs:2026-05-01',
     )
 
@@ -159,7 +203,11 @@ def test_mail_document_evidence_packet_preserves_parser_status_metadata(db_sessi
 
     packet = build_mail_document_evidence_packet(
         db=db_session,
-        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        permission_context=PermissionContext(
+            user_id='demo-admin',
+            role='admin',
+            allowed_permission_levels=('public', 'internal', 'restricted'),
+        ),
         source_window='mail-docs:2026-05-01',
     )
 
@@ -220,6 +268,143 @@ def test_mail_document_evidence_packet_can_scope_to_source_ids(db_session: Sessi
     assert {message.metadata['source_type'] for message in packet.messages} == {'gmail'}
 
 
+def test_mail_document_evidence_packet_excludes_disallowed_permissions(db_session: Session) -> None:
+    seed_chunk(db_session, 'gmail', 'gmail-agent-test', 'internal')
+    seed_chunk(db_session, 'drive', 'drive-restricted-test', 'restricted')
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(
+            user_id='hanvv-employee',
+            role='employee',
+            allowed_permission_levels=('public', 'internal'),
+        ),
+        source_window='mail-docs:employee',
+    )
+
+    assert [message.source_id for message in packet.messages] == ['gmail-agent-test']
+    assert packet.strictest_permission == 'internal'
+
+
+def test_mail_document_evidence_packet_excludes_disallowed_source_permission_even_when_chunk_is_internal(
+    db_session: Session,
+) -> None:
+    source = Source(
+        source_type='drive',
+        source_id='drive-restricted-source-internal-chunk',
+        source_url='https://drive.mock/restricted-source',
+        title='Restricted source',
+        author='owner@example.com',
+        permission_level='restricted',
+        raw_metadata={'ts': '2026-05-14T09:00:00+09:00'},
+    )
+    db_session.add(source)
+    db_session.flush()
+    document = Document(source_id=source.id, title=source.title, current_version='v1')
+    db_session.add(document)
+    db_session.flush()
+    version = DocumentVersion(document_id=document.id, version='v1', body='Restricted source text.')
+    db_session.add(version)
+    db_session.flush()
+    db_session.add(
+        DocumentChunk(
+            version_id=version.id,
+            source_id=source.id,
+            chunk_index=0,
+            text='Restricted source text.',
+            source_snippet='Restricted source text.',
+            permission_level='internal',
+            metadata_={'source_type': 'drive'},
+        )
+    )
+    db_session.commit()
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(
+            user_id='hanvv-employee',
+            role='employee',
+            allowed_permission_levels=('public', 'internal'),
+        ),
+        source_window='mail-docs:employee',
+    )
+
+    assert packet.messages == []
+
+
+def test_mail_document_changed_source_review_items_preserve_group_local_source_ids(
+    db_session: Session,
+) -> None:
+    seed_chunk(db_session, 'gmail', 'gmail:message-1', 'internal')
+    seed_chunk(
+        db_session,
+        'gmail_attachment',
+        'gmail_attachment:message-1:att-1',
+        'internal',
+        metadata={'parent_source_id': 'gmail:message-1'},
+    )
+    seed_chunk(db_session, 'drive', 'drive:file-1', 'internal')
+    agent = MailDocumentAgent(model=FlexibleMailDocumentModel())
+
+    created = create_mail_document_agent_review_items_for_changed_sources(
+        db=db_session,
+        agent=agent,
+        permission_context=PermissionContext(
+            user_id='demo-admin',
+            role='admin',
+            allowed_permission_levels=('public', 'internal', 'restricted'),
+        ),
+        source_window='mail-docs:changed',
+        source_ids=['gmail:message-1', 'gmail_attachment:message-1:att-1', 'drive:file-1'],
+    )
+
+    assert len(created) == 2
+    payloads = [item.payload for item in sorted(created, key=lambda item: item.id)]
+    assert payloads[0]['source_ids'] == ['gmail:message-1', 'gmail_attachment:message-1:att-1']
+    assert payloads[1]['source_ids'] == ['drive:file-1']
+
+
+def test_mail_document_review_payload_filters_reserved_structured_fields(
+    db_session: Session,
+) -> None:
+    seed_chunk(
+        db_session,
+        'gmail',
+        'gmail:k-tech-pilot',
+        'internal',
+        text=(
+            'Subject: [논의] K테크 솔루션즈 파일럿 제안 검토 요청\n\n'
+            'K테크 솔루션즈 측에서 ParaWorks 1개월 파일럿 도입에 큰 관심을 보이고 있습니다. '
+            '파일럿 범위와 성공 기준을 검토해 회신이 필요합니다.'
+        ),
+        source_snippet='K테크 솔루션즈 측에서 ParaWorks 1개월 파일럿 도입에 큰 관심을 보이고 있습니다.',
+    )
+    agent = MailDocumentAgent(model=StructuredOverrideMailDocumentModel())
+
+    created = create_mail_document_agent_review_items(
+        db=db_session,
+        agent=agent,
+        permission_context=PermissionContext(
+            user_id='demo-admin',
+            role='admin',
+            allowed_permission_levels=('public', 'internal', 'restricted'),
+        ),
+        source_window='mail-docs:k-tech',
+        source_ids=['gmail:k-tech-pilot'],
+    )
+
+    assert len(created) == 1
+    item = created[0]
+    assert item.item_type == 'todo'
+    assert item.payload['title'] == 'K테크 1개월 파일럿 제안 검토 및 회신'
+    assert item.payload['summary'] == 'K테크 솔루션즈가 ParaWorks 1개월 파일럿 도입을 제안했습니다.'
+    assert item.payload['source_ids'] == ['gmail:k-tech-pilot']
+    assert item.payload['agent_run_id'] != '99999'
+    assert item.payload['estimated_cost_usd'] != '999'
+    assert item.payload['recommended_next_step'] == '파일럿 범위, 성공 지표, 일정 초안을 정리해 회신합니다.'
+    assert 'From:' not in item.payload['summary']
+
+
 def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Session) -> None:
     seed_chunk(
         db_session,
@@ -236,7 +421,11 @@ def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Ses
 
     packet = build_mail_document_evidence_packet(
         db=db_session,
-        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        permission_context=PermissionContext(
+            user_id='demo-admin',
+            role='admin',
+            allowed_permission_levels=('public', 'internal', 'restricted'),
+        ),
         source_window='mail-docs-calendar:2026-05-01',
     )
 

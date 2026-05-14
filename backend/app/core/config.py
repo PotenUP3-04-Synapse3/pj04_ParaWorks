@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     agent_llm_enabled: bool = False
     agent_llm_provider_order: str = 'openai,gemini'
-    agent_llm_openai_model: str = 'gpt-4.1-mini'
+    agent_llm_openai_model: str = 'gpt-5.4-mini'
     agent_llm_gemini_model: str = 'gemini-2.5-flash'
     agent_llm_input_cost_per_1m_tokens: float = 0.15
     agent_llm_output_cost_per_1m_tokens: float = 0.60

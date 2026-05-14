@@ -9,7 +9,7 @@ from backend.app.agent_runtime import (
 )
 from backend.app.agents.slack_agent.agent import SlackAgentModelResponse
 
-DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+DEFAULT_OPENAI_MODEL = 'gpt-5.4-mini'
 DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 DEFAULT_INPUT_COST_PER_1M = 0.15
 DEFAULT_OUTPUT_COST_PER_1M = 0.60

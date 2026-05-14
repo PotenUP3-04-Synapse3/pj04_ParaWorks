@@ -33,7 +33,7 @@ def validate_review_item_for_approval(item: ReviewItem) -> None:
         raise ValueError('Review item is missing required fields')
 
 
-def promote_review_item(db: Session, item: ReviewItem) -> None:
+def promote_review_item(db: Session, item: ReviewItem) -> dict:
     validate_review_item_for_approval(item)
     normalized = _normalized_payload_for_item(item)
     base_fields = {
@@ -44,70 +44,81 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
         'permission_level': item.permission_level,
         'review_status': 'approved',
     }
+    result = {
+        'target_type': item.item_type if item.item_type in PROMOTABLE_REVIEW_TYPES else 'review_item',
+        'created_record_ids': [],
+        'created_timeline_event_ids': [],
+        'project_key': item.payload.get('project_key'),
+        'next_routes': _next_routes_for_item(item.item_type),
+    }
 
     if item.item_type == 'decision_record':
-        db.add(
-            DecisionRecord(
-                title=normalized['title'],
-                decision_summary=normalized['decision_summary'],
-                **base_fields,
-            )
+        decision = DecisionRecord(
+            title=normalized['title'],
+            decision_summary=normalized['decision_summary'],
+            **base_fields,
         )
-        db.add(
-            TimelineEvent(
-                title=f"[결정] {normalized['title']}",
-                result_summary=normalized['decision_summary'],
-                **base_fields,
-            )
+        timeline = TimelineEvent(
+            title=f"[결정] {normalized['title']}",
+            result_summary=normalized['decision_summary'],
+            **base_fields,
         )
-        return
+        db.add_all([decision, timeline])
+        db.flush()
+        result['created_record_ids'] = [decision.id]
+        result['created_timeline_event_ids'] = [timeline.id]
+        return result
 
     if item.item_type == 'history_event':
-        db.add(
-            HistoryEvent(
-                title=normalized['title'],
-                reason=normalized['reason'],
-                **base_fields,
-            )
+        history = HistoryEvent(
+            title=normalized['title'],
+            reason=normalized['reason'],
+            **base_fields,
         )
-        db.add(
-            TimelineEvent(
-                title=normalized['title'],
-                result_summary=normalized['reason'],
-                **base_fields,
-            )
+        timeline = TimelineEvent(
+            title=normalized['title'],
+            result_summary=normalized['reason'],
+            **base_fields,
         )
-        return
+        db.add_all([history, timeline])
+        db.flush()
+        result['created_record_ids'] = [history.id]
+        result['created_timeline_event_ids'] = [timeline.id]
+        return result
 
     if item.item_type == 'timeline_event':
-        db.add(
-            TimelineEvent(
-                title=normalized['title'],
-                result_summary=normalized['result_summary'],
-                **base_fields,
-            )
+        timeline = TimelineEvent(
+            title=normalized['title'],
+            result_summary=normalized['result_summary'],
+            **base_fields,
         )
-        return
+        db.add(timeline)
+        db.flush()
+        result['created_timeline_event_ids'] = [timeline.id]
+        return result
 
     if item.item_type == 'todo':
-        db.add(
-            Todo(
-                title=normalized['title'],
-                priority=normalized['priority'],
-                priority_reason=normalized['priority_reason'],
-                **base_fields,
-            )
+        todo = Todo(
+            title=normalized['title'],
+            priority=normalized['priority'],
+            priority_reason=normalized['priority_reason'],
+            **base_fields,
         )
-        db.add(
-            TimelineEvent(
-                title=f"[할 일] {normalized['title']}",
-                result_summary=(
-                    f"담당자: {item.payload.get('assignee') or '미지정'}, "
-                    f"기한: {item.payload.get('due_date') or '기한 없음'}"
-                ),
-                **base_fields,
-            )
+        timeline = TimelineEvent(
+            title=f"[할 일] {normalized['title']}",
+            result_summary=(
+                f"담당자: {item.payload.get('assignee') or '미정'}, "
+                f"기한: {item.payload.get('due_date') or '기한 없음'}"
+            ),
+            **base_fields,
         )
+        db.add_all([todo, timeline])
+        db.flush()
+        result['created_record_ids'] = [todo.id]
+        result['created_timeline_event_ids'] = [timeline.id]
+        return result
+
+    return result
 
 
 def _normalized_payload_for_item(item: ReviewItem) -> dict[str, str]:
@@ -137,7 +148,12 @@ def _normalized_payload_for_item(item: ReviewItem) -> dict[str, str]:
         return {
             'title': _string_payload(item, 'title'),
             'priority': _string_payload(item, 'priority') or 'medium',
-            'priority_reason': _string_payload(item, 'priority_reason') or _string_payload(item, 'summary'),
+            'priority_reason': (
+                _string_payload(item, 'priority_reason')
+                or _string_payload(item, 'recommended_next_step')
+                or _string_payload(item, 'task_summary')
+                or _string_payload(item, 'summary')
+            ),
         }
 
     if item.item_type == 'project_assignment':
@@ -173,3 +189,13 @@ def _required_fields_for_type(item_type: str) -> tuple[str, ...]:
 def _string_payload(item: ReviewItem, key: str) -> str:
     value = item.payload.get(key)
     return value if isinstance(value, str) else ''
+
+
+def _next_routes_for_item(item_type: str) -> list[str]:
+    if item_type == 'todo':
+        return ['/projects', '/timeline']
+    if item_type in {'history_event', 'timeline_event'}:
+        return ['/timeline']
+    if item_type == 'decision_record':
+        return ['/knowledge', '/timeline']
+    return []
