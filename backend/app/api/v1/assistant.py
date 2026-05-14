@@ -5,6 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
+from backend.app.assistant.contact_lookup import (
+    contact_lookup_response_content,
+    detect_contact_lookup_request,
+)
 from backend.app.assistant.email_actions import (
     EMAIL_ACTION_PROMPT_VERSION,
     assistant_email_draft_content,
@@ -216,6 +220,55 @@ def create_assistant_message(
         messages=messages[:-1],
         max_chars=settings.assistant_email_agent_max_input_chars,
     )
+    contact_lookup = detect_contact_lookup_request(
+        latest_message=user_message.content,
+        conversation_context=email_context,
+    )
+    if contact_lookup.is_lookup:
+        recipient_resolution = resolve_email_recipients(
+            db=db,
+            latest_message=contact_lookup.lookup_query,
+            conversation_context=email_context,
+        )
+        tool_logger.log(
+            'contact_lookup',
+            (
+                f'result status={recipient_resolution.status} '
+                f'candidate_count={len(recipient_resolution.candidates)} '
+                f'reason={recipient_resolution.reason} '
+                f'lookup_reason={contact_lookup.reason}'
+            ),
+        )
+        assistant_message = append_assistant_message(
+            db,
+            user,
+            conversation,
+            content=contact_lookup_response_content(recipient_resolution),
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level=None,
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={
+                'action_type': 'contact_lookup',
+                'status': recipient_resolution.status,
+                'agent_name': 'recipient_resolver',
+                'lookup_reason': contact_lookup.reason,
+                'lookup_query': contact_lookup.lookup_query,
+                'resolved_recipients': recipient_resolution.resolved_recipients,
+                'candidate_count': len(recipient_resolution.candidates),
+                'reason': recipient_resolution.reason,
+            },
+        )
+        return {
+            'conversation': serialize_conversation(conversation),
+            'user_message': serialize_message(user_message),
+            'assistant_message': serialize_message(assistant_message),
+        }
+
     tool_logger.log(
         'email_intent_gate',
         f'start conversation_id={conversation.id} message_id={user_message.id}',

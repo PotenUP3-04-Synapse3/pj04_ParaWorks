@@ -4001,3 +4001,11 @@ Cost/security note:
     `build_email_draft_composer()` to use the dedicated stronger model.
   - Verification: targeted model-routing tests passed, wider assistant backend
     tests passed with 39 tests, and ruff passed on touched files.
+- `fix: route assistant contact lookups`
+  - Added a dedicated contact lookup route before `email_intent_gate`, so
+    address lookup requests such as `김종우님 이메일 알려줘.` do not become email
+    draft clarification loops.
+  - Added Korean aliases for demo contacts and kept active `AuthUser` records
+    higher priority than demo fallback contacts.
+  - Verification: targeted contact lookup tests passed, wider assistant backend
+    tests passed with 47 tests, and ruff passed on touched files.

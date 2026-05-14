@@ -148,8 +148,9 @@ def _demo_user_candidates() -> list[RecipientCandidate]:
             title=user.title,
             department=user.department,
             source_type='demo_auth',
-            confidence=0.82,
+            confidence=0.78,
             evidence='demo_auth',
+            extra_aliases=set(user.aliases),
         )
         for user in USERS.values()
     ]
@@ -249,6 +250,7 @@ def _candidate(
     evidence: str,
     title: str = '',
     department: str = '',
+    extra_aliases: set[str] | None = None,
 ) -> RecipientCandidate:
     normalized_email = email.strip().lower()
     name = _clean_name(display_name)
@@ -259,6 +261,8 @@ def _candidate(
         title,
         department,
     }
+    if extra_aliases:
+        aliases.update(extra_aliases)
     return RecipientCandidate(
         email=normalized_email,
         display_name=name or normalized_email,

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1 import assistant as assistant_api
 from backend.app.assistant.service import (
     append_assistant_message,
+    append_user_message,
     build_contextual_question,
     create_conversation,
     list_messages,
@@ -454,6 +455,75 @@ def test_assistant_can_draft_email_from_rag_answer(
     assert assistant_message['metadata']['action_type'] == 'email_draft'
     assert assistant_message['metadata']['email_draft']['to'] == ['lead@example.com']
     assert assistant_message['metadata']['email_draft']['body'] == 'Project Alpha launch is Friday.'
+
+
+def test_assistant_contact_lookup_returns_known_email_without_email_draft(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def fail_if_email_or_rag_runs(*args, **kwargs):
+        raise AssertionError('연락처 조회는 이메일 작성이나 RAG 흐름으로 라우팅되면 안 됩니다.')
+
+    monkeypatch.setattr(assistant_api, 'build_email_intent_gate', fail_if_email_or_rag_runs)
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_email_or_rag_runs)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': 'Contact lookup'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': '김종우님 이메일 알려줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert 'kjw4work@gmail.com' in assistant_message['content']
+    assert assistant_message['metadata']['action_type'] == 'contact_lookup'
+    assert assistant_message['metadata']['status'] == 'resolved'
+
+
+def test_assistant_contact_lookup_followup_uses_recent_lookup_request(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    def fail_if_email_or_rag_runs(*args, **kwargs):
+        raise AssertionError('연락처 조회 후속 답변은 이메일 작성이나 RAG 흐름으로 라우팅되면 안 됩니다.')
+
+    monkeypatch.setattr(assistant_api, 'build_email_intent_gate', fail_if_email_or_rag_runs)
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_email_or_rag_runs)
+    conversation = create_conversation(db_session, USERS['viewer'], title='Contact lookup followup')
+    append_user_message(db_session, USERS['viewer'], conversation, '김종우님 이메일 알려줘.')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content='김종우님의 이메일 주소를 알려주시겠어요?',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={},
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': '너가 알려줘야지.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert 'kjw4work@gmail.com' in assistant_message['content']
+    assert assistant_message['metadata']['action_type'] == 'contact_lookup'
 
 
 def test_assistant_passes_resolved_recipient_to_email_draft_composer(

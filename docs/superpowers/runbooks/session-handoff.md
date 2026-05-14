@@ -1314,3 +1314,27 @@ uv run ruff check backend/app/core/config.py backend/app/assistant/email_agent.p
 ```
 
 Result: targeted model tests passed; 39 assistant tests passed; ruff passed.
+
+## 2026-05-14 Assistant Contact Lookup Routing
+
+- Split direct contact lookup away from the email intent/draft path with
+  `backend/app/assistant/contact_lookup.py`.
+- Requests such as `김종우님 이메일 알려줘.` now resolve known contacts directly
+  through the deterministic `recipient_resolver` and return the address instead
+  of asking the user to provide it.
+- Follow-up replies such as `너가 알려줘야지.` reuse the latest contact lookup
+  request from the conversation context, so the assistant does not accidentally
+  enter the email draft or RAG path.
+- Added Korean aliases for key `demo_auth.USERS` contacts and lowered demo
+  contact confidence so active `AuthUser` records still win when real DB users
+  are present.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_recipient_resolver.py::test_recipient_resolver_uses_demo_user_korean_alias backend/tests/test_assistant_api.py::test_assistant_contact_lookup_returns_known_email_without_email_draft backend/tests/test_assistant_api.py::test_assistant_contact_lookup_followup_uses_recent_lookup_request -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/assistant/contact_lookup.py backend/app/assistant/recipient_resolver.py backend/app/api/v1/assistant.py backend/app/core/demo_auth.py backend/tests/test_assistant_api.py backend/tests/test_assistant_recipient_resolver.py
+```
+
+Result: targeted contact lookup tests passed; wider assistant backend tests
+passed with 47 tests; ruff passed.

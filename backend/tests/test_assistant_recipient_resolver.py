@@ -15,6 +15,17 @@ def test_recipient_resolver_uses_recent_conversation_contact_pair(db_session: Se
     assert [candidate.email for candidate in resolution.candidates] == ['yonghee199702@gmail.com']
 
 
+def test_recipient_resolver_uses_demo_user_korean_alias(db_session: Session) -> None:
+    resolution = resolve_email_recipients(
+        db=db_session,
+        latest_message='김종우님 이메일 알려줘.',
+        conversation_context='[]',
+    )
+
+    assert resolution.status == 'resolved'
+    assert resolution.candidates[0].email == 'kjw4work@gmail.com'
+
+
 def test_recipient_resolver_uses_auth_user_display_name(db_session: Session) -> None:
     db_session.add(
         AuthUser(

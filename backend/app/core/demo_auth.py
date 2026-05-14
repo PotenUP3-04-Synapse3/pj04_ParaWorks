@@ -22,6 +22,7 @@ class DemoUser:
     name: str
     title: str
     department: str
+    aliases: tuple[str, ...] = ()
 
 
 USERS = {
@@ -51,6 +52,7 @@ USERS = {
         'Kim Jongwoo',
         'COO',
         'platform',
+        ('김종우', '종우', '김종우 COO', 'COO 김종우'),
     ),
     'yonghee199702': DemoUser(
         'yonghee199702',
@@ -60,6 +62,7 @@ USERS = {
         'Kim Yonghee',
         'CTO',
         'platform',
+        ('김용희', '용희', '김용희 CTO', 'CTO 김용희'),
     ),
     'hanvv-employee': DemoUser(
         'google-hanvv-employee',
@@ -69,6 +72,7 @@ USERS = {
         'Hanvv Employee',
         'AI Agent Developer',
         'Engineering',
+        ('한준혁', '준혁', '한준혁 개발자', 'AI Agent Developer 한준혁'),
     ),
     'viewer': DemoUser(
         'employee-mina',
@@ -78,6 +82,7 @@ USERS = {
         'Kim Mina',
         'Product Manager',
         'Product',
+        ('김미나', '미나', '김미나 PM', 'PM 김미나'),
     ),
 }
 
@@ -141,6 +146,7 @@ def demo_user_from_serialized(payload: dict) -> DemoUser:
         name=payload['name'],
         title=payload['title'],
         department=payload['department'],
+        aliases=tuple(payload.get('aliases', ())),
     )
 
 
