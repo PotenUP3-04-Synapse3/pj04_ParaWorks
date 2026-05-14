@@ -3970,3 +3970,15 @@ Cost/security note:
     starting the frontend, reducing startup `ECONNREFUSED` proxy noise.
   - Verification: assistant/RAG/script tests passed with 47 tests; ruff and
     PowerShell parser checks passed.
+- `fix: harden docker startup migrations`
+  - Added checked native-command execution and a Postgres readiness wait to
+    `scripts/paraworks-docker.ps1`, so Docker, Alembic, and schema failures no
+    longer scroll by before a misleading final ready message.
+  - Made the `project_key` Alembic migration idempotent for fresh databases
+    where the current-schema baseline already created those columns and
+    indexes.
+  - Kept pgvector `vector(1536)` dimension validation while suppressing the
+    expected SQLAlchemy reflection warning from the CLI schema check.
+  - Verification: Docker script tests, DB schema operation tests, pgvector
+    runbook tests, ruff, PowerShell parser check, real docker startup, backend
+    `/health`, and frontend `/login` smoke all passed.

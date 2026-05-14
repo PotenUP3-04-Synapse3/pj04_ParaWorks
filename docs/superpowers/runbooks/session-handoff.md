@@ -1236,3 +1236,32 @@ uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_ag
 
 Result: 47 tests passed; ruff passed; PowerShell parser check for
 `scripts/paraworks-docker.ps1` passed.
+
+## 2026-05-14 Docker Startup Guardrails
+
+- Hardened `scripts/paraworks-docker.ps1` so native command failures from
+  Docker, Alembic, and schema checks stop the script immediately instead of
+  continuing to a misleading final `Ready` state.
+- Added a Postgres readiness wait between `docker compose up -d` and the
+  pgvector schema check. This removes the transient first-run connection error
+  where Postgres had started as a container but was not yet accepting database
+  connections.
+- Made the `project_key` Alembic migration idempotent against the current-schema
+  baseline migration. Fresh databases created by `0001_create_current_schema`
+  already include these columns, so the follow-up migration now skips columns
+  and indexes that are already present.
+- Suppressed the expected SQLAlchemy reflection warning for pgvector's
+  `vector` type inside the schema checker while preserving the explicit
+  PostgreSQL type/dimension validation.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_paraworks_docker_script.py backend/tests/test_db_schema_operations.py backend/tests/test_pgvector_dev_runbook.py -q
+uv run ruff check scripts/check_db_schema.py backend/migrations/versions/5f8d874023d7_add_project_key_to_knowledge_models.py backend/tests/test_paraworks_docker_script.py backend/tests/test_db_schema_operations.py
+.\scripts\paraworks-docker.ps1
+Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:8000/health -TimeoutSec 5
+Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:3000/login -TimeoutSec 10
+```
+
+Result: 14 targeted tests passed; ruff passed; PowerShell parser check passed;
+Docker services, backend health, and frontend login smoke passed.
