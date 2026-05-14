@@ -43,6 +43,7 @@ class ProjectTimelineItem:
     review_status: str
     created_at: str
     evidence_reason: str
+    project_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,19 +66,64 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
         .where(ReviewItem.item_type == 'project_assignment', ReviewItem.status == 'approved')
         .order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
     ).all()
+    
+    # 1. 리뷰 항목에서 가져오는 새 방식의 ReviewItem들 (Phase 2로 project_key가 payload에 포함된 경우)
+    approved_knowledge_items = db.scalars(
+        select(ReviewItem)
+        .where(ReviewItem.item_type.in_(['decision_record', 'history_event', 'timeline_event', 'todo']), ReviewItem.status == 'approved')
+    ).all()
+    
     pending_counts = _pending_assignment_counts(db)
     memory_records = _approved_memory_records(db)
 
+    # 모든 프로젝트 키 수집
+    active_project_keys = set()
+    
+    # 통합된 모든 승인 항목
+    all_approved_items = approved_assignments + approved_knowledge_items
+    
+    for item in all_approved_items:
+        key = item.payload.get('project_key')
+        if key: active_project_keys.add(key)
+    
+    for item in memory_records:
+        if item.project_key:
+            active_project_keys.add(item.project_key)
+
     projects: list[ProjectMemory] = []
-    for project in CANONICAL_PROJECTS:
+    
+    # Canonical 프로젝트와 동적 프로젝트 매핑용 헬퍼 함수
+    from backend.app.projects.classifier import project_by_key
+
+    for p_key in sorted(active_project_keys):
+        canonical = project_by_key(p_key)
+        
+        # 이름 변환: ad-hoc 이면 '미분류 업무', project- 로 시작하면 태그 이름 복원
+        if canonical:
+            name = canonical.name
+        elif p_key == 'ad-hoc':
+            name = '기타 업무 (Ad-hoc)'
+        elif p_key.startswith('project-'):
+            name = p_key.replace('project-', '').replace('-', ' ').title()
+        else:
+            name = f"프로젝트 {p_key.upper()}"
+            
+        base_summary = canonical.summary if canonical else "AI에 의해 분류된 동적 프로젝트입니다."
+        
         assignments = [
             item
-            for item in approved_assignments
-            if item.payload.get('project_key') == project.project_key
+            for item in all_approved_items
+            if item.payload.get('project_key') == p_key
         ]
+        
         evidence = _evidence_from_assignments(assignments)
-        timeline_items = _timeline_for_project(project.project_key, assignments, memory_records)
-        permission_levels = [item.permission_level for item in assignments] + [
+        timeline_items = _timeline_for_project(p_key, assignments, memory_records)
+        
+        # evidence나 timeline_items가 없으면 스킵
+        if not evidence and not timeline_items:
+            continue
+            
+        permission_levels = [item.permission_level for item in evidence] + [
             item.permission_level for item in timeline_items
         ]
         latest_candidates = [item.timestamp for item in evidence] + [item.created_at for item in timeline_items]
@@ -85,16 +131,17 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
             {item.source_type for item in evidence},
             key=lambda source_type: SOURCE_TYPE_RANK.get(source_type, 99),
         )
+        
         projects.append(
             ProjectMemory(
-                project_key=project.project_key,
-                name=project.name,
-                summary=_project_summary(project.summary, evidence, timeline_items),
+                project_key=p_key,
+                name=name,
+                summary=_project_summary(base_summary, evidence, timeline_items),
                 source_types=source_types,
                 evidence_count=len(evidence),
                 permission_level=_strictest_permission(permission_levels),
                 latest_timestamp=max(latest_candidates) if latest_candidates else '',
-                pending_review_count=pending_counts.get(project.project_key, 0),
+                pending_review_count=pending_counts.get(p_key, 0),
                 evidence=evidence,
                 timeline_items=timeline_items,
             )
@@ -231,12 +278,20 @@ def _timeline_for_project(
         for assignment in assignments
         if assignment.payload.get('project_key') == project_key and assignment.payload.get('source_id')
     }
-    items = [
-        item
-        for item in memory_records
-        if project_links.intersection(item.source_links)
-        or any(source_id and source_id in ' '.join(item.source_links) for source_id in project_source_ids)
-    ]
+    
+    items = []
+    for item in memory_records:
+        # Phase 3 이후 데이터는 project_key가 명시적으로 존재함
+        if item.project_key == project_key:
+            items.append(item)
+            continue
+            
+        # 레거시 데이터 폴백: source_links나 source_id 기반 매칭
+        if project_links.intersection(item.source_links) or any(
+            source_id and source_id in ' '.join(item.source_links) for source_id in project_source_ids
+        ):
+            items.append(item)
+
     return sorted(items, key=lambda item: (item.created_at, item.id), reverse=True)
 
 

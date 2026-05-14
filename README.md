@@ -16,6 +16,6 @@ For local pgvector validation, use:
 ```
 
 If another PostgreSQL service already owns `127.0.0.1:5432`, the helper falls
-back to host port `55432` and prints the matching `DATABASE_URL`. Full details
+back to host port `5432` and prints the matching `DATABASE_URL`. Full details
 and the fake-embedding integration test live in
 `docs/superpowers/runbooks/pgvector-dev.md`.

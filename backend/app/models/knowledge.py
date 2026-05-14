@@ -11,6 +11,7 @@ class DecisionRecord(Base):
     __tablename__ = 'decision_records'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_key: Mapped[str | None] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(300))
     decision_summary: Mapped[str] = mapped_column(Text)
     source_links: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list)
@@ -25,6 +26,7 @@ class HistoryEvent(Base):
     __tablename__ = 'history_events'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_key: Mapped[str | None] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(300))
     reason: Mapped[str] = mapped_column(Text)
     source_links: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list)
@@ -39,6 +41,7 @@ class TimelineEvent(Base):
     __tablename__ = 'timeline_events'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_key: Mapped[str | None] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(300))
     result_summary: Mapped[str] = mapped_column(Text)
     source_links: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list)
@@ -53,6 +56,7 @@ class Todo(Base):
     __tablename__ = 'todos'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_key: Mapped[str | None] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(300))
     priority: Mapped[str] = mapped_column(String(32))
     priority_reason: Mapped[str] = mapped_column(Text)

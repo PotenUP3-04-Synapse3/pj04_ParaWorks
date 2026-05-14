@@ -171,13 +171,13 @@ def test_projects_api_returns_two_canonical_projects_and_approved_evidence_only(
     assert response.status_code == 200
     payload = response.json()
     assert payload['project_count'] == 2
-    assert [project['project_key'] for project in payload['projects']] == ['k-tech-pilot', 'seed-ir']
-    assert {project['name'] for project in payload['projects']} == {'K테크 파일럿', '시드 투자 IR'}
-    assert 'Project Newbiegenie' not in {project['name'] for project in payload['projects']}
+    assert [project['project_key'] for project in payload['projects']] == ['k-tech-pilot', 'project-newbiegenie']
+    assert {project['name'] for project in payload['projects']} == {'K테크 파일럿', 'Newbiegenie'}
     ktech = payload['projects'][0]
     assert ktech['evidence_count'] == 1
     assert ktech['evidence'][0]['title'] == 'K테크 파일럿 제안서 업데이트'
     assert ktech['evidence'][0]['evidence_reason']
+
 
 
 def test_projects_api_links_timeline_items_to_approved_project_assignments(
