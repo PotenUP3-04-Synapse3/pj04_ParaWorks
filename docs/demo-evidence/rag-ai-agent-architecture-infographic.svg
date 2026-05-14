@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1050" viewBox="0 0 1400 1050" role="img" aria-labelledby="title desc">
+  <title id="title">ParaWorks RAG AI Agent Architecture</title>
+  <desc id="desc">Evidence-first, permission-aware RAG architecture for ParaWorks company memory platform.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f5ef; }
+      .title { font: 800 38px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #17202a; }
+      .subtitle { font: 500 18px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #52606d; }
+      .section { fill: #ffffff; stroke: #d9d4c7; stroke-width: 2; rx: 8; }
+      .section-dark { fill: #16202b; stroke: #16202b; rx: 8; }
+      .section-title { font: 800 20px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #17202a; }
+      .section-title-light { font: 800 20px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #ffffff; }
+      .label { font: 700 16px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #1d2733; }
+      .small { font: 500 13px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #53606d; }
+      .small-light { font: 500 13px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #d9e2ec; }
+      .chip { fill: #f0f4f8; stroke: #cbd5df; rx: 6; }
+      .chip-text { font: 700 12px "Segoe UI", "Noto Sans KR", Arial, sans-serif; fill: #35465a; }
+      .node-blue { fill: #e7f1ff; stroke: #7aa7d9; rx: 8; }
+      .node-green { fill: #e8f5ed; stroke: #75a985; rx: 8; }
+      .node-amber { fill: #fff3d7; stroke: #d2a94f; rx: 8; }
+      .node-red { fill: #ffe9e5; stroke: #d98071; rx: 8; }
+      .node-purple { fill: #efe9ff; stroke: #9b86d9; rx: 8; }
+      .node-gray { fill: #eef1f4; stroke: #aab4be; rx: 8; }
+      .arrow { stroke: #405466; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .arrow-soft { stroke: #7b8794; stroke-width: 2.4; fill: none; stroke-dasharray: 7 6; marker-end: url(#arrowhead-soft); }
+      .rail { fill: #fffaf0; stroke: #d8c897; stroke-width: 2; rx: 8; }
+      .rail2 { fill: #eef7f2; stroke: #94b8a1; stroke-width: 2; rx: 8; }
+      .rail3 { fill: #f1f3f5; stroke: #b8c0c8; stroke-width: 2; rx: 8; }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#405466"/>
+    </marker>
+    <marker id="arrowhead-soft" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#7b8794"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1400" height="1050"/>
+
+  <text class="title" x="70" y="72">ParaWorks RAG AI Agent Architecture</text>
+  <text class="subtitle" x="72" y="105">증거 우선, 권한 보존, 비용 가시화를 중심으로 한 한국어 회사 메모리 RAG 구조</text>
+
+  <rect class="section-dark" x="70" y="135" width="1260" height="86"/>
+  <text class="section-title-light" x="100" y="170">핵심 원칙</text>
+  <text class="small-light" x="100" y="199">AI 출력은 곧바로 지식이 되지 않음. 모든 후보는 source link, snippet, permission, confidence, cost metadata를 보존하고 Review Queue를 통과해야 함.</text>
+
+  <rect class="section" x="70" y="255" width="250" height="260"/>
+  <text class="section-title" x="96" y="292">1. Connector Ingestion</text>
+  <rect class="node-blue" x="100" y="320" width="190" height="50"/>
+  <text class="label" x="125" y="350">Slack / Gmail</text>
+  <rect class="node-blue" x="100" y="385" width="190" height="50"/>
+  <text class="label" x="130" y="415">Drive / Calendar</text>
+  <rect class="node-gray" x="100" y="450" width="190" height="42"/>
+  <text class="small" x="119" y="476">SourceEvent + ConnectorManifest</text>
+
+  <rect class="section" x="365" y="255" width="270" height="260"/>
+  <text class="section-title" x="394" y="292">2. Evidence Store</text>
+  <rect class="node-green" x="397" y="320" width="205" height="50"/>
+  <text class="label" x="429" y="350">Source</text>
+  <rect class="node-green" x="397" y="385" width="205" height="50"/>
+  <text class="label" x="423" y="415">DocumentChunk</text>
+  <rect class="node-gray" x="397" y="450" width="205" height="42"/>
+  <text class="small" x="420" y="476">source_url / snippet / permission</text>
+
+  <rect class="section" x="680" y="255" width="300" height="260"/>
+  <text class="section-title" x="710" y="292">3. Agent Runtime</text>
+  <rect class="node-purple" x="710" y="320" width="238" height="48"/>
+  <text class="label" x="741" y="350">AgentRegistry / Manifest</text>
+  <rect class="node-purple" x="710" y="382" width="238" height="48"/>
+  <text class="label" x="735" y="412">LangGraph Workflow</text>
+  <rect class="node-gray" x="710" y="444" width="238" height="48"/>
+  <text class="small" x="730" y="470">EvidencePacket, AgentOutput, Cost</text>
+
+  <rect class="section" x="1025" y="255" width="305" height="260"/>
+  <text class="section-title" x="1055" y="292">4. Source Agents</text>
+  <rect class="node-amber" x="1055" y="320" width="110" height="48"/>
+  <text class="label" x="1082" y="350">Slack</text>
+  <rect class="node-amber" x="1185" y="320" width="110" height="48"/>
+  <text class="label" x="1201" y="350">Mail/Docs</text>
+  <rect class="node-amber" x="1055" y="382" width="240" height="48"/>
+  <text class="label" x="1094" y="412">Memory Extraction</text>
+  <rect class="node-gray" x="1055" y="444" width="240" height="48"/>
+  <text class="small" x="1081" y="470">Timeline / History / Decision / Todo</text>
+
+  <path class="arrow" d="M320 385 C340 385 345 385 365 385"/>
+  <path class="arrow" d="M635 385 C655 385 660 385 680 385"/>
+  <path class="arrow" d="M980 385 C1000 385 1005 385 1025 385"/>
+
+  <rect class="section" x="70" y="575" width="310" height="230"/>
+  <text class="section-title" x="100" y="612">5. Review Queue</text>
+  <rect class="node-red" x="100" y="640" width="245" height="48"/>
+  <text class="label" x="130" y="670">pending_review</text>
+  <rect class="node-red" x="100" y="702" width="245" height="48"/>
+  <text class="label" x="130" y="732">Evidence Drawer</text>
+  <text class="small" x="100" y="775">승인 전까지는 trusted knowledge가 아님</text>
+
+  <rect class="section" x="425" y="575" width="270" height="230"/>
+  <text class="section-title" x="455" y="612">6. Approved Knowledge</text>
+  <rect class="node-green" x="455" y="640" width="205" height="48"/>
+  <text class="label" x="479" y="670">DecisionRecord</text>
+  <rect class="node-green" x="455" y="702" width="205" height="48"/>
+  <text class="label" x="481" y="732">History / Todo</text>
+  <text class="small" x="455" y="775">검토된 항목만 RAG corpus에 포함</text>
+
+  <rect class="section" x="740" y="575" width="285" height="230"/>
+  <text class="section-title" x="770" y="612">7. Vector Index</text>
+  <rect class="node-blue" x="770" y="640" width="220" height="48"/>
+  <text class="label" x="800" y="670">VectorDocument</text>
+  <rect class="node-blue" x="770" y="702" width="220" height="48"/>
+  <text class="label" x="803" y="732">pgvector Store</text>
+  <text class="small" x="770" y="775">content_hash로 중복 embedding skip</text>
+
+  <rect class="section" x="1070" y="575" width="260" height="230"/>
+  <text class="section-title" x="1100" y="612">8. Ask / RAG Answer</text>
+  <rect class="node-purple" x="1100" y="640" width="195" height="48"/>
+  <text class="label" x="1124" y="670">/api/v1/ask</text>
+  <rect class="node-purple" x="1100" y="702" width="195" height="48"/>
+  <text class="label" x="1117" y="732">RAG Orchestrator</text>
+  <text class="small" x="1100" y="775">citation + permission_notice 반환</text>
+
+  <path class="arrow" d="M1175 515 C1175 540 225 540 225 575"/>
+  <path class="arrow" d="M380 690 C400 690 405 690 425 690"/>
+  <path class="arrow" d="M695 690 C715 690 720 690 740 690"/>
+  <path class="arrow" d="M1025 690 C1045 690 1050 690 1070 690"/>
+
+  <rect class="rail2" x="70" y="845" width="390" height="135"/>
+  <text class="section-title" x="100" y="883">Permission Guardrail</text>
+  <text class="small" x="100" y="913">restricted source in → restricted output out</text>
+  <text class="small" x="100" y="938">검색/답변은 사용자 role과 source permission을 함께 확인</text>
+  <text class="small" x="100" y="963">숨겨진 매치는 내용 없이 hidden_match_count로만 보고</text>
+
+  <rect class="rail" x="505" y="845" width="390" height="135"/>
+  <text class="section-title" x="535" y="883">Cost Control</text>
+  <text class="small" x="535" y="913">ranked evidence window, token cap, cache key</text>
+  <text class="small" x="535" y="938">embedding budget preflight + batch embed_many</text>
+  <text class="small" x="535" y="963">indexed_count, skipped_count, saved_embedding_calls 노출</text>
+
+  <rect class="rail3" x="940" y="845" width="390" height="135"/>
+  <text class="section-title" x="970" y="883">Observability</text>
+  <text class="small" x="970" y="913">AgentRun에 prompt_version, token usage, cost 저장</text>
+  <text class="small" x="970" y="938">RAG smoke evaluation: precision / recall / hit rate</text>
+  <text class="small" x="970" y="963">관리자 화면에서 reindex와 cost summary 확인</text>
+
+  <path class="arrow-soft" d="M265 845 C265 812 270 806 310 785"/>
+  <path class="arrow-soft" d="M700 845 C700 812 810 806 840 785"/>
+  <path class="arrow-soft" d="M1135 845 C1135 812 1165 806 1188 785"/>
+
+  <rect class="chip" x="70" y="1005" width="200" height="28"/>
+  <text class="chip-text" x="88" y="1024">FastAPI + SQLAlchemy</text>
+  <rect class="chip" x="285" y="1005" width="175" height="28"/>
+  <text class="chip-text" x="303" y="1024">LangGraph 1.x</text>
+  <rect class="chip" x="475" y="1005" width="200" height="28"/>
+  <text class="chip-text" x="493" y="1024">PostgreSQL + pgvector</text>
+  <rect class="chip" x="690" y="1005" width="210" height="28"/>
+  <text class="chip-text" x="708" y="1024">SQLite smoke fallback</text>
+  <rect class="chip" x="915" y="1005" width="195" height="28"/>
+  <text class="chip-text" x="933" y="1024">Next.js Workbench</text>
+  <rect class="chip" x="1125" y="1005" width="205" height="28"/>
+  <text class="chip-text" x="1143" y="1024">Korean-first UX</text>
+</svg>
