@@ -1031,3 +1031,46 @@ Direct Docker-backed API check on a secondary backend port confirmed:
 - `/api/v1/review?status=pending_review` returns seeded review items;
 - `/api/v1/ask` returns 200 when the `paraworks_csrf` cookie is echoed in
   `X-CSRF-Token`.
+
+## 2026-05-14 Scoped Sync-Driven Agent Review Update
+
+- `/integrations` no longer exposes separate generic Agent execution buttons
+  for Slack/Gmail/Drive. The user-facing sync button is now the single path:
+  sync fetches changed Source/DocumentChunk rows, then runs only the matching
+  connector review agent for changed source ids.
+- Duplicate sync is handled at the ingestion contract boundary by returning
+  `changed_source_ids=[]` when the source content signature is unchanged. This
+  prevents repeat Agent Review cost without splitting sync and Agent execution
+  into two user actions.
+- Slack review extraction and Mail/Document review extraction can now scope
+  evidence packets by explicit `source_ids`, so Gmail sync does not process
+  Drive data and Drive sync does not process Gmail data.
+- Connector factories now fail loudly when an installed Slack/Google OAuth
+  connection exists but its local token is missing, instead of silently falling
+  back to demo/config behavior.
+- AI 비서 now uses the low-cost email action sub-agent as a routing layer with
+  configurable confidence gating (`assistant_email_agent_min_confidence=0.72`).
+  High-confidence email drafts and lightweight general replies skip expensive
+  RAG; low-confidence decisions fall back to the existing RAG orchestrator.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_mail_document_agent_api.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_assistant_api.py backend/tests/test_connector_factory.py backend/tests/test_connector_ingestion_contract.py -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_models.py backend/tests/test_assistant_service.py -q
+uv run pytest backend/tests/test_integration_runtime_status.py backend/tests/test_review.py backend/tests/test_dashboard_api.py -q
+uv run ruff check backend/app/ingestion/service.py backend/app/ingestion/sync.py backend/app/agents/mail_document_agent/service.py backend/app/agents/slack_agent/service.py backend/app/api/v1/integrations.py backend/app/connectors/factory.py backend/app/core/config.py backend/app/assistant/email_agent.py backend/app/api/v1/assistant.py backend/tests/test_mail_document_agent_api.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_assistant_api.py backend/tests/test_connector_factory.py backend/tests/test_connector_ingestion_contract.py
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+```
+
+Result: targeted backend tests passed (`46`, `29`, and `17` tests); ruff,
+frontend lint, and frontend production build passed.
+
+Residual note:
+
+- A full `uv run pytest backend/tests -q` run still has unrelated pre-existing
+  failures around Slack OAuth PKCE expectations, Slack connector fake-client
+  contracts, and RAG indexing tests that still expect all chunks to index
+  without approved ReviewItem source ids. The sync/assistant tests listed above
+  are green after this change.

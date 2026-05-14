@@ -157,7 +157,7 @@ def test_live_gmail_manifest_reports_send_scope_for_approval_actions() -> None:
     assert 'https://www.googleapis.com/auth/gmail.send' in manifests['gmail'].required_scopes
 
 
-def test_sync_connector_events_records_job_and_ingests_review_items(db_session: Session) -> None:
+def test_sync_connector_events_records_job_and_changed_source_ids(db_session: Session) -> None:
     result = sync_connector_events(db=db_session, connector=ContractConnector())
 
     job = db_session.query(SyncJob).one()
@@ -167,10 +167,11 @@ def test_sync_connector_events_records_job_and_ingests_review_items(db_session: 
     assert result.connector_type == 'slack'
     assert result.status == 'complete'
     assert result.fetched_events == 1
-    assert result.created_review_items == 1
+    assert result.created_review_items == 0
+    assert result.changed_source_ids == ['contract-event-1']
     assert result.skipped_events == 0
     assert job.status == 'complete'
-    assert job.message == 'fetched=1 created_review_items=1 skipped_events=0'
+    assert job.message == 'fetched=1 created_review_items=0 skipped_events=0'
     assert job.progress_pct == 100
     assert chunk.metadata_['source_id'] == 'contract-event-1'
     assert chunk.metadata_['source_type'] == 'slack'
@@ -199,6 +200,7 @@ def test_sync_connector_events_reports_skipped_duplicates(db_session: Session) -
     assert result.status == 'complete'
     assert result.fetched_events == 1
     assert result.created_review_items == 0
+    assert result.changed_source_ids == []
     assert result.skipped_events == 1
     assert db_session.query(DocumentParserRun).count() == 1
 
@@ -235,6 +237,7 @@ def test_sync_connector_events_persists_parser_run_provenance(db_session: Sessio
 
     parser_run = db_session.query(DocumentParserRun).one()
     assert result.fetched_events == 1
+    assert result.changed_source_ids == ['drive:parser-test']
     assert parser_run.parser_name == 'google_drive_metadata'
     assert parser_run.parser_status == 'metadata_only'
     assert parser_run.parser_status_reason == 'pdf_parser_not_enabled'
@@ -259,6 +262,7 @@ def test_sync_connector_events_skips_same_content_signature(db_session: Session)
     assert result.status == 'complete'
     assert result.fetched_events == 1
     assert result.created_review_items == 0
+    assert result.changed_source_ids == []
     assert result.skipped_events == 1
     assert db_session.query(DocumentChunk).count() == 1
 
@@ -282,6 +286,7 @@ def test_sync_connector_events_ingests_changed_content_signature(db_session: Ses
     assert result.status == 'complete'
     assert result.fetched_events == 1
     assert result.created_review_items == 0
+    assert result.changed_source_ids == ['drive:file-1']
     assert result.skipped_events == 0
     chunks = db_session.query(DocumentChunk).order_by(DocumentChunk.id).all()
     assert len(chunks) == 2
@@ -320,7 +325,8 @@ def test_sync_connector_events_passes_latest_slack_timestamp_cursor(db_session: 
 
     assert connector.observed_cursor == {'C123': '1777600800.000100'}
     assert result.fetched_events == 1
-    assert result.created_review_items == 1
+    assert result.created_review_items == 0
+    assert result.changed_source_ids == ['contract-event-2']
 
 
 def test_sync_connector_events_passes_latest_generic_sync_cursor(db_session: Session) -> None:
@@ -353,7 +359,8 @@ def test_sync_connector_events_passes_latest_generic_sync_cursor(db_session: Ses
 
     assert connector.observed_cursor == {'gmail': '1777600900000'}
     assert result.fetched_events == 1
-    assert result.created_review_items == 1
+    assert result.created_review_items == 0
+    assert result.changed_source_ids == ['contract-event-2']
 
 
 def test_sync_connector_events_marks_job_failed_on_connector_error(db_session: Session) -> None:

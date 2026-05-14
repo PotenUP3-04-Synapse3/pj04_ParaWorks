@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.connectors.base import Connector
-from backend.app.ingestion.service import ingest_events
+from backend.app.ingestion.service import ingest_events_with_result
 from backend.app.models import Source, SyncJob
 
 
@@ -19,6 +19,7 @@ class ConnectorSyncResult:
     fetched_events: int
     created_review_items: int
     skipped_events: int
+    changed_source_ids: list[str] = field(default_factory=list)
     parser_status_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -41,7 +42,7 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
             events = connector.fetch_events()
         skipped_events = _count_same_content_signature_events(db, events)
         parser_status_counts = _parser_status_counts(events)
-        created_review_items = ingest_events(db, events)
+        ingestion_result = ingest_events_with_result(db, events)
     except Exception as exc:
         job.status = 'failed'
         job.message = f'failed: {exc}'
@@ -53,7 +54,7 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
     job.status = 'complete'
     job.message = (
         f'fetched={len(events)} '
-        f'created_review_items={created_review_items} '
+        f'created_review_items={ingestion_result.created_review_items} '
         f'skipped_events={skipped_events}'
     )
     job.progress_pct = 100
@@ -65,8 +66,9 @@ def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncRes
         connector_type=connector.source_type,
         status=job.status,
         fetched_events=len(events),
-        created_review_items=created_review_items,
+        created_review_items=ingestion_result.created_review_items,
         skipped_events=skipped_events,
+        changed_source_ids=ingestion_result.changed_source_ids,
         parser_status_counts=parser_status_counts,
     )
 

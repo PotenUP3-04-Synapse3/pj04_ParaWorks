@@ -155,7 +155,8 @@ def create_assistant_message(
         ),
         latest_message=user_message.content,
     )
-    email_draft = email_decision.to_draft()
+    confident_action = email_decision.confidence_score >= settings.assistant_email_agent_min_confidence
+    email_draft = email_decision.to_draft() if confident_action else None
     if email_draft is not None:
         assistant_message = append_assistant_message(
             db,
@@ -174,6 +175,7 @@ def create_assistant_message(
                 **email_draft_metadata(email_draft),
                 'agent_name': 'email_action_agent',
                 'model_name': email_decision.model_name,
+                'confidence_score': email_decision.confidence_score,
             },
         )
         return {
@@ -182,7 +184,36 @@ def create_assistant_message(
             'assistant_message': serialize_message(assistant_message),
         }
 
-    if email_decision.action_type == 'needs_clarification' and email_decision.clarification_question:
+    if confident_action and email_decision.action_type == 'general_reply' and email_decision.reply.strip():
+        assistant_message = append_assistant_message(
+            db,
+            user,
+            conversation,
+            content=email_decision.reply,
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level=None,
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=None,
+            metadata={
+                'action_type': 'general_reply',
+                'status': 'complete',
+                'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
+                'agent_name': 'email_action_agent',
+                'model_name': email_decision.model_name,
+                'confidence_score': email_decision.confidence_score,
+            },
+        )
+        return {
+            'conversation': serialize_conversation(conversation),
+            'user_message': serialize_message(user_message),
+            'assistant_message': serialize_message(assistant_message),
+        }
+
+    if confident_action and email_decision.action_type == 'needs_clarification' and email_decision.clarification_question:
         assistant_message = append_assistant_message(
             db,
             user,
@@ -202,6 +233,7 @@ def create_assistant_message(
                 'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
                 'agent_name': 'email_action_agent',
                 'model_name': email_decision.model_name,
+                'confidence_score': email_decision.confidence_score,
             },
         )
         return {

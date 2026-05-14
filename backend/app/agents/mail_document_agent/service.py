@@ -20,6 +20,8 @@ def create_mail_document_agent_review_items(
     agent: MailDocumentAgent,
     permission_context: PermissionContext,
     source_window: str,
+    source_ids: list[str] | None = None,
+    source_types: tuple[str, ...] = MAIL_DOCUMENT_SOURCE_TYPES,
 ) -> list[ReviewItem]:
     """
     메일 및 문서 에이전트를 실행하여 DB에 검토 항목(ReviewItem)을 생성합니다.
@@ -33,6 +35,8 @@ def create_mail_document_agent_review_items(
         db=db,
         permission_context=permission_context,
         source_window=source_window,
+        source_ids=source_ids,
+        source_types=source_types,
     )
     if not packet.messages:
         return []
@@ -112,16 +116,21 @@ def build_mail_document_evidence_packet(
     db: Session,
     permission_context: PermissionContext,
     source_window: str,
+    source_ids: list[str] | None = None,
+    source_types: tuple[str, ...] = MAIL_DOCUMENT_SOURCE_TYPES,
 ) -> EvidencePacket:
     """
     DB의 DocumentChunk와 Source 테이블을 조인하여 에이전트 입력용 증거 패킷을 생성합니다.
     """
-    rows = db.execute(
+    query = (
         select(DocumentChunk, Source)
         .join(Source, DocumentChunk.source_id == Source.id)
-        .where(Source.source_type.in_(MAIL_DOCUMENT_SOURCE_TYPES))
+        .where(Source.source_type.in_(source_types))
         .order_by(DocumentChunk.id)
-    ).all()
+    )
+    if source_ids is not None:
+        query = query.where(Source.source_id.in_(source_ids))
+    rows = db.execute(query).all()
 
     messages = [
         EvidenceMessage(

@@ -585,6 +585,7 @@ export type IntegrationSyncResponse = {
   fetched_events: number;
   skipped_events: number;
   parser_status_counts?: Record<string, number>;
+  changed_source_ids?: string[];
 };
 
 export type IntegrationManifest = {

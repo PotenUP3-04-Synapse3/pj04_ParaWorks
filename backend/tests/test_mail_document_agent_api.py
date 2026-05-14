@@ -1,7 +1,8 @@
 from sqlalchemy import select
 
-from backend.app.models import DocumentChunk, DocumentParserRun, Source
-
+from backend.app.connectors.mock import get_mock_connector
+from backend.app.ingestion.sync import sync_connector_events
+from backend.app.models import DocumentChunk, DocumentParserRun, ReviewItem, Source
 
 CSRF_HEADERS = {'X-CSRF-Token': 'test-csrf-token'}
 
@@ -10,12 +11,10 @@ def _set_csrf_cookie(client) -> None:
     client.cookies.set('paraworks_csrf', 'test-csrf-token')
 
 
-def test_mail_document_agent_review_endpoint_creates_agent_review_item(client) -> None:
+def test_mail_document_agent_review_endpoint_creates_agent_review_item(client, db_session) -> None:
     _set_csrf_cookie(client)
-    gmail_sync = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
-    drive_sync = client.post('/api/v1/integrations/drive/sync', headers=CSRF_HEADERS)
-    assert gmail_sync.status_code == 200
-    assert drive_sync.status_code == 200
+    sync_connector_events(db=db_session, connector=get_mock_connector('gmail'))
+    sync_connector_events(db=db_session, connector=get_mock_connector('drive'))
 
     response = client.post('/api/v1/integrations/mail-docs/agent-review', headers=CSRF_HEADERS)
 
@@ -34,6 +33,49 @@ def test_mail_document_agent_review_endpoint_creates_agent_review_item(client) -
     ]
     assert len(agent_items) == 1
     assert agent_items[0]['payload']['agent_run_id']
+
+
+def test_gmail_sync_runs_agent_only_for_changed_gmail_sources(client, db_session) -> None:
+    _set_csrf_cookie(client)
+
+    response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['connector_type'] == 'gmail'
+    assert payload['created_review_items'] == 1
+    review_item = db_session.query(ReviewItem).one()
+    assert review_item.payload['agent_name'] == 'mail_document_agent'
+    assert all('.mock/project-alpha/redis-summary' in link for link in review_item.source_links)
+    assert not any('drive.mock' in link for link in review_item.source_links)
+
+
+def test_drive_sync_runs_agent_only_for_changed_drive_sources(client, db_session) -> None:
+    _set_csrf_cookie(client)
+
+    response = client.post('/api/v1/integrations/drive/sync', headers=CSRF_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['connector_type'] == 'drive'
+    assert payload['created_review_items'] == 1
+    review_item = db_session.query(ReviewItem).one()
+    assert review_item.payload['agent_name'] == 'mail_document_agent'
+    assert all('drive.mock' in link for link in review_item.source_links)
+    assert not any('gmail.mock' in link for link in review_item.source_links)
+
+
+def test_duplicate_gmail_sync_does_not_rerun_agent_for_unchanged_sources(client, db_session) -> None:
+    _set_csrf_cookie(client)
+    first_response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+    assert first_response.status_code == 200
+    assert first_response.json()['created_review_items'] == 1
+
+    second_response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+
+    assert second_response.status_code == 200
+    assert second_response.json()['created_review_items'] == 0
+    assert db_session.query(ReviewItem).count() == 1
 
 
 def test_gmail_sync_smoke_ingests_attachment_metadata_boundary(client, db_session) -> None:

@@ -18,7 +18,7 @@ def test_ask_api_answers_with_visible_sources(client, db_session) -> None:
     assert payload['source_ids']
     assert payload['estimated_cost_usd'] > 0
     assert payload['token_usage']['total_tokens'] > 0
-    agent_run = db_session.query(AgentRun).one()
+    agent_run = db_session.query(AgentRun).filter_by(agent_name='rag_orchestrator_agent').one()
     assert payload['agent_run_id'] == agent_run.id
 
 

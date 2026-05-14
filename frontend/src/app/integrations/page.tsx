@@ -44,40 +44,21 @@ const integrationVisuals = {
     icon: MessageSquare,
     accent: "bg-[#21132b] text-white",
     description: "채널 메시지를 수집해 타임라인, 히스토리, 결정 후보를 만듭니다.",
-    agentAction: {
-      key: "slack",
-      label: "Slack Agent 실행",
-      runningLabel: "Slack Agent 실행 중",
-      path: "/api/v1/integrations/slack/agent-review",
-    },
   },
   gmail: {
     icon: Mail,
     accent: "bg-blue-50 text-blue-700",
     description: "메일 흐름을 요약하고 결정, 후속 작업, 히스토리 후보를 추출합니다.",
-    agentAction: {
-      key: "mail-docs",
-      label: "Mail/Docs Agent 실행",
-      runningLabel: "Mail/Docs Agent 실행 중",
-      path: "/api/v1/integrations/mail-docs/agent-review",
-    },
   },
   drive: {
     icon: Database,
     accent: "bg-emerald-50 text-emerald-700",
     description: "사내 문서와 버전 정보를 회사 메모리의 근거로 연결합니다.",
-    agentAction: {
-      key: "mail-docs",
-      label: "Mail/Docs Agent 실행",
-      runningLabel: "Mail/Docs Agent 실행 중",
-      path: "/api/v1/integrations/mail-docs/agent-review",
-    },
   },
   calendar: {
     icon: Calendar,
     accent: "bg-amber-50 text-amber-700",
     description: "회의 일정과 시간 맥락을 히스토리 이벤트의 타임라인 근거로 사용합니다.",
-    agentAction: undefined,
   },
 } satisfies Record<
   string,
@@ -85,12 +66,6 @@ const integrationVisuals = {
     icon: typeof MessageSquare;
     accent: string;
     description: string;
-    agentAction?: {
-      key: string;
-      label: string;
-      runningLabel: string;
-      path: string;
-    };
   }
 >;
 
@@ -101,7 +76,6 @@ const fallbackVisual = {
   icon: PlugZap,
   accent: "bg-neutral-100 text-neutral-700",
   description: "공통 ingestion contract를 통해 회사 메모리로 연결됩니다.",
-  agentAction: undefined,
 };
 
 /**
@@ -121,7 +95,6 @@ export default function IntegrationsPage() {
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
-  const [agentRunningKey, setAgentRunningKey] = useState<string>();
   const [llmAgentRunning, setLlmAgentRunning] = useState(false);
   const [error, setError] = useState<string>();
   const jobStatus = useJobStatus(activeJobId);
@@ -356,24 +329,6 @@ export default function IntegrationsPage() {
   }
 
   /**
-   * 일반 에이전트(추출 에이전트)를 실행합니다.
-   */
-  async function runAgent(agentKey: string, path: string) {
-    setAgentRunningKey(agentKey);
-    setError(undefined);
-
-    try {
-      const result = await apiPost<AgentReviewResponse>(path);
-      setAgentResult(result);
-      await refreshDashboardSummary();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Agent 실행에 실패했습니다.");
-    } finally {
-      setAgentRunningKey(undefined);
-    }
-  }
-  
-  /**
    * 연동 해제(Disconnect)를 실행합니다.
    */
   async function disconnect(type: string) {
@@ -482,8 +437,6 @@ export default function IntegrationsPage() {
             const Icon = visual.icon;
             const pending = pendingType === manifest.type;
             const featured = manifest.type === "slack";
-            const agentAction = visual.agentAction;
-            const agentRunning = agentAction ? agentRunningKey === agentAction.key : false;
             const connection = connections.find((item) => item.connector_type === manifest.type);
             const credentialAvailable = connection?.credential_status === "available";
             const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
@@ -618,17 +571,6 @@ export default function IntegrationsPage() {
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                         해제
-                      </button>
-                    ) : null}
-                    {agentAction ? (
-                      <button
-                        type="button"
-                        onClick={() => void runAgent(agentAction.key, agentAction.path)}
-                        disabled={agentRunning}
-                        className="liquid-control inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)] disabled:cursor-not-allowed disabled:opacity-55"
-                      >
-                        <Bot className="h-4 w-4" aria-hidden="true" />
-                        {agentRunning ? agentAction.runningLabel : agentAction.label}
                       </button>
                     ) : null}
                     {manifest.type === "drive" ? (

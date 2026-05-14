@@ -198,6 +198,21 @@ def test_mail_document_evidence_packet_includes_gmail_attachment_sources(db_sess
     assert message.metadata['parser_status_reason'] == 'pdf_parser_not_enabled'
 
 
+def test_mail_document_evidence_packet_can_scope_to_source_ids(db_session: Session) -> None:
+    seed_chunk(db_session, 'gmail', 'gmail-agent-test', 'internal')
+    seed_chunk(db_session, 'drive', 'drive-agent-test', 'restricted')
+
+    packet = build_mail_document_evidence_packet(
+        db=db_session,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mail-docs:gmail-sync',
+        source_ids=['gmail-agent-test'],
+    )
+
+    assert [message.source_id for message in packet.messages] == ['gmail-agent-test']
+    assert {message.metadata['source_type'] for message in packet.messages} == {'gmail'}
+
+
 def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Session) -> None:
     seed_chunk(
         db_session,

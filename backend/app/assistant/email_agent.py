@@ -6,7 +6,7 @@ from backend.app.assistant.email_actions import EmailDraft
 from backend.app.core.config import Settings
 
 EMAIL_AGENT_PROMPT_VERSION = 'assistant-email-agent:v2'
-EMAIL_ACTION_TYPES = {'not_email', 'email_draft', 'needs_clarification'}
+EMAIL_ACTION_TYPES = {'not_email', 'email_draft', 'needs_clarification', 'general_reply'}
 
 
 class EmailActionAgentError(RuntimeError):
@@ -20,6 +20,8 @@ class EmailActionDecision:
     subject: str = ''
     body: str = ''
     clarification_question: str = ''
+    reply: str = ''
+    confidence_score: float = 1.0
     model_name: str | None = None
 
     def to_draft(self) -> EmailDraft | None:
@@ -71,7 +73,7 @@ class LangChainEmailActionModel:
                 'system',
                 (
                     'You are a low-cost ParaWorks Email Action sub-agent. '
-                    'Classify whether the user wants to draft or send an email. '
+                    'Classify whether the user wants email action, a brief general reply, or company-memory RAG. '
                     'Use the recent conversation only to resolve recipients, groups, and omitted context. '
                     'Never send email directly. Return strict JSON only.'
                 ),
@@ -98,6 +100,8 @@ class LangChainEmailActionModel:
             subject=decision.subject,
             body=decision.body,
             clarification_question=decision.clarification_question,
+            reply=decision.reply,
+            confidence_score=decision.confidence_score,
             model_name=self.model_name,
         )
 
@@ -150,24 +154,29 @@ def render_email_action_prompt(
 ) -> str:
     payload = {
         'prompt_version': EMAIL_AGENT_PROMPT_VERSION,
-        'task': 'Decide whether the latest user message should become a Gmail draft.',
+        'task': 'Route the latest user message before the expensive RAG answer agent runs.',
         'conversation_context': conversation_context[-max_input_chars:],
         'latest_message': latest_message,
         'rules': [
             'If the latest message asks to write, draft, send, forward, or email someone, return action_type=email_draft.',
             'Use previous conversation context to resolve omitted recipients or referenced people.',
             'If an email action is requested but the recipient or content is missing, return action_type=needs_clarification.',
+            'If the latest message only asks for a greeting, wording help, or a short non-company-memory response, return action_type=general_reply.',
             'If the user is asking a knowledge question or does not want email, return action_type=not_email.',
             'For email_draft, write a concise Korean business subject and body.',
+            'For general_reply, write a concise Korean reply and leave email fields empty.',
+            'Return confidence_score between 0 and 1. Use low confidence when the intent is ambiguous.',
             'Do not require RAG evidence for ordinary email composition requests.',
             'Never invent a recipient that is not in the latest message or conversation context.',
         ],
         'json_schema': {
-            'action_type': 'not_email | email_draft | needs_clarification',
+            'action_type': 'not_email | email_draft | needs_clarification | general_reply',
             'to': ['recipient@example.com'],
             'subject': 'Korean business email subject',
             'body': 'Korean business email body',
             'clarification_question': 'Korean question when required information is missing',
+            'reply': 'Korean reply for general_reply',
+            'confidence_score': 0.0,
         },
     }
     return json.dumps(payload, ensure_ascii=False)
@@ -189,7 +198,17 @@ def _decision_from_payload(payload: dict[str, Any]) -> EmailActionDecision:
         subject=str(payload.get('subject') or '').strip(),
         body=str(payload.get('body') or '').strip(),
         clarification_question=str(payload.get('clarification_question') or '').strip(),
+        reply=str(payload.get('reply') or '').strip(),
+        confidence_score=_confidence_score(payload.get('confidence_score')),
     )
+
+
+def _confidence_score(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(parsed, 1.0))
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:
