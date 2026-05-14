@@ -6,6 +6,29 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-14 Approved Project Timeline and RAG Visibility Fix
+
+- Fixed the approved Review Queue to Project/Timeline display path so promoted
+  Decision, History, Timeline, and Todo records preserve `project_key` through
+  the shared `/api/v1/projects` response.
+- Updated the project workspace to show approved workflow items alongside
+  connector assignment evidence, while keeping Review Queue approval as the
+  trust boundary.
+- Repaired the approval-based RAG source chunk path by preserving Mail/Document
+  `source_ids`, `source_types`, `source_urls`, and `source_authors` in ReviewItem
+  payloads.
+- Aligned RAG indexing tests with the approval-only policy: approved knowledge
+  records are indexed, and original email/document chunks enter RAG only when
+  their external `Source.source_id` appears in an approved ReviewItem payload.
+- Verification: targeted project/review/mail-document/RAG backend tests passed
+  with 44 passed; frontend TypeScript check and production build passed.
+
+Portfolio angle:
+
+- Shows the human-review loop becoming product-visible and retrieval-ready:
+  approved evidence-backed work history now appears in project workflow,
+  timeline views, and RAG indexing without indexing unapproved synced content.
+
 ## 2026-05-14 Project Recognition and Timeline Workflow Boundary
 
 - Replaced loose `/projects` source grouping with two canonical company
@@ -3900,3 +3923,10 @@ Cost/security note:
   - Scoped Slack and Mail/Document evidence packets by changed source ids so Gmail, Drive, and Slack review candidates are generated only from the connector that just changed.
   - Added a confidence-gated low-cost AI 비서 routing layer for email drafts and lightweight replies, preserving RAG for ambiguous/company-memory questions.
   - Verification: targeted backend sync/assistant/review tests passed (`46`, `29`, and `17` tests); ruff passed; `npm.cmd run lint` and `npm.cmd run build` passed.
+
+- `fix: connect slack sync to agent_slack llm pipeline`
+  - Slack sync 후 `Redis 큐 관련 결정사항 추출됨` 1건만 생성되던 원인이 sync 경로의 결정론/fake Slack Agent 호출임을 확인했다.
+  - 운영형 local/prod 모드와 provider key가 있는 경우 `/api/v1/integrations/slack/sync`가 `agent_slack.process_daily_slack_sync()` 기반 분석 경로를 타도록 연결했다.
+  - `trigger_slack_agent_analysis()`가 변경된 Slack `Source.source_id`만 받아 분석하도록 좁혀, 최근 7일 전체 재분석으로 인한 중복 비용과 중복 ReviewItem 생성을 피했다.
+  - demo/test 모드와 provider key가 없는 환경은 기존 결정론 스모크 경로를 유지해 테스트가 live LLM을 호출하지 않도록 했다.
+  - Verification: targeted Slack sync/Agent API tests passed (`1`, `8`, and `23` tests); ruff passed.

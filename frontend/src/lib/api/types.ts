@@ -555,6 +555,7 @@ export type ProjectTimelineItem = {
   review_status: string;
   created_at: string;
   evidence_reason: string;
+  project_key?: string | null;
 };
 
 export type ProjectMemory = {

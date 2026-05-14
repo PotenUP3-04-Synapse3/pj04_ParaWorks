@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -110,14 +110,19 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
             
         base_summary = canonical.summary if canonical else "AI에 의해 분류된 동적 프로젝트입니다."
         
-        assignments = [
+        project_link_items = [
             item
             for item in all_approved_items
             if item.payload.get('project_key') == p_key
         ]
+        assignment_evidence_items = [
+            item
+            for item in approved_assignments
+            if item.payload.get('project_key') == p_key
+        ]
         
-        evidence = _evidence_from_assignments(assignments)
-        timeline_items = _timeline_for_project(p_key, assignments, memory_records)
+        evidence = _evidence_from_assignments(assignment_evidence_items)
+        timeline_items = _timeline_for_project(p_key, project_link_items, memory_records)
         
         # evidence나 timeline_items가 없으면 스킵
         if not evidence and not timeline_items:
@@ -259,7 +264,30 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
         )
         for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all()
     )
-    return records
+    project_keys = _approved_memory_project_keys(db)
+    return [
+        replace(record, project_key=project_keys.get(record.id))
+        if record.project_key is None and project_keys.get(record.id)
+        else record
+        for record in records
+    ]
+
+
+def _approved_memory_project_keys(db: Session) -> dict[str, str]:
+    keys: dict[str, str] = {}
+    for item in db.scalars(select(DecisionRecord).where(DecisionRecord.review_status == 'approved')).all():
+        if item.project_key:
+            keys[f'decision_record:{item.id}'] = item.project_key
+    for item in db.scalars(select(HistoryEvent).where(HistoryEvent.review_status == 'approved')).all():
+        if item.project_key:
+            keys[f'history_event:{item.id}'] = item.project_key
+    for item in db.scalars(select(TimelineEvent).where(TimelineEvent.review_status == 'approved')).all():
+        if item.project_key:
+            keys[f'timeline_event:{item.id}'] = item.project_key
+    for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all():
+        if item.project_key:
+            keys[f'todo:{item.id}'] = item.project_key
+    return keys
 
 
 def _timeline_for_project(

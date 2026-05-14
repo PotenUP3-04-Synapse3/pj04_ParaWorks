@@ -127,6 +127,13 @@ def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session:
     ]
     assert review_item.payload['agent_run_id'] == agent_run.id
     assert review_item.payload['agent_name'] == 'mail_document_agent'
+    assert review_item.payload['source_ids'] == ['gmail-agent-test', 'drive-agent-test']
+    assert review_item.payload['source_types'] == ['gmail', 'drive']
+    assert review_item.payload['source_urls'] == [
+        'https://gmail.mock/gmail-agent-test',
+        'https://drive.mock/drive-agent-test',
+    ]
+    assert review_item.payload['source_authors'] == ['owner@example.com']
     assert review_item.source_links == [
         'https://gmail.mock/gmail-agent-test',
         'https://drive.mock/drive-agent-test',
