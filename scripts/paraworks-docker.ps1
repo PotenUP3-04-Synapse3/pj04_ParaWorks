@@ -159,6 +159,21 @@ if ($Stop -or $Down) {
 
 New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
 
+$existingState = Read-State
+if ($null -ne $existingState) {
+    $existingBackendPort = [int]$existingState.backend_port
+    $existingFrontendPort = [int]$existingState.frontend_port
+    if ((Test-HostPortInUse -Port $existingBackendPort) -and (Test-HostPortInUse -Port $existingFrontendPort)) {
+        Write-Step "Already running"
+        Write-Host "Backend:  http://$HostAddress`:$existingBackendPort/health"
+        Write-Host "Frontend: http://127.0.0.1:$existingFrontendPort/login"
+        Write-Host ""
+        Write-Host "Stop with:"
+        Write-Host "  .\scripts\paraworks-docker.ps1 -Stop"
+        return
+    }
+}
+
 Start-DockerDesktop
 Wait-DockerReady
 
