@@ -80,6 +80,8 @@ export default function ReviewPage() {
   const [editingId, setEditingId] = useState<number>();
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
+  const [editProjectKey, setEditProjectKey] = useState("");
+  const [definedProjects, setDefinedProjects] = useState<Array<{project_key: string, name: string}>>([]);
   const [evidenceRequestId, setEvidenceRequestId] = useState<number>();
   const [evidenceRequestNote, setEvidenceRequestNote] = useState("");
   const [previews, setPreviews] = useState<Record<number, ReviewPromotionPreview>>({});
@@ -95,6 +97,9 @@ export default function ReviewPage() {
       const review = await apiGet<ReviewResponse>("/api/v1/review?status=pending_review");
       setGroups(review.groups || []);
       
+      const projectsRes = await apiGet<{projects: Array<{project_key: string, name: string}>}>("/api/v1/projects/defined");
+      setDefinedProjects(projectsRes.projects || []);
+
       // 모든 항목에 대한 프리뷰 로드
       const allItems = (review.groups || []).flatMap(g => g.items || []);
       const previewPairs = await Promise.all(
@@ -123,6 +128,7 @@ export default function ReviewPage() {
     setEditingId(item.id);
     setEditTitle(itemTitle(item));
     setEditSummary(itemSummary(item));
+    setEditProjectKey(stringField(item.payload.project_key));
     setError(undefined);
   }
 
@@ -157,6 +163,7 @@ export default function ReviewPage() {
         ...item.payload,
         title: editTitle,
         [key]: editSummary,
+        project_key: editProjectKey,
       },
     };
 
@@ -280,6 +287,19 @@ export default function ReviewPage() {
 
                             {isEditing ? (
                               <div className="mt-3 max-w-3xl space-y-3">
+                                <label className="block text-sm font-semibold">
+                                  소속 프로젝트
+                                  <select
+                                    value={editProjectKey}
+                                    onChange={(e) => setEditProjectKey(e.target.value)}
+                                    className="mt-1 h-10 w-full rounded-lg border border-[var(--line-soft)] px-3 text-sm font-normal outline-none focus:border-[#21132b] bg-white"
+                                  >
+                                    <option value="ad-hoc">기타 업무 (Ad-hoc) / 미지정</option>
+                                    {definedProjects.map(p => (
+                                      <option key={p.project_key} value={p.project_key}>{p.name}</option>
+                                    ))}
+                                  </select>
+                                </label>
                                 <label className="block text-sm font-semibold">
                                   제목
                                   <input

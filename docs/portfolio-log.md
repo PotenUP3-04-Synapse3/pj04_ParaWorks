@@ -6,6 +6,25 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-14 사용자 정의 프로젝트 동기화 검토사항 수정
+
+- 사용자가 프로젝트를 생성하면 기존 Slack/Gmail/Drive/Calendar source를 즉시
+  해당 프로젝트 기준으로 분류하고, 근거가 매칭될 때 `project_assignment`
+  ReviewItem을 `pending_review` 상태로 생성하도록 수정했다.
+- connector sync 이후에도 같은 프로젝트 분류기를 실행해 새로 동기화된 source와
+  이미 동기화되어 skipped 처리된 기존 source가 별도 재분류 호출 없이 프로젝트
+  연결 검토사항으로 들어오도록 했다.
+- 프로젝트 요약, 근거 사유, 승인 타임라인 사유, source 라벨에 남아 있던 깨진
+  한글 fallback 문구를 읽을 수 있는 한국어 문장으로 교체했다.
+- 검증: 프로젝트/동기화/검토 관련 백엔드 테스트 37개 통과, ruff 통과,
+  프론트엔드 TypeScript 검사와 프로덕션 빌드 통과.
+
+포트폴리오 관점:
+
+- 사용자 생성 프로젝트, connector 근거, Agent 제안, 수동 승인이 Review Queue에서
+  만나는 흐름을 구현해 프로젝트 탭이 실제 human-in-the-loop 라우팅 화면으로
+  작동하도록 만들었다.
+
 ## 2026-05-14 Approved Project Timeline and RAG Visibility Fix
 
 - Fixed the approved Review Queue to Project/Timeline display path so promoted
@@ -3934,3 +3953,10 @@ Cost/security note:
   - `trigger_slack_agent_analysis()`가 변경된 Slack `Source.source_id`만 받아 분석하도록 좁혀, 최근 7일 전체 재분석으로 인한 중복 비용과 중복 ReviewItem 생성을 피했다.
   - demo/test 모드와 provider key가 없는 환경은 기존 결정론 스모크 경로를 유지해 테스트가 live LLM을 호출하지 않도록 했다.
   - Verification: targeted Slack sync/Agent API tests passed (`1`, `8`, and `23` tests); ruff passed.
+
+- `fix: show user-defined projects and classify sources against them`
+  - `projects` 테이블에 저장된 사용자 정의 프로젝트는 evidence/timeline이 없어도 `/api/v1/projects`에 표시되도록 했다.
+  - `/api/v1/projects/defined`에서 하드코딩 프로젝트를 제거하고 DB 프로젝트만 반환하도록 정리했다.
+  - Slack/Gmail/Drive/Calendar source 분류는 하드코딩 목록 대신 사용자가 만든 프로젝트의 이름과 설명을 기준으로 후보 ReviewItem을 만든다.
+  - Review 화면은 DB 프로젝트 목록을 받아 사용자가 LLM 제안 프로젝트를 그대로 두거나 직접 선택한 뒤 승인할 수 있는 흐름을 유지한다.
+  - Verification: project/review backend tests passed (`12` and `26` tests); ruff, frontend typecheck, and frontend build passed.

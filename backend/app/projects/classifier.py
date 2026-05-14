@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models import DocumentChunk, ReviewItem, Source
+from backend.app.models import DocumentChunk, Project, ReviewItem, Source
 
 
 @dataclass(frozen=True)
@@ -16,20 +16,7 @@ class CanonicalProject:
     aliases: tuple[str, ...]
 
 
-CANONICAL_PROJECTS = (
-    CanonicalProject(
-        project_key='k-tech-pilot',
-        name='K테크 파일럿',
-        summary='K테크 솔루션즈 엔터프라이즈 파일럿 계약, 온보딩, 검증 일정을 추적합니다.',
-        aliases=('k테크', 'k-tech', 'ktech', '파일럿', '02_파일럿_프로젝트', '엔터프라이즈 파일럿'),
-    ),
-    CanonicalProject(
-        project_key='seed-ir',
-        name='시드 투자 IR',
-        summary='시드 투자 IR, 투자자 커뮤니케이션, 재무/피치덱 준비 흐름을 추적합니다.',
-        aliases=('ir', '투자', 'series seed', 'seed', '03_ir_투자', '피치덱', 'vc', '밸류에이션'),
-    ),
-)
+CANONICAL_PROJECTS: tuple[CanonicalProject, ...] = ()
 
 NON_PROJECT_MARKERS = (
     '00_회사규정',
@@ -37,7 +24,7 @@ NON_PROJECT_MARKERS = (
     '회사규정',
     '사내 규정',
     '복리후생',
-    '온보딩 가이드',
+    '홍보 가이드',
     '보안_정책',
     '정보 보안 정책',
 )
@@ -61,16 +48,20 @@ class ProjectAssignmentCandidate:
     timestamp: str
 
 
-def classify_source_project(source: Source, chunks: list[DocumentChunk]) -> ProjectAssignmentCandidate | None:
+def classify_source_project(
+    source: Source,
+    chunks: list[DocumentChunk],
+    projects: list[Project] | None = None,
+) -> ProjectAssignmentCandidate | None:
     haystack = _source_haystack(source, chunks)
     lowered = haystack.lower()
     if any(marker.lower() in lowered for marker in NON_PROJECT_MARKERS):
         return None
 
-    matched_project: CanonicalProject | None = None
+    matched_project: Project | None = None
     matched_alias = ''
-    for project in CANONICAL_PROJECTS:
-        for alias in project.aliases:
+    for project in projects or []:
+        for alias in _project_aliases(project):
             if _contains_alias(lowered, alias):
                 matched_project = project
                 matched_alias = alias
@@ -99,6 +90,10 @@ def classify_source_project(source: Source, chunks: list[DocumentChunk]) -> Proj
 
 
 def build_project_assignment_candidates(db: Session) -> list[ProjectAssignmentCandidate]:
+    projects = db.scalars(select(Project).order_by(Project.created_at.desc(), Project.id.desc())).all()
+    if not projects:
+        return []
+
     sources = db.scalars(
         select(Source)
         .where(Source.source_type.in_(PROJECT_SOURCE_TYPES))
@@ -110,12 +105,11 @@ def build_project_assignment_candidates(db: Session) -> list[ProjectAssignmentCa
         ).all()
         for source in sources
     }
-    candidates = [
+    return [
         candidate
         for source in sources
-        if (candidate := classify_source_project(source, chunks_by_source.get(source.id, []))) is not None
+        if (candidate := classify_source_project(source, chunks_by_source.get(source.id, []), projects)) is not None
     ]
-    return candidates
 
 
 def create_project_assignment_review_items(db: Session) -> list[ReviewItem]:
@@ -157,6 +151,42 @@ def create_project_assignment_review_items(db: Session) -> list[ReviewItem]:
 
 def project_by_key(project_key: str) -> CanonicalProject | None:
     return next((project for project in CANONICAL_PROJECTS if project.project_key == project_key), None)
+
+
+def _project_aliases(project: Project) -> tuple[str, ...]:
+    raw_aliases = [project.name, project.project_key.replace('project-', '').replace('-', ' ')]
+    raw_aliases.extend(_meaningful_terms(project.name))
+    raw_aliases.extend(_meaningful_terms(project.summary))
+    seen: set[str] = set()
+    aliases: list[str] = []
+    for alias in raw_aliases:
+        normalized = ' '.join(alias.split()).strip()
+        if len(normalized) < 2:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        aliases.append(normalized)
+    return tuple(aliases)
+
+
+def _meaningful_terms(text: str) -> list[str]:
+    terms = re.findall(r'[0-9A-Za-z가-힣]{2,}', text)
+    stopwords = {
+        '프로젝트',
+        '업무',
+        '진행',
+        '상태',
+        '고객',
+        '문서',
+        '계약',
+        '이번',
+        '관련',
+        '확인',
+        '개편',
+    }
+    return [term for term in terms if term.lower() not in stopwords]
 
 
 def _contains_alias(lowered_haystack: str, alias: str) -> bool:

@@ -7,6 +7,7 @@ from backend.app.models.jobs import SyncJob
 from backend.app.models.knowledge import (
     DecisionRecord,
     HistoryEvent,
+    Project,
     TimelineEvent,
     Todo,
 )
@@ -32,6 +33,7 @@ __all__ = [
     'IntegrationConnection',
     'DecisionRecord',
     'HistoryEvent',
+    'Project',
     'TimelineEvent',
     'Todo',
     'Message',

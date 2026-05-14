@@ -196,18 +196,26 @@ def render_slack_llm_prompt(
         if remaining_chars <= 0:
             break
 
+    # ?숈쟻 ?꾨줈?앺듃 紐⑸줉 二쇱엯
+    projects_context = packet.context.get('projects', [])
+    project_descriptions = [f"{p['name']} ({p['project_key']}): {p['summary']}" for p in projects_context]
+    if not project_descriptions:
+        project_descriptions = ["吏꾪뻾 以묒씤 怨듭떇 ?꾨줈?앺듃媛 ?꾩쭅 ?놁뒿?덈떎."]
+
     return json.dumps(
         {
             'task': 'Extract Slack-based company history candidates for human review.',
             'allowed_item_types': ['history_event', 'decision_record', 'todo'],
             'category_guide': 'Project, Operations, Administration, Ad-hoc',
             'importance_guide': 'Low, Medium, High',
+            'current_projects': project_descriptions,
             'requirements': [
                 'Use only the provided evidence.',
                 'The title and summary must be written in Korean.',
                 'Keep the summary concise and business-friendly.',
                 'Set confidence_score between 0 and 1.',
                 'Assign category, topic_tag, and importance to each candidate.',
+                'For topic_tag, CHOOSE EXACTLY ONE from the current_projects list. If none fit, invent a short new topic name, or use "Ad-hoc" if it\'s just general chatter.',
             ],
             'source_window': packet.source_window,
             'evidence': evidence_rows,
@@ -377,15 +385,6 @@ def _usage_tokens(response: Any, messages: list[tuple[str, str]], payload: dict[
 
 def _safe_item_type(raw_item_type: Any) -> str:
     item_type = str(raw_item_type or 'history_event')
-    return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
-
-
-def _safe_confidence(raw_confidence: Any) -> float:
-    try:
-        return min(max(float(raw_confidence), 0.0), 1.0)
-    except (TypeError, ValueError):
-        return 0.7
-
     return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
 
 

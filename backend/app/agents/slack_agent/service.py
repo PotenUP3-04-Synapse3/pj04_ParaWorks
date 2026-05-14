@@ -11,7 +11,6 @@ from backend.app.agent_runtime import (
 )
 from backend.app.agents.slack_agent.agent import SlackAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
-from backend.app.projects.classifier import CANONICAL_PROJECTS
 
 _DECISION_KEYWORDS = (
     '결정',
@@ -50,8 +49,7 @@ _TECH_COST_KEYWORDS = (
     'openai',
     'langgraph',
 )
-_LOW_SIGNAL_KEYWORDS = ('ㅋㅋ', 'ㅎㅎ', '좋아요', '오케이', '굿', '감사')
-
+_LOW_SIGNAL_KEYWORDS = ('넵', '네', '좋아요', '확인', '굿', '감사')
 
 def create_slack_agent_review_items(
     *,
@@ -104,10 +102,10 @@ def create_slack_agent_review_items(
 
     for candidate in result.candidates:
         candidate.validate_evidence()
-        
-        # Phase 2: 동적 태그 전파 (Back-propagation)
+
+        # Phase 2: ?숈쟻 ?쒓렇 ?꾪뙆 (Back-propagation)
         back_propagate_slack_tags(db, candidate)
-        
+
         topic_tag = candidate.payload_fields.get('topic_tag', 'N/A')
         project_key, is_new_project = _determine_project_from_tag(topic_tag, candidate.summary)
 
@@ -133,7 +131,7 @@ def create_slack_agent_review_items(
             },
             'uncertainty_reason': candidate.uncertainty_reason,
         }
-        
+
         review_item = ReviewItem(
             status='pending_review',
             item_type=candidate.item_type,
@@ -153,31 +151,21 @@ def create_slack_agent_review_items(
     return review_items
 
 def _determine_project_from_tag(topic_tag: str, summary: str) -> tuple[str | None, bool]:
-    searchable = f'{topic_tag} {summary}'.lower()
-    for project in CANONICAL_PROJECTS:
-        for alias in project.aliases:
-            if alias.lower() in {'ir', 'vc'}:
-                if re.search(rf'(?<![0-9a-z]){re.escape(alias.lower())}(?![0-9a-z])', searchable):
-                    return project.project_key, False
-            elif alias.lower() in searchable:
-                return project.project_key, False
-    
-    # 신규 프로젝트 제안 (태그가 명확한 경우)
-    if topic_tag and topic_tag not in ('N/A', 'None', '기타', '기본', 'Ad-hoc', 'ad-hoc', '미지정'):
-        import re as regex
-        # 한글, 영문, 숫자 외 제거하고 대시로 연결
-        dynamic_key = regex.sub(r'[^a-z0-9가-힣]+', '-', topic_tag.lower()).strip('-')
-        if dynamic_key:
-            return f"project-{dynamic_key}", True
-    
-    return "ad-hoc", False
+    searchable = f'{topic_tag} {summary}'.strip()
+    if not searchable or topic_tag in {'N/A', 'None', 'Ad-hoc', 'ad-hoc', '미정'}:
+        return 'ad-hoc', False
+
+    dynamic_key = re.sub(r'[^a-z0-9가-힣]+', '-', searchable.lower()).strip('-')
+    if dynamic_key:
+        return f'project-{dynamic_key[:48]}', True
+    return 'ad-hoc', False
 
 def back_propagate_slack_tags(db: Session, candidate: ReviewCandidate) -> None:
-    """추출된 지식의 카테고리/토픽 정보를 원본 슬랙 메시지 청크에 역전파합니다."""
+    """異붿텧??吏?앹쓽 移댄뀒怨좊━/?좏뵿 ?뺣낫瑜??먮낯 ?щ옓 硫붿떆吏 泥?겕????쟾?뚰빀?덈떎."""
     source_ids = []
     for url in candidate.source_links:
-        # URL에서 p 뒤의 숫자 16자리 추출 (슬랙 ID 규칙)
-        # 예: https://.../archives/C123/p1715000000000100 -> C123:1715000000.000100
+        # URL?먯꽌 p ?ㅼ쓽 ?レ옄 16?먮━ 異붿텧 (?щ옓 ID 洹쒖튃)
+        # ?? https://.../archives/C123/p1715000000000100 -> C123:1715000000.000100
         if '/archives/' in url and '/p' in url:
             parts = url.split('/archives/')[-1].split('/')
             channel_id = parts[0]
@@ -192,7 +180,7 @@ def back_propagate_slack_tags(db: Session, candidate: ReviewCandidate) -> None:
     source_pks = db.scalars(
         select(Source.id).where(Source.source_id.in_(source_ids))
     ).all()
-    
+
     if source_pks:
         chunks = db.scalars(
             select(DocumentChunk).where(DocumentChunk.source_id.in_(source_pks))
@@ -254,11 +242,22 @@ def build_slack_evidence_packet(
         for index, (chunk, source) in enumerate(rows, start=1)
     ]
 
+    # 而⑦뀓?ㅽ듃???꾨줈?앺듃 紐⑸줉 二쇱엯
+    from backend.app.models import Project
+    from backend.app.projects.classifier import CANONICAL_PROJECTS
+    db_projects = db.scalars(select(Project)).all()
+    seen_keys = {p.project_key for p in db_projects}
+    active_projects = [{'project_key': p.project_key, 'name': p.name, 'summary': p.summary} for p in db_projects]
+    for p in CANONICAL_PROJECTS:
+        if p.project_key not in seen_keys:
+            active_projects.append({'project_key': p.project_key, 'name': p.name, 'summary': p.summary})
+
     return EvidencePacket(
         source_type='slack',
         source_window=source_window,
         messages=messages,
         permission_context=permission_context,
+        context={'projects': active_projects},
     )
 
 

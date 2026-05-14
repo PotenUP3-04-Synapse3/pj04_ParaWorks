@@ -38,6 +38,7 @@ class EvidencePacket:
     source_window: str
     messages: list[EvidenceMessage]
     permission_context: PermissionContext
+    context: dict = field(default_factory=dict)
 
     @property
     def strictest_permission(self) -> str:

@@ -134,3 +134,46 @@
   - `uv run pytest backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py backend/tests/test_integration_runtime_status.py::test_sync_returns_configuration_error_when_connector_is_not_configured -q` -> 8 passed
   - `uv run ruff check backend/app/api/v1/integrations.py backend/app/agents/slack_agent/sync_service.py backend/tests/test_slack_agent_api.py` -> passed
   - `uv run pytest backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py -q` -> 23 passed
+
+## 작업 15 - 사용자 정의 프로젝트 목록 및 분류 흐름 수정
+
+- Gemini가 추가한 `projects` 테이블, `/api/v1/projects/define`, `/api/v1/projects/defined` 흐름을 이어받아 현재 상태를 확인했다.
+- 문제 원인:
+  - 프로젝트 생성 API는 있었지만, 분류 로직은 여전히 하드코딩 프로젝트 목록을 전제로 삼고 있었다.
+  - `/api/v1/projects/defined`도 하드코딩 프로젝트와 DB 프로젝트를 합치도록 작성되어 있어 사용자가 요청한 방향과 맞지 않았다.
+  - DB에 저장된 프로젝트가 없어도 이전 restart 과정에서 로컬 DB가 초기화되어 화면에 표시할 프로젝트가 없었다.
+- 수정 내용:
+  - `/api/v1/projects/defined`는 DB에 저장된 사용자 정의 프로젝트만 반환하도록 변경했다.
+  - `/api/v1/projects`는 DB에 저장된 프로젝트를 evidence/timeline이 없어도 반환한다.
+  - `build_project_assignment_candidates()`는 이제 하드코딩 프로젝트가 아니라 DB의 `Project.name`과 `Project.summary`를 기준으로 Slack/Gmail/Drive/Calendar source를 분류한다.
+  - 승인된 과거 항목에 DB 프로젝트 행이 없더라도 `ReviewItem.payload.project_name`이 있으면 프로젝트 표시명으로 사용한다.
+  - Review 화면의 프로젝트 선택 흐름은 `/api/v1/projects/defined` 목록을 사용하므로, 사용자가 LLM 제안값을 그대로 승인하거나 직접 프로젝트를 고른 뒤 저장/승인할 수 있다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py -q` -> 12 passed
+  - `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` -> 26 passed
+  - `uv run ruff check backend/app/api/v1/projects.py backend/app/projects/service.py backend/app/projects/classifier.py backend/app/models/knowledge.py backend/tests/test_project_memory_api.py` -> passed
+  - `cd frontend && npm.cmd exec tsc -- --noEmit` -> passed
+  - `cd frontend && npm.cmd run build` -> passed
+
+## 작업 16 - 동기화 후 검토사항 미생성 및 프로젝트 설명 깨짐 수정
+
+- 사용자 제보:
+  - 동기화 버튼을 눌렀는데 검토사항으로 넘어오는 항목이 보이지 않았다.
+  - 프로젝트 생성 후 설명 뒤에 `?꾩쭅 ?뱀씤???꾨줈?앺듃 evidence...` 같은 깨진 문자열이 붙었다.
+- 원인 확인:
+  - 프로젝트 생성 API는 `projects` 테이블에 프로젝트만 저장했고, 이미 동기화된 Slack/Gmail/Drive/Calendar 소스를 새 프로젝트 기준으로 다시 분류하지 않았다.
+  - 동기화 API는 변경된 source가 있을 때 Slack/Mail-Document Agent 후보는 만들 수 있었지만, 사용자 정의 프로젝트와 source를 연결하는 `project_assignment` 후보 생성은 별도 `/api/v1/projects/reclassify` 호출에만 의존했다.
+  - `backend/app/projects/service.py`와 `backend/app/projects/classifier.py`에 깨진 한글 문자열이 남아 프로젝트 요약, 근거 사유, fallback 이름에 그대로 노출됐다.
+- 수정 내용:
+  - `/api/v1/projects/define`이 프로젝트 저장 직후 기존 source를 사용자 정의 프로젝트 기준으로 분류하고, 매칭되면 `project_assignment` ReviewItem을 `pending_review` 상태로 생성하도록 연결했다.
+  - `/api/v1/integrations/{connector_type}/sync`가 source 저장 뒤 프로젝트 분류기도 실행해, 새로 동기화된 데이터와 이미 동기화되어 skipped 된 기존 데이터 모두 프로젝트 연결 검토사항으로 들어오도록 했다.
+  - 프로젝트 요약, 승인 근거 문구, fallback 프로젝트명, Gmail 첨부 라벨, 프로젝트 분류 사유의 깨진 문자열을 읽을 수 있는 한국어로 교체했다.
+  - 프로젝트명/설명 기반 분류에서 한국어 토큰 범위를 `가-힣`로 정리해 사용자 정의 한국어 프로젝트명도 안정적으로 매칭되게 했다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py::test_define_project_returns_readable_empty_summary backend/tests/test_project_memory_api.py::test_define_project_creates_pending_assignment_candidates_from_existing_sources -q` -> 2 passed
+  - `uv run pytest backend/tests/test_mock_sync.py::test_sync_creates_project_assignment_review_items_for_defined_projects -q` -> 1 passed
+  - `uv run pytest backend/tests/test_mock_sync.py::test_duplicate_sync_still_classifies_existing_sources_for_new_project backend/tests/test_slack_agent_api.py::test_slack_sync_uses_agent_slack_llm_pipeline_when_provider_key_exists -q` -> 2 passed
+  - `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_mock_sync.py backend/tests/test_slack_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` -> 37 passed
+  - `uv run ruff check backend/app/api/v1/projects.py backend/app/api/v1/integrations.py backend/app/projects/service.py backend/app/projects/classifier.py backend/tests/test_project_memory_api.py backend/tests/test_mock_sync.py` -> passed
+  - `cd frontend && npm.cmd exec tsc -- --noEmit` -> passed
+  - `cd frontend && npm.cmd run build` -> passed

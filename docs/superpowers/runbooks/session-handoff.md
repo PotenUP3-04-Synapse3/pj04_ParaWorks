@@ -2,6 +2,52 @@
 
 Updated: 2026-05-14
 
+## 2026-05-14 사용자 정의 프로젝트 동기화 검토사항 수정
+
+- 증상:
+  - 동기화 버튼을 눌러도 프로젝트 관련 항목이 Review Queue로 들어오지 않았다.
+  - 새로 만든 프로젝트 요약 뒤에 `?꾩쭅 ?뱀씤???꾨줈?앺듃 evidence...`
+    같은 깨진 한글 문자열이 붙었다.
+- 원인:
+  - `/api/v1/projects/define`은 `Project` 행만 저장하고, 이미 동기화된 source를
+    새 프로젝트 기준으로 다시 분류하지 않았다.
+  - `/api/v1/integrations/{connector_type}/sync`는 connector별 review agent는
+    실행했지만, 사용자 정의 프로젝트에 대한 `project_assignment` 후보는 만들지
+    않았다.
+  - `backend/app/projects/service.py`와
+    `backend/app/projects/classifier.py`에 깨진 한글 fallback 문자열이 남아 있었다.
+- 수정:
+  - 프로젝트 생성 시 새 `Project` 행을 flush한 뒤
+    `create_project_assignment_review_items()`를 호출하고
+    `created_review_items`를 응답에 포함했다.
+  - connector sync가 source 저장 뒤 같은 deterministic 프로젝트 분류기를 실행하고,
+    응답/audit metadata에 `project_assignment_items`를 포함하게 했다. 변경 source가
+    없고 skipped 된 기존 source만 있어도 프로젝트 분류는 다시 시도한다.
+  - 프로젝트 요약, 근거 사유, 승인 타임라인 사유, fallback 프로젝트 라벨, source
+    라벨을 읽을 수 있는 한국어로 다시 작성했다.
+  - 한국어 프로젝트 키워드 추출 범위를 `가-힣`로 정리했다.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_project_memory_api.py::test_define_project_returns_readable_empty_summary backend/tests/test_project_memory_api.py::test_define_project_creates_pending_assignment_candidates_from_existing_sources -q
+uv run pytest backend/tests/test_mock_sync.py::test_sync_creates_project_assignment_review_items_for_defined_projects -q
+uv run pytest backend/tests/test_mock_sync.py::test_duplicate_sync_still_classifies_existing_sources_for_new_project backend/tests/test_slack_agent_api.py::test_slack_sync_uses_agent_slack_llm_pipeline_when_provider_key_exists -q
+uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_mock_sync.py backend/tests/test_slack_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q
+uv run ruff check backend/app/api/v1/projects.py backend/app/api/v1/integrations.py backend/app/projects/service.py backend/app/projects/classifier.py backend/tests/test_project_memory_api.py backend/tests/test_mock_sync.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+결과:
+
+- 신규 프로젝트 회귀 테스트: 2 passed;
+- sync 프로젝트 연결 회귀 테스트: 1 passed;
+- 중복 sync + Slack LLM sync 회귀 테스트: 2 passed;
+- 관련 백엔드 테스트 묶음: 37 passed;
+- ruff: passed;
+- 프론트엔드 TypeScript/build: passed.
+
 ## 2026-05-14 Project/Timeline/RAG Approval Visibility Fix
 
 - Approved knowledge records now preserve `project_key` into project timeline
@@ -1162,3 +1208,31 @@ uv run pytest backend/tests/test_slack_agent_review_bridge.py backend/tests/test
 ```
 
 Result: `1 passed`, `8 passed`, ruff passed, `23 passed`.
+
+## 2026-05-14 사용자 정의 프로젝트 목록 및 분류 흐름 수정
+
+- 사용자가 프로젝트 탭에서 직접 만든 프로젝트가 보이지 않고, 하드코딩 프로젝트는 제거해야 한다고 보고했다.
+- 현재 워크트리에는 Gemini가 추가한 `Project` 모델, `projects` 테이블 마이그레이션,
+  `/api/v1/projects/define`, `/api/v1/projects/defined`가 이미 있었다.
+- 수정 방향:
+  - 하드코딩 프로젝트 목록은 제품 흐름에서 제거한다.
+  - DB에 저장된 사용자 정의 프로젝트는 evidence/timeline이 없어도 `/api/v1/projects`에 표시한다.
+  - Slack/Gmail/Drive/Calendar source 분류는 사용자가 만든 프로젝트의 이름과 설명을 기준으로 수행한다.
+  - Review 화면에서는 `/api/v1/projects/defined` 목록으로 프로젝트를 고를 수 있으므로, LLM/Agent가 제안한 프로젝트를 사용자가 직접 변경한 뒤 승인할 수 있다.
+- 주요 변경:
+  - `backend/app/api/v1/projects.py`: `/defined`가 DB 프로젝트만 반환하도록 수정.
+  - `backend/app/projects/service.py`: 빈 DB 프로젝트 표시, 승인 항목의 `project_name` fallback 유지.
+  - `backend/app/projects/classifier.py`: `Project.name`/`Project.summary` 기반 분류로 변경.
+  - `backend/tests/test_project_memory_api.py`: 프로젝트 생성 후 빈 프로젝트 표시, 하드코딩 프로젝트 제거, 사용자 정의 프로젝트 기준 분류 테스트 추가.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_project_memory_api.py -q
+uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q
+uv run ruff check backend/app/api/v1/projects.py backend/app/projects/service.py backend/app/projects/classifier.py backend/app/models/knowledge.py backend/tests/test_project_memory_api.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+Result: `12 passed`, `26 passed`, ruff passed, frontend typecheck/build passed.

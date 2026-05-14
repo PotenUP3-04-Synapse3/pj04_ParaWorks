@@ -180,9 +180,9 @@ def classify_work_node(state: SlackAgentState):
 # 6. 노드 구현: 요약 및 모델 스위칭 (Summarizer Tool + Model Switching Middleware)
 def summarize_node(state: SlackAgentState):
     # 이미 필터링을 거쳤으므로 텍스트가 짧아져서 4o-mini로도 충분할 가능성이 높아짐
-    model = "gpt-4o-mini"
+    model = "gpt-5-mini"
     if len(state.processed_text) > 2000: # 필터링 후에도 길다면 고성능 모델 사용
-        model = "gpt-4o"
+        model = "gpt-5-mini"
         logger.info(f"[Middleware: Model Switching] Content remains large after compression; using high-performance model ({model}).")
 
     logger.info(f"[Tool: Summarizer] Summarizing filtered key context... (Model: {model})")
