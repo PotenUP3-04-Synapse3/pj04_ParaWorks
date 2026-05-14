@@ -82,7 +82,7 @@ def calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
 
 # 4. 노드 구현: 전처리 & 증거 매핑 (PII Masking & Evidence Mapping Middleware)
 def preprocess_node(state: SlackAgentState):
-    logger.info(f"[Middleware: PII Masking & Evidence] 채널({state.channel_id}) 전처리 시작.")
+    logger.info(f"[Middleware: PII Masking & Evidence] Starting preprocessing for channel({state.channel_id}).")
     
     combined_text = ""
     for msg in sorted(state.messages, key=lambda x: float(x.get("ts", 0))):
@@ -99,7 +99,7 @@ def preprocess_node(state: SlackAgentState):
 
     # Cost Guard Middleware: 길이 초과 시 Truncation 적용
     if len(combined_text) > MAX_INPUT_CHARS:
-        logger.warning(f"[Middleware: Cost Guard] 텍스트 길이({len(combined_text)}자)가 제한({MAX_INPUT_CHARS}자)을 초과하여 자릅니다.")
+        logger.warning(f"[Middleware: Cost Guard] Text length({len(combined_text)} chars) exceeds limit({MAX_INPUT_CHARS} chars). Truncating.")
         combined_text = combined_text[:MAX_INPUT_CHARS] + "\n...[COST_GUARD_TRUNCATED]..."
 
     masked_text = mask_pii(combined_text)
@@ -107,7 +107,7 @@ def preprocess_node(state: SlackAgentState):
 
 # 5. 노드 구현: 업무 필터링 (Tool: Work Filter / Middleware: Context Compression)
 def classify_work_node(state: SlackAgentState):
-    logger.info("[Tool: Work Filter] 저비용 모델로 업무 관련 메시지 선별 중...")
+    logger.info("[Tool: Work Filter] Screening work-related messages using a low-cost model...")
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=state.openai_api_key)
     
     # 메시지 리스트에서 인덱스와 본문만 추출하여 프롬프트 구성
@@ -161,7 +161,7 @@ def classify_work_node(state: SlackAgentState):
             
             compressed_text += f"[{readable_time}] {user_display}: {text} [TS: {ts_val}]\n"
             
-        logger.info(f"[Middleware: Context Compression] 원본 {len(state.messages)}건 -> 필터링 {len(compressed_messages)}건으로 압축 완료.")
+        logger.info(f"[Middleware: Context Compression] Compressed {len(state.messages)} original messages -> {len(compressed_messages)} filtered messages.")
         
         return {
             "is_work_related": True,
@@ -170,7 +170,7 @@ def classify_work_node(state: SlackAgentState):
             "total_completion_tokens": state.total_completion_tokens + ct
         }
     except Exception as e:
-        logger.warning(f"필터링 파싱 실패, 전체 내용으로 진행: {e}")
+        logger.warning(f"Filtering parsing failed, proceeding with full content: {e}")
         return {
             "is_work_related": True,
             "total_prompt_tokens": state.total_prompt_tokens + pt,
@@ -183,9 +183,9 @@ def summarize_node(state: SlackAgentState):
     model = "gpt-4o-mini"
     if len(state.processed_text) > 2000: # 필터링 후에도 길다면 고성능 모델 사용
         model = "gpt-4o"
-        logger.info(f"[Middleware: Model Switching] 압축 후에도 내용이 방대하여 고성능 모델({model})을 사용합니다.")
+        logger.info(f"[Middleware: Model Switching] Content remains large after compression; using high-performance model ({model}).")
 
-    logger.info(f"[Tool: Summarizer] 필터링된 핵심 맥락 요약 중... (사용 모델: {model})")
+    logger.info(f"[Tool: Summarizer] Summarizing filtered key context... (Model: {model})")
     llm = ChatOpenAI(model=model, temperature=0, api_key=state.openai_api_key)
     
     # 이름 보존을 위한 강력한 지침 추가
@@ -216,7 +216,7 @@ def summarize_node(state: SlackAgentState):
 # 7. 노드 구현: 다중 지식 추출 및 폴백 (Agent + Fallback Middleware)
 def extract_candidate_node(state: SlackAgentState):
     current_model = state.model_name
-    logger.info(f"[Agent: Knowledge Extractor] 다중 지식 후보 추출 시작. (모델: {current_model})")
+    logger.info(f"[Agent: Knowledge Extractor] Starting multiple knowledge candidate extraction. (Model: {current_model})")
     try:
         llm = ChatOpenAI(model=current_model, temperature=0, api_key=state.openai_api_key)
         structured_llm = llm.with_structured_output(CandidateList)
@@ -247,7 +247,7 @@ def extract_candidate_node(state: SlackAgentState):
         parsed_result = structured_llm.invoke(prompt)
         
         if not parsed_result or not hasattr(parsed_result, 'candidate_items'):
-            logger.warning("[Agent] 추출된 결과가 없거나 형식이 올바르지 않습니다.")
+            logger.warning("[Agent] No results extracted or invalid format.")
             return {"candidates": [], "total_prompt_tokens": state.total_prompt_tokens + 100, "total_completion_tokens": state.total_completion_tokens + 100}
 
         # 기본 토큰 근사치 가산 (with_structured_output 한계 보완)
@@ -297,7 +297,7 @@ def extract_candidate_node(state: SlackAgentState):
         return {"candidates": final_candidates, "total_prompt_tokens": state.total_prompt_tokens + approx_pt, "total_completion_tokens": state.total_completion_tokens + approx_ct}
         
     except Exception as e:
-        logger.error(f"[Middleware: Fallback] 기본 모델 실패. Gemini 모델로 폴백합니다. Error: {e}")
+        logger.error(f"[Middleware: Fallback] Primary model failed. Falling back to Gemini model. Error: {e}")
         gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro", temperature=0, google_api_key=state.gemini_api_key)
         
         response = gemini_llm.invoke(f"다음 텍스트에서 주요 결정 사항과 할 일을 추출해 JSON 리스트 형식으로만 답해줘. 사용자 이름은 전체 형식을 유지해줘: {state.summary}")
@@ -363,7 +363,7 @@ def process_daily_slack_sync(channel_id: str, messages: List[dict], openai_api_k
         cache_hit=False # 배치는 현재 캐시 미적용
     )
     
-    logger.info(f"[MW: Token Tracker] 비용 정산 완료: ${cost_usd:.5f} (총 토큰: {agent_run_cost.token_usage.total_tokens})")
+    logger.info(f"[MW: Token Tracker] Cost settlement completed: ${cost_usd:.5f} (Total tokens: {agent_run_cost.token_usage.total_tokens})")
     
     # 결과 반환 시 비용 객체 추가
     final_state["run_cost"] = agent_run_cost

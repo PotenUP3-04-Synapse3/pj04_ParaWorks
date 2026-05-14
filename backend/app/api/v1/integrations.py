@@ -795,9 +795,9 @@ def _extract_count(message: str, key: str) -> int:
 
 def _slack_error_action_hint(code: str) -> str:
     if code in {'not_in_channel', 'channel_not_found'}:
-        return 'Slack 앱을 선택한 채널에 추가한 뒤 다시 동기화하세요.'
+        return 'Please add the Slack app to the selected channel and try syncing again.'
     if code == 'missing_scope':
-        return 'Slack OAuth scope를 확인하고 앱을 다시 설치하세요.'
+        return 'Check Slack OAuth scopes and reinstall the app.'
     if code == 'rate_limited':
-        return 'Slack API rate limit이 풀린 뒤 다시 시도하세요.'
-    return 'Slack 연결, 채널 권한, 토큰 상태를 확인한 뒤 다시 동기화하세요.'
+        return 'Please try again after the Slack API rate limit is lifted.'
+    return 'Check Slack connection, channel permissions, and token status, then try syncing again.'
