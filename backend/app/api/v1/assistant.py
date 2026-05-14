@@ -149,7 +149,7 @@ def create_assistant_message(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     messages = list_messages(db, user, conversation.id)
-    tool_logger = AssistantToolLogger(settings.assistant_tool_log_path)
+    tool_logger = AssistantToolLogger()
     tool_logger.log(
         'email_action_agent',
         f'start conversation_id={conversation.id} message_id={user_message.id}',

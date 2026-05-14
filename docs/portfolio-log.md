@@ -3939,9 +3939,10 @@ Cost/security note:
   - AI Assistant RAG answering now has a stronger primary OpenAI model setting:
     `AGENT_LLM_OPENAI_PRIMARY_MODEL=gpt-5.4`, with
     `AGENT_LLM_OPENAI_MODEL=gpt-5.4-mini` kept as the fallback.
-  - Added assistant tool-call trace logging to `.tmp/paraworks-backend.err.log`
-    through `ASSISTANT_TOOL_LOG_PATH`, using English lines such as
-    `[Tool: rag_retrieval] result backend=keyword source_count=...`.
+  - Added assistant tool-call trace logging through the Python
+    `AssistantTool` logger, using English lines such as
+    `[Tool: rag_retrieval] result backend=keyword source_count=...`; the
+    docker scripts surface these lines through the backend stderr log file.
   - The trace covers email action routing, RAG retrieval backend selection, and
     RAG answer model start/result/error events, making it easier to see whether
     the assistant used a tool or company-memory retrieval.

@@ -1169,9 +1169,9 @@ Result: `1 passed`, `8 passed`, ruff passed, `23 passed`.
   as the primary OpenAI model. The default primary model is `gpt-5.4`, while
   `AGENT_LLM_OPENAI_MODEL` remains the OpenAI fallback and defaults to
   `gpt-5.4-mini`.
-- Added `ASSISTANT_TOOL_LOG_PATH`, defaulting to
-  `.tmp/paraworks-backend.err.log`, so local/docker runs can inspect assistant
-  routing and RAG behavior from the existing backend error log path.
+- Assistant tool logs now follow the Slack Agent pattern and use the Python
+  `AssistantTool` logger instead of opening a path from `.env`; local/docker
+  runs still expose the lines through the backend stderr log redirection.
 - Assistant message creation now logs email action routing, RAG retrieval, and
   RAG answer generation in English with the format
   `[Tool: tool_name] ...description...`.

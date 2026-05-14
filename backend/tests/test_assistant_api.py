@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -72,10 +73,10 @@ def test_assistant_message_flow_stores_rag_answer_without_cost_fields(
 
 def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
     client: TestClient,
+    caplog,
     monkeypatch,
-    tmp_path,
 ) -> None:
-    log_path = tmp_path / 'paraworks-backend.err.log'
+    caplog.set_level(logging.INFO, logger='AssistantTool')
 
     class LowConfidenceEmailActionAgent:
         def decide(self, **kwargs):
@@ -107,7 +108,6 @@ def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
 
     def override_settings():
         return assistant_api.Settings(
-            assistant_tool_log_path=str(log_path),
             paraworks_demo_mode=False,
             openai_api_key='test-key',
         )
@@ -130,7 +130,7 @@ def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
     )
 
     assert turn_response.status_code == 200
-    log_text = log_path.read_text(encoding='utf-8')
+    log_text = caplog.text
     assert '[Tool: email_action_agent] start' in log_text
     assert '[Tool: email_action_agent] result action=not_email confidence=0.2 model=gpt-4.1-nano' in log_text
     assert '[Tool: rag_retrieval] result backend=keyword source_count=1 hidden_count=0' in log_text
