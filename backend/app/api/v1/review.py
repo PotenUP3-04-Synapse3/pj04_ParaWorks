@@ -289,6 +289,7 @@ def reject_review_item(
     # Phase 2: 반려 시 데이터 폐기 (Delete on Rejection)
     # 연결된 Source들을 찾아 삭제 (Cascade 설정을 통해 하위 항목도 삭제됨)
     source_ids = item.payload.get('source_ids', [])
+    sources = []
     if source_ids:
         sources = db.scalars(select(Source).where(Source.source_id.in_(source_ids))).all()
         for src in sources:
@@ -371,12 +372,22 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
     
     evidence_count = max(len(links), len(snippets))
     agent_run_id = _agent_run_id(item)
+    summaries_by_url = _agent_evidence_summary_by_url(agent_run)
     rows: list[dict] = []
 
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
-        source_id = source_ids[index] if index < len(source_ids) else None
-        author = source_authors[index] if index < len(source_authors) else "Unknown"
+        summary = summaries_by_url.get(source_url) or {}
+        
+        # ID 및 작성자 정보 폴백 로직
+        source_id = (
+            source_ids[index] if index < len(source_ids) else 
+            summary.get('source_id')
+        )
+        author = (
+            source_authors[index] if index < len(source_authors) else 
+            summary.get('author') or "Unknown"
+        )
         
         if index < len(snippets):
             source_snippet = snippets[index]
@@ -389,12 +400,12 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
                 'rank': index + 1,
                 'source_id': source_id,
                 'source_url': source_url,
-                'source_type': summary.get('source_type'),
+                'source_type': summary.get('source_type') or item.payload.get('source_type') or 'slack',
                 'source_snippet': source_snippet,
                 'permission_level': item.permission_level,
                 'confidence_score': item.confidence_score,
-                'importance_score': 0,
-                'timestamp': None,
+                'importance_score': summary.get('importance_score', 0),
+                'timestamp': summary.get('timestamp'),
                 'author': author,
                 'agent_run_id': agent_run_id,
                 'parser_status': summary.get('parser_status'),
