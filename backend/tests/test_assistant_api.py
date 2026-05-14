@@ -147,6 +147,95 @@ def test_assistant_email_request_creates_approval_draft_without_rag(
     assert assistant_message['metadata']['email_draft']['subject'] == '회의 취소 안내'
 
 
+def test_assistant_low_confidence_email_decision_falls_back_to_rag(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    class LowConfidenceEmailActionAgent:
+        def decide(self, **kwargs):
+            return assistant_api.EmailActionDecision(
+                action_type='email_draft',
+                to=['partner@example.com'],
+                subject='모호한 요청',
+                body='모호한 요청입니다.',
+                confidence_score=0.4,
+            )
+
+    def fake_rag_answer(**kwargs):
+        return SimpleNamespace(
+            answer='안녕하세요. 무엇을 도와드릴까요?',
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=321,
+            agent_name='rag_orchestrator_agent',
+            prompt_version='rag-answer:v1',
+            question=kwargs['question'],
+        )
+
+    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: LowConfidenceEmailActionAgent())
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fake_rag_answer)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '일반 대화'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': '간단히 인사해줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['content'] == '안녕하세요. 무엇을 도와드릴까요?'
+    assert assistant_message['metadata']['agent_name'] == 'rag_orchestrator_agent'
+    assert assistant_message['metadata'].get('action_type') != 'email_draft'
+
+
+def test_assistant_high_confidence_general_reply_skips_rag(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    class GeneralReplyAgent:
+        def decide(self, **kwargs):
+            return assistant_api.EmailActionDecision(
+                action_type='general_reply',
+                reply='안녕하세요. 무엇을 도와드릴까요?',
+                confidence_score=0.91,
+            )
+
+    def fail_if_rag_runs(**kwargs):
+        raise AssertionError('일반 대화는 충분히 높은 confidence가 있으면 RAG를 호출하지 않습니다.')
+
+    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: GeneralReplyAgent())
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': '일반 대화'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': '간단히 인사해줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['content'] == '안녕하세요. 무엇을 도와드릴까요?'
+    assert assistant_message['metadata']['action_type'] == 'general_reply'
+    assert assistant_message['metadata']['confidence_score'] == 0.91
+
+
 def test_assistant_email_agent_uses_conversation_context_without_rag(
     client: TestClient,
     monkeypatch,

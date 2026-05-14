@@ -7,9 +7,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import EvidencePacket, PermissionContext
-from backend.app.agent_runtime.company_memory import (
-    run_company_memory_agent_orchestration,
-)
 from backend.app.agents.mail_document_agent import (
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
@@ -29,7 +26,6 @@ from backend.app.agents.slack_agent import (
     build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
-from backend.app.agents.slack_agent.sync_service import trigger_slack_agent_analysis
 from backend.app.connectors.factory import (
     ConnectorNotConfiguredError,
     get_sync_connector,
@@ -213,24 +209,16 @@ def sync_connector(
             slack_channel_ids_override=selected_channel_ids,
         )
         result = sync_connector_events(db=db, connector=connector)
-        
+        changed_source_ids = getattr(result, 'changed_source_ids', [])
+
         # 동기화 성공 시 지식 추출 에이전트 오케스트레이션 트리거
-        if result.status == 'complete':
-            orch_result = run_company_memory_agent_orchestration(
+        if result.status == 'complete' and changed_source_ids:
+            agent_review_items = _run_connector_agent_review(
                 db=db,
                 user=user,
-                question=f"Analyze recently synced data from {connector_type}",
+                connector_type=connector_type,
+                changed_source_ids=changed_source_ids,
             )
-            agent_review_items = (
-                orch_result.outputs.get('slack_review_items_created', 0) +
-                orch_result.outputs.get('mail_document_review_items_created', 0) +
-                orch_result.outputs.get('memory_review_items_created', 0)
-            )
-
-            # Slack인 경우 기존의 상세 분석도 함께 수행
-            if connector_type == 'slack':
-                agent_review_items += trigger_slack_agent_analysis(db=db, days=7) or 0
-
     except ConnectorNotConfiguredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SlackApiError as exc:
@@ -238,6 +226,13 @@ def sync_connector(
     parser_status_counts = getattr(result, 'parser_status_counts', {})
 
     total_review_items = result.created_review_items + agent_review_items
+    sync_job = db.scalar(select(SyncJob).where(SyncJob.job_id == result.job_id))
+    if sync_job is not None:
+        sync_job.message = (
+            f'fetched={result.fetched_events} '
+            f'created_review_items={total_review_items} '
+            f'skipped_events={result.skipped_events}'
+        )
 
     record_audit_log(
         db=db,
@@ -253,6 +248,7 @@ def sync_connector(
             'parser_status_counts': parser_status_counts,
             'selected_channel_ids': selected_channel_ids,
             'agent_generated_items': agent_review_items,
+            'changed_source_ids': changed_source_ids,
         },
     )
     db.commit()
@@ -265,7 +261,38 @@ def sync_connector(
         'fetched_events': result.fetched_events,
         'skipped_events': result.skipped_events,
         'parser_status_counts': parser_status_counts,
+        'changed_source_ids': changed_source_ids,
     }
+
+
+def _run_connector_agent_review(
+    *,
+    db: Session,
+    user: DemoUser,
+    connector_type: str,
+    changed_source_ids: list[str],
+) -> int:
+    if connector_type == 'slack':
+        review_items = create_slack_agent_review_items(
+            db=db,
+            agent=SlackAgent(model=DeterministicSlackAgentModel()),
+            permission_context=PermissionContext(user_id=user.id, role=user.role),
+            source_window=f'sync:{connector_type}:changed',
+            source_ids=changed_source_ids,
+        )
+        return len(review_items)
+
+    if connector_type in GOOGLE_OAUTH_CONNECTOR_TYPES:
+        review_items = create_mail_document_agent_review_items(
+            db=db,
+            agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
+            permission_context=PermissionContext(user_id=user.id, role=user.role),
+            source_window=f'sync:{connector_type}:changed',
+            source_ids=changed_source_ids,
+        )
+        return len(review_items)
+
+    return 0
 
 
 @router.get('/slack/oauth/install-url')

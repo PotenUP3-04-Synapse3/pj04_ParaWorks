@@ -9,6 +9,8 @@ from backend.app.models import AssistantConversation, AssistantMessage
 RECENT_CONTEXT_MESSAGE_LIMIT = 6
 DEFAULT_CONVERSATION_TITLE = '새 대화'
 MAX_CONVERSATION_TITLE_LENGTH = 32
+MAX_CONTEXT_MESSAGE_CHARS = 500
+MAX_SUMMARY_LINES = 4
 
 
 def create_conversation(db: Session, user: DemoUser, *, title: str | None = None) -> AssistantConversation:
@@ -192,7 +194,6 @@ def build_contextual_question(
                 continue
             seen_context.add(dedupe_key)
             parts.append(f'{message.role}: {content}')
-        parts.extend(f'{message.role}: {message.content}' for message in recent_messages)
 
     parts.append(f'현재 질문: {new_message.strip()}')
     return '\n'.join(parts)

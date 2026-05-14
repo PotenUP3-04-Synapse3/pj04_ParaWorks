@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     assistant_email_agent_max_output_tokens: int = 256
     assistant_email_agent_temperature: float = 0.0
     assistant_email_agent_timeout_seconds: float = 12.0
+    assistant_email_agent_min_confidence: float = 0.72
     rag_embedding_max_estimated_cost_usd: float | None = 0.001
     rag_use_pgvector_search: bool = False
     slack_bot_token: str | None = None

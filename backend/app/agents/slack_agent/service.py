@@ -3,7 +3,12 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext, ReviewCandidate
+from backend.app.agent_runtime import (
+    EvidenceMessage,
+    EvidencePacket,
+    PermissionContext,
+    ReviewCandidate,
+)
 from backend.app.agents.slack_agent.agent import SlackAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 from backend.app.projects.classifier import CANONICAL_PROJECTS
@@ -57,6 +62,7 @@ def create_slack_agent_review_items(
     max_messages: int | None = None,
     newest_first: bool = False,
     selection_strategy: str = 'chronological',
+    source_ids: list[str] | None = None,
 ) -> list[ReviewItem]:
     packet = build_slack_evidence_packet(
         db=db,
@@ -65,6 +71,7 @@ def create_slack_agent_review_items(
         max_messages=max_messages,
         newest_first=newest_first,
         selection_strategy=selection_strategy,
+        source_ids=source_ids,
     )
     if not packet.messages:
         return []
@@ -204,13 +211,17 @@ def build_slack_evidence_packet(
     max_messages: int | None = None,
     newest_first: bool = False,
     selection_strategy: str = 'chronological',
+    source_ids: list[str] | None = None,
 ) -> EvidencePacket:
-    rows = db.execute(
+    query = (
         select(DocumentChunk, Source)
         .join(Source, DocumentChunk.source_id == Source.id)
         .where(Source.source_type == 'slack')
         .order_by(DocumentChunk.id)
-    ).all()
+    )
+    if source_ids is not None:
+        query = query.where(Source.source_id.in_(source_ids))
+    rows = db.execute(query).all()
     rows = [(row[0], row[1]) for row in rows]
     importance_scores: dict[int, int] = {}
 

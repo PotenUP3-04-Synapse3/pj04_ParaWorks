@@ -12,6 +12,7 @@ from backend.app.models import (
     DecisionRecord,
     DocumentChunk,
     HistoryEvent,
+    ReviewItem,
     Source,
     Todo,
     VectorIndexState,

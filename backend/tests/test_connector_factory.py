@@ -142,11 +142,11 @@ def test_sync_connector_requires_slack_token_when_installed_token_is_not_in_vaul
     db_session.add(
         IntegrationConnection(
             connector_type='slack',
-            workspace_id='T123',
+            workspace_id='T-MISSING-SLACK',
             workspace_name='ParaWorks',
             bot_user_id='U999',
             scopes=['channels:history'],
-            token_ref='local:slack:T123:bot',
+            token_ref='local:slack:T-MISSING-SLACK:bot',
             masked_bot_token='xoxb...lled',
             status='connected',
         )

@@ -144,7 +144,9 @@ def _get_installed_slack_connector(
 
     bot_token = token_vault.resolve(connection.token_ref)
     if not bot_token:
-        return None
+        raise ConnectorNotConfiguredError(
+            'slack connector credential is missing. Reconnect Slack before syncing.'
+        )
 
     return SlackConnector(
         config=SlackConnectorConfig(
@@ -184,7 +186,9 @@ def _get_installed_google_connector(
 
     oauth_token = token_vault.resolve(connection.token_ref)
     if not oauth_token:
-        return None
+        raise ConnectorNotConfiguredError(
+            f'{connector_type} connector credential is missing. Reconnect Google before syncing.'
+        )
 
     # kjw: If it's a refresh token, we MUST exchange it for an access token before sync.
     # Otherwise, Google APIs will reject "Bearer <refresh_token>" calls.

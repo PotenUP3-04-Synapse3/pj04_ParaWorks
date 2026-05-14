@@ -19,7 +19,7 @@ from backend.app.core.demo_auth import USERS
 
 def test_conversations_are_scoped_to_user(db_session: Session) -> None:
     viewer = USERS['viewer']
-    employee = USERS['employee-jun']
+    employee = USERS['hanvv-employee']
     create_conversation(db_session, viewer, title='Viewer private thread')
     create_conversation(db_session, employee, title='Employee private thread')
 
@@ -30,7 +30,7 @@ def test_conversations_are_scoped_to_user(db_session: Session) -> None:
 
 def test_get_owned_conversation_rejects_other_user(db_session: Session) -> None:
     viewer = USERS['viewer']
-    employee = USERS['employee-jun']
+    employee = USERS['hanvv-employee']
     conversation = create_conversation(db_session, viewer, title='Viewer private thread')
 
     with pytest.raises(ValueError, match='assistant conversation not found'):
@@ -77,7 +77,7 @@ def test_append_messages_and_context_window(db_session: Session) -> None:
 
 def test_append_user_message_rejects_other_user(db_session: Session) -> None:
     viewer = USERS['viewer']
-    employee = USERS['employee-jun']
+    employee = USERS['hanvv-employee']
     conversation = create_conversation(db_session, viewer, title='Viewer private thread')
 
     with pytest.raises(ValueError, match='assistant conversation not found'):
@@ -86,7 +86,7 @@ def test_append_user_message_rejects_other_user(db_session: Session) -> None:
 
 def test_append_assistant_message_rejects_other_user(db_session: Session) -> None:
     viewer = USERS['viewer']
-    employee = USERS['employee-jun']
+    employee = USERS['hanvv-employee']
     conversation = create_conversation(db_session, viewer, title='Viewer private thread')
 
     with pytest.raises(ValueError, match='assistant conversation not found'):

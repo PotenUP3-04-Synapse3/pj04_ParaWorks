@@ -3895,3 +3895,8 @@ Cost/security note:
   - Preserved source snippets in Mail/Docs and Memory Extraction evidence packets, added richer Review evidence metadata, and expanded deterministic extraction for Korean/English work assignments from Gmail, Drive, and Calendar evidence.
   - Added Mail/Docs and Memory Extraction LLM preflight responses that expose evidence counts and estimated cost while keeping live LLM execution closed for this slice.
   - Verification: `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q` passed with 29 tests; `uv run ruff check ...` fixed and cleared touched backend files; `npm run lint` and `npm run build` passed.
+- `fix: scope sync-driven agent reviews`
+  - Collapsed connector sync and deterministic Agent review generation into one user action while keeping cost control at the ingestion boundary: unchanged source content now returns no changed source ids, so duplicate syncs do not rerun review extraction.
+  - Scoped Slack and Mail/Document evidence packets by changed source ids so Gmail, Drive, and Slack review candidates are generated only from the connector that just changed.
+  - Added a confidence-gated low-cost AI 비서 routing layer for email drafts and lightweight replies, preserving RAG for ambiguous/company-memory questions.
+  - Verification: targeted backend sync/assistant/review tests passed (`46`, `29`, and `17` tests); ruff passed; `npm.cmd run lint` and `npm.cmd run build` passed.
