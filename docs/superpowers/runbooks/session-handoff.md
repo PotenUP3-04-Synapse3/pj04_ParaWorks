@@ -2,6 +2,44 @@
 
 Updated: 2026-05-14
 
+## 2026-05-14 Mail/Document Agent Review Quality and Promotion Flow
+
+- Mail/Document live LLM review generation now uses source-grouped windows
+  instead of one all-corpus candidate. Gmail attachments remain grouped with
+  their parent email, and Drive/Calendar evidence stays source-local.
+- The shared agent LLM default model is now `gpt-5.4-mini`; `.env.example`,
+  backend settings, and Mail/Docs/Slack LLM defaults are aligned. Local `.env`
+  values can still override this.
+- Mail/Docs LLM parsing now treats string `"false"` as false and filters
+  reserved `structured_data` fields so LLM output cannot overwrite ReviewItem
+  source ids, AgentRun ids, title/summary, or cost metadata.
+- Mail/Docs ReviewItems can carry action-oriented fields such as
+  `business_context`, `task_summary`, `recommended_next_step`, `assignee`,
+  `due_date`, `counterparty`, and `source_subject`; Review Queue shows these as
+  an 업무 판단 block before source evidence.
+- Review approval now returns `promotion_result` with created knowledge ids,
+  created timeline ids, project key, and next routes; the frontend displays a
+  post-approval navigation CTA.
+- Todo promotion copy was repaired to clean Korean timeline text, and todo
+  approval can use `recommended_next_step` or `task_summary` as the priority
+  reason fallback.
+- Document Agent portfolio notes for this work are in
+  `docs/portfolio-log-docs-agent.md`; do not duplicate this entry in
+  `docs/portfolio-log.md`.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py -q
+uv run ruff check backend/app/agents/mail_document_agent backend/app/agents/slack_agent/llm.py backend/app/api/v1/integrations.py backend/app/api/v1/review.py backend/app/knowledge/promotion.py backend/app/core/config.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+Result: 51 backend tests passed, ruff passed, TypeScript check passed, and
+frontend production build passed.
+
 ## 2026-05-14 Project/Timeline/RAG Approval Visibility Fix
 
 - Approved knowledge records now preserve `project_key` into project timeline
@@ -1135,6 +1173,42 @@ uv run ruff check backend/app/agents/mail_document_agent/service.py backend/app/
 ```
 
 Result: 63 targeted backend tests passed; ruff passed.
+
+## 2026-05-14 Mail/Document Operating MVP Hardening
+
+- Mail/Document evidence now filters `DocumentChunk.permission_level` through
+  `PermissionContext.allowed_permission_levels`, and integrations/orchestration
+  pass the current user's permission levels explicitly.
+- Manual `/mail-docs/agent-review` and company-memory orchestration now create
+  grouped ReviewItems instead of one all-corpus item. Gmail attachments stay
+  grouped with their parent email; Drive/Calendar sources stay source-local.
+- Mail/Docs has Slack-style live LLM boundaries:
+  `GET /api/v1/integrations/mail-docs/agent-review/llm/preflight` and
+  `POST /api/v1/integrations/mail-docs/agent-review/llm` with
+  `confirm_paid_run=true`. Connector sync still uses deterministic review
+  generation and does not auto-trigger paid LLM calls.
+- Review rejection preserves linked `Source` and `DocumentChunk` rows. Audit
+  metadata records `source_ids_preserved` and `rejected_review_item_id`.
+- RAG indexing now ignores malformed approved `payload.source_ids` unless it is
+  a `list[str]`, and approved `TimelineEvent` rows are indexed as trusted
+  knowledge documents.
+- Observability follows the Slack pattern: no new `*_LOG_PATH`/`*_LOG_FILE`
+  settings. Mail/Docs live runs store `source_window`, evidence counts,
+  included source types, parser status counts, selection strategy, and
+  preflight data in `AgentRun.metadata_`, `AuditLog.metadata_`, and API
+  responses. Legacy Slack sync now uses a module logger instead of `print()`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_rag_indexing.py backend/tests/test_company_memory_orchestration_service.py -q
+uv run ruff check backend/app/agents/mail_document_agent backend/app/agents/slack_agent/sync_service.py backend/app/api/v1/integrations.py backend/app/api/v1/review.py backend/app/rag/indexing.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+Result: `63 passed`, ruff passed, frontend TypeScript check and production
+build passed.
 
 ## 2026-05-14 Slack sync와 agent_slack LLM 파이프라인 연결
 

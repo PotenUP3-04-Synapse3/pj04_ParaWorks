@@ -86,6 +86,37 @@ def test_approve_todo_promotes_to_knowledge_table(client, db_session) -> None:
     assert todo.review_status == 'approved'
 
 
+def test_approve_mail_document_todo_returns_promotion_next_routes(client, db_session) -> None:
+    item = seed_review_item(
+        db_session,
+        item_type='todo',
+        payload={
+            'title': 'K테크 1개월 파일럿 제안 검토 및 회신',
+            'task_summary': '1개월 파일럿 제안의 범위와 성공 기준을 검토합니다.',
+            'recommended_next_step': '파일럿 범위, 성공 지표, 일정 초안을 정리해 회신합니다.',
+            'assignee': '용희',
+            'due_date': '2026-05-15',
+            'project_key': 'k-tech-pilot',
+        },
+    )
+
+    response = client.post(f'/api/v1/review/{item.id}/approve')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'approved'
+    assert body['promotion_result']['target_type'] == 'todo'
+    assert body['promotion_result']['project_key'] == 'k-tech-pilot'
+    assert body['promotion_result']['next_routes'] == ['/projects', '/timeline']
+    todo = db_session.scalars(select(Todo)).one()
+    timeline = db_session.scalars(select(TimelineEvent)).one()
+    assert body['promotion_result']['created_record_ids'] == [todo.id]
+    assert body['promotion_result']['created_timeline_event_ids'] == [timeline.id]
+    assert todo.priority_reason == '파일럿 범위, 성공 지표, 일정 초안을 정리해 회신합니다.'
+    assert timeline.title == '[할 일] K테크 1개월 파일럿 제안 검토 및 회신'
+    assert timeline.result_summary == '담당자: 용희, 기한: 2026-05-15'
+
+
 def test_approve_timeline_event_promotes_to_timeline_table(client, db_session) -> None:
     item = seed_review_item(
         db_session,

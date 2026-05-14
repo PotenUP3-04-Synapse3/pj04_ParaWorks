@@ -12,6 +12,7 @@ from backend.app.models import (
     ReviewItem,
     Source,
     SyncJob,
+    TimelineEvent,
     Todo,
     VectorIndexState,
 )
@@ -397,6 +398,58 @@ def test_build_rag_index_documents_excludes_unapproved_source_chunks(
     documents = build_rag_index_documents(db_session)
 
     assert all('gmail-unapproved-source' not in document.document_id for document in documents)
+
+
+def test_build_rag_index_documents_ignores_malformed_approved_source_ids(
+    db_session: Session,
+) -> None:
+    seed_chunk(
+        db_session,
+        'Malformed approved source id payload should not index this chunk.',
+        'gmail-malformed-source',
+        approve_for_rag=False,
+    )
+    db_session.add(
+        ReviewItem(
+            item_type='history_event',
+            payload={
+                'title': 'Malformed source ids',
+                'summary': 'source_ids must be a list of strings.',
+                'source_ids': 'gmail-malformed-source',
+            },
+            source_links=['https://gmail.mock/gmail-malformed-source'],
+            source_snippets=['Malformed approved source id payload should not index this chunk.'],
+            confidence_score=0.8,
+            permission_level='internal',
+            status='approved',
+        )
+    )
+    db_session.commit()
+
+    documents = build_rag_index_documents(db_session)
+
+    assert all(document.metadata.get('source_id') != 'gmail-malformed-source' for document in documents)
+
+
+def test_build_rag_index_documents_includes_approved_timeline_events(
+    db_session: Session,
+) -> None:
+    timeline = TimelineEvent(
+        title='K-Tech pilot kickoff completed',
+        result_summary='The K-Tech pilot kickoff meeting was completed with confirmed next steps.',
+        source_links=['https://calendar.mock/k-tech-kickoff'],
+        source_snippets=['K-Tech pilot kickoff meeting completed.'],
+        confidence_score=0.91,
+        permission_level='internal',
+        review_status='approved',
+    )
+    db_session.add(timeline)
+    db_session.commit()
+
+    documents = build_rag_index_documents(db_session)
+
+    assert [document.document_id for document in documents] == [f'timeline_event:{timeline.id}']
+    assert documents[0].metadata['source_type'] == 'timeline_event'
 
 
 def test_build_rag_index_documents_includes_document_parser_metadata(db_session: Session) -> None:

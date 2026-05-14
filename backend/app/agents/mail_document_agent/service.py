@@ -12,6 +12,7 @@ from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
 # 처리 대상 소스 타입 정의
 MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar')
+_PERMISSION_RANK = {'public': 0, 'internal': 1, 'restricted': 2}
 
 
 def create_mail_document_agent_review_items(
@@ -22,6 +23,8 @@ def create_mail_document_agent_review_items(
     source_window: str,
     source_ids: list[str] | None = None,
     source_types: tuple[str, ...] = MAIL_DOCUMENT_SOURCE_TYPES,
+    max_messages: int | None = None,
+    selection_strategy: str = 'chronological',
 ) -> list[ReviewItem]:
     """
     메일 및 문서 에이전트를 실행하여 DB에 검토 항목(ReviewItem)을 생성합니다.
@@ -37,6 +40,8 @@ def create_mail_document_agent_review_items(
         source_window=source_window,
         source_ids=source_ids,
         source_types=source_types,
+        max_messages=max_messages,
+        selection_strategy=selection_strategy,
     )
     if not packet.messages:
         return []
@@ -66,6 +71,9 @@ def create_mail_document_agent_review_items(
             'source_type': packet.source_type,
             'included_source_types': included_source_types,
             'message_count': len(packet.messages),
+            'source_window': packet.source_window,
+            'selection_strategy': selection_strategy,
+            'parser_status_counts': _parser_status_counts(packet),
             'cache_hit': result.cost.cache_hit,
             'evidence_summary': build_evidence_summary(packet),
         },
@@ -150,6 +158,7 @@ def create_mail_document_agent_review_items_for_changed_sources(
                 source_window=source_window,
                 source_ids=group_source_ids,
                 source_types=source_types,
+                selection_strategy='source_group',
             )
         )
     return review_items
@@ -162,6 +171,8 @@ def build_mail_document_evidence_packet(
     source_window: str,
     source_ids: list[str] | None = None,
     source_types: tuple[str, ...] = MAIL_DOCUMENT_SOURCE_TYPES,
+    max_messages: int | None = None,
+    selection_strategy: str = 'chronological',
 ) -> EvidencePacket:
     """
     DB의 DocumentChunk와 Source 테이블을 조인하여 에이전트 입력용 증거 패킷을 생성합니다.
@@ -170,11 +181,24 @@ def build_mail_document_evidence_packet(
         select(DocumentChunk, Source)
         .join(Source, DocumentChunk.source_id == Source.id)
         .where(Source.source_type.in_(source_types))
+        .where(DocumentChunk.permission_level.in_(_allowed_permission_levels(permission_context)))
+        .where(Source.permission_level.in_(_allowed_permission_levels(permission_context)))
         .order_by(DocumentChunk.id)
     )
     if source_ids is not None:
         query = query.where(Source.source_id.in_(source_ids))
     rows = db.execute(query).all()
+    rows = [(chunk, source) for chunk, source in rows]
+
+    if selection_strategy == 'ranked':
+        rows = sorted(
+            rows,
+            key=lambda row: _mail_document_rank_key(row[0], row[1]),
+            reverse=True,
+        )
+
+    if max_messages is not None:
+        rows = rows[:max(max_messages, 0)]
 
     messages = [
         EvidenceMessage(
@@ -183,7 +207,7 @@ def build_mail_document_evidence_packet(
             text=chunk.text,
             author=source.author,
             timestamp=str(source.raw_metadata.get('ts') or source.created_at.isoformat()),
-            permission_level=chunk.permission_level,
+            permission_level=_strictest_permission(chunk.permission_level, source.permission_level),
             metadata={
                 'chunk_id': chunk.id,
                 'source_pk': source.id,
@@ -241,6 +265,23 @@ def build_mail_document_agent_preflight(
     }
 
 
+def _parser_status_counts(packet: EvidencePacket) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for message in packet.messages:
+        status = message.metadata.get('parser_status')
+        if isinstance(status, str) and status:
+            counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _allowed_permission_levels(permission_context: PermissionContext) -> tuple[str, ...]:
+    return permission_context.allowed_permission_levels
+
+
+def _strictest_permission(*levels: str) -> str:
+    return max(levels, key=lambda level: _PERMISSION_RANK.get(level, 1))
+
+
 def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
     """문서 파싱 품질 및 메타데이터를 추출합니다."""
     keys = (
@@ -273,6 +314,46 @@ def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
 
 def _estimate_tokens(packet: EvidencePacket) -> int:
     return sum(max(1, len(message.text.strip()) // 4) for message in packet.messages if message.text.strip())
+
+
+def _mail_document_rank_key(chunk: DocumentChunk, source: Source) -> tuple[int, float, int]:
+    return (_mail_document_importance_score(chunk, source), _source_sort_timestamp(source), chunk.id)
+
+
+def _mail_document_importance_score(chunk: DocumentChunk, source: Source) -> int:
+    text = chunk.text.lower()
+    score = 0
+    if any(keyword in text for keyword in ('decision', 'decided', 'approved', '계약', '결정')):
+        score += 50
+    if any(keyword in text for keyword in ('todo', 'due', 'deadline', 'owner', '검토', '준비')):
+        score += 35
+    if source.source_type == 'gmail':
+        score += 10
+    if source.source_type in {'drive', 'gmail_attachment'}:
+        score += 8
+    if source.source_type == 'calendar':
+        score += 6
+    parser_status = chunk.metadata_.get('parser_status')
+    if parser_status == 'parsed':
+        score += 10
+    if parser_status in {'metadata_only', 'unsupported', 'error'}:
+        score -= 5
+    if 40 <= len(chunk.text) <= 1600:
+        score += 5
+    return score
+
+
+def _source_sort_timestamp(source: Source) -> float:
+    raw_metadata = source.raw_metadata or {}
+    timestamp = raw_metadata.get('ts') or raw_metadata.get('sync_cursor') or raw_metadata.get('modified_time')
+    if isinstance(timestamp, (int, float)):
+        return float(timestamp)
+    if isinstance(timestamp, str):
+        try:
+            return float(timestamp)
+        except ValueError:
+            pass
+    return source.created_at.timestamp()
 
 
 def _changed_source_groups(

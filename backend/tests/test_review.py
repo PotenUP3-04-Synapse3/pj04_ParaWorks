@@ -1,4 +1,16 @@
-from backend.app.models import AgentRun, ReviewItem, TimelineEvent, Todo
+from sqlalchemy import select
+
+from backend.app.models import (
+    AgentRun,
+    AuditLog,
+    Document,
+    DocumentChunk,
+    DocumentVersion,
+    ReviewItem,
+    Source,
+    TimelineEvent,
+    Todo,
+)
 
 
 def test_approve_review_item_changes_status(client) -> None:
@@ -15,6 +27,62 @@ def test_reject_review_item_changes_status(client) -> None:
     response = client.post(f"/api/v1/review/{item['id']}/reject")
     assert response.status_code == 200
     assert response.json()['status'] == 'rejected'
+
+
+def test_reject_mail_document_review_item_preserves_source_evidence(client, db_session) -> None:
+    source = Source(
+        source_type='gmail',
+        source_id='gmail:reject-preserve',
+        source_url='https://gmail.mock/reject-preserve',
+        title='Reject preserve source',
+        author='owner@example.com',
+        permission_level='internal',
+        raw_metadata={},
+    )
+    db_session.add(source)
+    db_session.flush()
+    document = Document(source_id=source.id, title=source.title, current_version='v1')
+    db_session.add(document)
+    db_session.flush()
+    version = DocumentVersion(document_id=document.id, version='v1', body='Rejecting the AI candidate must not delete this source.')
+    db_session.add(version)
+    db_session.flush()
+    chunk = DocumentChunk(
+        version_id=version.id,
+        source_id=source.id,
+        chunk_index=0,
+        text='Rejecting the AI candidate must not delete this source.',
+        source_snippet='Rejecting the AI candidate must not delete this source.',
+        permission_level='internal',
+        metadata_={'source_type': 'gmail'},
+    )
+    item = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': 'Reject preserve candidate',
+            'summary': 'The AI candidate is not trusted yet.',
+            'source_ids': ['gmail:reject-preserve'],
+        },
+        source_links=[source.source_url],
+        source_snippets=[chunk.source_snippet],
+        confidence_score=0.72,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add_all([chunk, item])
+    db_session.commit()
+    db_session.refresh(item)
+
+    response = client.post(f'/api/v1/review/{item.id}/reject')
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'rejected'
+    assert db_session.scalar(select(Source).where(Source.source_id == 'gmail:reject-preserve')) is not None
+    assert db_session.scalar(select(DocumentChunk).where(DocumentChunk.source_id == source.id)) is not None
+    audit_log = db_session.scalar(select(AuditLog).where(AuditLog.action == 'review.reject'))
+    assert audit_log is not None
+    assert audit_log.metadata_['source_ids_preserved'] == ['gmail:reject-preserve']
+    assert audit_log.metadata_['rejected_review_item_id'] == item.id
 
 
 def test_patch_review_item_updates_payload(client) -> None:

@@ -14,6 +14,7 @@ from backend.app.models import (
     HistoryEvent,
     ReviewItem,
     Source,
+    TimelineEvent,
     Todo,
     VectorIndexState,
 )
@@ -215,6 +216,7 @@ def build_rag_index_documents(db: Session) -> list[VectorDocument]:
     documents.extend(_chunk_documents(db))
     documents.extend(_decision_documents(db))
     documents.extend(_history_documents(db))
+    documents.extend(_timeline_documents(db))
     documents.extend(_todo_documents(db))
     return documents
 
@@ -226,10 +228,18 @@ def _chunk_documents(db: Session) -> list[VectorDocument]:
         select(ReviewItem.payload).where(ReviewItem.status == 'approved')
     ).scalars().all()
     
-    approved_sid_set = set()
+    approved_sid_set: set[str] = set()
     for p in approved_payloads:
-        if isinstance(p, dict) and 'source_ids' in p:
-            approved_sid_set.update(p['source_ids'])
+        if not isinstance(p, dict):
+            continue
+        source_ids = p.get('source_ids')
+        if not isinstance(source_ids, list):
+            continue
+        approved_sid_set.update(
+            source_id.strip()
+            for source_id in source_ids
+            if isinstance(source_id, str) and source_id.strip()
+        )
             
     if not approved_sid_set:
         return []
@@ -327,6 +337,27 @@ def _history_documents(db: Session) -> list[VectorDocument]:
             source_type='history_event',
             title=event.title,
             text=f'기록/공유: {event.title}\n내용: {event.reason}',
+            source_links=event.source_links,
+            source_snippets=event.source_snippets,
+            permission_level=event.permission_level,
+            timestamp=event.created_at.isoformat(),
+        )
+        for event in events
+    ]
+
+
+def _timeline_documents(db: Session) -> list[VectorDocument]:
+    events = db.scalars(
+        select(TimelineEvent)
+        .where(TimelineEvent.review_status == 'approved')
+        .order_by(TimelineEvent.id)
+    ).all()
+    return [
+        _knowledge_document(
+            document_id=f'timeline_event:{event.id}',
+            source_type='timeline_event',
+            title=event.title,
+            text=f'Timeline: {event.title}\nSummary: {event.result_summary}',
             source_links=event.source_links,
             source_snippets=event.source_snippets,
             permission_level=event.permission_level,

@@ -24,12 +24,12 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
   AgentReviewResponse,
+  AgentLlmPreflight,
   GoogleRuntimeStatus,
   IntegrationConnection,
   IntegrationManifest,
   IntegrationSyncResponse,
   OAuthInstallUrlResponse,
-  SlackLlmPreflight,
   SlackRuntimeStatus,
   DashboardResponse,
 } from "@/lib/api/types";
@@ -88,7 +88,8 @@ export default function IntegrationsPage() {
   const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
-  const [slackLlmPreflight, setSlackLlmPreflight] = useState<SlackLlmPreflight>();
+  const [slackLlmPreflight, setSlackLlmPreflight] = useState<AgentLlmPreflight>();
+  const [mailDocsLlmPreflight, setMailDocsLlmPreflight] = useState<AgentLlmPreflight>();
   const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
   const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
   const [dashboardSummary, setDashboardSummary] = useState<DashboardResponse>();
@@ -96,6 +97,7 @@ export default function IntegrationsPage() {
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
   const [llmAgentRunning, setLlmAgentRunning] = useState(false);
+  const [mailDocsLlmAgentRunning, setMailDocsLlmAgentRunning] = useState(false);
   const [error, setError] = useState<string>();
   const jobStatus = useJobStatus(activeJobId);
 
@@ -176,7 +178,7 @@ export default function IntegrationsPage() {
       });
 
     // Slack LLM 에이전트 실행 전 검사(예산, 모델 등)
-    apiGet<SlackLlmPreflight>("/api/v1/integrations/slack/agent-review/llm/preflight")
+    apiGet<AgentLlmPreflight>("/api/v1/integrations/slack/agent-review/llm/preflight")
       .then((preflight) => {
         if (active) {
           setSlackLlmPreflight(preflight);
@@ -185,6 +187,18 @@ export default function IntegrationsPage() {
       .catch(() => {
         if (active) {
           setSlackLlmPreflight(undefined);
+        }
+      });
+
+    apiGet<AgentLlmPreflight>("/api/v1/integrations/mail-docs/agent-review/llm/preflight")
+      .then((preflight) => {
+        if (active) {
+          setMailDocsLlmPreflight(preflight);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setMailDocsLlmPreflight(undefined);
         }
       });
 
@@ -380,6 +394,24 @@ export default function IntegrationsPage() {
       setError(caught instanceof Error ? caught.message : "실제 LLM Agent 실행에 실패했습니다.");
     } finally {
       setLlmAgentRunning(false);
+    }
+  }
+
+  async function runMailDocsLlmAgent() {
+    setMailDocsLlmAgentRunning(true);
+    setError(undefined);
+
+    try {
+      const result = await apiPost<AgentReviewResponse>("/api/v1/integrations/mail-docs/agent-review/llm", {
+        confirm_paid_run: true,
+      });
+      setAgentResult(result);
+      setMailDocsLlmPreflight(result.preflight);
+      await refreshDashboardSummary();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Mail/Docs LLM Agent 실행에 실패했습니다.");
+    } finally {
+      setMailDocsLlmAgentRunning(false);
     }
   }
 
@@ -612,6 +644,12 @@ export default function IntegrationsPage() {
               />
             ) : null}
             <GoogleRuntimeStatusList statuses={googleRuntimeByType} />
+            <AgentLlmPreflightPanel
+              title="Mail/Docs LLM 테스트"
+              preflight={mailDocsLlmPreflight}
+              agentRunning={mailDocsLlmAgentRunning}
+              onRunAgent={runMailDocsLlmAgent}
+            />
 
             {error ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
@@ -768,7 +806,7 @@ function SlackRuntimeStatusPanel({
   onToggleChannel,
 }: {
   status: SlackRuntimeStatus;
-  llmPreflight?: SlackLlmPreflight;
+  llmPreflight?: AgentLlmPreflight;
   llmAgentRunning: boolean;
   selectedChannelIds: string[];
   onRunLlmAgent: () => void;
@@ -928,6 +966,65 @@ function SlackRuntimeStatusPanel({
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function AgentLlmPreflightPanel({
+  title,
+  preflight,
+  agentRunning,
+  onRunAgent,
+}: {
+  title: string;
+  preflight?: AgentLlmPreflight;
+  agentRunning: boolean;
+  onRunAgent: () => void;
+}) {
+  if (!preflight) {
+    return null;
+  }
+
+  return (
+    <div className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold text-[var(--ink-strong)]">{title}</p>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">
+            명시 확인 후에만 유료 LLM을 실행합니다. Mail/Docs는 GPT-5.4 mini로 업무 후보를 생성합니다.
+          </p>
+        </div>
+        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
+          <span>{preflight.budget_status}</span>
+        </span>
+      </div>
+      <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
+        <p className="font-semibold">
+          {preflight.model_name ?? "모델 미설정"} · {preflight.available_providers.join(" → ") || "API key 필요"}
+        </p>
+        <p className="mt-1 text-[var(--ink-muted)]">
+          예상 {preflight.estimated_total_tokens.toLocaleString()} tokens · $
+          {preflight.estimated_cost_usd.toFixed(6)}
+          {preflight.budget_limit_usd ? ` / $${preflight.budget_limit_usd}` : ""}
+        </p>
+        <p className="mt-1 text-[var(--ink-muted)]">
+          evidence {preflight.evidence_message_count.toLocaleString()} /{" "}
+          {preflight.max_evidence_messages.toLocaleString()}개
+          {preflight.source_window ? ` · ${preflight.source_window}` : ""}
+        </p>
+        <button
+          type="button"
+          onClick={() => onRunAgent()}
+          disabled={agentRunning || preflight.action !== "run"}
+          className="liquid-primary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+        >
+          <Bot className="h-4 w-4" aria-hidden="true" />
+          {agentRunning ? "LLM 실행 중" : title.includes("Mail/Docs") ? "GPT-5.4 mini로 업무 후보 생성" : "유료 LLM 실행"}
+        </button>
+        {preflight.action !== "run" ? (
+          <p className="mt-2 text-[var(--ink-muted)]">상태: {preflight.reason}</p>
+        ) : null}
+      </div>
     </div>
   );
 }

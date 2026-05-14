@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,8 @@ from backend.app.models import (
     ReviewItem,
     Source,
 )
+
+logger = logging.getLogger(__name__)
 
 # 프로젝트 루트를 경로에 추가하여 agent_slack 임포트 가능하게 함
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
@@ -45,7 +48,7 @@ def trigger_slack_agent_analysis(
     ID 기반 중복 체크를 통해 이미 분석된 메시지는 완벽하게 제외합니다.
     """
     if process_daily_slack_sync is None:
-        print('[!] Error: agent_slack.agent_slack module not found.')
+        logger.error('agent_slack.agent_slack module not found')
         return 0
 
     # 1. 이미 존재하는 ReviewItem들의 source_id 수집 (중복 분석 방지)
@@ -113,12 +116,10 @@ def trigger_slack_agent_analysis(
         id_to_author[source.source_id] = source.author
 
     if skipped_count > 0:
-        print(
-            f'[*] Skipping {skipped_count} already analyzed Slack messages (ID-based).'
-        )
+        logger.info('Skipping already analyzed Slack messages count=%s', skipped_count)
 
     if not messages_by_channel:
-        print('[*] No new Slack messages to analyze.')
+        logger.info('No new Slack messages to analyze')
         return 0
 
     # 4. 각 채널별 분석 실행
@@ -219,8 +220,8 @@ def trigger_slack_agent_analysis(
                 total_created += 1
 
             db.commit()
-        except Exception as e:
-            print(f'[!] Error analyzing channel {channel_id}: {e}')
+        except Exception:
+            logger.exception('Slack channel analysis failed channel_id=%s', channel_id)
             db.rollback()
             continue
 

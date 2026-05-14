@@ -9,7 +9,7 @@ from backend.app.agent_runtime import (
 )
 from backend.app.agents.slack_agent.agent import SlackAgentModelResponse
 
-DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+DEFAULT_OPENAI_MODEL = 'gpt-5.4-mini'
 DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 DEFAULT_INPUT_COST_PER_1M = 0.15
 DEFAULT_OUTPUT_COST_PER_1M = 0.60
@@ -377,15 +377,6 @@ def _usage_tokens(response: Any, messages: list[tuple[str, str]], payload: dict[
 
 def _safe_item_type(raw_item_type: Any) -> str:
     item_type = str(raw_item_type or 'history_event')
-    return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
-
-
-def _safe_confidence(raw_confidence: Any) -> float:
-    try:
-        return min(max(float(raw_confidence), 0.0), 1.0)
-    except (TypeError, ValueError):
-        return 0.7
-
     return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
 
 

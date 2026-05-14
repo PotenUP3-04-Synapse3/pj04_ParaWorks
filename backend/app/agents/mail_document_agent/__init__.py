@@ -13,6 +13,14 @@ from backend.app.agents.mail_document_agent.agent import (
     MailDocumentAgentModel,
     MailDocumentAgentModelResponse,
 )
+from backend.app.agents.mail_document_agent.llm import (
+    FallbackMailDocumentAgentModel,
+    LangChainMailDocumentAgentModel,
+    MailDocumentLlmProviderError,
+    MailDocumentLlmSettings,
+    build_langchain_mail_document_agent_model,
+    build_mail_document_llm_preflight,
+)
 from backend.app.agents.mail_document_agent.service import (
     MAIL_DOCUMENT_SOURCE_TYPES,
     build_mail_document_agent_preflight,
@@ -28,11 +36,17 @@ __all__ = [
     'MAIL_DOCUMENT_AGENT_PROMPT_VERSION',
     'MAIL_DOCUMENT_SOURCE_TYPES',
     'DeterministicMailDocumentAgentModel',
+    'FallbackMailDocumentAgentModel',
+    'LangChainMailDocumentAgentModel',
     'MailDocumentAgent',
     'MailDocumentAgentModel',
     'MailDocumentAgentModelResponse',
+    'MailDocumentLlmProviderError',
+    'MailDocumentLlmSettings',
     'build_mail_document_agent_preflight',
     'build_mail_document_evidence_packet',
+    'build_langchain_mail_document_agent_model',
+    'build_mail_document_llm_preflight',
     'create_mail_document_agent_review_items',
     'create_mail_document_agent_review_items_for_changed_sources',
 ]

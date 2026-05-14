@@ -6,6 +6,21 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgent,
     MailDocumentAgentModelResponse,
 )
+from backend.app.agents.mail_document_agent.llm import LangChainMailDocumentAgentModel
+
+
+class FakeChatResponse:
+    def __init__(self, content: str) -> None:
+        self.content = content
+        self.usage_metadata = {'input_tokens': 100, 'output_tokens': 40}
+
+
+class FakeChatModel:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+    def invoke(self, messages):
+        return FakeChatResponse(self.content)
 
 
 class FakeMailDocumentModel:
@@ -66,6 +81,37 @@ def test_mail_document_agent_creates_evidence_backed_candidate() -> None:
     assert result.cost.token_usage.total_tokens == 1060
     assert result.cost.estimated_cost_usd > 0
     assert result.cache_key
+
+
+def test_mail_document_llm_treats_string_false_as_not_business_related() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:test',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal-1',
+                source_url='https://gmail.mock/personal',
+                text='Subject: Lunch\n\nThis is a personal lunch message.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+    model = LangChainMailDocumentAgentModel(
+        provider='openai',
+        model_name='gpt-5.4-mini',
+        chat_model=FakeChatModel(
+            '{"title":"개인 메일","summary":"업무 관련 없음","item_type":"history_event",'
+            '"confidence_score":0.91,"is_business_related":"false","structured_data":{}}'
+        ),
+    )
+
+    result = MailDocumentAgent(model=model).run(packet)
+
+    assert result.candidates == []
 
 
 def test_deterministic_mail_document_agent_marks_metadata_only_evidence_uncertain() -> None:
@@ -160,6 +206,44 @@ def test_deterministic_mail_document_agent_extracts_generic_korean_work_assignme
     assert candidate.payload_fields['due_date'] == '금요일'
     assert candidate.payload_fields['task_summary'] == '김하나님, 금요일까지 고객사 공유본을 준비해주세요.'
     assert candidate.payload_fields['evidence_reason']
+
+
+def test_deterministic_mail_document_agent_summarizes_korean_business_request_without_raw_email_header() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:k-tech',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-k-tech',
+                source_url='https://gmail.mock/k-tech',
+                text=(
+                    'Subject: RE: [논의] K테크 솔루션즈 파일럿 제안 검토 요청\n'
+                    'From: "김종우" <kjw4work@gmail.com>\n'
+                    'Date: Wed, 13 May 2026 16:48:53 +0900\n\n'
+                    'K테크 솔루션즈 측에서 ParaWorks 파일럿 도입에 큰 관심을 보이고 있습니다. '
+                    '1개월 파일럿이 유의미한 결과를 낼 수 있을지 검토하고 회신이 필요합니다.'
+                ),
+                author='kjw4work@gmail.com',
+                timestamp='2026-05-13T16:48:53+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+                source_snippet_override=(
+                    'From: "김종우" <kjw4work@gmail.com> Date: Wed, 13 May 2026 '
+                    'K테크 솔루션즈 측에서 ParaWorks 파일럿 도입에 큰 관심을 보이고 있습니다.'
+                ),
+            ),
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.item_type == 'todo'
+    assert not candidate.title.startswith('RE:')
+    assert 'From:' not in candidate.summary
+    assert 'Date:' not in candidate.summary
+    assert candidate.payload_fields['recommended_next_step']
 
 
 def test_deterministic_mail_document_agent_extracts_drive_only_assignment() -> None:
