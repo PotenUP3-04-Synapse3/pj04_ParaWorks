@@ -4009,3 +4009,11 @@ Cost/security note:
     higher priority than demo fallback contacts.
   - Verification: targeted contact lookup tests passed, wider assistant backend
     tests passed with 47 tests, and ruff passed on touched files.
+- `fix: preserve referenced assistant content in email drafts`
+  - Added an explicit referenced-content email draft path so `이 내용으로
+    보내줘` and draft correction complaints use the latest sendable assistant
+    answer or pending draft state before falling through to normal RAG chat.
+  - Added a guardrail that appends the selected source content when the draft
+    composer produces a generic body that omits the actual referenced answer.
+  - Verification: targeted referenced-email tests passed, wider assistant
+    backend tests passed with 49 tests, and ruff passed on touched files.

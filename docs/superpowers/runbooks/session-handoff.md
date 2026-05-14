@@ -1338,3 +1338,30 @@ uv run ruff check backend/app/assistant/contact_lookup.py backend/app/assistant/
 
 Result: targeted contact lookup tests passed; wider assistant backend tests
 passed with 47 tests; ruff passed.
+
+## 2026-05-14 Assistant Referenced Email Drafts
+
+- Added `backend/app/assistant/email_draft_context.py` so the assistant can
+  treat recent AI answers and pending email drafts as explicit email body
+  sources.
+- Requests such as `이 내용을 용희님한테 메일로 보내줘.` now route before the
+  low-cost `email_intent_gate`, select the latest sendable assistant answer,
+  resolve recipients, and pass that selected source to `email_draft_composer`.
+- Draft revision complaints such as `내용이 하나도 안 들어가 있잖아.` now reuse
+  the pending draft's recipient/subject plus the earlier assistant answer,
+  creating a new approval-required draft instead of falling into RAG chat.
+- Added a source-content guardrail: if the draft composer compresses `이 내용`
+  into a generic note and omits the actual selected body, the selected source is
+  appended to the draft before storing the pending approval metadata.
+- Isolated `test_email_draft_composer_defaults_to_stronger_model_than_intent_gate`
+  from local `.env` overrides with `Settings(_env_file=None)`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_referenced_answer_email_keeps_selected_content backend/tests/test_assistant_api.py::test_assistant_revises_pending_draft_when_user_says_body_is_missing -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/app/assistant/email_agent.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted referenced-email tests passed; wider assistant backend tests
+passed with 49 tests; ruff passed.

@@ -26,7 +26,7 @@ class FakeChatModel:
 
 
 def test_email_draft_composer_defaults_to_stronger_model_than_intent_gate() -> None:
-    settings = Settings()
+    settings = Settings(_env_file=None)
 
     assert settings.assistant_email_agent_model == 'gpt-4.1-nano'
     assert settings.assistant_email_draft_agent_model == 'gpt-5.4-mini'

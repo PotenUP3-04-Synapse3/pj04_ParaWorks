@@ -457,6 +457,158 @@ def test_assistant_can_draft_email_from_rag_answer(
     assert assistant_message['metadata']['email_draft']['body'] == 'Project Alpha launch is Friday.'
 
 
+def test_assistant_referenced_answer_email_keeps_selected_content(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    source_content = (
+        'ParaWorks 회사 소개\n'
+        'ParaWorks는 조직의 기억을 하나로 모으는 AI 기반 회사 기억 플랫폼입니다.\n'
+        '핵심 가치: 흩어진 지식의 통합, 신뢰 가능한 지식화, 권한 기반 보안.\n'
+        '주요 기능: Slack, Gmail, Google Drive 데이터 동기화와 Review Queue.'
+    )
+
+    def fail_if_email_gate_or_rag_runs(*args, **kwargs):
+        raise AssertionError('참조 메일 요청은 이전 답변을 메일 본문 후보로 고정한 뒤 초안 작성으로 바로 라우팅해야 합니다.')
+
+    def compose_generic_draft(**kwargs):
+        assert source_content in kwargs['rag_context']
+        assert kwargs['resolved_recipients'][0]['email'] == 'yonghee199702@gmail.com'
+        return assistant_api.EmailActionDecision(
+            action_type='email_draft',
+            to=['yonghee199702@gmail.com'],
+            subject='ParaWorks 회사 소개서 공유드립니다',
+            body='회사 소개서 초안을 공유드립니다. 검토 부탁드립니다.',
+        )
+
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=False),
+        draft_decision=compose_generic_draft,
+    )
+    monkeypatch.setattr(assistant_api, 'build_email_intent_gate', fail_if_email_gate_or_rag_runs)
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_email_gate_or_rag_runs)
+    conversation = create_conversation(db_session, USERS['viewer'], title='Referenced answer email')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content=source_content,
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={'agent_name': 'rag_orchestrator_agent'},
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': '이 내용을 용희님한테 메일로 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    draft = assistant_message['metadata']['email_draft']
+    assert assistant_message['metadata']['action_type'] == 'email_draft'
+    assert assistant_message['metadata']['source_context']['kind'] == 'assistant_answer'
+    assert draft['to'] == ['yonghee199702@gmail.com']
+    assert '핵심 가치' in draft['body']
+    assert '주요 기능' in draft['body']
+
+
+def test_assistant_revises_pending_draft_when_user_says_body_is_missing(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    source_content = (
+        'ParaWorks 회사 소개\n'
+        'ParaWorks는 Slack, Gmail, Google Drive의 업무 데이터를 연결합니다.\n'
+        'Review Queue를 통해 AI가 추출한 후보를 사람이 승인합니다.'
+    )
+
+    def fail_if_email_gate_or_rag_runs(*args, **kwargs):
+        raise AssertionError('초안 수정 요청은 기존 승인 대기 초안과 이전 산출물을 사용해야 합니다.')
+
+    def compose_revision(**kwargs):
+        assert source_content in kwargs['rag_context']
+        assert kwargs['resolved_recipients'][0]['email'] == 'yonghee199702@gmail.com'
+        return assistant_api.EmailActionDecision(
+            action_type='email_draft',
+            to=['yonghee199702@gmail.com'],
+            subject='ParaWorks 회사 소개서 초안 공유드립니다',
+            body='회사 소개서 초안을 공유드립니다.',
+        )
+
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=False),
+        draft_decision=compose_revision,
+    )
+    monkeypatch.setattr(assistant_api, 'build_email_intent_gate', fail_if_email_gate_or_rag_runs)
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_email_gate_or_rag_runs)
+    conversation = create_conversation(db_session, USERS['viewer'], title='Draft revision')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content=source_content,
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={'agent_name': 'rag_orchestrator_agent'},
+    )
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content='메일 초안을 작성했습니다.',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level=None,
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={
+            'action_type': 'email_draft',
+            'status': 'pending_approval',
+            'email_draft': {
+                'to': ['yonghee199702@gmail.com'],
+                'subject': 'ParaWorks 회사 소개서 공유드립니다',
+                'body': '회사 소개서 초안을 공유드립니다.',
+            },
+        },
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': '내용이 하나도 안 들어가 있잖아.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    draft = assistant_message['metadata']['email_draft']
+    assert assistant_message['metadata']['action_type'] == 'email_draft'
+    assert assistant_message['metadata']['source_context']['kind'] == 'assistant_answer'
+    assert draft['to'] == ['yonghee199702@gmail.com']
+    assert 'Google Drive' in draft['body']
+    assert 'Review Queue' in draft['body']
+
+
 def test_assistant_contact_lookup_returns_known_email_without_email_draft(
     client: TestClient,
     monkeypatch,
