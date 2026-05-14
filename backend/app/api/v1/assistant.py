@@ -19,6 +19,7 @@ from backend.app.assistant.email_agent import (
     render_recent_assistant_context_for_email,
 )
 from backend.app.assistant.gmail_sender import GmailDraftSender, GmailSendError
+from backend.app.assistant.recipient_resolver import resolve_email_recipients
 from backend.app.assistant.service import (
     append_assistant_message,
     append_user_message,
@@ -244,6 +245,19 @@ def create_assistant_message(
         and email_intent.confidence_score >= settings.assistant_email_agent_min_confidence
     )
     if confident_email_intent:
+        recipient_resolution = resolve_email_recipients(
+            db=db,
+            latest_message=user_message.content,
+            conversation_context=email_context,
+        )
+        tool_logger.log(
+            'recipient_resolver',
+            (
+                f'result status={recipient_resolution.status} '
+                f'candidate_count={len(recipient_resolution.candidates)} '
+                f'reason={recipient_resolution.reason}'
+            ),
+        )
         rag_context = recent_assistant_context
         if email_intent.requires_rag_result:
             answer = _answer_question_or_raise(
@@ -266,6 +280,7 @@ def create_assistant_message(
             latest_message=user_message.content,
             intent=email_intent,
             rag_context=rag_context,
+            resolved_recipients=recipient_resolution.resolved_recipients,
         )
         tool_logger.log(
             'email_draft_composer',

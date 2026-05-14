@@ -1265,3 +1265,31 @@ Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:3000/login -TimeoutSec 
 
 Result: 14 targeted tests passed; ruff passed; PowerShell parser check passed;
 Docker services, backend health, and frontend login smoke passed.
+
+## 2026-05-14 Assistant Recipient Resolver
+
+- Added the design note
+  `docs/superpowers/specs/2026-05-14-assistant-recipient-resolver-design.md`
+  for the AI Assistant email recipient resolution layer.
+- Added `backend/app/assistant/recipient_resolver.py`, a deterministic,
+  cost-free resolver that collects contact candidates from recent assistant
+  context, `AuthUser`, `demo_auth.USERS`, and Google `Source` metadata
+  (`gmail`, `gmail_attachment`, `drive`, `calendar`).
+- The email orchestration now runs `[Tool: recipient_resolver]` after
+  `email_intent_gate` and before `email_draft_composer`, passing
+  `resolved_recipients` into the draft prompt.
+- This supports flows such as "김용희님한테 오늘 회의 3시에 있다고 메일 보내줘" when the
+  recent conversation or synced contact metadata contains
+  `김용희 (yonghee199702@gmail.com)`.
+- Duplicate names are surfaced as `ambiguous`; department/group messages such
+  as `Product팀 전체` resolve to all matching known users.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_recipient_resolver.py backend/tests/test_assistant_api.py::test_assistant_passes_resolved_recipient_to_email_draft_composer -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py -q
+uv run ruff check backend/app/assistant/recipient_resolver.py backend/app/assistant/email_agent.py backend/app/api/v1/assistant.py backend/tests/test_assistant_recipient_resolver.py backend/tests/test_assistant_api.py
+```
+
+Result: targeted resolver/API tests passed; 37 assistant tests passed; ruff
+passed.

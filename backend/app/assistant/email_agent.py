@@ -84,6 +84,7 @@ class EmailDraftComposer:
         latest_message: str,
         intent: EmailIntentDecision,
         rag_context: str = '',
+        resolved_recipients: list[dict[str, object]] | None = None,
     ) -> EmailActionDecision:
         try:
             return self.model.compose(
@@ -91,6 +92,7 @@ class EmailDraftComposer:
                 latest_message=latest_message,
                 intent=intent,
                 rag_context=rag_context,
+                resolved_recipients=resolved_recipients or [],
             )
         except EmailActionAgentError:
             return EmailActionDecision(action_type='not_email', confidence_score=0.0)
@@ -166,6 +168,7 @@ class LangChainEmailDraftComposerModel:
         latest_message: str,
         intent: EmailIntentDecision,
         rag_context: str = '',
+        resolved_recipients: list[dict[str, object]] | None = None,
     ) -> EmailActionDecision:
         messages = [
             (
@@ -186,6 +189,7 @@ class LangChainEmailDraftComposerModel:
                     latest_message=latest_message,
                     intent=intent,
                     rag_context=rag_context,
+                    resolved_recipients=resolved_recipients or [],
                     max_input_chars=self.max_input_chars,
                 ),
             ),
@@ -337,6 +341,7 @@ def render_email_draft_prompt(
     latest_message: str,
     intent: EmailIntentDecision,
     rag_context: str,
+    resolved_recipients: list[dict[str, object]] | None = None,
     max_input_chars: int,
 ) -> str:
     payload = {
@@ -351,9 +356,11 @@ def render_email_draft_prompt(
             'reason': intent.reason,
         },
         'rag_context': rag_context[-max_input_chars:],
+        'resolved_recipients': resolved_recipients or [],
         'rules': [
             'For a complete email request, return action_type=email_draft.',
             'If recipient or content is still missing, return action_type=needs_clarification.',
+            'If resolved_recipients is not empty, use those email addresses as the to list.',
             'Use rag_context as the factual content source when it is provided.',
             'If the latest message only provides a recipient or address, use conversation_context and rag_context as the email body source.',
             'If the user says "this content", "that summary", or similar continuation, use the latest relevant assistant answer from rag_context.',

@@ -456,6 +456,62 @@ def test_assistant_can_draft_email_from_rag_answer(
     assert assistant_message['metadata']['email_draft']['body'] == 'Project Alpha launch is Friday.'
 
 
+def test_assistant_passes_resolved_recipient_to_email_draft_composer(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    def compose_with_resolved_recipient(**kwargs):
+        assert kwargs['resolved_recipients'] == [
+            {
+                'email': 'yonghee199702@gmail.com',
+                'display_name': '김용희',
+                'title': 'CTO',
+                'department': 'platform',
+                'source_type': 'conversation',
+                'confidence_score': 1.0,
+            }
+        ]
+        return assistant_api.EmailActionDecision(
+            action_type='email_draft',
+            to=['yonghee199702@gmail.com'],
+            subject='회의 일정 안내',
+            body='오늘 회의는 오후 3시에 진행됩니다.',
+        )
+
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=True),
+        draft_decision=compose_with_resolved_recipient,
+    )
+    conversation = create_conversation(db_session, USERS['viewer'], title='Recipient resolver')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content='문의처: 김용희 (yonghee199702@gmail.com)',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level='internal',
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={},
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': '김용희님한테 오늘 회의 3시에 있다고 메일 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['metadata']['email_draft']['to'] == ['yonghee199702@gmail.com']
+
+
 def test_assistant_email_draft_requires_approval_endpoint_before_send(
     client: TestClient,
     monkeypatch,

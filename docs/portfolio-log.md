@@ -3982,3 +3982,14 @@ Cost/security note:
   - Verification: Docker script tests, DB schema operation tests, pgvector
     runbook tests, ruff, PowerShell parser check, real docker startup, backend
     `/health`, and frontend `/login` smoke all passed.
+- `feat: resolve assistant email recipients`
+  - Added a deterministic AI Assistant recipient resolver between
+    `email_intent_gate` and `email_draft_composer` so natural-language
+    recipients can be mapped to known email addresses before draft generation.
+  - The resolver collects candidates from recent conversation contact pairs,
+    active `AuthUser` rows, `demo_auth.USERS`, and Google source metadata from
+    Gmail, Drive, and Calendar.
+  - The email draft prompt now receives `resolved_recipients`, while all actual
+    sends still require the existing pending approval and Gmail send endpoint.
+  - Verification: targeted recipient resolver/API tests passed, wider assistant
+    backend tests passed with 37 tests, and ruff passed on touched files.
