@@ -34,6 +34,7 @@ def test_google_oauth_install_url_contains_signed_state_and_hides_secret() -> No
     assert params['access_type'] == ['offline']
     assert params['prompt'] == ['consent']
     assert 'https://www.googleapis.com/auth/gmail.readonly' in params['scope'][0]
+    assert 'https://www.googleapis.com/auth/gmail.send' in params['scope'][0]
     assert 'google-secret' not in install.install_url
     assert install.state == params['state'][0]
 
@@ -105,6 +106,7 @@ def test_google_oauth_install_url_api_uses_settings_without_exposing_secret(
     assert payload['configured'] is True
     assert payload['connector_type'] == 'gmail'
     assert 'https://www.googleapis.com/auth/gmail.readonly' in payload['required_scopes']
+    assert 'https://www.googleapis.com/auth/gmail.send' in payload['required_scopes']
     assert 'google-secret' not in str(payload)
 
 

@@ -16,11 +16,13 @@ data/
 .env
 .env.local
 .env_backup
+.env.example
 
 
 # Test artifacts
 .pytest_cache/
 .tmp/
+pararule.md
 
 # Frontend generated files
 frontend/node_modules/
@@ -33,3 +35,6 @@ frontend/tsconfig.tsbuildinfo
 
 # Git worktrees
 .worktrees/
+
+# Secrets
+.tokens.json

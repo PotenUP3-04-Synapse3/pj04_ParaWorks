@@ -1,10 +1,129 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-02
+Last updated: 2026-05-14
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-14 Project Recognition and Timeline Workflow Boundary
+
+- Replaced loose `/projects` source grouping with two canonical company
+  projects: `K테크 파일럿` and `시드 투자 IR`.
+- Added deterministic, zero-token project classification that creates
+  `project_assignment` Review Queue candidates from Slack, Gmail, Drive, and
+  Calendar source evidence.
+- Changed `/projects` to show only approved project assignments, so legacy
+  smoke/demo labels such as `Project Newbiegenie`, `프로젝트 결과`, and
+  `미분류 프로젝트` no longer appear as business projects.
+- Updated `/timeline` to consume project-scoped workflow data from `/projects`
+  instead of showing one generic `Company Memory` timeline.
+- Stopped using raw connector titles like `Slack message in C0AUJDZUKA8` as
+  task titles and moved project evidence reasons into the UI data model.
+- Removed the deterministic RAG Redis canned-answer branch so local fallback
+  answers now summarize retrieved evidence snippets instead of returning a
+  fixed Redis/PostgreSQL response.
+- Added a local/dev reset utility for connector-derived data that preserves
+  auth users and integration connections while clearing sources, review items,
+  approved knowledge, vector state, AgentRuns, and assistant conversations.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from connector-data display toward evidence-backed
+  project understanding and evidence-grounded assistant answers with human
+  review as the trust boundary.
+  project understanding with human review as the trust boundary.
+
+## 2026-05-12 Smoke-Only Demo Data Boundary
+
+- Changed the default runtime posture so demo/mock content is not seeded unless
+  `PARAWORKS_SEED_DEMO_DATA=true`.
+- Kept `scripts/start-smoke.ps1` as the smoke/demo entrypoint that explicitly
+  enables demo mode and demo seed data.
+- Updated the pgvector Docker-backed dev startup path to run with
+  `PARAWORKS_DEMO_MODE=false` and `PARAWORKS_SEED_DEMO_DATA=false`, so an empty
+  database remains empty until Slack or Google connectors are installed and
+  synced.
+- Stopped the Review page from showing local fallback review items when the API
+  cannot return real items.
+- Changed Dashboard, Projects, and Timeline sample-only surfaces to render empty
+  states in production-like mode instead of hard-coded ORION/Nova/Atlas data.
+- Verification: `uv run pytest backend/tests -v` passed with 297 passed and 1
+  skipped; `npm run build` passed from `frontend`.
+
+## 2026-05-12 AI Assistant Conversation Memory
+
+- Added database-backed, per-user AI assistant conversations for the `AI 비서`
+  surface.
+- Persisted user and assistant messages with citations, source snippets,
+  permission notices, hidden-source counts, and linked AgentRun ids.
+- Kept token, cache, and cost details out of the user-facing assistant flow so
+  cost observability remains in `Agent Runs`.
+- Added regression coverage for user-scoped assistant conversations and the
+  `/search` assistant UX.
+
+Portfolio angle:
+
+- Shows ParaWorks evolving from one-shot RAG search into a product-like
+  evidence-backed AI assistant with memory, permission safety, and operator
+  observability.
+
+## 2026-05-12 AI Assistant Chat UX and Sincere-mode RAG LLM
+
+- Reworked `/search` into a more natural chat surface with compact conversation
+  history, duplicate empty-chat prevention, bottom composer, and folded
+  evidence/source panels inside each assistant response.
+- Continued the chat polish on 2026-05-13 by keeping history ordered by latest
+  updated conversation rather than selected conversation, constraining scrolling
+  to the transcript pane, removing message badges, rendering assistant markdown,
+  adding copy actions, and adding one-click suggested prompts.
+- Shortened chat history titles from the first user message so the history list
+  behaves like a conversation list instead of a document summary list.
+- Added a RAG LLM adapter for non-demo 진심모드:
+  - OpenAI primary model: `gpt-5.4-mini`;
+  - `.env` `AGENT_LLM_OPENAI_MODEL` as the OpenAI fallback model;
+  - provider fallback through the configured provider order.
+- Kept demo mode deterministic so tests and cheap demos do not call live LLMs.
+- Updated the session handoff runbook with the active branch and local
+  continuation notes.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from a technical RAG answer page toward a credible
+  AI assistant product surface while preserving evidence, permissions, and
+  operator cost observability.
+
+## 2026-05-11 Sidebar and Workspace Navigation Update
+
+- Simplified the main sidebar by removing separate Decision, History, and
+  Knowledge Map entries.
+- Added a Project page where users can switch between assigned projects from a
+  top project menu and review progress, risk, pending review count, Gantt-style
+  planning, calendar scheduling, board status, and task lists.
+- Kept the Timeline entry as `타임라인` and made the page project-scoped, with
+  history summaries tied back to source Slack/Gmail/Drive/Calendar evidence.
+- Updated the global top search so the left search icon acts as the submit
+  button and routes to `AI 비서` with the query prefilled.
+- Renamed the assistant surface to `AI 비서` in navigation and page copy.
+- Restored Dashboard review visibility with a `검토사항` section and renamed the
+  Review page heading from `검토 큐` to `검토사항`; when the backend is not
+  reachable, demo review items remain visible instead of leaving the page in a
+  loading state.
+- Updated Timeline history interactions so the history icon opens a source-
+  specific history panel only on demand, then collapses back to a full-width
+  timeline when closed.
+- Rebuilt the Dashboard as a personalized work home focused on today's assigned
+  tasks, review items, meetings, mentions, assigned projects, and suggested Ask
+  prompts instead of workspace-wide ingestion metrics.
+- Moved source collection status into Integrations, where connector operations
+  and source health belong.
+- Verification: `npm run build` passed from `frontend`.
+
+Portfolio angle:
+
+- Shows ParaWorks moving from many knowledge-category pages toward an
+  operator-friendly workspace organized around projects, timelines, source
+  history, and evidence-backed Ask.
 
 ## Portfolio Positioning
 
@@ -3759,3 +3878,20 @@ Cost/security note:
   - Hid admin-only navigation entries from non-admin users, including Admin Console and AgentRun execution records, while keeping the existing backend/API authorization checks for direct URL access.
   - Fixed escaped Korean text rendering in the account header and global search placeholder so users see readable Korean copy instead of raw `\u...` sequences.
   - Verification: `npm.cmd exec tsc -- --noEmit` passed; targeted auth/admin/AgentRun backend tests passed; `npm.cmd run build` passed with `/account` included in the route manifest.
+- `feat: add mail document calendar project grouping`
+  - Added `docs/mail-doc-calendar-agent-status.md` to summarize the current Developer B agent state, gaps, and next work for Google Drive, Gmail, and Calendar evidence.
+  - Extended the Mail/Document Agent evidence packet to include Calendar chunks and preserve event context/status/organizer/duration metadata.
+  - Added `GET /api/v1/projects`, which groups Gmail, Gmail attachment, Drive, and Calendar evidence by `project_key`/`scenario` with permission-aware hidden project accounting.
+  - Updated backend test fixtures so CSRF cookies/headers and auth rate-limit state match the current production-like security middleware during tests.
+  - Verification: `uv run pytest backend/tests -v` passed with 287 tests and 1 skipped pgvector integration test.
+- `feat: add assistant optimistic turns and email approval drafts`
+  - AI 비서 now shows the user's message immediately while the assistant turn is still running, then reveals the assistant answer with a smooth typing-style stream effect.
+  - Added a modular assistant email action path that detects direct email-send requests without forcing RAG evidence, drafts a business-tone subject/body, and stores the draft as pending approval in assistant message metadata.
+  - Added a Gmail approval endpoint that sends only after explicit user approval and only when an installed Gmail connection already has send-capable OAuth scope.
+  - Verification: `uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q`, `npm.cmd run lint`, `npm.cmd run test:visual -- assistant-memory.spec.ts --project=chromium-desktop`, and `npm.cmd run build` passed.
+- `feat: connect work data and harden assignment extraction`
+  - Fixed dashboard timeline data to use real `TimelineEvent` fields and connected `/projects` to the existing permission-aware project memory API instead of empty frontend state.
+  - Repaired future todo-to-timeline promotion copy so generated Korean timeline entries no longer contain mojibake.
+  - Preserved source snippets in Mail/Docs and Memory Extraction evidence packets, added richer Review evidence metadata, and expanded deterministic extraction for Korean/English work assignments from Gmail, Drive, and Calendar evidence.
+  - Added Mail/Docs and Memory Extraction LLM preflight responses that expose evidence counts and estimated cost while keeping live LLM execution closed for this slice.
+  - Verification: `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_knowledge_api.py backend/tests/test_review.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_memory_extraction_agent.py backend/tests/test_memory_extraction_review_bridge.py backend/tests/test_agent_preflight.py -q` passed with 29 tests; `uv run ruff check ...` fixed and cleared touched backend files; `npm run lint` and `npm run build` passed.

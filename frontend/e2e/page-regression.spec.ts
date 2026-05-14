@@ -22,6 +22,7 @@ const expectedAppRoutes = [
   "/login/google/callback",
   "/messages",
   "/notifications",
+  "/projects",
   "/review",
   "/search",
   "/timeline",
@@ -33,6 +34,7 @@ const staticPageTargets = [
   { name: "dashboard", path: "/dashboard" },
   { name: "messages", path: "/messages" },
   { name: "notifications", path: "/notifications" },
+  { name: "projects", path: "/projects" },
   { name: "review", path: "/review" },
   { name: "knowledge", path: "/knowledge" },
   { name: "knowledge map", path: "/knowledge-map" },
@@ -112,7 +114,7 @@ function monitorPageErrors(page: Page) {
       return;
     }
     const text = message.text();
-    if (text.includes("favicon.ico")) {
+    if (text.includes("favicon.ico") || text.includes("favicon.png")) {
       return;
     }
     if (text.includes("403 (Forbidden)")) {

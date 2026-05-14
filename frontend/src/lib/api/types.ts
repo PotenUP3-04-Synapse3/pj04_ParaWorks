@@ -10,6 +10,34 @@ export type DashboardResponse = {
   source_counts: Record<string, number>;
   pending_review_count: number;
   recent_jobs: SyncJob[];
+  pending_items: {
+    id: number;
+    title: string;
+    item_type: string;
+    category: string;
+    confidence_score: number;
+  }[];
+  today_todos: {
+    id: number;
+    title: string;
+    assignee: string;
+    due_date: string;
+    category: string;
+  }[];
+  recent_decisions: {
+    id: number;
+    title: string;
+    summary: string;
+    created_at: string;
+  }[];
+  recent_timeline: {
+    id: number;
+    title: string;
+    summary: string;
+    created_at: string;
+    confidence_score: number;
+    source_links: string[];
+  }[];
 };
 
 export type DemoUser = {
@@ -195,6 +223,7 @@ export type RagReindexResponse = {
   incremental: boolean;
   storage_backend: string;
   embedding_budget: EmbeddingBudgetDecision;
+  parser_status_counts: Record<string, number>;
 };
 
 export type RagIndexingSummaryResponse = {
@@ -318,6 +347,7 @@ export type ReviewSourceEvidence = {
   rank: number;
   source_id?: string | null;
   source_url?: string | null;
+  source_type?: string | null;
   source_snippet: string;
   permission_level: string;
   confidence_score: number;
@@ -325,6 +355,9 @@ export type ReviewSourceEvidence = {
   timestamp?: string | null;
   author?: string | null;
   agent_run_id?: number | null;
+  parser_status?: string | null;
+  section_path?: string | null;
+  evidence_reason?: string | null;
 };
 
 export type ReviewItem = {
@@ -338,6 +371,7 @@ export type ReviewItem = {
   confidence_score: number;
   permission_level: string;
   status: ReviewStatus;
+  reviewer_id?: string | null;
 };
 
 export type ReviewPromotionPreview = {
@@ -347,7 +381,19 @@ export type ReviewPromotionPreview = {
   normalized_payload: Record<string, string>;
 };
 
+export type ReviewGroup = {
+  group_id: string;
+  title: string;
+  item_type: string;
+  status: ReviewStatus;
+  permission_level: string;
+  items: ReviewItem[];
+  total_count: number;
+  avg_confidence: number;
+};
+
 export type ReviewResponse = {
+  groups: ReviewGroup[];
   items: ReviewItem[];
 };
 
@@ -362,6 +408,9 @@ export type SearchResult = {
   relevance_score: number;
   matched_terms: string[];
   citation: RagCitation;
+  parser_status?: string | null;
+  parser_status_reason?: string | null;
+  revision_id?: string | null;
 };
 
 export type SearchResponse = {
@@ -374,6 +423,28 @@ export type SearchResponse = {
   results: SearchResult[];
   hidden_match_count: number;
   permission_notice?: string;
+};
+
+export type DocumentSummary = {
+  id: number;
+  source_id: string;
+  title: string;
+  current_version: string;
+  revision_id?: string | null;
+  parser_name?: string | null;
+  parser_status?: string | null;
+  parser_status_reason?: string | null;
+  chunk_count?: number | null;
+};
+
+export type DocumentVersionSummary = {
+  id: number;
+  version: string;
+  revision_id?: string | null;
+  parser_name?: string | null;
+  parser_status?: string | null;
+  parser_status_reason?: string | null;
+  chunk_count?: number | null;
 };
 
 export type RagCitation = {
@@ -398,6 +469,7 @@ export type AskResponse = {
   permission_level: string;
   hidden_match_count: number;
   permission_notice?: string | null;
+  agent_run_id?: number | null;
   cache_key: string;
   model_name: string;
   estimated_cost_usd: number;
@@ -408,6 +480,103 @@ export type AskResponse = {
   };
 };
 
+export type AssistantConversation = {
+  id: number;
+  title: string;
+  summary?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssistantMessage = {
+  id: number;
+  conversation_id: number;
+  role: "user" | "assistant" | string;
+  content: string;
+  citations: RagCitation[];
+  source_ids: string[];
+  source_links: string[];
+  source_snippets: string[];
+  permission_level?: string | null;
+  hidden_match_count: number;
+  permission_notice?: string | null;
+  agent_run_id?: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AssistantConversationsResponse = {
+  conversations: AssistantConversation[];
+};
+
+export type AssistantConversationCreatedResponse = {
+  conversation: AssistantConversation;
+};
+
+export type AssistantMessagesResponse = {
+  conversation: AssistantConversation;
+  messages: AssistantMessage[];
+};
+
+export type AssistantTurnResponse = {
+  conversation: AssistantConversation;
+  user_message: AssistantMessage;
+  assistant_message: AssistantMessage;
+};
+
+export type AssistantEmailSendResponse = {
+  message: AssistantMessage;
+  status: string;
+  gmail_message_id?: string | null;
+};
+
+export type ProjectEvidence = {
+  id: string;
+  source_id: string;
+  source_type: string;
+  title: string;
+  source_url: string;
+  source_snippet: string;
+  permission_level: string;
+  timestamp: string;
+  task_summary: string;
+  evidence_reason: string;
+};
+
+export type ProjectTimelineItem = {
+  id: string;
+  item_type: string;
+  title: string;
+  summary: string;
+  source_links: string[];
+  source_snippets: string[];
+  confidence_score: number;
+  permission_level: string;
+  review_status: string;
+  created_at: string;
+  evidence_reason: string;
+};
+
+export type ProjectMemory = {
+  project_key: string;
+  name: string;
+  summary: string;
+  source_types: string[];
+  evidence_count: number;
+  permission_level: string;
+  latest_timestamp: string;
+  pending_review_count: number;
+  evidence: ProjectEvidence[];
+  timeline_items: ProjectTimelineItem[];
+};
+
+export type ProjectsResponse = {
+  project_count: number;
+  hidden_project_count: number;
+  hidden_evidence_count?: number;
+  projects: ProjectMemory[];
+};
+
 export type IntegrationSyncResponse = {
   job_id: string;
   connector_type: string;
@@ -415,6 +584,7 @@ export type IntegrationSyncResponse = {
   created_review_items: number;
   fetched_events: number;
   skipped_events: number;
+  parser_status_counts?: Record<string, number>;
 };
 
 export type IntegrationManifest = {

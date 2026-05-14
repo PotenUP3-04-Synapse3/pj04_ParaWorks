@@ -6,7 +6,7 @@ from backend.app.models import ReviewItem
 def test_employee_cannot_approve_review_item(client, db_session: Session) -> None:
     item = _add_review_item(db_session, permission_level='internal')
 
-    response = client.post(f'/api/v1/review/{item.id}/approve', headers={'X-Demo-User': 'jun@paraworks.com'})
+    response = client.post(f'/api/v1/review/{item.id}/approve', headers={'X-Demo-User': 'hanvv3@koreacu.ac.kr'})
 
     assert response.status_code == 403
     assert response.json()['detail'] == 'Review approval permission required.'
@@ -39,6 +39,39 @@ def test_admin_can_approve_restricted_review_item(client, db_session: Session) -
     assert response.status_code == 200
     assert response.json()['status'] == 'approved'
     assert response.json()['reviewer_id'] == 'google-hanvv-admin'
+
+
+def test_review_list_hides_items_above_user_permission(client, db_session: Session) -> None:
+    visible_item = _add_review_item(db_session, permission_level='internal')
+    hidden_item = _add_review_item(db_session, permission_level='restricted')
+
+    response = client.get('/api/v1/review?status=pending_review', headers={'X-Demo-User': 'hanvv3@koreacu.ac.kr'})
+
+    assert response.status_code == 200
+    item_ids = {item['id'] for item in response.json()['items']}
+    assert visible_item.id in item_ids
+    assert hidden_item.id not in item_ids
+
+
+def test_review_preview_hides_items_above_user_permission(client, db_session: Session) -> None:
+    item = _add_review_item(db_session, permission_level='restricted')
+
+    response = client.get(f'/api/v1/review/{item.id}/promotion-preview', headers={'X-Demo-User': 'hanvv3@koreacu.ac.kr'})
+
+    assert response.status_code == 404
+
+
+def test_reviewer_cannot_edit_restricted_review_item(client, db_session: Session) -> None:
+    item = _add_review_item(db_session, permission_level='restricted')
+
+    response = client.patch(
+        f'/api/v1/review/{item.id}',
+        json={'payload': {'title': 'Changed title', 'reason': 'Changed reason'}},
+        headers={'X-Demo-User': 'mina@paraworks.com'},
+    )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Review approval permission required.'
 
 
 def _add_review_item(db_session: Session, *, permission_level: str) -> ReviewItem:

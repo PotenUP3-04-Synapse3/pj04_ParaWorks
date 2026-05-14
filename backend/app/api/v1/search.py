@@ -64,6 +64,9 @@ def search_knowledge(
                 'relevance_score': candidate.relevance_score,
                 'matched_terms': candidate.matched_terms,
                 'citation': citation_from_candidate(candidate),
+                'parser_status': candidate.metadata.get('parser_status'),
+                'parser_status_reason': candidate.metadata.get('parser_status_reason'),
+                'revision_id': candidate.metadata.get('revision_id'),
             }
             for index, candidate in enumerate(visible_candidates)
         ]

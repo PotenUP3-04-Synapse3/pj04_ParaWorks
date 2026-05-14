@@ -1,286 +1,228 @@
-import {
-  ArrowRight,
-  BarChart3,
-  Bot,
-  FileText,
-  Mail,
-  MessageSquare,
-  MoreHorizontal,
-  Pause,
-  Settings,
-} from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock3, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { serverApiGet } from "@/lib/api/server";
-import type { AgentRunsResponse, DashboardResponse } from "@/lib/api/types";
+import type { DashboardResponse } from "@/lib/api/types";
 
 export const dynamic = "force-dynamic";
 
-const FALLBACK_DASHBOARD: DashboardResponse = {
-  source_counts: {
-    slack: 128,
-    gmail: 62,
-    drive: 34,
-    calendar: 18,
-    other: 6,
-  },
-  pending_review_count: 12,
-  recent_jobs: [],
+type TodayTask = {
+  title: string;
+  category: string;
+  assignee: string;
+  due_date: string;
+  status: string;
 };
 
-const FALLBACK_AGENT_RUNS: AgentRunsResponse = {
-  total_runs: 248,
-  total_tokens: 1240000,
-  estimated_cost_usd: 124.58,
-  recent_runs: [],
+type UpcomingEvent = readonly [time: string, title: string, people: string];
+type AssignedProject = readonly [name: string, progress: string, status: string, risk: string];
+type PersonalUpdate = {
+  icon: typeof Sparkles;
+  title: string;
+  detail: string;
+  time: string;
 };
+type ReviewListItem = readonly [title: string, source: string, due: string, priority: string];
 
-const sourceCards = [
-  { label: "전체 소스", key: "all", value: 248, detail: "실시간", icon: BarChart3, tone: "neutral" },
-  { label: "Slack", key: "slack", value: 128, detail: "실시간", icon: MessageSquare, tone: "slack" },
-  { label: "Gmail", key: "gmail", value: 62, detail: "실시간", icon: Mail, tone: "gmail" },
-  { label: "Google Drive", key: "drive", value: 34, detail: "실시간", icon: FileText, tone: "drive" },
-  { label: "기타", key: "other", value: 6, detail: "실시간", icon: MoreHorizontal, tone: "neutral" },
-];
-
-const activities = [
-  {
-    time: "11:42:31",
-    source: "Slack",
-    title: "#project-orion 스레드 수집 완료",
-    detail: "김하나님의 언급됨 · 고객사 요구사항 변경에 대한 논의",
-    meta: "Slack · #project-orion · 참여자 6명",
-    status: "미분석",
-    priority: "높은 중요도",
-    tone: "purple",
-  },
-  {
-    time: "11:31:05",
-    source: "Gmail",
-    title: "FW: Oracle DB 선정 이유",
-    detail: "이메일 스레드 수집 완료 (8개 메시지)",
-    meta: "Gmail · 프로젝트 오리온",
-    status: "분석 완료",
-    priority: "높은 중요도",
-    tone: "blue",
-  },
-  {
-    time: "11:21:18",
-    source: "Drive",
-    title: "ORION_PRD_v2.docx 수정됨",
-    detail: "문서 내용 변경 감지",
-    meta: "Drive · ORION / 기획 문서",
-    status: "분석 중",
-    priority: "중간 중요도",
-    tone: "green",
-  },
-  {
-    time: "11:15:42",
-    source: "Calendar",
-    title: "주간 프로젝트 회의",
-    detail: "새 이벤트 생성",
-    meta: "Calendar · 2026.05.07 (목) 10:00",
-    status: "분석 완료",
-    priority: "낮은 중요도",
-    tone: "orange",
-  },
-  {
-    time: "11:08:27",
-    source: "Slack",
-    title: "#backend-team 새 메시지",
-    detail: "API 성능 개선 관련 논의",
-    meta: "Slack · #backend-team · 참여자 4명",
-    status: "미분석",
-    priority: "중간 중요도",
-    tone: "purple",
-  },
-  {
-    time: "10:55:12",
-    source: "Gmail",
-    title: "결제 요청: 보안 이슈 대응",
-    detail: "이메일 스레드 수집 완료 (5개 메시지)",
-    meta: "Gmail · 보안 이슈",
-    status: "분석 중",
-    priority: "높은 중요도",
-    tone: "blue",
-  },
-  {
-    time: "10:42:05",
-    source: "Drive",
-    title: "보안 점검 결과 보고서.pdf 업로드",
-    detail: "새 파일 업로드",
-    meta: "Drive · /보안/2026/05",
-    status: "미분석",
-    priority: "낮은 중요도",
-    tone: "green",
-  },
-  {
-    time: "10:33:18",
-    source: "Slack",
-    title: "#general 새 메시지",
-    detail: "일반 공지사항",
-    meta: "Slack · #general · 참여자 23명",
-    status: "분석 완료",
-    priority: "낮은 중요도",
-    tone: "purple",
-  },
-];
-
-const reviewRows = [
-  ["프로젝트 ORION 요구사항 변경 검토", "문서", "이준호", "2026.05.07", "D-2", "대기 중", "높음"],
-  ["신규 보안 정책(안) 검토 요청", "정책", "박지은", "2026.05.07", "D-4", "대기 중", "보통"],
-  ["FY26 2분기 OKR 초안 검토", "의사결정", "정민철", "2026.05.06", "D-1", "검토 중", "높음"],
-  ["고객 데이터 처리 절차 문서 검토", "문서", "최유리", "2026.05.05", "D-3", "대기 중", "보통"],
-];
 
 export default async function DashboardPage() {
-  const [dashboard, agentRuns] = await Promise.all([
-    serverApiGet<DashboardResponse>("/api/v1/dashboard").catch(() => FALLBACK_DASHBOARD),
-    serverApiGet<AgentRunsResponse>("/api/v1/agent-runs").catch(() => FALLBACK_AGENT_RUNS),
-  ]);
+  const dashboard = await serverApiGet<DashboardResponse>("/api/v1/dashboard").catch(() => null);
+  const pendingReviewCount = dashboard?.pending_review_count ?? 0;
+  const syncDateStr = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
 
-  const counts = dashboard.source_counts || FALLBACK_DASHBOARD.source_counts;
-  const totalSources =
-    (counts.slack ?? 0) +
-    (counts.gmail ?? 0) +
-    (counts.drive ?? 0) +
-    (counts.calendar ?? 0) +
-    (counts.other ?? 0);
-  const pendingReviewCount = dashboard.pending_review_count || FALLBACK_DASHBOARD.pending_review_count;
+  const visibleTodayTasks: TodayTask[] = dashboard?.today_todos?.map((todo) => ({
+    title: todo.title,
+    category: todo.category,
+    assignee: todo.assignee,
+    due_date: todo.due_date,
+    status: "검토 필요"
+  })) ?? [];
+  const visibleUpcomingEvents: UpcomingEvent[] = [];
+  const visibleAssignedProjects: AssignedProject[] = [];
+  const visiblePersonalUpdates: PersonalUpdate[] = [
+    ...(dashboard?.recent_decisions?.map((d) => ({
+      icon: Sparkles,
+      title: `[의사결정] ${d.title}`,
+      detail: d.summary,
+      time: new Date(d.created_at).toLocaleDateString(),
+    })) ?? []),
+    ...(dashboard?.recent_timeline?.map((t) => ({
+      icon: Clock3,
+      title: `[타임라인] ${t.title}`,
+      detail: `${t.summary} · 신뢰도 ${Math.round(t.confidence_score * 100)}%`,
+      time: new Date(t.created_at).toLocaleDateString(),
+    })) ?? []),
+  ];
+  const visibleReviewItems: ReviewListItem[] = dashboard?.pending_items?.map((item) => [
+    item.title,
+    item.item_type,
+    "기한 없음",
+    item.confidence_score > 0.8 ? "높음" : "보통"
+  ]) ?? [];
 
   return (
-    <div className="reference-dashboard">
+    <div className="reference-dashboard space-y-4">
       <section className="page-heading reference-heading">
         <div>
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">My Work Home</p>
           <h1>대시보드</h1>
-          <p>연결된 채널에서 수집되는 모든 활동을 실시간으로 확인하세요.</p>
+          <p>오늘 내가 처리해야 할 업무, 일정, 멘션, 담당 프로젝트를 한곳에서 확인합니다.</p>
+        </div>
+        <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
+          <Clock3 className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+          {syncDateStr}
         </div>
       </section>
 
-      <section className="source-card-grid">
-        {sourceCards.map((card) => {
-          const value = card.key === "all" ? totalSources : counts[card.key as keyof typeof counts] || card.value;
-          return <SourceMetric key={card.label} card={{ ...card, value }} />;
-        })}
+      <section className="grid gap-3 md:grid-cols-4">
+        <PersonalMetric label="오늘 할 일" value={`${visibleTodayTasks.length}건`} detail="높은 우선순위 0건" />
+        <PersonalMetric label="내 검토 대기" value={`${pendingReviewCount}건`} detail="검토사항" />
+        <PersonalMetric label="오늘 일정" value={`${visibleUpcomingEvents.length}개`} detail="연동 후 표시" />
+        <PersonalMetric label="담당 프로젝트" value={`${visibleAssignedProjects.length}개`} detail="연동 후 표시" />
       </section>
 
-      <section className="reference-grid">
-        <div className="reference-main">
-          <Panel className="activity-panel-large">
-            <div className="activity-toolbar">
-              <div>
-                <h2>실시간 활동 스트림</h2>
-                <div className="filter-pills">
-                  <span className="active">전체 <b>{totalSources}</b></span>
-                  <span>미분석 <b>86</b></span>
-                  <span>분석 중 <b>32</b></span>
-                  <span>분석 완료 <b>130</b></span>
-                </div>
-              </div>
-              <div className="toolbar-actions">
-                <button type="button">
-                  <Pause className="h-4 w-4" aria-hidden="true" />
-                  일시 정지
-                </button>
-                <button type="button">
-                  <Settings className="h-4 w-4" aria-hidden="true" />
-                  스트림 설정
-                </button>
-              </div>
-            </div>
-            <div className="activity-stream">
-              {activities.map((item) => (
-                <ActivityRow key={`${item.time}-${item.title}`} item={item} />
-              ))}
-            </div>
-            <div className="dashboard-pagination">
-              <span>1-20 / {totalSources}</span>
-              <span className="pager">‹ 1 2 3 ··· 13 ›</span>
-            </div>
-          </Panel>
-
-          <Panel className="review-panel">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
+          <Panel>
             <div className="panel-header compact">
-              <PanelTitle title="검토 우선순위" count={`${pendingReviewCount}건`} />
-              <Link href="/review" className="text-link">
-                전체 검토 보기
+              <PanelTitle title="오늘 해야 할 업무" count={`${visibleTodayTasks.length}`} />
+              <Link href="/projects" className="text-link">
+                프로젝트 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
-            <div className="review-table">
-              <div className="review-table-head">
-                <span>제목</span>
-                <span>유형</span>
-                <span>요청자</span>
-                <span>요청일</span>
-                <span>마감</span>
-                <span>상태</span>
-                <span>우선순위</span>
-              </div>
-              {reviewRows.map((row) => (
-                <div className="review-table-row" key={row[0]}>
-                  {row.map((cell, index) => (
-                    <span key={`${row[0]}-${cell}`} className={index >= 4 ? "strong-cell" : ""}>
-                      {cell}
+            <div className="mt-3 space-y-3">
+              {visibleTodayTasks.length > 0 ? visibleTodayTasks.map((task) => (
+                <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-[15px] font-extrabold text-ink">{task.title}</h2>
+                      <p className="mt-1 text-[12px] font-bold text-muted">{task.category} · 담당: {task.assignee}</p>
+                    </div>
+                    <span className="priority-badge warning">
+                      {task.category}
                     </span>
-                  ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] font-bold text-muted">
+                    <span className="badge blue">검토 필요</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                      {task.due_date}까지
+                    </span>
+                  </div>
+                </article>
+              )) : (
+                <div className="p-12 text-center text-muted font-bold border-2 border-dashed rounded-xl">
+                  추출된 할 일이 없습니다. 슬랙 동기화를 진행해 주세요.
                 </div>
+              )}
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="panel-header compact">
+              <PanelTitle title="검토사항" count={`${visibleReviewItems.length}`} />
+              <Link href="/review" className="text-link">
+                전체 보기
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {visibleReviewItems.map(([title, source, due, priority]) => (
+                <div key={title} className="grid gap-2 rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] sm:grid-cols-[1fr_84px_92px_58px] sm:items-center">
+                  <span className="font-extrabold text-ink">{title}</span>
+                  <span className="text-muted">{source}</span>
+                  <span className="text-muted">{due}</span>
+                  <span className={`priority-badge ${priority === "높음" ? "danger" : "warning"}`}>{priority}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="panel-header compact">
+              <PanelTitle title="내 담당 프로젝트" />
+              <Link href="/timeline" className="text-link">
+                타임라인 보기
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {visibleAssignedProjects.map(([name, progress, status, risk]) => (
+                <article key={name} className="rounded-lg border border-line bg-surface-soft p-4">
+                  <h2 className="text-[14px] font-extrabold text-ink">{name}</h2>
+                  <p className="mt-2 text-[12px] font-bold text-muted">{status}</p>
+                  <div className="mt-4 flex items-center justify-between text-[12px] font-extrabold">
+                    <span>{progress}</span>
+                    <span className={risk === "높음" ? "text-red-700" : risk === "보통" ? "text-amber-700" : "text-emerald-700"}>
+                      위험도 {risk}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-white">
+                    <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: progress }} />
+                  </div>
+                </article>
               ))}
             </div>
           </Panel>
         </div>
 
-        <aside className="reference-aside">
+        <aside className="space-y-4">
           <Panel>
-            <div className="side-title">
-              <h2>활동 요약 (실시간)</h2>
-              <span>업데이트: 11:45:30</span>
-            </div>
-            <div className="side-summary">
-              <div>
-                <strong>{totalSources}</strong>
-                <span>총 활동</span>
-              </div>
-              <MiniBars />
-            </div>
-            <Legend rows={[["미분석", 86, "35%", "purple"], ["분석 중", 32, "13%", "blue"], ["분석 완료", 130, "52%", "green"]]} />
-          </Panel>
-
-          <Panel>
-            <PanelTitle title="활동 소스별 현황" />
-            <SourceBar label="Slack" value={counts.slack} percent="52%" tone="purple" />
-            <SourceBar label="Gmail" value={counts.gmail} percent="25%" tone="blue" />
-            <SourceBar label="Google Drive" value={counts.drive} percent="14%" tone="green" />
-            <SourceBar label="Google Calendar" value={counts.calendar} percent="7%" tone="orange" />
-            <SourceBar label="기타" value={counts.other} percent="2%" tone="gray" />
-          </Panel>
-
-          <Panel>
-            <PanelTitle title="주요 키워드 (실시간)" />
-            <div className="keyword-cloud">
-              {["#project-orion 24", "보안 18", "API 15", "결재 12", "Oracle DB 10", "요구사항 8", "변경 8", "백엔드 6"].map((keyword) => (
-                <span key={keyword}>{keyword}</span>
+            <PanelTitle title="오늘 일정" />
+            <div className="mt-3 space-y-2">
+              {visibleUpcomingEvents.map(([time, title, people]) => (
+                <div key={`${time}-${title}`} className="flex gap-3 rounded-lg border border-line bg-surface-soft p-3">
+                  <span className="w-12 shrink-0 text-[12px] font-extrabold text-[var(--primary-dark)]">{time}</span>
+                  <div>
+                    <p className="text-[13px] font-extrabold text-ink">{title}</p>
+                    <p className="mt-1 text-[12px] text-muted">{people}</p>
+                  </div>
+                </div>
               ))}
             </div>
           </Panel>
 
           <Panel>
-            <div className="side-title">
-              <h2>에이전트 요약</h2>
-              <Link href="/agent-runs">전체보기</Link>
+            <PanelTitle title="내게 온 업데이트" />
+            <div className="mt-3 space-y-3">
+              {visiblePersonalUpdates.map((update) => {
+                const Icon = update.icon;
+                return (
+                  <article key={update.title} className="flex gap-3 rounded-lg border border-line bg-[var(--glass-elevated)] p-3">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[var(--primary-soft)] text-[var(--primary-dark)]">
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <h2 className="text-[13px] font-extrabold text-ink">{update.title}</h2>
+                      <p className="mt-1 text-[12px] leading-5 text-muted">{update.detail}</p>
+                      <p className="mt-1 text-[11px] font-bold text-muted">{update.time}</p>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-            <div className="agent-cost-line">
-              <span>총 실행</span>
-              <strong>{agentRuns.total_runs.toLocaleString()}회</strong>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-1 h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+              <div>
+                <h2 className="text-[14px] font-extrabold text-ink">오늘의 AI 비서 제안</h2>
+                <p className="mt-2 text-[13px] leading-6 text-muted">
+                  Slack 또는 Google을 연동하면 실제 업무 맥락 기반 질문 제안이 표시됩니다.
+                </p>
+                <Link href="/search" className="primary-action mt-4">
+                  AI 비서로 이동
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </div>
             </div>
-            <div className="agent-cost-line">
-              <span>예상 비용</span>
-              <strong>${agentRuns.estimated_cost_usd.toFixed(2)}</strong>
-            </div>
-            <Link href="/search" className="primary-action">
-              <Bot className="h-4 w-4" aria-hidden="true" />
-              Ask 워크스페이스로 이동
-            </Link>
           </Panel>
         </aside>
       </section>
@@ -301,75 +243,15 @@ function PanelTitle({ title, count }: { title: string; count?: string }) {
   );
 }
 
-function SourceMetric({ card }: { card: (typeof sourceCards)[number] }) {
-  const Icon = card.icon;
+function PersonalMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <article className="source-metric-card">
-      <div>
-        <span className={`source-logo ${card.tone}`}>
-          <Icon className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <strong>{card.label}</strong>
+    <article className="panel reference-panel">
+      <div className="flex items-center gap-2 text-[13px] font-bold text-muted">
+        <CheckCircle2 className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
+        {label}
       </div>
-      <b>{card.value}</b>
-      <p>{card.detail}</p>
+      <strong className="mt-3 block text-[24px] leading-8 text-ink">{value}</strong>
+      <p className="mt-1 text-[12px] font-bold text-muted">{detail}</p>
     </article>
-  );
-}
-
-function ActivityRow({ item }: { item: (typeof activities)[number] }) {
-  const statusTone = item.status === "분석 완료" ? "green" : item.status === "분석 중" ? "blue" : "violet";
-  const priorityTone = item.priority.startsWith("높은") ? "danger" : item.priority.startsWith("중간") ? "warning" : "success";
-  return (
-    <article className="activity-row">
-      <time>{item.time}</time>
-      <span className={`activity-line-dot ${item.tone}`} />
-      <span className={`source-logo ${item.tone}`}>{item.source.slice(0, 1)}</span>
-      <div>
-        <h3>{item.title}</h3>
-        <p>{item.detail}</p>
-        <small>{item.meta}</small>
-      </div>
-      <span className={`badge ${statusTone}`}>{item.status}</span>
-      <span className={`priority-badge ${priorityTone}`}>{item.priority}</span>
-    </article>
-  );
-}
-
-function MiniBars() {
-  return (
-    <div className="mini-bars" aria-hidden="true">
-      {[34, 52, 46, 68, 42, 88, 54, 96].map((height, index) => (
-        <span key={index} style={{ height: `${height}%` }} />
-      ))}
-    </div>
-  );
-}
-
-function Legend({ rows }: { rows: [string, number, string, string][] }) {
-  return (
-    <div className="legend-list">
-      {rows.map(([label, value, percent, tone]) => (
-        <div key={label}>
-          <span className={`legend-dot ${tone}`} />
-          <span>{label}</span>
-          <strong>{value}</strong>
-          <em>({percent})</em>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SourceBar({ label, value, percent, tone }: { label: string; value: number; percent: string; tone: string }) {
-  return (
-    <div className="source-bar-row">
-      <span>{label}</span>
-      <div>
-        <i className={tone} style={{ width: percent }} />
-      </div>
-      <strong>{value}</strong>
-      <em>({percent})</em>
-    </div>
   );
 }

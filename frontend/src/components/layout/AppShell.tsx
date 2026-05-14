@@ -6,23 +6,25 @@ import {
   CalendarClock,
   CircleHelp,
   Database,
-  FileClock,
+  FolderKanban,
   GitBranch,
   Grid2X2,
   Inbox,
-  Map,
   Search,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, clearStoredDemoUserId } from "@/lib/api/client";
-import type { AuthUserResponse, DemoUser } from "@/lib/api/types";
+import { REVIEW_QUEUE_UPDATED_EVENT } from "@/lib/reviewQueueEvents";
+import type { AuthUserResponse, DashboardResponse, DemoUser, NotificationsResponse } from "@/lib/api/types";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 
+/**
+ * 네비게이션 아이템의 타입 정의
+ */
 type NavItem = {
   href: string;
   label: string;
@@ -31,37 +33,42 @@ type NavItem = {
   requiredRole?: "admin";
 };
 
+/**
+ * 사이드바에 표시될 네비게이션 그룹 및 아이템 설정
+ */
 const navGroups: { items: NavItem[] }[] = [
   {
     items: [
-      { href: "/dashboard", label: "\ub300\uc2dc\ubcf4\ub4dc", icon: Grid2X2 },
-      { href: "/review", label: "\uac80\ud1a0\uc0ac\ud56d", icon: Inbox, badge: 12 },
-      { href: "/decisions", label: "\uc758\uc0ac\uacb0\uc815", icon: ShieldCheck },
-      { href: "/timeline", label: "\ud0c0\uc784\ub77c\uc778", icon: GitBranch },
-      { href: "/history", label: "\ud788\uc2a4\ud1a0\ub9ac", icon: FileClock },
-      { href: "/knowledge-map", label: "\uc9c0\uc2dd \ub9f5", icon: Map },
+      { href: "/dashboard", label: "대시보드", icon: Grid2X2 },
+      { href: "/projects", label: "프로젝트", icon: FolderKanban },
+      { href: "/review", label: "검토사항", icon: Inbox },
+      { href: "/timeline", label: "타임라인", icon: GitBranch },
     ],
   },
   {
     items: [
-      { href: "/search", label: "Ask \uc6cc\ud06c\uc2a4\ud398\uc774\uc2a4", icon: Bot },
+      { href: "/search", label: "AI 비서", icon: Bot },
       {
         href: "/agent-runs",
-        label: "\uc5d0\uc774\uc804\ud2b8 \uc2e4\ud589 \uae30\ub85d",
+        label: "에이전트 실행 기록",
         icon: CalendarClock,
         requiredRole: "admin",
       },
-      { href: "/integrations", label: "\uc5f0\ub3d9 \uad00\ub9ac", icon: Database },
-      { href: "/notifications", label: "\uc54c\ub9bc", icon: Bell, badge: 3 },
+      { href: "/integrations", label: "연동 관리", icon: Database },
+      { href: "/notifications", label: "알림", icon: Bell },
     ],
   },
   {
     items: [
-      { href: "/admin", label: "\uad00\ub9ac\uc790 \ucf58\uc194", icon: Settings, requiredRole: "admin" },
+      { href: "/admin", label: "관리자 콘솔", icon: Settings, requiredRole: "admin" },
     ],
   },
 ];
 
+/**
+ * AppShell 컴포넌트: 어플리케이션의 공통 레이아웃을 담당합니다.
+ * 다국어 지원을 위한 LanguageProvider와 내부 레이아웃인 ShellContent를 래핑합니다.
+ */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <LanguageProvider>
@@ -70,18 +77,41 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * ShellContent 컴포넌트: 실제 사이드바, 헤더, 메인 콘텐츠 영역을 렌더링합니다.
+ * 인증 상태 확인, 배지 카운트 조회, 네비게이션 필터링 등의 로직을 포함합니다.
+ */
 function ShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
+  const [badgeCounts, setBadgeCounts] = useState<{ review?: number; notifications?: number }>({});
 
+  useEffect(() => {
+    function refreshBadgeCounts() {
+      apiGet<DashboardResponse>("/api/v1/dashboard")
+        .then((res) => setBadgeCounts((prev) => ({ ...prev, review: res.pending_review_count || 0 })))
+        .catch(() => undefined);
+
+      apiGet<NotificationsResponse>("/api/v1/notifications")
+        .then((res) => setBadgeCounts((prev) => ({ ...prev, notifications: res.counts?.total || 0 })))
+        .catch(() => undefined);
+    }
+
+    window.addEventListener(REVIEW_QUEUE_UPDATED_EVENT, refreshBadgeCounts);
+    return () => window.removeEventListener(REVIEW_QUEUE_UPDATED_EVENT, refreshBadgeCounts);
+  }, []);
+
+  // 페이지 로드 시 및 경로 변경 시 인증 상태 및 배지 카운트 확인
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/login/")) {
       return;
     }
 
     let active = true;
+    
+    // 현재 로그인된 사용자 정보 조회
     apiGet<AuthUserResponse>("/api/v1/auth/me")
       .then((result) => {
         if (active) {
@@ -91,44 +121,70 @@ function ShellContent({ children }: { children: ReactNode }) {
       .catch(() => {
         if (active) {
           setCurrentUser(null);
+          router.push("/login"); // 인증 실패 시 로그인 페이지로 이동
         }
       });
+
+    // 대시보드 배지(검토 대기 건수) 로드
+    apiGet<DashboardResponse>("/api/v1/dashboard")
+      .then((res) => active && setBadgeCounts((prev) => ({ ...prev, review: res.pending_review_count || 0 })))
+      .catch(() => {});
+      
+    // 알림 배지 카운트 로드
+    apiGet<NotificationsResponse>("/api/v1/notifications")
+      .then((res) => active && setBadgeCounts((prev) => ({ ...prev, notifications: res.counts?.total || 0 })))
+      .catch(() => {});
 
     return () => {
       active = false;
     };
-  }, [pathname]);
+  }, [pathname, router]);
 
+  /**
+   * 사용자 권한에 따라 노출할 네비게이션 메뉴를 필터링하고 배지 숫자를 적용합니다.
+   */
   const visibleNavGroups = useMemo(
     () =>
       navGroups
         .map((group) => ({
-          items: group.items.filter((item) => !item.requiredRole || currentUser?.role === item.requiredRole),
+          items: group.items
+            .filter((item) => !item.requiredRole || currentUser?.role === item.requiredRole)
+            .map((item) => {
+              if (item.href === "/review") return { ...item, badge: badgeCounts.review || undefined };
+              if (item.href === "/notifications") return { ...item, badge: badgeCounts.notifications || undefined };
+              return item;
+            }),
         }))
         .filter((group) => group.items.length > 0),
-    [currentUser?.role],
+    [currentUser?.role, badgeCounts],
   );
 
+  /**
+   * 하단 사용자 프로필 영역에 표시할 정보를 계산합니다.
+   */
   const accountDisplay = useMemo(() => {
-    const name = currentUser?.name ?? "\ub85c\uadf8\uc778 \ud544\uc694";
+    const isLoggedIn = !!currentUser;
+    const name = currentUser?.name ?? "로그인이 필요합니다";
     const roleLabels: Record<string, string> = {
-      admin: "\uad00\ub9ac\uc790",
-      manager: "\ub9e4\ub2c8\uc800",
-      reviewer: "\ub9ac\ubdf0\uc5b4",
-      employee: "\uba64\ubc84",
+      admin: "관리자",
+      manager: "매니저",
+      reviewer: "리뷰어",
+      employee: "멤버",
     };
-    const role = currentUser ? (roleLabels[currentUser.role] ?? currentUser.role) : "\uacc4\uc815 \uc5c6\uc74c";
-    const initial = name.trim().charAt(0).toUpperCase() || "?";
-    const avatarFileName = currentUser?.email.split("@", 1)[0]?.trim().toLowerCase();
-    const fallbackAvatarUrl = avatarFileName ? `/profile/${avatarFileName}.png` : null;
-    const avatarUrl = currentUser?.role === "admin" ? null : (currentUser?.avatar_url ?? fallbackAvatarUrl);
-    return { name, role, initial, avatarUrl };
+    const role = currentUser ? (roleLabels[currentUser.role] ?? currentUser.role) : "여기를 클릭해 로그인하세요";
+    const initial = isLoggedIn ? (currentUser?.name?.trim().charAt(0).toUpperCase() || "?") : "!";
+    const avatarUrl = currentUser?.avatar_url ?? null;
+    return { name, role, initial, avatarUrl, isLoggedIn };
   }, [currentUser]);
 
+  // 로그인 페이지에서는 셸 없이 콘텐츠만 렌더링
   if (pathname === "/login" || pathname.startsWith("/login/")) {
     return <>{children}</>;
   }
 
+  /**
+   * 상단 검색창 제출 시 AI 비서(검색) 페이지로 이동
+   */
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -136,6 +192,9 @@ function ShellContent({ children }: { children: ReactNode }) {
     router.push(query ? `/search?q=${encodeURIComponent(query)}` : "/search");
   }
 
+  /**
+   * 로그아웃 처리
+   */
   async function logout() {
     setAccountMenuOpen(false);
     try {
@@ -149,7 +208,9 @@ function ShellContent({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-app text-ink">
+      {/* 데스크탑 사이드바 */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] border-r border-line bg-sidebar px-4 py-6 lg:flex lg:flex-col">
+        {/* 로고 영역 */}
         <Link href="/dashboard" className="flex items-start gap-3">
           <span className="brand-logo" aria-hidden="true">
             <Image src="/assets/paraworks-logo-icon.png" alt="" width={37} height={37} />
@@ -159,6 +220,7 @@ function ShellContent({ children }: { children: ReactNode }) {
           </span>
         </Link>
 
+        {/* 네비게이션 메뉴 */}
         <nav className="mt-6 flex-1 overflow-y-auto">
           {visibleNavGroups.map((group, groupIndex) => (
             <div key={groupIndex} className="border-t border-line py-4 first:border-t-0 first:pt-0">
@@ -179,57 +241,94 @@ function ShellContent({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="relative mt-4 flex items-center justify-between rounded-lg bg-[#fafafa] p-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="avatar-photo" aria-hidden="true">
+        {/* 하단 계정/프로필 영역 */}
+        <div className="relative mt-4 flex items-center justify-between rounded-lg bg-white p-2 shadow-sm border border-line/50">
+          <button
+            type="button"
+            className={`flex min-w-0 flex-1 items-center gap-2 p-1 text-left outline-none transition-opacity hover:opacity-80 ${
+              !accountDisplay.isLoggedIn ? "animate-pulse" : ""
+            }`}
+            onClick={() => {
+              if (!accountDisplay.isLoggedIn) {
+                router.push("/login");
+              } else {
+                setAccountMenuOpen((open) => !open);
+              }
+            }}
+          >
+            <span className={`avatar-photo ${!accountDisplay.isLoggedIn ? "bg-[var(--primary-soft)]" : ""}`} aria-hidden="true">
               {accountDisplay.avatarUrl ? (
                 <Image src={accountDisplay.avatarUrl} alt="" width={34} height={34} />
               ) : (
-                accountDisplay.initial
+                <span className={!accountDisplay.isLoggedIn ? "text-[var(--primary-dark)]" : ""}>
+                  {accountDisplay.initial}
+                </span>
               )}
             </span>
-            <span className="min-w-0">
-              <span className="block truncate text-[13px] font-bold text-ink">{accountDisplay.name}</span>
-              <span className="block text-[11px] text-muted">{accountDisplay.role}</span>
+            <span className="min-w-0 flex-1">
+              <span className={`block truncate text-[13px] font-bold ${accountDisplay.isLoggedIn ? "text-ink" : "text-[var(--primary-dark)]"}`}>
+                {accountDisplay.name}
+              </span>
+              <span className="block truncate text-[11px] text-muted">{accountDisplay.role}</span>
             </span>
-          </div>
+          </button>
+          
           <button
             type="button"
-            className="icon-button small"
-            aria-label={"\uacc4\uc815 \uba54\ub274"}
+            className="icon-button small shrink-0"
+            aria-label={"계정 메뉴"}
             aria-expanded={accountMenuOpen}
             onClick={() => setAccountMenuOpen((open) => !open)}
           >
             <Settings className="h-4 w-4" aria-hidden="true" />
           </button>
 
+          {/* 계정 드롭다운 메뉴 */}
           {accountMenuOpen ? (
-            <div className="absolute bottom-full right-0 z-40 mb-2 w-36 rounded-lg border border-line bg-[var(--glass-elevated)] p-1 shadow-lg">
-              <button
-                type="button"
-                className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
-                onClick={() => {
-                  setAccountMenuOpen(false);
-                  router.push("/account");
-                }}
-              >
-                {"\ub0b4 \uacc4\uc815"}
-              </button>
-              <button
-                type="button"
-                className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-red-600 hover:bg-red-50"
-                onClick={() => void logout()}
-              >
-                {"\ub85c\uadf8\uc544\uc6c3"}
-              </button>
+            <div className="absolute bottom-full right-0 z-40 mb-2 w-44 rounded-lg border border-line bg-[var(--glass-elevated)] p-1 shadow-lg">
+              {accountDisplay.isLoggedIn ? (
+                <>
+                  <button
+                    type="button"
+                    className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-ink hover:bg-[#f3f7fd]"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      router.push("/account");
+                    }}
+                  >
+                    내 계정 정보
+                  </button>
+                  <div className="my-1 border-t border-line" />
+                  <button
+                    type="button"
+                    className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-red-600 hover:bg-red-50"
+                    onClick={() => void logout()}
+                  >
+                    로그아웃
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="w-full rounded-md px-3 py-2 text-left text-[13px] font-bold text-[var(--primary-dark)] hover:bg-[var(--primary-soft)]"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    router.push("/login");
+                  }}
+                >
+                  로그인하기
+                </button>
+              )}
             </div>
           ) : null}
         </div>
       </aside>
 
       <div className="lg:pl-[216px]">
+        {/* 상단 헤더 */}
         <header className="sticky top-0 z-20 bg-app/95 px-4 py-4 backdrop-blur md:px-6 lg:px-6">
           <div className="flex items-center justify-between gap-4">
+            {/* 모바일 로고 */}
             <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
               <span className="brand-logo small" aria-hidden="true">
                 <Image src="/assets/paraworks-logo-icon.png" alt="" width={31} height={31} />
@@ -237,28 +336,33 @@ function ShellContent({ children }: { children: ReactNode }) {
               <span className="brand-wordmark text-[var(--primary-dark)]">paraworks</span>
             </Link>
 
+            {/* 통합 검색창 */}
             <form onSubmit={submitSearch} className="top-search ml-auto min-w-0 flex-1 md:max-w-[470px]">
-              <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+              <button type="submit" className="top-search-icon-button" aria-label="AI 비서에게 질문">
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </button>
               <input
                 name="q"
                 className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[#667085]"
-                placeholder={"\uac80\uc0c9\uc5b4\ub97c \uc785\ub825\ud558\uc138\uc694"}
-                aria-label={"\ud68c\uc0ac \uba54\ubaa8\ub9ac \uac80\uc0c9"}
+                placeholder={"검색어를 입력하세요"}
+                aria-label={"회사 메모리 검색"}
               />
             </form>
 
+            {/* 헤더 우측 유틸리티 버튼 */}
             <div className="flex shrink-0 items-center gap-3">
-              <button type="button" className="icon-button" aria-label={"\ub3c4\uc6c0\ub9d0"}>
+              <button type="button" className="icon-button" aria-label={"도움말"}>
                 <CircleHelp className="h-[18px] w-[18px]" aria-hidden="true" />
               </button>
-              <Link href="/notifications" className="icon-button notification-button" aria-label={"\uc54c\ub9bc"}>
+              <Link href="/notifications" className="icon-button notification-button" aria-label={"알림"}>
                 <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
-                <span>3</span>
+                {badgeCounts.notifications ? <span>{badgeCounts.notifications}</span> : null}
               </Link>
             </div>
           </div>
         </header>
 
+        {/* 메인 콘텐츠 영역 */}
         <main className="w-full px-4 pb-8 pt-1 md:px-6 lg:px-6">{children}</main>
       </div>
     </div>

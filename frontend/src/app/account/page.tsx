@@ -62,9 +62,7 @@ export default function AccountPage() {
 
   const accountDisplay = useMemo(() => {
     const name = user?.name ?? "";
-    const localPart = user?.email.split("@", 1)[0]?.trim().toLowerCase();
-    const fallbackAvatarUrl = localPart ? `/profile/${localPart}.png` : null;
-    const avatarUrl = user?.role === "admin" ? null : (user?.avatar_url ?? fallbackAvatarUrl);
+    const avatarUrl = user?.avatar_url ?? null;
     const initial = name.trim().charAt(0).toUpperCase() || "?";
     return {
       avatarUrl,
@@ -118,9 +116,9 @@ export default function AccountPage() {
         <div className="grid gap-5 p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="rounded-lg border border-line bg-[var(--glass-strong)] p-5">
             <div className="flex flex-col items-center text-center">
-              <span className="grid h-24 w-24 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-[#7c2d12] to-[#f0c0a5] text-2xl font-extrabold text-white">
+              <span className="grid h-36 w-36 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-[#7c2d12] to-[#f0c0a5] text-4xl font-extrabold text-white">
                 {accountDisplay.avatarUrl ? (
-                  <Image src={accountDisplay.avatarUrl} alt="" width={96} height={96} className="h-full w-full object-cover" />
+                  <Image src={accountDisplay.avatarUrl} alt="" width={144} height={144} className="h-full w-full object-cover" />
                 ) : (
                   accountDisplay.initial
                 )}

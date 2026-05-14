@@ -3,6 +3,7 @@ from backend.app.agents.rag_orchestrator_agent import (
     RAG_ORCHESTRATOR_AGENT_MANIFEST,
     RAG_ORCHESTRATOR_AGENT_PROMPT_VERSION,
     DeterministicRagOrchestratorModel,
+    RagModelResponse,
     RagOrchestratorAgent,
 )
 
@@ -58,3 +59,39 @@ def test_rag_orchestrator_returns_evidence_backed_answer_with_cost() -> None:
     assert answer.cost.token_usage.total_tokens > 0
     assert answer.cost.estimated_cost_usd > 0
     assert answer.permission_notice is None
+
+
+def test_rag_orchestrator_records_actual_model_name_from_llm_response() -> None:
+    class FakeLlmModel:
+        def answer(self, question: str, packet: EvidencePacket) -> RagModelResponse:
+            return RagModelResponse(
+                answer='근거에 따르면 Redis는 임시 작업 상태에 사용됩니다.',
+                input_tokens=120,
+                output_tokens=30,
+                model_name='gpt-5.4-mini',
+            )
+
+    packet = EvidencePacket(
+        source_type='rag',
+        source_window='ask:redis',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-redis',
+                source_url='https://gmail.mock/redis',
+                text='Redis should be used for transient job state.',
+                author='noah@example.com',
+                timestamp='2026-04-30T10:15:00+00:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            ),
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    answer = RagOrchestratorAgent(model=FakeLlmModel()).answer(
+        question='Redis는 무엇에 쓰이나요?',
+        packet=packet,
+        hidden_match_count=0,
+    )
+
+    assert answer.cost.model_name == 'gpt-5.4-mini'

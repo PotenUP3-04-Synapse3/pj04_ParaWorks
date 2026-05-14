@@ -1,4 +1,5 @@
 from backend.app.models.agent_runs import AgentRun
+from backend.app.models.assistant import AssistantConversation, AssistantMessage
 from backend.app.models.audit import AuditLog
 from backend.app.models.auth import AuthUser, RefreshToken
 from backend.app.models.integrations import IntegrationConnection
@@ -11,12 +12,20 @@ from backend.app.models.knowledge import (
 )
 from backend.app.models.messages import Message, MessageChannel
 from backend.app.models.review import ReviewItem
-from backend.app.models.source import Document, DocumentChunk, DocumentVersion, Source
+from backend.app.models.source import (
+    Document,
+    DocumentChunk,
+    DocumentParserRun,
+    DocumentVersion,
+    Source,
+)
 from backend.app.models.vector_index import VectorIndexState
 
 __all__ = [
     'SyncJob',
     'AgentRun',
+    'AssistantConversation',
+    'AssistantMessage',
     'AuditLog',
     'AuthUser',
     'RefreshToken',
@@ -30,6 +39,7 @@ __all__ = [
     'ReviewItem',
     'Document',
     'DocumentChunk',
+    'DocumentParserRun',
     'DocumentVersion',
     'Source',
     'VectorIndexState',

@@ -12,6 +12,8 @@ from typing import Protocol
 import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
+from backend.app.documents.parsers import parser_adapter_decision_for_mime_type
+from backend.app.documents.adapters import PdfDocumentParser, DocxDocumentParser, TextDocumentParser
 
 GoogleQueryParams = dict[str, str | list[str]]
 GOOGLE_TEXT_BODY_LIMIT = 4_000
@@ -20,18 +22,13 @@ GOOGLE_DRIVE_TEXT_EXPORT_MIME_TYPE = 'text/plain'
 GOOGLE_DRIVE_SHEETS_MIME_TYPE = 'application/vnd.google-apps.spreadsheet'
 GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE = 'text/csv'
 GOOGLE_DRIVE_SLIDES_MIME_TYPE = 'application/vnd.google-apps.presentation'
-PDF_MIME_TYPE = 'application/pdf'
-DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-HWP_MIME_TYPES = frozenset(
-    {
-        'application/x-hwp',
-        'application/haansofthwp',
-        'application/vnd.hancom.hwpx',
-    }
-)
+GOOGLE_DRIVE_SLIDES_EXPORT_MIME_TYPE = 'text/plain'
 
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
-    'gmail': ('https://www.googleapis.com/auth/gmail.readonly',),
+    'gmail': (
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+    ),
     'drive': ('https://www.googleapis.com/auth/drive.readonly',),
     'calendar': ('https://www.googleapis.com/auth/calendar.readonly',),
 }
@@ -42,10 +39,16 @@ class GoogleApiClient(Protocol):
     def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
         raise NotImplementedError
 
+    def gmail_attachment_download(self, *, message_id: str, attachment_id: str) -> bytes:
+        raise NotImplementedError
+
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         raise NotImplementedError
 
     def drive_file_text_export(self, *, file_id: str, export_mime_type: str) -> str:
+        raise NotImplementedError
+
+    def drive_file_content_download(self, *, file_id: str) -> bytes:
         raise NotImplementedError
 
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
@@ -97,6 +100,15 @@ class GoogleWebApiClient:
             )
         return messages
 
+    def gmail_attachment_download(self, *, message_id: str, attachment_id: str) -> bytes:
+        payload = self._get_json(
+            f'{self.gmail_base_url}/gmail/v1/users/me/messages/{message_id}/attachments/{attachment_id}',
+            params={},
+        )
+        data = payload.get('data') or ''
+        import base64
+        return base64.urlsafe_b64decode(data.encode('ascii') + b'=' * (-len(data) % 4))
+
     def drive_files(self, *, modified_after: str | None = None) -> list[dict]:
         params: GoogleQueryParams = {
             'pageSize': str(self.page_limit),
@@ -118,6 +130,12 @@ class GoogleWebApiClient:
         return self._get_text(
             f'{self.drive_base_url}/drive/v3/files/{file_id}/export',
             params={'mimeType': export_mime_type},
+        )
+
+    def drive_file_content_download(self, *, file_id: str) -> bytes:
+        return self._get_bytes(
+            f'{self.drive_base_url}/drive/v3/files/{file_id}',
+            params={'alt': 'media'},
         )
 
     def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
@@ -161,6 +179,24 @@ class GoogleWebApiClient:
             )
             if response.status_code < 400:
                 return response.text
+            if not _should_retry(response.status_code):
+                raise GoogleApiError(_google_error_message(response))
+            if attempt >= self.max_retries:
+                if response.status_code == 429:
+                    raise GoogleApiError('Google API request failed: rate_limited')
+                raise GoogleApiError(f'Google API request failed: http_{response.status_code}')
+            self.sleep(_retry_after_seconds(response))
+        raise GoogleApiError('Google API request failed')
+
+    def _get_bytes(self, url: str, *, params: GoogleQueryParams) -> bytes:
+        for attempt in range(self.max_retries + 1):
+            response = self.http_client.get(
+                url,
+                headers={'Authorization': f'Bearer {self.oauth_token}'},
+                params=params,
+            )
+            if response.status_code < 400:
+                return response.content
             if not _should_retry(response.status_code):
                 raise GoogleApiError(_google_error_message(response))
             if attempt >= self.max_retries:
@@ -215,7 +251,10 @@ class GoogleConnector:
 
     def fetch_events(self) -> list[SourceEvent]:
         if self.config.connector_type == 'gmail':
-            return [self._gmail_message_to_source_event(message) for message in self.client.gmail_messages()]
+            events: list[SourceEvent] = []
+            for message in self.client.gmail_messages():
+                events.extend(self._gmail_message_to_source_events(message))
+            return events
         if self.config.connector_type == 'drive':
             return [self._drive_file_to_source_event(file) for file in self.client.drive_files()]
         if self.config.connector_type == 'calendar':
@@ -224,12 +263,12 @@ class GoogleConnector:
 
     def fetch_events_since(self, latest_cursors_by_partition: dict[str, str]) -> list[SourceEvent]:
         if self.config.connector_type == 'gmail':
-            return [
-                self._gmail_message_to_source_event(message)
-                for message in self.client.gmail_messages(
-                    after_internal_date=latest_cursors_by_partition.get('gmail')
-                )
-            ]
+            events: list[SourceEvent] = []
+            for message in self.client.gmail_messages(
+                after_internal_date=latest_cursors_by_partition.get('gmail')
+            ):
+                events.extend(self._gmail_message_to_source_events(message))
+            return events
         if self.config.connector_type == 'drive':
             return [
                 self._drive_file_to_source_event(file)
@@ -241,6 +280,13 @@ class GoogleConnector:
                 for event in self.client.calendar_events(updated_min=latest_cursors_by_partition.get('calendar'))
             ]
         return self.fetch_events()
+
+    def _gmail_message_to_source_events(self, message: dict) -> list[SourceEvent]:
+        message_event = self._gmail_message_to_source_event(message)
+        return [
+            message_event,
+            *self._gmail_attachment_source_events(message=message, parent_event=message_event),
+        ]
 
     def _gmail_message_to_source_event(self, message: dict) -> SourceEvent:
         message_id = str(message['id'])
@@ -289,6 +335,82 @@ class GoogleConnector:
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
             },
         )
+
+    def _gmail_attachment_source_events(self, *, message: dict, parent_event: SourceEvent) -> list[SourceEvent]:
+        events: list[SourceEvent] = []
+        message_id = str(message['id'])
+        thread_id = str(message.get('threadId') or '')
+        internal_date = str(message.get('internalDate') or '')
+        subject = _header_value(message, 'Subject') or f'Gmail message {message_id}'
+        for attachment in _gmail_attachment_parts(message.get('payload') or {}):
+            attachment_id = attachment['attachment_id']
+            filename = attachment['filename']
+            mime_type = attachment['mime_type']
+            attachment_size = attachment['attachment_size']
+            decision = parser_adapter_decision_for_mime_type(mime_type)
+            source_id = f'gmail_attachment:{message_id}:{attachment_id}'
+            body_lines = [
+                f'Gmail attachment: {filename}',
+                f'Parent subject: {subject}',
+                f'Mime type: {mime_type}',
+                f'Attachment size: {attachment_size}',
+            ]
+            if decision.parser_status == 'parsed':
+                downloader = getattr(self.client, 'gmail_attachment_download', None)
+                if downloader:
+                    try:
+                        payload = downloader(message_id=message_id, attachment_id=str(attachment_id))
+                        if mime_type == 'application/pdf':
+                            parsed = PdfDocumentParser().parse(payload, metadata={})
+                            if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+                                body_lines.append('\n\n'.join(chunk.text for chunk in parsed.chunks))
+                        elif mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                            parsed = DocxDocumentParser().parse(payload, metadata={})
+                            if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+                                body_lines.append('\n\n'.join(chunk.text for chunk in parsed.chunks))
+                        elif mime_type in ('text/plain', 'text/markdown'):
+                            parsed = TextDocumentParser().parse(payload, metadata={})
+                            if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+                                body_lines.append('\n\n'.join(chunk.text for chunk in parsed.chunks))
+                    except Exception:
+                        decision = parser_adapter_decision_for_mime_type('application/octet-stream')  # Fallback
+            events.append(
+                SourceEvent(
+                    source_type='gmail_attachment',
+                    source_id=source_id,
+                    source_url=parent_event.source_url,
+                    title=f'Attachment: {filename}',
+                    body='\n'.join(body_lines),
+                    author=parent_event.author,
+                    participants=parent_event.participants,
+                    timestamp=parent_event.timestamp,
+                    permission_level=parent_event.permission_level,
+                    raw_metadata={
+                        'parent_source_id': parent_event.source_id,
+                        'message_id': message_id,
+                        'thread_id': thread_id or None,
+                        'thread_context_key': f'{thread_id}:{message_id}:{attachment_id}'
+                        if thread_id
+                        else f'{message_id}:{attachment_id}',
+                        'attachment_id': attachment_id,
+                        'filename': filename,
+                        'mime_type': mime_type,
+                        'attachment_size': attachment_size,
+                        'account_id': self.config.account_id,
+                        'sync_partition': 'gmail',
+                        'sync_cursor': internal_date,
+                        'parser_name': 'gmail_attachment_metadata',
+                        'parser_status': decision.parser_status,
+                        'parser_status_reason': decision.parser_status_reason,
+                        'document_version': internal_date or attachment_id,
+                        'revision_id': attachment_id,
+                        'content_signature': f'{source_id}:{attachment_size}',
+                        'source_snippet': f'Gmail attachment {filename} ({mime_type})',
+                        'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['gmail']),
+                    },
+                )
+            )
+        return events
 
     def _drive_file_to_source_event(self, file: dict) -> SourceEvent:
         file_id = str(file['id'])
@@ -494,6 +616,7 @@ def _drive_parser_metadata(
     signature_parts = [part for part in [f'drive:{file_id}', document_version, revision_id] if part]
     if exported_text:
         snippet, _ = _bounded_text(exported_text)
+        snippet = re.sub(r'\s+', ' ', snippet).strip()
         return {
             'parser_name': export_parser_name or 'google_drive_text_export',
             'parser_status': 'parsed',
@@ -521,13 +644,8 @@ def _drive_parser_status_for_mime_type(mime_type: str) -> tuple[str, str]:
         return ('metadata_only', 'sheets_export_not_enabled')
     if mime_type == GOOGLE_DRIVE_SLIDES_MIME_TYPE:
         return ('metadata_only', 'slides_export_not_enabled')
-    if mime_type == PDF_MIME_TYPE:
-        return ('metadata_only', 'pdf_parser_not_enabled')
-    if mime_type == DOCX_MIME_TYPE:
-        return ('metadata_only', 'docx_parser_not_enabled')
-    if mime_type in HWP_MIME_TYPES:
-        return ('unsupported', 'hwp_parser_not_decided')
-    return ('metadata_only', 'content_export_not_enabled')
+    decision = parser_adapter_decision_for_mime_type(mime_type)
+    return (decision.parser_status, decision.parser_status_reason)
 
 
 def _drive_exported_text(*, client: GoogleApiClient, file: dict) -> tuple[str, str] | None:
@@ -538,6 +656,36 @@ def _drive_exported_text(*, client: GoogleApiClient, file: dict) -> tuple[str, s
     elif mime_type == GOOGLE_DRIVE_SHEETS_MIME_TYPE:
         export_mime_type = GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE
         parser_name = 'google_drive_sheets_csv_export'
+    elif mime_type == GOOGLE_DRIVE_SLIDES_MIME_TYPE:
+        export_mime_type = GOOGLE_DRIVE_SLIDES_EXPORT_MIME_TYPE
+        parser_name = 'google_drive_slides_text_export'
+    elif mime_type == 'application/pdf':
+        downloader = getattr(client, 'drive_file_content_download', None)
+        if not downloader:
+            return None
+        payload = downloader(file_id=str(file['id']))
+        parsed = PdfDocumentParser().parse(payload, metadata={})
+        if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+            return ('\n\n'.join(chunk.text for chunk in parsed.chunks), 'pypdf')
+        return None
+    elif mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        downloader = getattr(client, 'drive_file_content_download', None)
+        if not downloader:
+            return None
+        payload = downloader(file_id=str(file['id']))
+        parsed = DocxDocumentParser().parse(payload, metadata={})
+        if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+            return ('\n\n'.join(chunk.text for chunk in parsed.chunks), 'python-docx')
+        return None
+    elif mime_type in ('text/plain', 'text/markdown'):
+        downloader = getattr(client, 'drive_file_content_download', None)
+        if not downloader:
+            return None
+        payload = downloader(file_id=str(file['id']))
+        parsed = TextDocumentParser().parse(payload, metadata={})
+        if parsed.parser_run.parser_status == 'parsed' and parsed.chunks:
+            return ('\n\n'.join(chunk.text for chunk in parsed.chunks), 'built-in-text')
+        return None
     else:
         return None
     exporter = getattr(client, 'drive_file_text_export', None)
@@ -630,6 +778,25 @@ def _gmail_payload_text_candidates(payload: dict) -> list[tuple[str, str]]:
     return candidates
 
 
+def _gmail_attachment_parts(payload: dict) -> list[dict[str, object]]:
+    attachments: list[dict[str, object]] = []
+    body = payload.get('body') or {}
+    attachment_id = body.get('attachmentId')
+    filename = str(payload.get('filename') or '').strip()
+    if attachment_id and filename:
+        attachments.append(
+            {
+                'attachment_id': str(attachment_id),
+                'filename': filename,
+                'mime_type': str(payload.get('mimeType') or 'application/octet-stream'),
+                'attachment_size': int(body.get('size') or 0),
+            }
+        )
+    for part in payload.get('parts') or []:
+        attachments.extend(_gmail_attachment_parts(part))
+    return attachments
+
+
 def _decode_base64url(value: str) -> str:
     padded = value + '=' * (-len(value) % 4)
     try:
@@ -644,7 +811,11 @@ def _strip_html(value: str) -> str:
 
 
 def _normalize_text(value: str) -> str:
-    return re.sub(r'\s+', ' ', value).strip()
+    # Collapse multiple spaces but preserve paragraph breaks (newlines)
+    lines = value.splitlines()
+    normalized_lines = [re.sub(r'[ \t]+', ' ', line).strip() for line in lines]
+    # Remove empty lines that are more than 2 consecutive
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(normalized_lines)).strip()
 
 
 def _bounded_text(value: str, limit: int = GOOGLE_TEXT_BODY_LIMIT) -> tuple[str, bool]:

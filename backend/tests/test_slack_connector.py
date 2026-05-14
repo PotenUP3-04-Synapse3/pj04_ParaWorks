@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from backend.app.connectors.slack import (
-    SLACK_REQUIRED_HISTORY_SCOPES,
+    SLACK_REQUIRED_SCOPES,
     SlackApiError,
     SlackConnector,
     SlackConnectorConfig,
@@ -35,12 +35,17 @@ class FakeSlackClient:
         return []
 
 
-def test_slack_required_history_scopes_cover_channel_types() -> None:
-    assert SLACK_REQUIRED_HISTORY_SCOPES == (
+def test_slack_required_scopes_cover_channel_types() -> None:
+    assert SLACK_REQUIRED_SCOPES == (
         'channels:history',
         'groups:history',
         'im:history',
         'mpim:history',
+        'channels:read',
+        'groups:read',
+        'im:read',
+        'mpim:read',
+        'users:read',
     )
 
 
@@ -67,7 +72,7 @@ def test_slack_connector_maps_history_messages_to_source_events() -> None:
     assert event.participants == ['U123']
     assert event.timestamp == datetime.fromtimestamp(1777600800.000100, tz=UTC)
     assert event.permission_level == 'internal'
-    assert event.raw_metadata['required_scopes'] == list(SLACK_REQUIRED_HISTORY_SCOPES)
+    assert event.raw_metadata['required_scopes'] == list(SLACK_REQUIRED_SCOPES)
 
 
 def test_slack_connector_fetches_incremental_history_after_channel_cursor() -> None:
@@ -181,6 +186,38 @@ def test_slack_connector_collects_thread_replies_with_parent_context() -> None:
     assert events[1].raw_metadata['thread_parent_text'] == '결정: 벡터 DB는 pgvector로 갑니다.'
     assert events[1].raw_metadata['thread_reply_index'] == 1
     assert events[1].raw_metadata['thread_context_window'] == 'parent_plus_reply'
+
+
+def test_slack_connector_discovers_channels_when_empty() -> None:
+    class DiscoveryFakeSlackClient:
+        def conversations_list(self) -> list[dict]:
+            return [
+                {'id': 'C1', 'name': 'chan1', 'is_member': True},
+                {'id': 'C2', 'name': 'chan2', 'is_member': False},
+                {'id': 'C3', 'name': 'chan3', 'is_member': True},
+            ]
+
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            return [{'type': 'message', 'user': 'U1', 'text': f'msg in {channel_id}', 'ts': '1.0'}]
+
+        def conversation_replies(self, *args, **kwargs) -> list[dict]:
+            return []
+
+    connector = SlackConnector(
+        config=SlackConnectorConfig(
+            bot_token='xoxb-test',
+            channel_ids=[],  # Empty channel list
+            workspace_url='https://example.slack.com',
+        ),
+        client=DiscoveryFakeSlackClient(),
+    )
+
+    events = connector.fetch_events()
+
+    # Should discover C1 and C3 (is_member=True)
+    assert len(events) == 2
+    assert events[0].source_id.startswith('C1:')
+    assert events[1].source_id.startswith('C3:')
 
 
 def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:
@@ -324,7 +361,7 @@ def test_slack_web_api_client_fetches_paginated_channel_list() -> None:
 
     assert [channel['id'] for channel in channels] == ['C123', 'C456']
     assert requests[0].url.path == '/api/conversations.list'
-    assert requests[0].url.params['types'] == 'public_channel,private_channel'
+    assert requests[0].url.params['types'] == 'public_channel,private_channel,im,mpim'
     assert requests[0].url.params['exclude_archived'] == 'true'
 
 

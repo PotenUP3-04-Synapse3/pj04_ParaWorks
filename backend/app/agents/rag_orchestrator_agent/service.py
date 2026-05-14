@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +9,13 @@ from backend.app.agents.rag_orchestrator_agent.agent import (
     RagAnswer,
     RagOrchestratorAgent,
 )
+from backend.app.agents.rag_orchestrator_agent.llm import (
+    DEFAULT_RAG_OPENAI_MODEL,
+    RagLlmProviderError,
+    RagLlmSettings,
+    build_langchain_rag_orchestrator_model,
+)
+from backend.app.core.config import Settings
 from backend.app.core.demo_auth import DemoUser
 from backend.app.models import (
     AgentRun,
@@ -42,9 +49,10 @@ def answer_question_with_rag(
     user: DemoUser,
     question: str,
     agent: RagOrchestratorAgent | None = None,
+    settings: Settings | None = None,
     vector_store: VectorStore | None = None,
 ) -> RagAnswer:
-    selected_agent = agent or RagOrchestratorAgent(model=DeterministicRagOrchestratorModel())
+    selected_agent = agent or build_default_rag_orchestrator_agent(settings)
     if vector_store is None:
         matching_candidates = retrieve_matching_evidence_candidates(db=db, question=question)
         visible_candidates = [
@@ -68,30 +76,59 @@ def answer_question_with_rag(
         packet=packet,
         hidden_match_count=hidden_match_count,
     )
-    db.add(
-        AgentRun(
-            agent_name=answer.agent_name,
-            prompt_version=answer.prompt_version,
-            status='complete',
-            source_window=packet.source_window,
-            cache_key=answer.cache_key,
-            model_name=answer.cost.model_name,
-            input_tokens=answer.cost.token_usage.input_tokens,
-            output_tokens=answer.cost.token_usage.output_tokens,
-            total_tokens=answer.cost.token_usage.total_tokens,
-            estimated_cost_usd=answer.cost.estimated_cost_usd,
-            permission_level=answer.permission_level,
-            metadata_={
-                'source_type': packet.source_type,
-                'question': question,
-                'source_count': len(answer.source_links),
-                'hidden_match_count': hidden_match_count,
-                'cache_hit': answer.cost.cache_hit,
-            },
-        )
+    agent_run = AgentRun(
+        agent_name=answer.agent_name,
+        prompt_version=answer.prompt_version,
+        status='complete',
+        source_window=packet.source_window,
+        cache_key=answer.cache_key,
+        model_name=answer.cost.model_name,
+        input_tokens=answer.cost.token_usage.input_tokens,
+        output_tokens=answer.cost.token_usage.output_tokens,
+        total_tokens=answer.cost.token_usage.total_tokens,
+        estimated_cost_usd=answer.cost.estimated_cost_usd,
+        permission_level=answer.permission_level,
+        metadata_={
+            'source_type': packet.source_type,
+            'question': question,
+            'source_count': len(answer.source_links),
+            'hidden_match_count': hidden_match_count,
+            'cache_hit': answer.cost.cache_hit,
+        },
     )
+    db.add(agent_run)
+    db.flush()
+    answer = replace(answer, agent_run_id=agent_run.id)
     db.commit()
     return answer
+
+
+def build_default_rag_orchestrator_agent(settings: Settings | None) -> RagOrchestratorAgent:
+    if settings is None or settings.paraworks_demo_mode:
+        return RagOrchestratorAgent(model=DeterministicRagOrchestratorModel())
+
+    llm_settings = RagLlmSettings(
+        enabled=settings.agent_llm_enabled or not settings.paraworks_demo_mode,
+        provider_order=tuple(settings.agent_llm_provider_order.split(',')),
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key or settings.google_api_key,
+        openai_primary_model=DEFAULT_RAG_OPENAI_MODEL,
+        openai_fallback_model=settings.agent_llm_openai_model,
+        gemini_model=settings.agent_llm_gemini_model,
+        max_input_chars=settings.agent_llm_max_input_chars,
+        max_output_tokens=settings.agent_llm_max_output_tokens,
+        temperature=settings.agent_llm_temperature,
+        timeout_seconds=settings.agent_llm_timeout_seconds,
+    )
+    try:
+        return RagOrchestratorAgent(
+            model=build_langchain_rag_orchestrator_model(llm_settings),
+            input_cost_per_1m=settings.agent_llm_input_cost_per_1m_tokens,
+            output_cost_per_1m=settings.agent_llm_output_cost_per_1m_tokens,
+        )
+    except RagLlmProviderError:
+        # 진심모드라도 키가 없거나 provider 구성이 깨졌다면 로컬 실행을 멈추지 않는다.
+        return RagOrchestratorAgent(model=DeterministicRagOrchestratorModel())
 
 
 def retrieve_matching_evidence_candidates(*, db: Session, question: str) -> list[RagEvidenceCandidate]:

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Database,
   ExternalLink,
+  FileText,
   KeyRound,
   LockKeyhole,
   Mail,
@@ -15,10 +16,12 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useJobStatus } from "@/hooks/useJobStatus";
-import { apiGet, apiPost } from "@/lib/api/client";
+import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
+import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
   AgentReviewResponse,
   GoogleRuntimeStatus,
@@ -28,10 +31,14 @@ import type {
   OAuthInstallUrlResponse,
   SlackLlmPreflight,
   SlackRuntimeStatus,
+  DashboardResponse,
 } from "@/lib/api/types";
 
 const GOOGLE_CONNECTOR_TYPES = ["gmail", "drive", "calendar"] as const;
 
+/**
+ * 연동 도구별 시각적 요소(아이콘, 색상, 설명 등) 정의
+ */
 const integrationVisuals = {
   slack: {
     icon: MessageSquare,
@@ -87,6 +94,9 @@ const integrationVisuals = {
   }
 >;
 
+/**
+ * 정의되지 않은 연동 도구에 대한 기본 시각적 설정
+ */
 const fallbackVisual = {
   icon: PlugZap,
   accent: "bg-neutral-100 text-neutral-700",
@@ -94,6 +104,9 @@ const fallbackVisual = {
   agentAction: undefined,
 };
 
+/**
+ * 연동 관리 페이지 컴포넌트
+ */
 export default function IntegrationsPage() {
   const [manifests, setManifests] = useState<IntegrationManifest[]>([]);
   const [activeJobId, setActiveJobId] = useState<string>();
@@ -104,6 +117,7 @@ export default function IntegrationsPage() {
   const [slackLlmPreflight, setSlackLlmPreflight] = useState<SlackLlmPreflight>();
   const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
   const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardResponse>();
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
@@ -112,8 +126,11 @@ export default function IntegrationsPage() {
   const [error, setError] = useState<string>();
   const jobStatus = useJobStatus(activeJobId);
 
+  // 초기 로드 시 다양한 연동 정보 및 상태 조회
   useEffect(() => {
     let active = true;
+    
+    // 연동 가능한 커넥터 목록(Manifest) 조회
     apiGet<IntegrationManifest[]>("/api/v1/integrations")
       .then((manifestResult) => {
         if (active) {
@@ -126,6 +143,7 @@ export default function IntegrationsPage() {
         }
       });
 
+    // 현재 활성화된 연결(Credentials/Token 상태 등) 조회
     apiGet<IntegrationConnection[]>("/api/v1/integrations/connections")
       .then((connectionResult) => {
         if (active) {
@@ -138,6 +156,20 @@ export default function IntegrationsPage() {
         }
       });
 
+    // 대시보드 요약 정보(소스별 카운트 등) 조회
+    apiGet<DashboardResponse>("/api/v1/dashboard")
+      .then((summary) => {
+        if (active) {
+          setDashboardSummary(summary);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDashboardSummary(undefined);
+        }
+      });
+
+    // Slack OAuth 설치 URL 조회
     apiGet<OAuthInstallUrlResponse>("/api/v1/integrations/slack/oauth/install-url")
       .then((slackOAuthResult) => {
         if (active) {
@@ -156,6 +188,7 @@ export default function IntegrationsPage() {
         }
       });
 
+    // Slack 운영 상태(채널 선택 등) 조회
     apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
       .then((status) => {
         if (active) {
@@ -169,6 +202,7 @@ export default function IntegrationsPage() {
         }
       });
 
+    // Slack LLM 에이전트 실행 전 검사(예산, 모델 등)
     apiGet<SlackLlmPreflight>("/api/v1/integrations/slack/agent-review/llm/preflight")
       .then((preflight) => {
         if (active) {
@@ -181,6 +215,7 @@ export default function IntegrationsPage() {
         }
       });
 
+    // Google 커넥터들(Gmail, Drive, Calendar)의 OAuth 및 상태 조회
     GOOGLE_CONNECTOR_TYPES.forEach((connectorType) => {
       apiGet<OAuthInstallUrlResponse>(`/api/v1/integrations/${connectorType}/oauth/install-url`)
         .then((googleOAuthResult) => {
@@ -231,6 +266,42 @@ export default function IntegrationsPage() {
     };
   }, []);
 
+
+  async function refreshDashboardSummary() {
+    try {
+      const summary = await apiGet<DashboardResponse>("/api/v1/dashboard");
+      setDashboardSummary(summary);
+      notifyReviewQueueUpdated();
+    } catch {
+      setDashboardSummary(undefined);
+    }
+  }
+
+  async function refreshRuntimeAfterMutation(type: string) {
+    if (type === "slack") {
+      try {
+        const status = await apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status");
+        setSlackRuntime(status);
+      } catch {
+        setSlackRuntime(undefined);
+      }
+    }
+
+    if (GOOGLE_CONNECTOR_TYPES.includes(type as (typeof GOOGLE_CONNECTOR_TYPES)[number])) {
+      try {
+        const status = await apiGet<GoogleRuntimeStatus>(`/api/v1/integrations/${type}/runtime-status`);
+        setGoogleRuntimeByType((current) => ({ ...current, [type]: status }));
+      } catch {
+        setGoogleRuntimeByType((current) => {
+          const next = { ...current };
+          delete next[type];
+          return next;
+        });
+      }
+    }
+
+    await refreshDashboardSummary();
+  }
   const visibleManifests = useMemo(
     () =>
       manifests.length > 0
@@ -250,6 +321,9 @@ export default function IntegrationsPage() {
     [manifests],
   );
 
+  /**
+   * 특정 커넥터의 데이터 동기화(Sync)를 시작합니다.
+   */
   async function startSync(type: string) {
     setPendingType(type);
     setError(undefined);
@@ -261,13 +335,7 @@ export default function IntegrationsPage() {
       );
       setSyncResult(result);
       setActiveJobId(result.job_id);
-      if (type === "slack") {
-        apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
-          .then((status) => {
-            setSlackRuntime(status);
-          })
-          .catch(() => undefined);
-      }
+      await refreshRuntimeAfterMutation(type);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "동기화에 실패했습니다.");
     } finally {
@@ -275,6 +343,9 @@ export default function IntegrationsPage() {
     }
   }
 
+  /**
+   * Slack 채널 선택 상태를 토글합니다.
+   */
   function toggleSlackChannel(channelId: string) {
     setSelectedSlackChannels((current) => {
       if (current.includes(channelId)) {
@@ -284,6 +355,9 @@ export default function IntegrationsPage() {
     });
   }
 
+  /**
+   * 일반 에이전트(추출 에이전트)를 실행합니다.
+   */
   async function runAgent(agentKey: string, path: string) {
     setAgentRunningKey(agentKey);
     setError(undefined);
@@ -291,13 +365,51 @@ export default function IntegrationsPage() {
     try {
       const result = await apiPost<AgentReviewResponse>(path);
       setAgentResult(result);
+      await refreshDashboardSummary();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Agent 실행에 실패했습니다.");
     } finally {
       setAgentRunningKey(undefined);
     }
   }
+  
+  /**
+   * 연동 해제(Disconnect)를 실행합니다.
+   */
+  async function disconnect(type: string) {
+    if (!confirm(`${type} 연동을 해제하시겠습니까? 관련 자격 증명이 삭제됩니다.`)) {
+      return;
+    }
 
+    setError(undefined);
+    try {
+      await apiDelete(`/api/v1/integrations/${type}`);
+      
+      // 연결 목록 갱신
+      const connectionResult = await apiGet<IntegrationConnection[]>("/api/v1/integrations/connections");
+      setConnections(connectionResult);
+      
+      // 구글 런타임 상태 갱신
+      if (GOOGLE_CONNECTOR_TYPES.includes(type as (typeof GOOGLE_CONNECTOR_TYPES)[number])) {
+        setGoogleRuntimeByType((current) => {
+          const next = { ...current };
+          delete next[type];
+          return next;
+        });
+      }
+      
+      // 슬랙 런타임 상태 갱신
+      if (type === "slack") {
+        setSlackRuntime(undefined);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "연동 해제에 실패했습니다.");
+    }
+  }
+
+  /**
+   * Slack LLM 에이전트(비용이 발생하는 실제 LLM 호출)를 실행합니다.
+   */
   async function runSlackLlmAgent() {
     setLlmAgentRunning(true);
     setError(undefined);
@@ -308,6 +420,7 @@ export default function IntegrationsPage() {
       });
       setAgentResult(result);
       setSlackLlmPreflight(result.preflight);
+      await refreshDashboardSummary();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "실제 LLM Agent 실행에 실패했습니다.");
     } finally {
@@ -315,9 +428,31 @@ export default function IntegrationsPage() {
     }
   }
 
-  function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
+  async function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
     if (!oauth?.install_url) {
       setError(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
+      return;
+    }
+
+    if (oauth.install_url === "__direct_connect__") {
+      try {
+        const connection = await apiPost<IntegrationConnection>("/api/v1/integrations/slack/direct-connect");
+        setConnections((current) => {
+          const filtered = current.filter((item) => item.connector_type !== "slack");
+          return [...filtered, connection];
+        });
+        
+        // 연결 성공 후 런타임 상태 갱신
+        apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status")
+          .then((status) => {
+            setSlackRuntime(status);
+            setSelectedSlackChannels(status.selected_channel_ids);
+          })
+          .catch(() => undefined);
+          
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Slack 직접 연결에 실패했습니다.");
+      }
       return;
     }
 
@@ -325,23 +460,23 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <div className="reference-dashboard space-y-5">
+      <section className="page-heading reference-heading">
         <div>
-          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Tools</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">연동과 에이전트 도구</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">
+          <p className="text-[13px] font-bold text-[var(--primary-dark)]">Tools</p>
+          <h1>연동과 에이전트 도구</h1>
+          <p>
             Slack, 메일, 문서, 캘린더 데이터를 공통 ingestion contract로 받아 Review Queue와 RAG 흐름에 연결합니다.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 py-2 text-sm text-[var(--ink-muted)] shadow-sm">
+        <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold text-[var(--ink-subtle)]">
           <PlugZap className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
           Connector contract ready
         </div>
-      </div>
+      </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-4 sm:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
+        <div className="grid gap-4 sm:grid-cols-2 items-start">
           {visibleManifests.map((manifest) => {
             const visual = integrationVisuals[manifest.type as keyof typeof integrationVisuals] ?? fallbackVisual;
             const Icon = visual.icon;
@@ -375,7 +510,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col ${
                   featured ? "border-[#c9b7d5]" : "border-[var(--line-soft)]"
                 }`}
               >
@@ -461,7 +596,7 @@ export default function IntegrationsPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)] pt-4">
+                <div className="mt-auto pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)]">
                   <span className="text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
                   </span>
@@ -475,6 +610,16 @@ export default function IntegrationsPage() {
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
                     </button>
+                    {connection ? (
+                      <button
+                        type="button"
+                        onClick={() => void disconnect(manifest.type)}
+                        className="liquid-control inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        해제
+                      </button>
+                    ) : null}
                     {agentAction ? (
                       <button
                         type="button"
@@ -485,6 +630,15 @@ export default function IntegrationsPage() {
                         <Bot className="h-4 w-4" aria-hidden="true" />
                         {agentRunning ? agentAction.runningLabel : agentAction.label}
                       </button>
+                    ) : null}
+                    {manifest.type === "drive" ? (
+                      <a
+                        href="/documents"
+                        className="liquid-control inline-flex h-9 items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
+                      >
+                        <FileText className="h-4 w-4" aria-hidden="true" />
+                        문서 현황 보기 →
+                      </a>
                     ) : null}
                   </div>
                 </div>
@@ -503,6 +657,8 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="space-y-3 p-4">
+            <SourceOperationsPanel summary={dashboardSummary} />
+
             {slackRuntime ? (
               <SlackRuntimeStatusPanel
                 status={slackRuntime}
@@ -538,6 +694,7 @@ export default function IntegrationsPage() {
                   <ResultMetric label="Skipped" value={syncResult.skipped_events} />
                   <ResultMetric label="Status" value={syncResult.status} />
                 </div>
+                <ParserQualityBreakdown counts={syncResult.parser_status_counts} />
                 <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
                   <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--ink-muted)]">
                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
@@ -565,6 +722,97 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
+/**
+ * 소스별 데이터 수집 현황을 보여주는 패널 컴포넌트
+ */
+function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
+  const counts = summary?.source_counts ?? {
+    slack: 0,
+    gmail: 0,
+    drive: 0,
+    calendar: 0,
+    other: 0,
+  };
+  const total =
+    (counts.slack ?? 0) +
+    (counts.gmail ?? 0) +
+    (counts.drive ?? 0) +
+    (counts.calendar ?? 0) +
+    (counts.other ?? 0);
+
+  return (
+    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-[var(--ink-strong)]">소스별 연동 현황</h4>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">수집량과 커넥터별 비중</p>
+        </div>
+        <span className="rounded-full bg-[var(--glass-strong)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+          총 {total.toLocaleString()}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        <SourceOperationRow label="Slack" value={counts.slack ?? 0} total={total} tone="purple" />
+        <SourceOperationRow label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
+        <SourceOperationRow label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
+        <SourceOperationRow label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
+        <SourceOperationRow label="기타" value={counts.other ?? 0} total={total} tone="gray" />
+      </div>
+    </div>
+  );
+}
+
+function SourceOperationRow({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
+  const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div className="source-bar-row">
+      <span>{label}</span>
+      <div>
+        <i className={tone} style={{ width: `${Math.max(percent, value > 0 ? 4 : 0)}%` }} />
+      </div>
+      <strong>{value.toLocaleString()}</strong>
+      <em>({percent}%)</em>
+    </div>
+  );
+}
+
+/**
+ * 파싱 품질(Body 파싱 성공 여부 등) 통계를 보여주는 컴포넌트
+ */
+function ParserQualityBreakdown({ counts }: { counts?: Record<string, number> }) {
+  const rows = parserQualityRows(counts);
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
+
+  return (
+    <div
+      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-xs"
+      data-testid="sync-parser-quality"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold text-[var(--ink-strong)]">Parser quality</p>
+        <span className="text-[var(--ink-muted)]">{total.toLocaleString()} sources</span>
+      </div>
+      <div className="mt-2 grid gap-2">
+        {rows.map((row) => (
+          <div key={row.status} className="flex items-center justify-between gap-3 rounded-md bg-[var(--glass-strong)] px-2 py-1.5">
+            <span className="font-medium">{row.label}</span>
+            <span className={`rounded-full px-2 py-0.5 font-semibold ${row.className}`}>
+              {row.count.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 leading-5 text-[var(--ink-muted)]">
+        Metadata-only and unsupported files remain reviewable, but they are not treated as full body-parsed evidence.
+      </p>
     </div>
   );
 }
@@ -783,6 +1031,34 @@ function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, Google
       </div>
     </div>
   );
+}
+
+function parserQualityRows(counts?: Record<string, number>) {
+  const statusLabels: Record<string, string> = {
+    parsed: "Parsed",
+    metadata_only: "Metadata only",
+    unsupported: "Unsupported",
+  };
+  const statusClasses: Record<string, string> = {
+    parsed: "bg-emerald-50 text-emerald-800",
+    metadata_only: "bg-amber-50 text-amber-800",
+    unsupported: "bg-red-50 text-red-800",
+  };
+
+  return Object.entries(counts ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => {
+      const order = ["parsed", "metadata_only", "unsupported"];
+      const leftIndex = order.indexOf(left);
+      const rightIndex = order.indexOf(right);
+      return (leftIndex === -1 ? order.length : leftIndex) - (rightIndex === -1 ? order.length : rightIndex);
+    })
+    .map(([status, count]) => ({
+      status,
+      count,
+      label: statusLabels[status] ?? status,
+      className: statusClasses[status] ?? "bg-[var(--glass-strong)] text-[var(--ink-strong)]",
+    }));
 }
 
 function formatScopes(scopes: string[]) {

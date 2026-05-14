@@ -86,3 +86,41 @@ def test_validation_agent_requires_evidence_and_confidence_floor() -> None:
 
     assert validation.accept(candidate) is True
     assert validation.accept(weak_candidate) is False
+
+
+def test_deterministic_todo_model_extracts_assignee_and_due_date_from_drive_or_calendar_evidence() -> None:
+    packet = EvidencePacket(
+        source_type='company_memory',
+        source_window='test:drive-calendar-assignment',
+        messages=[
+            EvidenceMessage(
+                source_id='drive-plan-1',
+                source_url='https://drive.mock/project-alpha/plan',
+                text='담당: 김하나\n업무: 고객사 공유본 준비\n기한: 2026-05-20',
+                author='owner@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='restricted',
+                metadata={'source_type': 'drive'},
+                source_snippet_override='담당: 김하나 업무: 고객사 공유본 준비 기한: 2026-05-20',
+            ),
+            EvidenceMessage(
+                source_id='calendar-deadline-1',
+                source_url='https://calendar.mock/project-alpha/deadline',
+                text='고객사 공유본 준비 마감',
+                author='lead@example.com',
+                timestamp='2026-05-20T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'calendar', 'start': '2026-05-20T09:00:00+09:00'},
+            ),
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    todo = TodoAgent(model=DeterministicTodoModel()).run(packet).candidates[0]
+
+    assert todo.item_type == 'todo'
+    assert todo.permission_level == 'restricted'
+    assert todo.payload_fields['assignee'] == '김하나'
+    assert todo.payload_fields['due_date'] == '2026-05-20'
+    assert todo.payload_fields['task_summary'] == '고객사 공유본 준비'
+    assert todo.payload_fields['evidence_reason']

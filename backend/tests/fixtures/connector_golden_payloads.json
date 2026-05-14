@@ -49,18 +49,46 @@
       }
     }
   },
-  "drive": {
-    "id": "file-golden-1",
+  "drive_doc": {
+    "id": "file-golden-doc",
     "name": "Business plan",
     "mimeType": "application/vnd.google-apps.document",
     "description": "Revenue and hiring plan",
-    "webViewLink": "https://drive.google.com/file/d/file-golden-1/view",
+    "webViewLink": "https://drive.google.com/file/d/file-golden-doc/view",
     "modifiedTime": "2026-05-01T09:00:00Z",
     "createdTime": "2026-04-30T09:00:00Z",
     "version": "42",
     "headRevisionId": "rev-42",
     "owners": [{"emailAddress": "owner@example.com"}],
     "lastModifyingUser": {"emailAddress": "editor@example.com"}
+  },
+  "drive_sheets": {
+    "id": "file-golden-sheets",
+    "name": "Q3 Budget",
+    "mimeType": "application/vnd.google-apps.spreadsheet",
+    "description": "Quarterly budget numbers",
+    "webViewLink": "https://drive.google.com/file/d/file-golden-sheets/view",
+    "modifiedTime": "2026-05-01T09:05:00Z",
+    "version": "12",
+    "headRevisionId": "rev-12"
+  },
+  "drive_hwp": {
+    "id": "file-golden-hwp",
+    "name": "공공기관_계약서.hwp",
+    "mimeType": "application/haansofthwp",
+    "webViewLink": "https://drive.google.com/file/d/file-golden-hwp/view",
+    "modifiedTime": "2026-05-01T09:10:00Z",
+    "version": "5",
+    "headRevisionId": "rev-5"
+  },
+  "drive_pdf": {
+    "id": "file-golden-pdf",
+    "name": "Report.pdf",
+    "mimeType": "application/pdf",
+    "webViewLink": "https://drive.google.com/file/d/file-golden-pdf/view",
+    "modifiedTime": "2026-05-01T09:15:00Z",
+    "version": "8",
+    "headRevisionId": "rev-8"
   },
   "calendar": {
     "id": "event-golden-1",

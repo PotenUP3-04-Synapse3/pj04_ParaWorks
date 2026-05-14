@@ -3,7 +3,16 @@ from sqlalchemy.orm import Session
 
 from backend.app.connectors.base import SourceEvent
 from backend.app.documents.parsers import ParsedDocument, ParsedDocumentChunk, ParserRun
-from backend.app.models import Document, DocumentChunk, DocumentVersion, Source
+from backend.app.models import (
+    Document,
+    DocumentChunk,
+    DocumentParserRun,
+    DocumentVersion,
+    Source,
+)
+
+DEFAULT_CHUNK_MAX_CHARS = 1_200
+SOURCE_SNIPPET_MAX_CHARS = 240
 
 
 def parsed_document_from_source_event(event: SourceEvent) -> ParsedDocument:
@@ -11,7 +20,8 @@ def parsed_document_from_source_event(event: SourceEvent) -> ParsedDocument:
     document_version = str(metadata.get('document_version') or 'v1')
     revision_id = str(metadata.get('revision_id') or '')
     content_signature = str(metadata.get('content_signature') or f'{event.source_id}:{document_version}')
-    source_snippet = str(metadata.get('source_snippet') or event.body[:240])
+    source_snippet = str(metadata.get('source_snippet') or _snippet(event.body))
+    chunk_max_chars = _chunk_max_chars(metadata)
     return ParsedDocument(
         source_id=event.source_id,
         source_url=event.source_url,
@@ -26,13 +36,7 @@ def parsed_document_from_source_event(event: SourceEvent) -> ParsedDocument:
             parser_status=str(metadata.get('parser_status') or 'parsed'),
             parser_status_reason=_optional_string(metadata.get('parser_status_reason')),
         ),
-        chunks=[
-            ParsedDocumentChunk(
-                chunk_index=0,
-                text=event.body,
-                source_snippet=source_snippet,
-            )
-        ],
+        chunks=_parsed_chunks_from_text(event.body, max_chars=chunk_max_chars),
     )
 
 
@@ -65,6 +69,27 @@ def persist_parsed_document(
     db.add(version)
     db.flush()
 
+    parser_run = DocumentParserRun(
+        document_id=document.id,
+        document_version_id=version.id,
+        source_id=source.id,
+        parser_name=parsed.parser_run.parser_name,
+        parser_status=parsed.parser_run.parser_status,
+        parser_status_reason=parsed.parser_run.parser_status_reason,
+        mime_type=parsed.mime_type,
+        document_version_label=parsed.document_version,
+        revision_id=parsed.revision_id,
+        content_signature=parsed.content_signature,
+        chunk_count=len(parsed.chunks),
+        metadata_={
+            'source_id': parsed.source_id,
+            'source_url': parsed.source_url,
+            'permission_level': parsed.permission_level,
+            'source_snippet': parsed.source_snippet,
+        },
+    )
+    db.add(parser_run)
+
     chunks: list[DocumentChunk] = []
     for parsed_chunk in parsed.chunks:
         chunk = DocumentChunk(
@@ -89,3 +114,87 @@ def _optional_string(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _chunk_max_chars(metadata: dict) -> int:
+    value = metadata.get('chunk_max_chars')
+    if value is None:
+        return DEFAULT_CHUNK_MAX_CHARS
+    try:
+        return max(int(value), SOURCE_SNIPPET_MAX_CHARS)
+    except (TypeError, ValueError):
+        return DEFAULT_CHUNK_MAX_CHARS
+
+
+def _parsed_chunks_from_text(text: str, *, max_chars: int) -> list[ParsedDocumentChunk]:
+    paragraphs = _paragraphs(text)
+    if not paragraphs:
+        return [ParsedDocumentChunk(chunk_index=0, text='', source_snippet='')]
+
+    chunks: list[tuple[str, str | None]] = []
+    current: list[str] = []
+    current_section: str | None = None
+
+    for paragraph in paragraphs:
+        if _looks_like_heading(paragraph) and current:
+            chunks.append(('\n\n'.join(current), current_section))
+            current = []
+            current_section = None
+
+        if current_section is None:
+            current_section = _section_path(paragraph)
+
+        candidate = '\n\n'.join([*current, paragraph]) if current else paragraph
+        if len(candidate) <= max_chars:
+            current.append(paragraph)
+            continue
+
+        if current:
+            chunks.append(('\n\n'.join(current), current_section))
+            current = []
+            current_section = _section_path(paragraph)
+
+        if len(paragraph) <= max_chars:
+            current.append(paragraph)
+            continue
+
+        for part in _split_long_paragraph(paragraph, max_chars=max_chars):
+            chunks.append((part, current_section))
+        current_section = None
+
+    if current:
+        chunks.append(('\n\n'.join(current), current_section))
+
+    return [
+        ParsedDocumentChunk(
+            chunk_index=index,
+            text=chunk_text,
+            source_snippet=_snippet(chunk_text),
+            section_path=section_path,
+        )
+        for index, (chunk_text, section_path) in enumerate(chunks)
+    ]
+
+
+def _paragraphs(text: str) -> list[str]:
+    normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+    return [paragraph.strip() for paragraph in normalized.split('\n\n') if paragraph.strip()]
+
+
+def _looks_like_heading(paragraph: str) -> bool:
+    return '\n' not in paragraph and len(paragraph) <= 80 and not paragraph.endswith(('.', '?', '!', ':', ';'))
+
+
+def _section_path(paragraph: str) -> str | None:
+    first_line = paragraph.splitlines()[0].strip()
+    if not first_line:
+        return None
+    return first_line[:120]
+
+
+def _split_long_paragraph(paragraph: str, *, max_chars: int) -> list[str]:
+    return [paragraph[index : index + max_chars].strip() for index in range(0, len(paragraph), max_chars)]
+
+
+def _snippet(text: str) -> str:
+    return ' '.join(text.split())[:SOURCE_SNIPPET_MAX_CHARS]

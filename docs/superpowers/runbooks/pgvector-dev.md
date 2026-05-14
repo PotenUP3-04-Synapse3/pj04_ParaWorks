@@ -78,6 +78,12 @@ OPENAI_EMBEDDING_DIMENSIONS=1536
 RAG_USE_PGVECTOR_SEARCH=false
 ```
 
+`rag_vector_documents.embedding` is intentionally fixed at `vector(1536)` for
+the current embedding path. If `OPENAI_EMBEDDING_DIMENSIONS` or the embedding
+model is changed, run `uv run python scripts/check_db_schema.py` before writes.
+The check compares the configured dimension with the actual PostgreSQL column
+type and fails instead of allowing a silent mismatch.
+
 Keep `RAG_USE_PGVECTOR_SEARCH=false` until the index has been populated and
 verified. Toggle it only for manual vector retrieval checks.
 
@@ -85,11 +91,19 @@ verified. Toggle it only for manual vector retrieval checks.
 
 ```powershell
 $env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks'
+uv run alembic upgrade head
+uv run python scripts/check_db_schema.py
 uv run python -m backend.app.db.init_db
 ```
 
-The Docker init scripts create pgvector support and the vector tables for fresh
-volumes:
+`alembic upgrade head` is the source of truth for application schema changes.
+`scripts/check_db_schema.py` verifies that an existing database is not missing
+new tables or columns after a pull, and also verifies the native pgvector table
+and embedding dimension on PostgreSQL. `backend.app.db.init_db` is kept for
+local seed users and optional demo data.
+
+The Docker init scripts also create pgvector support and the vector tables for
+fresh volumes:
 
 - `docker/postgres/init/001_extensions.sql`
 - `docker/postgres/init/002_rag_vector_documents.sql`
@@ -99,6 +113,7 @@ The API also calls `PgVectorStore.ensure_schema()` before production writes.
 The helper runs the same schema guard explicitly:
 
 ```powershell
+uv run python scripts/check_db_schema.py --database-url $env:DATABASE_URL
 uv run python scripts/check_pgvector_dev.py --database-url $env:DATABASE_URL --ensure-vector-schema
 uv run python scripts/check_pgvector_dev.py --database-url $env:DATABASE_URL --expect-app-schema
 ```

@@ -148,6 +148,82 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     assert event.raw_metadata['body_truncated'] is False
 
 
+def test_google_connector_maps_gmail_attachments_to_source_events() -> None:
+    class AttachmentGoogleClient(FakeGoogleClient):
+        def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
+            self.gmail_after_internal_date = after_internal_date
+            return [
+                {
+                    'id': 'msg-attach-1',
+                    'threadId': 'thread-attach-1',
+                    'labelIds': ['INBOX'],
+                    'snippet': 'See attached proposal.',
+                    'internalDate': '1777600800000',
+                    'payload': {
+                        'mimeType': 'multipart/mixed',
+                        'headers': [
+                            {'name': 'Subject', 'value': 'Proposal review'},
+                            {'name': 'From', 'value': 'min@example.com'},
+                            {'name': 'To', 'value': 'para@example.com'},
+                        ],
+                        'parts': [
+                            {
+                                'mimeType': 'text/plain',
+                                'body': {'data': 'U2VlIGF0dGFjaGVkIHByb3Bvc2FsLg'},
+                            },
+                            {
+                                'filename': 'proposal.pdf',
+                                'mimeType': 'application/pdf',
+                                'body': {'attachmentId': 'att-1', 'size': 2048},
+                            },
+                        ],
+                    },
+                }
+            ]
+
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='gmail',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=AttachmentGoogleClient(),
+    )
+
+    events = connector.fetch_events()
+
+    assert [event.source_id for event in events] == [
+        'gmail:msg-attach-1',
+        'gmail_attachment:msg-attach-1:att-1',
+    ]
+    attachment = events[1]
+    assert attachment.source_type == 'gmail_attachment'
+    assert attachment.source_url == 'https://mail.google.com/mail/u/0/#all/msg-attach-1'
+    assert attachment.title == 'Attachment: proposal.pdf'
+    assert attachment.body == (
+        'Gmail attachment: proposal.pdf\n'
+        'Parent subject: Proposal review\n'
+        'Mime type: application/pdf\n'
+        'Attachment size: 2048'
+    )
+    assert attachment.author == 'min@example.com'
+    assert attachment.participants == ['min@example.com', 'para@example.com']
+    assert attachment.permission_level == 'internal'
+    assert attachment.raw_metadata['parent_source_id'] == 'gmail:msg-attach-1'
+    assert attachment.raw_metadata['message_id'] == 'msg-attach-1'
+    assert attachment.raw_metadata['thread_id'] == 'thread-attach-1'
+    assert attachment.raw_metadata['attachment_id'] == 'att-1'
+    assert attachment.raw_metadata['filename'] == 'proposal.pdf'
+    assert attachment.raw_metadata['mime_type'] == 'application/pdf'
+    assert attachment.raw_metadata['attachment_size'] == 2048
+    assert attachment.raw_metadata['parser_name'] == 'gmail_attachment_metadata'
+    assert attachment.raw_metadata['parser_status'] == 'parsed'
+    assert attachment.raw_metadata['parser_status_reason'] == ''
+    assert attachment.raw_metadata['document_version'] == '1777600800000'
+    assert attachment.raw_metadata['content_signature'] == 'gmail_attachment:msg-attach-1:att-1:2048'
+
+
 def test_google_connector_maps_drive_files_to_source_events() -> None:
     connector = GoogleConnector(
         config=GoogleConnectorConfig(
@@ -248,15 +324,55 @@ def test_google_connector_exports_google_sheets_csv_into_drive_source_events() -
     assert event.raw_metadata['source_snippet'] == '항목,금액 출장비,120000 식대,45000'
 
 
+def test_google_connector_exports_google_slides_text_into_drive_source_events() -> None:
+    client = FakeGoogleClient(
+        drive_files=[
+            {
+                'id': 'slides-1',
+                'name': 'Customer proposal deck',
+                'mimeType': 'application/vnd.google-apps.presentation',
+                'webViewLink': 'https://drive.google.com/file/d/slides-1/view',
+                'modifiedTime': '2026-05-01T09:00:00Z',
+                'version': '8',
+                'headRevisionId': 'slides-rev-8',
+                'owners': [{'emailAddress': 'owner@example.com'}],
+            }
+        ],
+        drive_exports={
+            ('slides-1', 'text/plain'): 'Slide 1\nCustomer rollout plan\nSlide 2\nApproval evidence required',
+        },
+    )
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='drive',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert client.drive_export_requests == [('slides-1', 'text/plain')]
+    assert event.body == 'Slide 1\nCustomer rollout plan\nSlide 2\nApproval evidence required'
+    assert event.raw_metadata['parser_name'] == 'google_drive_slides_text_export'
+    assert event.raw_metadata['parser_status'] == 'parsed'
+    assert event.raw_metadata['parser_status_reason'] is None
+    assert event.raw_metadata['document_version'] == '8'
+    assert event.raw_metadata['revision_id'] == 'slides-rev-8'
+    assert event.raw_metadata['content_signature'] == 'drive:slides-1:8:slides-rev-8'
+    assert event.raw_metadata['source_snippet'] == 'Slide 1 Customer rollout plan Slide 2 Approval evidence required'
+
+
 @pytest.mark.parametrize(
     ('mime_type', 'expected_status', 'expected_reason'),
     [
-        ('application/vnd.google-apps.presentation', 'metadata_only', 'slides_export_not_enabled'),
-        ('application/pdf', 'metadata_only', 'pdf_parser_not_enabled'),
+        ('application/pdf', 'parsed', ''),
         (
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'metadata_only',
-            'docx_parser_not_enabled',
+            'parsed',
+            '',
         ),
         ('application/x-hwp', 'unsupported', 'hwp_parser_not_decided'),
         ('application/haansofthwp', 'unsupported', 'hwp_parser_not_decided'),

@@ -60,6 +60,7 @@ class LangChainSlackAgentModel:
             (
                 'system',
                 'You extract one reviewable company history candidate from Slack evidence. '
+                'The title and summary must be written in Korean. '
                 'Return only JSON with title, summary, item_type, confidence_score, and optional uncertainty_reason.',
             ),
             ('user', render_slack_llm_prompt(packet, max_input_chars=self.max_input_chars)),
@@ -201,7 +202,8 @@ def render_slack_llm_prompt(
             'allowed_item_types': ['history_event', 'decision_record', 'todo'],
             'requirements': [
                 'Use only the provided evidence.',
-                'Keep the summary concise and business-friendly Korean or English based on evidence.',
+                'The title and summary must be written in Korean.',
+                'Keep the summary concise and business-friendly.',
                 'Set confidence_score between 0 and 1.',
             ],
             'source_window': packet.source_window,

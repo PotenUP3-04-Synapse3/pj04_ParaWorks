@@ -55,7 +55,10 @@ class MockConnector:
         return MOCK_CONNECTOR_MANIFESTS[self.source_type]
 
     def fetch_events(self) -> list[SourceEvent]:
-        return [copy.deepcopy(event) for event in SEED_EVENTS if event.source_type == self.source_type]
+        source_types = {self.source_type}
+        if self.source_type == 'gmail':
+            source_types.add('gmail_attachment')
+        return [copy.deepcopy(event) for event in SEED_EVENTS if event.source_type in source_types]
 
 
 def get_mock_connector(source_type: str) -> MockConnector:

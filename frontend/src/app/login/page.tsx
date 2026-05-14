@@ -5,6 +5,7 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DEMO_USER_STORAGE_KEY,
+  LOCAL_DEMO_USERS,
   apiGet,
   apiPost,
   clearStoredDemoUserId,
@@ -13,68 +14,11 @@ import {
 } from "@/lib/api/client";
 import type { AuthUserResponse, AuthUsersResponse, DemoUser, GoogleLoginUrlResponse } from "@/lib/api/types";
 
-const LOCAL_DEMO_USERS: DemoUser[] = [
-  {
-    id: "demo-admin",
-    email: "admin@paraworks.com",
-    role: "admin",
-    permission_levels: ["public", "internal", "restricted"],
-    name: "ParaWorks Admin",
-    title: "Workspace Administrator",
-    department: "Platform",
-  },
-  {
-    id: "google-hanvv-admin",
-    email: "hanvv3@gmail.com",
-    role: "admin",
-    permission_levels: ["public", "internal", "restricted"],
-    name: "Hanvv Admin",
-    title: "Workspace Administrator",
-    department: "Platform",
-  },
-  {
-    id: "google-hanvv-employee",
-    email: "hanvv3@koreacu.ac.kr",
-    role: "employee",
-    permission_levels: ["public", "internal"],
-    name: "Hanvv Employee",
-    title: "AI Agent Developer",
-    department: "Engineering",
-  },
-  {
-    id: "employee-mina",
-    email: "mina@paraworks.com",
-    role: "reviewer",
-    permission_levels: ["public", "internal"],
-    name: "Kim Mina",
-    title: "Product Manager",
-    department: "Product",
-  },
-  {
-    id: "employee-jun",
-    email: "jun@paraworks.com",
-    role: "employee",
-    permission_levels: ["public", "internal"],
-    name: "Lee Jun",
-    title: "Backend Engineer",
-    department: "Engineering",
-  },
-  {
-    id: "employee-soyeon",
-    email: "soyeon@paraworks.com",
-    role: "employee",
-    permission_levels: ["public"],
-    name: "Park Soyeon",
-    title: "Operations Associate",
-    department: "Operations",
-  },
-];
-
 export default function LoginPage() {
-  const [users, setUsers] = useState<DemoUser[]>([]);
+  const [users, setUsers] = useState<DemoUser[]>(LOCAL_DEMO_USERS);
   const [googleLogin, setGoogleLogin] = useState<GoogleLoginUrlResponse>();
   const [currentUserId, setCurrentUserId] = useState("hanvv-employee");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(LOCAL_DEMO_USERS[0].email);
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
@@ -94,7 +38,7 @@ export default function LoginPage() {
       .catch(() => {
         setUsers(LOCAL_DEMO_USERS);
         setEmail(LOCAL_DEMO_USERS[0].email);
-        setError("백엔드 API에 연결할 수 없어 로컬 데모 계정 목록을 사용합니다.");
+        setError("백엔드 API에 연결할 수 없어 로컬 데모 계정 목록을 표시합니다. 실제 로그인은 백엔드 연결이 필요합니다.");
       });
   }, []);
 
@@ -115,18 +59,12 @@ export default function LoginPage() {
       window.dispatchEvent(new StorageEvent("storage", { key: DEMO_USER_STORAGE_KEY, newValue: result.user.id }));
       setStatus(`${result.user.name} 계정으로 로그인했습니다.`);
       window.location.assign("/dashboard");
-    } catch {
-      const fallbackUser = users.find((user) => user.email.toLowerCase() === nextEmail.toLowerCase());
-      if (!fallbackUser) {
-        setError("로그인에 실패했습니다. 초대된 데모 계정 이메일인지 확인해 주세요.");
-        return;
-      }
-
-      setStoredDemoUserId(fallbackUser.id);
-      setCurrentUserId(fallbackUser.id);
-      window.dispatchEvent(new StorageEvent("storage", { key: DEMO_USER_STORAGE_KEY, newValue: fallbackUser.id }));
-      setStatus(`${fallbackUser.name} 계정으로 로그인했습니다. 백엔드 세션 쿠키는 생성되지 않았습니다.`);
-      window.location.assign("/dashboard");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? `로그인에 실패했습니다. ${caught.message}`
+          : "로그인에 실패했습니다. 백엔드 세션 쿠키가 생성되지 않았습니다.",
+      );
     } finally {
       setLoading(false);
     }
@@ -170,7 +108,7 @@ export default function LoginPage() {
             <span className="brand-wordmark">paraworks</span>
           </div>
           <div>
-            <h1>회사 모든 기록을 연결해, 더 나은 일의 흐름을 만듭니다.</h1>
+            <h1>회사 모든 기록을 연결하여, <br />더 나은 일의 흐름을 만듭니다.</h1>
             <p>모든 팀과 데이터가 하나로 연결되는 스마트 협업 플랫폼</p>
           </div>
           <div className="login-cube-scene" aria-hidden="true">

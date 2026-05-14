@@ -15,6 +15,15 @@ class ParserRun:
     parser_status_reason: str | None
 
 
+@dataclass(frozen=True)
+class ParserAdapterDecision:
+    mime_type: str
+    parser_status: str
+    parser_status_reason: str
+    candidate_package: str | None = None
+    live_enabled: bool = False
+
+
 @dataclass
 class ParsedDocumentChunk:
     chunk_index: int
@@ -91,3 +100,55 @@ class DocumentParser(Protocol):
 def _content_hash(payload: dict[str, object]) -> str:
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+
+
+_PDF_MIME_TYPE = 'application/pdf'
+_DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+_TEXT_PLAIN_MIME_TYPE = 'text/plain'
+_MARKDOWN_MIME_TYPE = 'text/markdown'
+_HWP_MIME_TYPES = frozenset(
+    {
+        'application/x-hwp',
+        'application/haansofthwp',
+        'application/vnd.hancom.hwpx',
+    }
+)
+
+
+def parser_adapter_decision_for_mime_type(mime_type: str) -> ParserAdapterDecision:
+    normalized = mime_type.strip().lower()
+    if normalized == _PDF_MIME_TYPE:
+        return ParserAdapterDecision(
+            mime_type=normalized,
+            parser_status='parsed',
+            parser_status_reason='',
+            candidate_package='pypdf',
+            live_enabled=True,
+        )
+    if normalized == _DOCX_MIME_TYPE:
+        return ParserAdapterDecision(
+            mime_type=normalized,
+            parser_status='parsed',
+            parser_status_reason='',
+            candidate_package='python-docx',
+            live_enabled=True,
+        )
+    if normalized in (_TEXT_PLAIN_MIME_TYPE, _MARKDOWN_MIME_TYPE):
+        return ParserAdapterDecision(
+            mime_type=normalized,
+            parser_status='parsed',
+            parser_status_reason='',
+            candidate_package='built-in',
+            live_enabled=True,
+        )
+    if normalized in _HWP_MIME_TYPES:
+        return ParserAdapterDecision(
+            mime_type=normalized,
+            parser_status='unsupported',
+            parser_status_reason='hwp_parser_not_decided',
+        )
+    return ParserAdapterDecision(
+        mime_type=normalized,
+        parser_status='metadata_only',
+        parser_status_reason='content_export_not_enabled',
+    )

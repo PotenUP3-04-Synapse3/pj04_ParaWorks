@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.auth.google_identity import (
@@ -20,6 +21,7 @@ from backend.app.core.demo_auth import (
     require_admin_user,
     serialize_demo_user,
 )
+from backend.app.core.rate_limit import rate_limit_auth
 from backend.app.core.session_auth import (
     clear_auth_cookies,
     issue_auth_cookies,
@@ -29,6 +31,8 @@ from backend.app.core.session_auth import (
     upsert_auth_user_from_demo,
 )
 from backend.app.db.session import get_db
+from backend.app.models import AuthUser
+from backend.app.seeds.auth_users import seed_auth_users
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
@@ -53,20 +57,26 @@ def get_login_options() -> dict:
     return {'users': list_demo_users()}
 
 
-@router.post('/login')
+@router.post('/login', dependencies=[Depends(rate_limit_auth)])
 def login(request: LoginRequest, response: Response, db: DbSession) -> dict:
     settings = get_settings()
-    if not settings.paraworks_demo_mode:
+    if settings.paraworks_demo_mode:
+        demo_user = authenticate_demo_user(request.email)
+        auth_user = upsert_auth_user_from_demo(db, demo_user)
+    elif settings.paraworks_env == 'local':
+        auth_user = _authenticate_local_seed_user(db, request.email)
+    else:
         raise HTTPException(status_code=403, detail='Demo login is disabled.')
-    demo_user = authenticate_demo_user(request.email)
-    auth_user = upsert_auth_user_from_demo(db, demo_user)
     issue_auth_cookies(response, db, auth_user)
     db.commit()
     return {'user': serialize_auth_user(auth_user)}
 
 
 @router.get('/google/login-url')
-def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+def get_google_login_url(
+    settings: Annotated[Settings, Depends(get_settings)],
+    redirect_uri: str | None = None,
+) -> dict:
     missing_config = google_identity_missing_config(settings)
     if missing_config:
         return {
@@ -74,18 +84,18 @@ def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -
             'login_url': None,
             'state': None,
             'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
-            'redirect_uri': settings.google_identity_redirect_uri,
+            'redirect_uri': redirect_uri or settings.google_identity_redirect_uri,
             'missing_config': missing_config,
         }
     try:
-        login_url = build_google_identity_login_url(settings=settings)
+        login_url = build_google_identity_login_url(settings=settings, redirect_uri=redirect_uri)
     except GoogleIdentityError:
         return {
             'configured': False,
             'login_url': None,
             'state': None,
             'required_scopes': list(GOOGLE_IDENTITY_SCOPES),
-            'redirect_uri': settings.google_identity_redirect_uri,
+            'redirect_uri': redirect_uri or settings.google_identity_redirect_uri,
             'missing_config': ['GOOGLE_IDENTITY_CONFIGURATION'],
         }
     return {
@@ -95,6 +105,7 @@ def get_google_login_url(settings: Annotated[Settings, Depends(get_settings)]) -
         'required_scopes': login_url.required_scopes,
         'redirect_uri': login_url.redirect_uri,
         'missing_config': login_url.missing_config,
+        'code_verifier': login_url.code_verifier,
     }
 
 
@@ -105,6 +116,7 @@ def google_login_callback(
     response: Response,
     db: DbSession,
     settings: Annotated[Settings, Depends(get_settings)],
+    redirect_uri: str | None = None,
 ) -> dict:
     try:
         auth_user = complete_google_identity_login(
@@ -114,6 +126,7 @@ def google_login_callback(
             code=code,
             state=state,
             cookie_issuer=issue_auth_cookies,
+            redirect_uri=redirect_uri,
         )
     except GoogleIdentityError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -122,7 +135,7 @@ def google_login_callback(
     return {'user': serialize_auth_user(auth_user)}
 
 
-@router.post('/refresh')
+@router.post('/refresh', dependencies=[Depends(rate_limit_auth)])
 def refresh(request: Request, response: Response, db: DbSession) -> dict:
     settings = get_settings()
     auth_user = rotate_refresh_token(response, db, request.cookies.get(settings.auth_refresh_cookie_name), settings)
@@ -144,3 +157,15 @@ def logout(request: Request, response: Response, db: DbSession) -> dict:
 @router.get('/users')
 def get_users(_: AdminUser) -> dict:
     return {'users': list_demo_users()}
+
+
+def _authenticate_local_seed_user(db: Session, email: str) -> AuthUser:
+    normalized_email = email.strip().lower()
+    if not normalized_email:
+        raise HTTPException(status_code=401, detail='Account not found.')
+
+    seed_auth_users(db)
+    auth_user = db.scalar(select(AuthUser).where(AuthUser.email == normalized_email))
+    if auth_user is None or auth_user.status != 'active':
+        raise HTTPException(status_code=401, detail='Account not found.')
+    return auth_user

@@ -10,7 +10,8 @@ from backend.app.agent_runtime import (
 from backend.app.agents.mail_document_agent.agent import MailDocumentAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
-MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'drive')
+# 처리 대상 소스 타입 정의
+MAIL_DOCUMENT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar')
 
 
 def create_mail_document_agent_review_items(
@@ -20,6 +21,14 @@ def create_mail_document_agent_review_items(
     permission_context: PermissionContext,
     source_window: str,
 ) -> list[ReviewItem]:
+    """
+    메일 및 문서 에이전트를 실행하여 DB에 검토 항목(ReviewItem)을 생성합니다.
+    1. 증거 패킷 구성
+    2. 에이전트 실행
+    3. 에이전트 실행 기록(AgentRun) 저장
+    4. 추출된 후보들을 검토 항목(ReviewItem)으로 저장
+    """
+    # 1. DB에서 관련 데이터를 조회하여 증거 패킷(Packet) 구성
     packet = build_mail_document_evidence_packet(
         db=db,
         permission_context=permission_context,
@@ -28,12 +37,15 @@ def create_mail_document_agent_review_items(
     if not packet.messages:
         return []
 
+    # 2. 에이전트 실행
     result = agent.run(packet)
     included_source_types = sorted({
         str(message.metadata.get('source_type'))
         for message in packet.messages
         if message.metadata.get('source_type')
     })
+    
+    # 3. 에이전트 실행 기록 저장 (비용, 토큰 사용량, 캐시 여부 등)
     agent_run = AgentRun(
         agent_name=result.agent_name,
         prompt_version=result.prompt_version,
@@ -46,17 +58,18 @@ def create_mail_document_agent_review_items(
         total_tokens=result.cost.token_usage.total_tokens,
         estimated_cost_usd=result.cost.estimated_cost_usd,
         permission_level=packet.strictest_permission,
-            metadata_={
-                'source_type': packet.source_type,
-                'included_source_types': included_source_types,
-                'message_count': len(packet.messages),
-                'cache_hit': result.cost.cache_hit,
-                'evidence_summary': build_evidence_summary(packet),
-            },
-        )
+        metadata_={
+            'source_type': packet.source_type,
+            'included_source_types': included_source_types,
+            'message_count': len(packet.messages),
+            'cache_hit': result.cost.cache_hit,
+            'evidence_summary': build_evidence_summary(packet),
+        },
+    )
     db.add(agent_run)
-    db.flush()
+    db.flush() # ID 생성을 위해 flush
 
+    # 4. 추출된 각 후보(Candidate)를 검토 항목으로 변환 및 저장
     review_items: list[ReviewItem] = []
     for candidate in result.candidates:
         candidate.validate_evidence()
@@ -77,6 +90,7 @@ def create_mail_document_agent_review_items(
                     'total_tokens': result.cost.token_usage.total_tokens,
                 },
                 'uncertainty_reason': candidate.uncertainty_reason,
+                **candidate.payload_fields,
             },
             source_links=candidate.source_links,
             source_snippets=candidate.source_snippets,
@@ -99,6 +113,9 @@ def build_mail_document_evidence_packet(
     permission_context: PermissionContext,
     source_window: str,
 ) -> EvidencePacket:
+    """
+    DB의 DocumentChunk와 Source 테이블을 조인하여 에이전트 입력용 증거 패킷을 생성합니다.
+    """
     rows = db.execute(
         select(DocumentChunk, Source)
         .join(Source, DocumentChunk.source_id == Source.id)
@@ -119,8 +136,9 @@ def build_mail_document_evidence_packet(
                 'source_pk': source.id,
                 'source_type': source.source_type,
                 'scenario': source.raw_metadata.get('scenario'),
-                **_document_parser_metadata(chunk),
+                **_source_quality_metadata(chunk),
             },
+            source_snippet_override=chunk.source_snippet,
         )
         for chunk, source in rows
     ]
@@ -133,7 +151,45 @@ def build_mail_document_evidence_packet(
     )
 
 
-def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
+def build_mail_document_agent_preflight(
+    *,
+    db: Session,
+    permission_context: PermissionContext,
+    source_window: str,
+    input_cost_per_1m: float = 0.15,
+    output_cost_per_1m: float = 0.60,
+    estimated_output_tokens: int = 256,
+) -> dict[str, object]:
+    packet = build_mail_document_evidence_packet(
+        db=db,
+        permission_context=permission_context,
+        source_window=source_window,
+    )
+    input_tokens = _estimate_tokens(packet)
+    included_source_types = sorted({
+        str(message.metadata.get('source_type'))
+        for message in packet.messages
+        if message.metadata.get('source_type')
+    })
+    return {
+        'action': 'preview_only',
+        'reason': 'live_llm_execution_not_enabled_for_this_slice',
+        'live_llm_execution': False,
+        'source_window': packet.source_window,
+        'evidence_message_count': len(packet.messages),
+        'included_source_types': included_source_types,
+        'strictest_permission': packet.strictest_permission,
+        'estimated_input_tokens': input_tokens,
+        'estimated_output_tokens': estimated_output_tokens if packet.messages else 0,
+        'estimated_cost_usd': (
+            (input_tokens * input_cost_per_1m)
+            + ((estimated_output_tokens if packet.messages else 0) * output_cost_per_1m)
+        ) / 1_000_000,
+    }
+
+
+def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
+    """문서 파싱 품질 및 메타데이터를 추출합니다."""
     keys = (
         'parser_name',
         'parser_status',
@@ -145,5 +201,22 @@ def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
         'content_hash',
         'section_path',
         'page_number',
+        'event_context_key',
+        'event_status',
+        'organizer_email',
+        'creator_email',
+        'recurring_event_id',
+        'attendee_response_statuses',
+        'attendee_domains',
+        'external_domains',
+        'has_external_attendees',
+        'duration_minutes',
+        'start',
+        'end',
+        'section_path',
     )
     return {key: chunk.metadata_.get(key) for key in keys if key in chunk.metadata_}
+
+
+def _estimate_tokens(packet: EvidencePacket) -> int:
+    return sum(max(1, len(message.text.strip()) // 4) for message in packet.messages if message.text.strip())

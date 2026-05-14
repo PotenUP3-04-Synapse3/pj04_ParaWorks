@@ -1,9 +1,14 @@
 from sqlalchemy.orm import Session
 
-from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, Todo
+from backend.app.models import (
+    DecisionRecord,
+    HistoryEvent,
+    ReviewItem,
+    TimelineEvent,
+    Todo,
+)
 
-
-PROMOTABLE_REVIEW_TYPES = {'decision_record', 'history_event', 'todo'}
+PROMOTABLE_REVIEW_TYPES = {'decision_record', 'history_event', 'timeline_event', 'todo'}
 
 
 def build_promotion_preview(item: ReviewItem) -> dict:
@@ -30,6 +35,7 @@ def validate_review_item_for_approval(item: ReviewItem) -> None:
 
 def promote_review_item(db: Session, item: ReviewItem) -> None:
     validate_review_item_for_approval(item)
+    normalized = _normalized_payload_for_item(item)
     base_fields = {
         'source_links': item.source_links,
         'source_snippets': item.source_snippets,
@@ -39,7 +45,6 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
     }
 
     if item.item_type == 'decision_record':
-        normalized = _normalized_payload_for_item(item)
         db.add(
             DecisionRecord(
                 title=normalized['title'],
@@ -47,10 +52,16 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
                 **base_fields,
             )
         )
+        db.add(
+            TimelineEvent(
+                title=f"[결정] {normalized['title']}",
+                result_summary=normalized['decision_summary'],
+                **base_fields,
+            )
+        )
         return
 
     if item.item_type == 'history_event':
-        normalized = _normalized_payload_for_item(item)
         db.add(
             HistoryEvent(
                 title=normalized['title'],
@@ -58,15 +69,41 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
                 **base_fields,
             )
         )
+        db.add(
+            TimelineEvent(
+                title=normalized['title'],
+                result_summary=normalized['reason'],
+                **base_fields,
+            )
+        )
+        return
+
+    if item.item_type == 'timeline_event':
+        db.add(
+            TimelineEvent(
+                title=normalized['title'],
+                result_summary=normalized['result_summary'],
+                **base_fields,
+            )
+        )
         return
 
     if item.item_type == 'todo':
-        normalized = _normalized_payload_for_item(item)
         db.add(
             Todo(
                 title=normalized['title'],
                 priority=normalized['priority'],
                 priority_reason=normalized['priority_reason'],
+                **base_fields,
+            )
+        )
+        db.add(
+            TimelineEvent(
+                title=f"[할 일] {normalized['title']}",
+                result_summary=(
+                    f"담당자: {item.payload.get('assignee') or '미지정'}, "
+                    f"기한: {item.payload.get('due_date') or '기한 없음'}"
+                ),
                 **base_fields,
             )
         )
@@ -85,11 +122,31 @@ def _normalized_payload_for_item(item: ReviewItem) -> dict[str, str]:
             'reason': _string_payload(item, 'reason') or _string_payload(item, 'summary'),
         }
 
+    if item.item_type == 'timeline_event':
+        return {
+            'title': _string_payload(item, 'title'),
+            'result_summary': (
+                _string_payload(item, 'result_summary')
+                or _string_payload(item, 'summary')
+                or _string_payload(item, 'reason')
+            ),
+        }
+
     if item.item_type == 'todo':
         return {
             'title': _string_payload(item, 'title'),
             'priority': _string_payload(item, 'priority') or 'medium',
             'priority_reason': _string_payload(item, 'priority_reason') or _string_payload(item, 'summary'),
+        }
+
+    if item.item_type == 'project_assignment':
+        return {
+            'title': _string_payload(item, 'title'),
+            'summary': _string_payload(item, 'summary'),
+            'project_key': _string_payload(item, 'project_key'),
+            'project_name': _string_payload(item, 'project_name'),
+            'source_id': _string_payload(item, 'source_id'),
+            'evidence_reason': _string_payload(item, 'evidence_reason'),
         }
 
     return {
@@ -103,8 +160,12 @@ def _required_fields_for_type(item_type: str) -> tuple[str, ...]:
         return ('title', 'decision_summary')
     if item_type == 'history_event':
         return ('title', 'reason')
+    if item_type == 'timeline_event':
+        return ('title', 'result_summary')
     if item_type == 'todo':
         return ('title', 'priority', 'priority_reason')
+    if item_type == 'project_assignment':
+        return ('title', 'project_key', 'project_name', 'source_id', 'evidence_reason')
     return ()
 
 
