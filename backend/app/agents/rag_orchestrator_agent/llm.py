@@ -121,6 +121,9 @@ def render_rag_llm_prompt(
                 'source_url': message.source_url,
                 'timestamp': message.timestamp,
                 'author': message.author,
+                'channel_name': message.metadata.get('channel_name'),
+                'category': message.metadata.get('category'),
+                'topic_tag': message.metadata.get('topic_tag'),
                 'permission_level': message.permission_level,
                 'text': text,
             }

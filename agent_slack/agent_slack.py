@@ -47,12 +47,17 @@ class CandidateItem(BaseModel):
     # 차원 3: 구체적 토픽/프로젝트명
     topic_tag: str = Field(description="구체적인 프로젝트명이나 서비스명 (예: '홈페이지 리뉴얼', '인사정책')")
     
+    # 차원 4: 중요도
+    importance: str = Field(
+        description="지식의 중요도: 'Low', 'Medium', 'High' 중 하나"
+    )
+    
     # 대시보드 할 일 관리를 위한 추가 정보
     assignee: Optional[str] = Field(description="할 일(todo)인 경우 담당자 이름 (없으면 null)")
     due_date: Optional[str] = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
     
     source_ts_list: List[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
-    source_snippets: List[str] = Field(description="증거가 되는 원문 일부. '[이름] 내용' 포맷으로 작성하세요.")
+    source_snippets: List[str] = Field(description="증거가 되는 원문 일부. 핵심 발언이나 문장을 1~2개 이상 배열에 문자열로 담으세요.")
 
 class CandidateList(BaseModel):
     candidate_items: List[CandidateItem] = Field(description="추출된 지식 후보들의 목록")
@@ -222,8 +227,10 @@ def extract_candidate_node(state: SlackAgentState):
 
 **필수 준수 사항**:
 1. 사용자 이름(예: [3기/AI] 김종우)은 절대로 변경하거나 성만 떼지 말고, 대화록에 있는 전체 이름 그대로 사용하세요.
-2. source_snippets 배열에는 지식을 뒷받침하는 핵심 발언 원문을 반드시 '[전체 이름] 내용' 포맷으로 채워 넣으세요.
-3. 지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나로 정확하게 기입하세요 (대소문자 일치).
+2. source_snippets 배열에는 지식을 뒷받침하는 핵심 발언 원문을 그대로 채워 넣으세요. (이름을 붙이지 마세요)
+3. source_ts_list 배열에는 해당 지식의 근거가 되는 메시지의 [TS: ...] 숫자값을 반드시 1개 이상 포함하세요. (매우 중요)
+4. 지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나만 사용하세요.
+5. 중요도(importance)는 대화의 긴급성이나 영향력을 판단하여 'Low', 'Medium', 'High' 중 하나를 선택하세요.
 
 카테고리 분류 기준:
 - Project (프로젝트): 명확한 기한과 목표가 있는 신규 기획/개발 건
@@ -234,7 +241,7 @@ def extract_candidate_node(state: SlackAgentState):
 특히 'todo' 유형은 대화 맥락에서 파악 가능한 '담당자(assignee)'와 '마감 기한(due_date)'을 반드시 포함하세요. 
 마감 기한은 YYYY-MM-DD 형식으로 변환하되, 연도가 없으면 현재 연도(2026년)를 기준으로 합니다.
 
-source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으세요:
+분석 대상 요약본:
 {state.summary}
 """
         parsed_result = structured_llm.invoke(prompt)
@@ -250,16 +257,16 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
         final_candidates = []
         # 중앙 설정 시스템에서 워크스페이스 URL 로드
         from backend.app.core.config import get_settings
+        from backend.app.connectors.slack import build_slack_permalink
         settings = get_settings()
         base_url = settings.slack_workspace_url.rstrip('/')
-        workspace_url = f"{base_url}/archives"
         
         for item in parsed_result.candidate_items:
             # TS 값을 이용해 딥링크 생성
             links = []
             for ts in item.source_ts_list:
-                clean_ts = ts.replace('.', '')
-                links.append(f"{workspace_url}/{state.channel_id}/p{clean_ts}")
+                # 표준화된 퍼머링크 생성 함수 사용 (16자리 포맷 보장)
+                links.append(build_slack_permalink(base_url, state.channel_id, ts))
 
             # item_type 안전 처리
             safe_type = item.item_type.strip().lower()
@@ -280,6 +287,7 @@ source_ts_list에는 증거가 되는 [TS: ...]의 숫자값만 배열로 넣으
                 payload_fields={
                     "category": item.category,
                     "topic_tag": item.topic_tag,
+                    "importance": item.importance,
                     "original_item_type": item.item_type,
                     "assignee": item.assignee or "미지정",
                     "due_date": item.due_date or "기한없음"

@@ -3,7 +3,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext
+from backend.app.agent_runtime import EvidenceMessage, EvidencePacket, PermissionContext, ReviewCandidate
 from backend.app.agents.slack_agent.agent import SlackAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
@@ -96,24 +96,35 @@ def create_slack_agent_review_items(
 
     for candidate in result.candidates:
         candidate.validate_evidence()
+        
+        # Phase 2: 동적 태그 전파 (Back-propagation)
+        back_propagate_slack_tags(db, candidate)
+
+        payload = {
+            'title': candidate.title,
+            'summary': candidate.summary,
+            'category': candidate.payload_fields.get('category', 'Ad-hoc'),
+            'topic_tag': candidate.payload_fields.get('topic_tag', 'N/A'),
+            'importance': candidate.payload_fields.get('importance', 'Medium'),
+            'assignee': candidate.payload_fields.get('assignee'),
+            'due_date': candidate.payload_fields.get('due_date'),
+            'agent_name': result.agent_name,
+            'agent_run_id': agent_run.id,
+            'prompt_version': result.prompt_version,
+            'cache_key': result.cache_key,
+            'estimated_cost_usd': result.cost.estimated_cost_usd,
+            'token_usage': {
+                'input_tokens': result.cost.token_usage.input_tokens,
+                'output_tokens': result.cost.token_usage.output_tokens,
+                'total_tokens': result.cost.token_usage.total_tokens,
+            },
+            'uncertainty_reason': candidate.uncertainty_reason,
+        }
+        
         review_item = ReviewItem(
             status='pending_review',
             item_type=candidate.item_type,
-            payload={
-                'title': candidate.title,
-                'summary': candidate.summary,
-                'agent_name': result.agent_name,
-                'agent_run_id': agent_run.id,
-                'prompt_version': result.prompt_version,
-                'cache_key': result.cache_key,
-                'estimated_cost_usd': result.cost.estimated_cost_usd,
-                'token_usage': {
-                    'input_tokens': result.cost.token_usage.input_tokens,
-                    'output_tokens': result.cost.token_usage.output_tokens,
-                    'total_tokens': result.cost.token_usage.total_tokens,
-                },
-                'uncertainty_reason': candidate.uncertainty_reason,
-            },
+            payload=payload,
             source_links=candidate.source_links,
             source_snippets=candidate.source_snippets,
             confidence_score=candidate.confidence_score,
@@ -127,6 +138,37 @@ def create_slack_agent_review_items(
         db.refresh(review_item)
 
     return review_items
+
+
+def back_propagate_slack_tags(db: Session, candidate: ReviewCandidate) -> None:
+    """추출된 지식의 카테고리/토픽 정보를 원본 슬랙 메시지 청크에 역전파합니다."""
+    source_ids = []
+    for url in candidate.source_links:
+        # URL에서 p 뒤의 숫자 16자리 추출 (슬랙 ID 규칙)
+        # 예: https://.../archives/C123/p1715000000000100 -> C123:1715000000.000100
+        if '/archives/' in url and '/p' in url:
+            parts = url.split('/archives/')[-1].split('/')
+            channel_id = parts[0]
+            raw_ts = parts[1].split('p')[-1].split('?')[0]
+            if len(raw_ts) >= 16:
+                formatted_ts = f"{raw_ts[:10]}.{raw_ts[10:]}"
+                source_ids.append(f"{channel_id}:{formatted_ts}")
+
+    if not source_ids:
+        return
+
+    source_pks = db.scalars(
+        select(Source.id).where(Source.source_id.in_(source_ids))
+    ).all()
+    
+    if source_pks:
+        chunks = db.scalars(
+            select(DocumentChunk).where(DocumentChunk.source_id.in_(source_pks))
+        ).all()
+        for chunk in chunks:
+            chunk.metadata_['category'] = candidate.payload_fields.get('category')
+            chunk.metadata_['topic_tag'] = candidate.payload_fields.get('topic_tag')
+            chunk.metadata_['importance'] = candidate.payload_fields.get('importance')
 
 
 def build_slack_evidence_packet(

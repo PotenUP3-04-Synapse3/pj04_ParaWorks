@@ -198,13 +198,16 @@ def render_slack_llm_prompt(
 
     return json.dumps(
         {
-            'task': 'Extract exactly one Slack-based company history candidate for human review.',
+            'task': 'Extract Slack-based company history candidates for human review.',
             'allowed_item_types': ['history_event', 'decision_record', 'todo'],
+            'category_guide': 'Project, Operations, Administration, Ad-hoc',
+            'importance_guide': 'Low, Medium, High',
             'requirements': [
                 'Use only the provided evidence.',
                 'The title and summary must be written in Korean.',
                 'Keep the summary concise and business-friendly.',
                 'Set confidence_score between 0 and 1.',
+                'Assign category, topic_tag, and importance to each candidate.',
             ],
             'source_window': packet.source_window,
             'evidence': evidence_rows,
@@ -374,6 +377,15 @@ def _usage_tokens(response: Any, messages: list[tuple[str, str]], payload: dict[
 
 def _safe_item_type(raw_item_type: Any) -> str:
     item_type = str(raw_item_type or 'history_event')
+    return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
+
+
+def _safe_confidence(raw_confidence: Any) -> float:
+    try:
+        return min(max(float(raw_confidence), 0.0), 1.0)
+    except (TypeError, ValueError):
+        return 0.7
+
     return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
 
 

@@ -15,7 +15,7 @@ from backend.app.knowledge.promotion import (
     promote_review_item,
     validate_review_item_for_approval,
 )
-from backend.app.models import AgentRun, ReviewItem
+from backend.app.models import AgentRun, ReviewItem, Source, Document, DocumentChunk
 from backend.app.schemas.review import ReviewEvidenceRequest, ReviewItemUpdate
 from backend.app.services.audit import record_audit_log
 
@@ -27,6 +27,23 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
 
 def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -> dict:
     agent_run_id = _agent_run_id(item)
+    
+    # 에이전트 실행 상세 정보 추출
+    agent_details = {
+        'model_name': 'Unknown',
+        'prompt_version': 'Unknown',
+        'estimated_cost_usd': 0.0,
+        'total_tokens': 0,
+    }
+    
+    if agent_run:
+        agent_details.update({
+            'model_name': agent_run.model_name or 'gpt-4o-mini',
+            'prompt_version': agent_run.prompt_version or 'v1',
+            'estimated_cost_usd': agent_run.estimated_cost_usd or 0.0,
+            'total_tokens': agent_run.total_tokens or 0,
+        })
+
     return {
         'id': item.id,
         'item_type': item.item_type,
@@ -35,6 +52,7 @@ def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -
         'source_snippets': item.source_snippets,
         'source_evidence': _source_evidence_response(item, agent_run),
         'agent_run_id': agent_run_id,
+        'agent_run_details': agent_details, # 상세 정보 추가
         'confidence_score': item.confidence_score,
         'permission_level': item.permission_level,
         'status': item.status,
@@ -267,15 +285,26 @@ def reject_review_item(
     ensure_can_review_permission(user, item.permission_level)
 
     item.status = 'rejected'
-    item.reviewer_id = user.id
-    item.reviewed_at = datetime.now(UTC)
+    
+    # Phase 2: 반려 시 데이터 폐기 (Delete on Rejection)
+    # 연결된 Source들을 찾아 삭제 (Cascade 설정을 통해 하위 항목도 삭제됨)
+    source_ids = item.payload.get('source_ids', [])
+    if source_ids:
+        sources = db.scalars(select(Source).where(Source.source_id.in_(source_ids))).all()
+        for src in sources:
+            db.delete(src)
+
     record_audit_log(
         db=db,
         actor=user,
         action='review.reject',
         target_type='review_item',
         target_id=item.id,
-        metadata={'item_type': item.item_type},
+        metadata={
+            'item_type': item.item_type,
+            'source_ids': source_ids,
+            'purged_source_count': len(sources)
+        },
     )
     db.commit()
     db.refresh(item)
@@ -334,30 +363,39 @@ def _agent_runs_by_id(db: Session, items: list[ReviewItem]) -> dict[int, AgentRu
 
 
 def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> list[dict]:
-    evidence_summary = _agent_evidence_summary_by_url(agent_run)
     links = item.source_links or []
     snippets = item.source_snippets or []
+    # 베이킹된 정보 로드
+    source_authors = item.payload.get('source_authors', [])
+    source_ids = item.payload.get('source_ids', [])
+    
     evidence_count = max(len(links), len(snippets))
     agent_run_id = _agent_run_id(item)
     rows: list[dict] = []
 
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
-        source_snippet = snippets[index] if index < len(snippets) else snippets[-1] if snippets else '표시할 원문 근거가 없습니다.'
-        summary = evidence_summary.get(source_url or '') or {}
+        source_id = source_ids[index] if index < len(source_ids) else None
+        author = source_authors[index] if index < len(source_authors) else "Unknown"
+        
+        if index < len(snippets):
+            source_snippet = snippets[index]
+        else:
+            source_snippet = snippets[-1] if snippets else '원문 발췌 내용이 없습니다.'
+            
         rows.append(
             {
                 'index': index + 1,
-                'rank': _int_or_default(summary.get('rank'), index + 1),
-                'source_id': summary.get('source_id'),
+                'rank': index + 1,
+                'source_id': source_id,
                 'source_url': source_url,
                 'source_type': summary.get('source_type'),
                 'source_snippet': source_snippet,
-                'permission_level': summary.get('permission_level') or item.permission_level,
+                'permission_level': item.permission_level,
                 'confidence_score': item.confidence_score,
-                'importance_score': _int_or_default(summary.get('importance_score'), 0),
-                'timestamp': summary.get('timestamp'),
-                'author': summary.get('author'),
+                'importance_score': 0,
+                'timestamp': None,
+                'author': author,
                 'agent_run_id': agent_run_id,
                 'parser_status': summary.get('parser_status'),
                 'section_path': summary.get('section_path'),
@@ -366,6 +404,21 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
         )
 
     return rows
+
+
+def _normalize_slack_url(url: str | None) -> str | None:
+    """슬랙 URL에서 타임스탬프 부분을 추출하여 정규화합니다."""
+    if not url or '/p' not in url:
+        return None
+    
+    # p 뒤의 숫자만 추출
+    ts_part = url.split('/p')[-1].split('?')[0]
+    
+    # 만약 16자리 숫자라면 (표준 규격), 이를 . 포맷으로 변환하여 매칭 확률을 극대화
+    if len(ts_part) == 16 and ts_part.isdigit():
+        return f"{ts_part[:10]}.{ts_part[10:]}".rstrip('0').rstrip('.')
+        
+    return ts_part.rstrip('0')
 
 
 def _agent_evidence_summary_by_url(agent_run: AgentRun | None) -> dict[str, dict]:
