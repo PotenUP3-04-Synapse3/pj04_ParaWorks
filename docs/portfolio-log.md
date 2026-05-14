@@ -3948,3 +3948,15 @@ Cost/security note:
     the assistant used a tool or company-memory retrieval.
   - Verification: targeted model/logging tests passed, wider assistant/RAG
     backend tests passed with 40 tests, and ruff passed on touched files.
+- `fix: split assistant email routing agents`
+  - Split the AI Assistant email path into an `email_intent_gate` that only
+    detects email intent and an `email_draft_composer` that only writes
+    approval-only drafts or clarification questions.
+  - Removed the active combined prompt that tried to classify email actions,
+    general replies, and company-memory RAG in one low-cost call; non-email
+    messages now naturally continue to the RAG answer path.
+  - Added orchestration for "RAG result to email" requests: when the intent gate
+    marks `requires_rag_result`, the assistant retrieves the company-memory
+    answer first and passes that answer/source context to the draft composer.
+  - Verification: targeted email-agent/API tests passed, wider assistant/RAG
+    backend tests passed with 43 tests, and ruff passed on touched files.

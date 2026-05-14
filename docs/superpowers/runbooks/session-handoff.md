@@ -1187,3 +1187,29 @@ uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/tool_log
 
 Result: targeted RED tests failed before implementation, then passed after the
 change; wider assistant/RAG tests passed with 40 tests; ruff passed.
+
+## 2026-05-14 Email Intent Gate and Draft Composer Split
+
+- The AI Assistant email path is now split into single-purpose sub-agents:
+  `email_intent_gate` only decides whether the latest user message is an email
+  action, and `email_draft_composer` only writes the approval-only draft or a
+  clarification question after intent is accepted.
+- The old combined email prompt that also classified general replies and RAG was
+  removed from the active path. Non-email messages fall through to the normal
+  RAG answer path.
+- `EmailIntentDecision.requires_rag_result` allows a flow such as "find this in
+  company memory and email it": assistant orchestration runs RAG first, renders
+  the RAG answer/source context, then passes that context to the draft composer.
+- Tool logs now show the split route with `[Tool: email_intent_gate]`,
+  `[Tool: rag_retrieval]`, `[Tool: rag_answer]`, and
+  `[Tool: email_draft_composer]`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py::test_assistant_tool_middleware_logs_email_and_rag_tools_in_english backend/tests/test_assistant_api.py::test_assistant_can_draft_email_from_rag_answer -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_agent.py backend/app/assistant/email_actions.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted RED tests failed before implementation, then passed after the
+change; wider assistant/RAG tests passed with 43 tests; ruff passed.

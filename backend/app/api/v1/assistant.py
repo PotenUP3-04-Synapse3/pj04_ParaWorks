@@ -12,7 +12,9 @@ from backend.app.assistant.email_actions import (
 )
 from backend.app.assistant.email_agent import (
     EmailActionDecision,
-    build_email_action_agent,
+    EmailIntentDecision,
+    build_email_draft_composer,
+    build_email_intent_gate,
     render_email_action_context,
 )
 from backend.app.assistant.gmail_sender import GmailDraftSender, GmailSendError
@@ -89,6 +91,60 @@ def append_failed_assistant_message(
     )
 
 
+def _answer_question_or_raise(
+    *,
+    db: Session,
+    user: DemoUser,
+    conversation,
+    question: str,
+    settings: Settings,
+    vector_store,
+    tool_logger: AssistantToolLogger,
+):
+    try:
+        return answer_question_with_rag(
+            db=db,
+            user=user,
+            question=question,
+            settings=settings,
+            vector_store=vector_store,
+            tool_logger=tool_logger,
+        )
+    except Exception as exc:
+        append_failed_assistant_message(
+            db,
+            user,
+            conversation,
+            reason='rag_exception',
+            failure_class=exc.__class__.__name__,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail='assistant answer generation failed',
+        ) from exc
+
+
+def _render_rag_answer_for_email(answer) -> str:
+    source_lines = [
+        f'- {link}' for link in answer.source_links[:5]
+    ]
+    snippet_lines = [
+        f'- {snippet}' for snippet in answer.source_snippets[:5]
+    ]
+    return '\n'.join(
+        [
+            'RAG answer:',
+            answer.answer,
+            '',
+            'Source links:',
+            *source_lines,
+            '',
+            'Source snippets:',
+            *snippet_lines,
+        ]
+    )
+
+
 @router.get('/conversations', response_model=AssistantConversationsResponse)
 def list_assistant_conversations(db: DbSession, user: CurrentUser) -> dict:
     conversations = list_conversations(db, user)
@@ -150,111 +206,27 @@ def create_assistant_message(
 
     messages = list_messages(db, user, conversation.id)
     tool_logger = AssistantToolLogger()
+    email_context = render_email_action_context(
+        messages=messages[:-1],
+        max_chars=settings.assistant_email_agent_max_input_chars,
+    )
     tool_logger.log(
-        'email_action_agent',
+        'email_intent_gate',
         f'start conversation_id={conversation.id} message_id={user_message.id}',
     )
-    email_decision: EmailActionDecision = build_email_action_agent(settings).decide(
-        conversation_context=render_email_action_context(
-            messages=messages[:-1],
-            max_chars=settings.assistant_email_agent_max_input_chars,
-        ),
+    email_intent: EmailIntentDecision = build_email_intent_gate(settings).decide(
+        conversation_context=email_context,
         latest_message=user_message.content,
     )
     tool_logger.log(
-        'email_action_agent',
+        'email_intent_gate',
         (
-            f'result action={email_decision.action_type} '
-            f'confidence={email_decision.confidence_score:g} '
-            f'model={email_decision.model_name or "deterministic"}'
+            f'result email_intent={email_intent.email_intent} '
+            f'confidence={email_intent.confidence_score:g} '
+            f'requires_rag_result={email_intent.requires_rag_result} '
+            f'model={email_intent.model_name or "deterministic"}'
         ),
     )
-    confident_action = email_decision.confidence_score >= settings.assistant_email_agent_min_confidence
-    email_draft = email_decision.to_draft() if confident_action else None
-    if email_draft is not None:
-        assistant_message = append_assistant_message(
-            db,
-            user,
-            conversation,
-            content=assistant_email_draft_content(email_draft),
-            citations=[],
-            source_ids=[],
-            source_links=[],
-            source_snippets=[],
-            permission_level=None,
-            hidden_match_count=0,
-            permission_notice=None,
-            agent_run_id=None,
-            metadata={
-                **email_draft_metadata(email_draft),
-                'agent_name': 'email_action_agent',
-                'model_name': email_decision.model_name,
-                'confidence_score': email_decision.confidence_score,
-            },
-        )
-        return {
-            'conversation': serialize_conversation(conversation),
-            'user_message': serialize_message(user_message),
-            'assistant_message': serialize_message(assistant_message),
-        }
-
-    if confident_action and email_decision.action_type == 'general_reply' and email_decision.reply.strip():
-        assistant_message = append_assistant_message(
-            db,
-            user,
-            conversation,
-            content=email_decision.reply,
-            citations=[],
-            source_ids=[],
-            source_links=[],
-            source_snippets=[],
-            permission_level=None,
-            hidden_match_count=0,
-            permission_notice=None,
-            agent_run_id=None,
-            metadata={
-                'action_type': 'general_reply',
-                'status': 'complete',
-                'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
-                'agent_name': 'email_action_agent',
-                'model_name': email_decision.model_name,
-                'confidence_score': email_decision.confidence_score,
-            },
-        )
-        return {
-            'conversation': serialize_conversation(conversation),
-            'user_message': serialize_message(user_message),
-            'assistant_message': serialize_message(assistant_message),
-        }
-
-    if confident_action and email_decision.action_type == 'needs_clarification' and email_decision.clarification_question:
-        assistant_message = append_assistant_message(
-            db,
-            user,
-            conversation,
-            content=email_decision.clarification_question,
-            citations=[],
-            source_ids=[],
-            source_links=[],
-            source_snippets=[],
-            permission_level=None,
-            hidden_match_count=0,
-            permission_notice=None,
-            agent_run_id=None,
-            metadata={
-                'action_type': 'email_clarification',
-                'status': 'needs_input',
-                'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
-                'agent_name': 'email_action_agent',
-                'model_name': email_decision.model_name,
-                'confidence_score': email_decision.confidence_score,
-            },
-        )
-        return {
-            'conversation': serialize_conversation(conversation),
-            'user_message': serialize_message(user_message),
-            'assistant_message': serialize_message(assistant_message),
-        }
 
     contextual_question = build_contextual_question(
         conversation=conversation,
@@ -262,6 +234,102 @@ def create_assistant_message(
         new_message=user_message.content,
     )
     vector_store = build_pgvector_search_store(db=db, settings=settings)
+    confident_email_intent = (
+        email_intent.email_intent
+        and email_intent.confidence_score >= settings.assistant_email_agent_min_confidence
+    )
+    if confident_email_intent:
+        rag_context = ''
+        if email_intent.requires_rag_result:
+            answer = _answer_question_or_raise(
+                db=db,
+                user=user,
+                conversation=conversation,
+                question=contextual_question,
+                settings=settings,
+                vector_store=vector_store,
+                tool_logger=tool_logger,
+            )
+            rag_context = _render_rag_answer_for_email(answer)
+
+        tool_logger.log(
+            'email_draft_composer',
+            f'start intent_type={email_intent.intent_type} requires_rag_result={email_intent.requires_rag_result}',
+        )
+        email_decision: EmailActionDecision = build_email_draft_composer(settings).compose(
+            conversation_context=email_context,
+            latest_message=user_message.content,
+            intent=email_intent,
+            rag_context=rag_context,
+        )
+        tool_logger.log(
+            'email_draft_composer',
+            (
+                f'result action={email_decision.action_type} '
+                f'confidence={email_decision.confidence_score:g} '
+                f'model={email_decision.model_name or "deterministic"}'
+            ),
+        )
+
+        email_draft = email_decision.to_draft()
+        if email_draft is not None:
+            assistant_message = append_assistant_message(
+                db,
+                user,
+                conversation,
+                content=assistant_email_draft_content(email_draft),
+                citations=[],
+                source_ids=[],
+                source_links=[],
+                source_snippets=[],
+                permission_level=None,
+                hidden_match_count=0,
+                permission_notice=None,
+                agent_run_id=None,
+                metadata={
+                    **email_draft_metadata(email_draft),
+                    'agent_name': 'email_draft_composer',
+                    'model_name': email_decision.model_name,
+                    'confidence_score': email_decision.confidence_score,
+                    'requires_rag_result': email_intent.requires_rag_result,
+                },
+            )
+            return {
+                'conversation': serialize_conversation(conversation),
+                'user_message': serialize_message(user_message),
+                'assistant_message': serialize_message(assistant_message),
+            }
+
+        if email_decision.action_type == 'needs_clarification' and email_decision.clarification_question:
+            assistant_message = append_assistant_message(
+                db,
+                user,
+                conversation,
+                content=email_decision.clarification_question,
+                citations=[],
+                source_ids=[],
+                source_links=[],
+                source_snippets=[],
+                permission_level=None,
+                hidden_match_count=0,
+                permission_notice=None,
+                agent_run_id=None,
+                metadata={
+                    'action_type': 'email_clarification',
+                    'status': 'needs_input',
+                    'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
+                    'agent_name': 'email_draft_composer',
+                    'model_name': email_decision.model_name,
+                    'confidence_score': email_decision.confidence_score,
+                    'requires_rag_result': email_intent.requires_rag_result,
+                },
+            )
+            return {
+                'conversation': serialize_conversation(conversation),
+                'user_message': serialize_message(user_message),
+                'assistant_message': serialize_message(assistant_message),
+            }
+
     try:
         answer = answer_question_with_rag(
             db=db,

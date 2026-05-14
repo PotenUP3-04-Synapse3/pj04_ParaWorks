@@ -17,6 +17,37 @@ from backend.app.models import AgentRun, AssistantMessage
 from backend.tests.test_rag_orchestrator_service import seed_chunk
 
 
+def _email_intent(
+    *,
+    email_intent: bool,
+    confidence_score: float = 1.0,
+    requires_rag_result: bool = False,
+    intent_type: str = 'send',
+) -> object:
+    return assistant_api.EmailIntentDecision(
+        email_intent=email_intent,
+        intent_type=intent_type if email_intent else 'none',
+        confidence_score=confidence_score,
+        requires_rag_result=requires_rag_result,
+        model_name='gpt-4.1-nano',
+    )
+
+
+def _patch_email_flow(monkeypatch, *, intent_decision, draft_decision=None) -> None:
+    class FakeEmailIntentGate:
+        def decide(self, **kwargs):
+            return intent_decision
+
+    class FakeEmailDraftComposer:
+        def compose(self, **kwargs):
+            if callable(draft_decision):
+                return draft_decision(**kwargs)
+            return draft_decision
+
+    monkeypatch.setattr(assistant_api, 'build_email_intent_gate', lambda settings: FakeEmailIntentGate())
+    monkeypatch.setattr(assistant_api, 'build_email_draft_composer', lambda settings: FakeEmailDraftComposer())
+
+
 def test_assistant_conversation_api_is_user_scoped(client: TestClient) -> None:
     create_response = client.post(
         '/api/v1/assistant/conversations',
@@ -78,14 +109,6 @@ def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
 ) -> None:
     caplog.set_level(logging.INFO, logger='AssistantTool')
 
-    class LowConfidenceEmailActionAgent:
-        def decide(self, **kwargs):
-            return assistant_api.EmailActionDecision(
-                action_type='not_email',
-                confidence_score=0.2,
-                model_name='gpt-4.1-nano',
-            )
-
     def fake_rag_answer(**kwargs):
         tool_logger = kwargs['tool_logger']
         tool_logger.log('rag_retrieval', 'result backend=keyword source_count=1 hidden_count=0')
@@ -112,7 +135,10 @@ def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
             openai_api_key='test-key',
         )
 
-    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: LowConfidenceEmailActionAgent())
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=False, confidence_score=0.2, intent_type='none'),
+    )
     monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fake_rag_answer)
     client.app.dependency_overrides[assistant_api.get_settings] = override_settings
 
@@ -131,8 +157,8 @@ def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
 
     assert turn_response.status_code == 200
     log_text = caplog.text
-    assert '[Tool: email_action_agent] start' in log_text
-    assert '[Tool: email_action_agent] result action=not_email confidence=0.2 model=gpt-4.1-nano' in log_text
+    assert '[Tool: email_intent_gate] start' in log_text
+    assert '[Tool: email_intent_gate] result email_intent=False confidence=0.2 requires_rag_result=False model=gpt-4.1-nano' in log_text
     assert '[Tool: rag_retrieval] result backend=keyword source_count=1 hidden_count=0' in log_text
     assert '[Tool: rag_answer] start model=gpt-5.4' in log_text
     assert '[Tool: rag_answer] result model=gpt-5.4 source_count=1' in log_text
@@ -188,7 +214,11 @@ def test_assistant_email_request_creates_approval_draft_without_rag(
     def fail_if_rag_runs(**kwargs):
         raise AssertionError('메일 작성 요청은 RAG 근거 확인 없이 액션 초안으로 라우팅되어야 합니다.')
 
-    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: FakeEmailActionAgent())
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=True),
+        draft_decision=FakeEmailActionAgent().decide,
+    )
     monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
     create_response = client.post(
         '/api/v1/assistant/conversations',
@@ -245,7 +275,11 @@ def test_assistant_low_confidence_email_decision_falls_back_to_rag(
             question=kwargs['question'],
         )
 
-    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: LowConfidenceEmailActionAgent())
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=True, confidence_score=0.4),
+        draft_decision=LowConfidenceEmailActionAgent().decide,
+    )
     monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fake_rag_answer)
     create_response = client.post(
         '/api/v1/assistant/conversations',
@@ -267,23 +301,32 @@ def test_assistant_low_confidence_email_decision_falls_back_to_rag(
     assert assistant_message['metadata'].get('action_type') != 'email_draft'
 
 
-def test_assistant_high_confidence_general_reply_skips_rag(
+def test_assistant_non_email_intent_goes_to_rag(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    class GeneralReplyAgent:
-        def decide(self, **kwargs):
-            return assistant_api.EmailActionDecision(
-                action_type='general_reply',
-                reply='안녕하세요. 무엇을 도와드릴까요?',
-                confidence_score=0.91,
-            )
-
-    def fail_if_rag_runs(**kwargs):
-        raise AssertionError('일반 대화는 충분히 높은 confidence가 있으면 RAG를 호출하지 않습니다.')
-
-    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: GeneralReplyAgent())
-    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=False, confidence_score=0.91, intent_type='none'),
+    )
+    monkeypatch.setattr(
+        assistant_api,
+        'answer_question_with_rag',
+        lambda **kwargs: SimpleNamespace(
+            answer='RAG answer',
+            citations=[],
+            source_ids=[],
+            source_links=[],
+            source_snippets=[],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=654,
+            agent_name='rag_orchestrator_agent',
+            prompt_version='rag-answer:v1',
+            question=kwargs['question'],
+        ),
+    )
     create_response = client.post(
         '/api/v1/assistant/conversations',
         json={'title': '일반 대화'},
@@ -299,9 +342,9 @@ def test_assistant_high_confidence_general_reply_skips_rag(
 
     assert turn_response.status_code == 200
     assistant_message = turn_response.json()['assistant_message']
-    assert assistant_message['content'] == '안녕하세요. 무엇을 도와드릴까요?'
-    assert assistant_message['metadata']['action_type'] == 'general_reply'
-    assert assistant_message['metadata']['confidence_score'] == 0.91
+    assert assistant_message['content'] == 'RAG answer'
+    assert assistant_message['metadata']['agent_name'] == 'rag_orchestrator_agent'
+    assert assistant_message['metadata'].get('action_type') != 'email_draft'
 
 
 def test_assistant_email_agent_uses_conversation_context_without_rag(
@@ -324,7 +367,11 @@ def test_assistant_email_agent_uses_conversation_context_without_rag(
     def fail_if_rag_runs(**kwargs):
         raise AssertionError('메일 의도를 sub-agent가 판단하면 RAG로 가지 않아야 합니다.')
 
-    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: FakeEmailActionAgent())
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=True),
+        draft_decision=FakeEmailActionAgent().decide,
+    )
     create_response = client.post(
         '/api/v1/assistant/conversations',
         json={'title': '메일 맥락'},
@@ -352,6 +399,63 @@ def test_assistant_email_agent_uses_conversation_context_without_rag(
     assert assistant_message['metadata']['email_draft']['subject'] == '회의 취소 안내'
 
 
+def test_assistant_can_draft_email_from_rag_answer(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def compose_from_rag(**kwargs):
+        assert kwargs['intent'].requires_rag_result is True
+        assert 'Project Alpha launch is Friday.' in kwargs['rag_context']
+        assert 'https://source.example/project-alpha' in kwargs['rag_context']
+        return assistant_api.EmailActionDecision(
+            action_type='email_draft',
+            to=['lead@example.com'],
+            subject='Project Alpha launch summary',
+            body='Project Alpha launch is Friday.',
+        )
+
+    def fake_rag_answer(**kwargs):
+        return SimpleNamespace(
+            answer='Project Alpha launch is Friday.',
+            citations=[],
+            source_ids=['source-1'],
+            source_links=['https://source.example/project-alpha'],
+            source_snippets=['Launch decision snippet'],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=987,
+            agent_name='rag_orchestrator_agent',
+            prompt_version='rag-answer:v1',
+            question=kwargs['question'],
+        )
+
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=True, requires_rag_result=True),
+        draft_decision=compose_from_rag,
+    )
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fake_rag_answer)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': 'Email RAG result'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'Find the Project Alpha launch date and email it to lead@example.com.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['metadata']['action_type'] == 'email_draft'
+    assert assistant_message['metadata']['email_draft']['to'] == ['lead@example.com']
+    assert assistant_message['metadata']['email_draft']['body'] == 'Project Alpha launch is Friday.'
+
+
 def test_assistant_email_draft_requires_approval_endpoint_before_send(
     client: TestClient,
     monkeypatch,
@@ -372,7 +476,11 @@ def test_assistant_email_draft_requires_approval_endpoint_before_send(
         def send(self, **kwargs):
             return SimpleNamespace(message_id='gmail-sent-1')
 
-    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: FakeEmailActionAgent())
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=True),
+        draft_decision=FakeEmailActionAgent().decide,
+    )
     monkeypatch.setattr(assistant_api, 'GmailDraftSender', FakeGmailDraftSender)
     create_response = client.post(
         '/api/v1/assistant/conversations',
