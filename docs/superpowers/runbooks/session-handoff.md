@@ -2,6 +2,46 @@
 
 Updated: 2026-05-14
 
+## 2026-05-14 AI Assistant Service NameError Hotfix
+
+- Symptom: `/api/v1/assistant/conversations/{conversation_id}/messages`
+  returned 500 after the LLM call, so the AI assistant appeared not to answer.
+- Error log:
+  `backend/app/assistant/service.py` raised
+  `NameError: name 'MAX_CONTEXT_MESSAGE_CHARS' is not defined` inside
+  `_compact_context_text()`.
+- Root cause:
+  - the context-deduplication service expected `MAX_CONTEXT_MESSAGE_CHARS` and
+    `MAX_SUMMARY_LINES`;
+  - the constants were missing from the current branch;
+  - the same context block also still appended raw recent messages after the
+    compacted/deduped messages, which defeated the dedupe path.
+- Fix:
+  - restored `MAX_CONTEXT_MESSAGE_CHARS = 500`;
+  - restored `MAX_SUMMARY_LINES = 4`;
+  - removed the duplicate raw recent-message append;
+  - updated stale assistant service tests from `employee-jun` to the current
+    `hanvv-employee` demo user key.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_service.py -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py -q
+git diff --check
+```
+
+Result:
+
+- assistant service tests: 11 passed;
+- assistant API + service tests: 24 passed;
+- whitespace check: passed.
+
+- Runtime check:
+  - restarted `scripts/paraworks-docker.ps1` serious mode;
+  - backend health returned `{"status":"ok","service":"paraworks","demo_mode":false}`;
+  - a short authenticated assistant API smoke request returned HTTP 200;
+  - backend error log after smoke showed no repeated `NameError`.
+
 ## 2026-05-14 Project Recognition Handoff
 
 - `/projects` now uses canonical company projects instead of loose source
