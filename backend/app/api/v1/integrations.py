@@ -27,6 +27,7 @@ from backend.app.agents.slack_agent import (
     build_slack_llm_preflight,
     create_slack_agent_review_items,
 )
+from backend.app.agents.slack_agent.sync_service import trigger_slack_agent_analysis
 from backend.app.connectors.factory import (
     ConnectorNotConfiguredError,
     get_sync_connector,
@@ -217,6 +218,7 @@ def sync_connector(
             agent_review_items = _run_connector_agent_review(
                 db=db,
                 user=user,
+                settings=settings,
                 connector_type=connector_type,
                 changed_source_ids=changed_source_ids,
             )
@@ -270,10 +272,21 @@ def _run_connector_agent_review(
     *,
     db: Session,
     user: DemoUser,
+    settings: Settings,
     connector_type: str,
     changed_source_ids: list[str],
 ) -> int:
     if connector_type == 'slack':
+        if (
+            not settings.paraworks_demo_mode
+            and (settings.openai_api_key or settings.gemini_api_key or settings.google_api_key)
+        ):
+            return trigger_slack_agent_analysis(
+                db=db,
+                source_ids=changed_source_ids,
+                settings=settings,
+            )
+
         review_items = create_slack_agent_review_items(
             db=db,
             agent=SlackAgent(model=DeterministicSlackAgentModel()),

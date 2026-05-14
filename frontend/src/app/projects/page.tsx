@@ -14,6 +14,7 @@ type Task = {
   span: number;
   date: string;
   evidenceReason: string;
+  kind: "evidence" | "timeline";
 };
 
 type Project = {
@@ -63,6 +64,7 @@ export default function ProjectsPage() {
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
     [projects, selectedProjectId],
   );
+
   if (!selectedProject) {
     return (
       <div className="reference-dashboard space-y-4">
@@ -70,7 +72,7 @@ export default function ProjectsPage() {
           <div>
             <p className="text-[13px] font-bold text-[var(--primary-dark)]">Project Workspace</p>
             <h1>프로젝트</h1>
-            <p>{loading ? "프로젝트 evidence를 불러오고 있습니다." : error || "Slack 또는 Google을 연동하면 실제 프로젝트 근거가 표시됩니다."}</p>
+            <p>{loading ? "프로젝트 evidence를 불러오고 있습니다." : error || "승인된 프로젝트 evidence가 아직 없습니다."}</p>
           </div>
           <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
             <FolderKanban className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
@@ -87,7 +89,7 @@ export default function ProjectsPage() {
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Project Workspace</p>
           <h1>프로젝트</h1>
-          <p>담당 프로젝트를 선택하고 간트 차트, 일정표, 보드, 목록으로 업무 흐름을 확인합니다.</p>
+          <p>승인된 source evidence와 업무 기록을 프로젝트별 워크플로우로 확인합니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <FolderKanban className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
@@ -116,7 +118,7 @@ export default function ProjectsPage() {
       <section className="panel reference-panel">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-4">
           <div>
-            <p className="text-[12px] font-bold text-muted">담당자 {selectedProject.owner}</p>
+            <p className="text-[12px] font-bold text-muted">담당 source {selectedProject.owner}</p>
             <h2 className="mt-1 text-[22px] font-extrabold leading-8 text-ink">{selectedProject.name}</h2>
             <p className="mt-2 max-w-3xl text-[13px] leading-6 text-muted">{selectedProject.summary}</p>
           </div>
@@ -127,8 +129,8 @@ export default function ProjectsPage() {
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <ProjectMetric icon={BarChart3} label="진행률" value={`${selectedProject.progress}%`} />
-          <ProjectMetric icon={CalendarDays} label="목표일" value={selectedProject.due} />
-          <ProjectMetric icon={Users} label="담당자" value={selectedProject.owner} />
+          <ProjectMetric icon={CalendarDays} label="최근 업데이트" value={selectedProject.due} />
+          <ProjectMetric icon={Users} label="담당 source" value={selectedProject.owner} />
           <ProjectMetric icon={CheckCircle2} label="검토 대기" value={`${selectedProject.reviewCount}건`} />
         </div>
 
@@ -163,7 +165,7 @@ export default function ProjectsPage() {
 }
 
 function projectFromMemory(memory: ProjectMemory): Project {
-  const tasks = memory.evidence.map((evidence, index) => ({
+  const evidenceTasks = memory.evidence.map((evidence, index) => ({
     id: evidence.id || `${memory.project_key}:${evidence.source_id}:${index}`,
     title: cleanTaskTitle(evidence.title || evidence.task_summary || evidence.source_snippet, evidence.source_type),
     owner: sourceTypeLabel(evidence.source_type),
@@ -172,14 +174,27 @@ function projectFromMemory(memory: ProjectMemory): Project {
     span: Math.min(Math.max(2, Math.ceil((evidence.source_snippet.length || 80) / 80)), 4),
     date: formatShortDate(evidence.timestamp),
     evidenceReason: evidence.evidence_reason,
+    kind: "evidence" as const,
   }));
+  const timelineTasks = memory.timeline_items.map((item, index) => ({
+    id: item.id,
+    title: cleanTaskTitle(item.title || item.summary || item.source_snippets[0] || "", item.item_type),
+    owner: timelineTypeLabel(item.item_type),
+    status: "완료" as const,
+    start: Math.min(evidenceTasks.length + index + 1, 9),
+    span: Math.min(Math.max(2, Math.ceil((item.summary.length || 80) / 80)), 4),
+    date: formatShortDate(item.created_at),
+    evidenceReason: item.evidence_reason,
+    kind: "timeline" as const,
+  }));
+  const tasks = [...timelineTasks, ...evidenceTasks];
   return {
     id: memory.project_key,
     name: memory.name,
-    owner: memory.source_types.map(sourceTypeLabel).join(", ") || "Source",
-    status: `${memory.evidence_count.toLocaleString()}개 evidence 연결`,
+    owner: memory.source_types.map(sourceTypeLabel).join(", ") || "Approved memory",
+    status: `${memory.evidence_count.toLocaleString()}개 evidence, ${memory.timeline_items.length.toLocaleString()}개 승인 업무`,
     due: formatShortDate(memory.latest_timestamp),
-    progress: Math.min(90, 30 + memory.evidence_count * 15),
+    progress: Math.min(90, 30 + tasks.length * 12),
     risk: memory.permission_level === "restricted" ? "높음" : memory.evidence_count >= 3 ? "보통" : "낮음",
     reviewCount: memory.pending_review_count,
     summary: memory.summary,
@@ -195,7 +210,6 @@ function cleanTaskTitle(value: string, sourceType: string) {
 }
 
 function taskStatus(sourceType: string): Task["status"] {
-  if (sourceType === "calendar") return "대기";
   if (sourceType === "drive") return "검토";
   if (sourceType === "slack") return "진행 중";
   return "대기";
@@ -210,9 +224,17 @@ function sourceTypeLabel(sourceType: string) {
   return sourceType;
 }
 
+function timelineTypeLabel(itemType: string) {
+  if (itemType === "decision_record") return "승인된 결정";
+  if (itemType === "history_event") return "승인된 히스토리";
+  if (itemType === "timeline_event") return "승인된 타임라인";
+  if (itemType === "todo") return "승인된 할 일";
+  return "승인된 업무";
+}
+
 function formatShortDate(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "기한 없음";
+  if (Number.isNaN(date.getTime())) return "날짜 없음";
   return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(date);
 }
 
@@ -246,7 +268,7 @@ function Overview({ project }: { project: Project }) {
       <div className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
         <h3 className="text-[14px] font-extrabold text-ink">프로젝트 운영 기준</h3>
         <p className="mt-3 text-[13px] leading-6 text-muted">
-          간트 차트로 의존성과 기간을 보고, 일정표로 마감 충돌을 확인하며, 보드와 목록에서 실행 상태를 관리합니다.
+          승인된 업무 기록과 source evidence를 함께 보여주되, trusted knowledge 승격은 Review Queue 승인 상태를 기준으로 유지합니다.
         </p>
       </div>
     </div>
@@ -269,9 +291,9 @@ function GanttView({ tasks }: { tasks: Task[] }) {
             <p className="text-[11px] text-muted">{task.owner}</p>
           </div>
           <div
-            className="h-8 rounded-md bg-[var(--primary)]"
+            className={`h-8 rounded-md ${task.kind === "timeline" ? "bg-emerald-500" : "bg-[var(--primary)]"}`}
             style={{ gridColumn: `${task.start + 1} / span ${task.span}` }}
-            title={`${task.title} · ${task.status}`}
+            title={`${task.title} - ${task.status}`}
           />
         </div>
       ))}
@@ -286,7 +308,7 @@ function CalendarView({ tasks }: { tasks: Task[] }) {
         <article key={task.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
           <p className="text-[12px] font-extrabold text-[var(--primary-dark)]">{task.date}</p>
           <h3 className="mt-2 text-[14px] font-extrabold text-ink">{task.title}</h3>
-          <p className="mt-2 text-[12px] text-muted">{task.owner} · {task.status}</p>
+          <p className="mt-2 text-[12px] text-muted">{task.owner} - {task.status}</p>
         </article>
       ))}
     </div>
@@ -316,9 +338,9 @@ function ListView({ tasks }: { tasks: Task[] }) {
     <div className="rounded-lg border border-line">
       <div className="grid grid-cols-[1fr_120px_100px_80px] gap-3 border-b border-line bg-surface-soft px-4 py-3 text-[12px] font-extrabold text-muted">
         <span>업무</span>
-        <span>담당자</span>
+        <span>담당</span>
         <span>상태</span>
-        <span>마감</span>
+        <span>날짜</span>
       </div>
       {tasks.map((task) => (
         <div key={task.id} className="grid grid-cols-[1fr_120px_100px_80px] gap-3 border-b border-line px-4 py-3 text-[13px] last:border-b-0">
@@ -336,7 +358,7 @@ function TaskRow({ task }: { task: Task }) {
   return (
     <div className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-[13px]">
       <span className="font-bold text-ink">{task.title}</span>
-      <span className="text-muted">{task.owner} · {task.status}</span>
+      <span className="text-muted">{task.owner} - {task.status}</span>
     </div>
   );
 }
@@ -345,7 +367,7 @@ function TaskCard({ task }: { task: Task }) {
   return (
     <article className="rounded-md border border-line bg-white p-3">
       <p className="text-[13px] font-extrabold text-ink">{task.title}</p>
-      <p className="mt-2 text-[12px] text-muted">{task.owner} · {task.date}</p>
+      <p className="mt-2 text-[12px] text-muted">{task.owner} - {task.date}</p>
     </article>
   );
 }

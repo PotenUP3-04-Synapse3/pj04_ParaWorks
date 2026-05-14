@@ -75,6 +75,14 @@ def create_mail_document_agent_review_items(
 
     # 4. 추출된 각 후보(Candidate)를 검토 항목으로 변환 및 저장
     review_items: list[ReviewItem] = []
+    source_payload = {
+        'source_ids': _unique_strings(message.source_id for message in packet.messages),
+        'source_types': _unique_strings(
+            str(message.metadata.get('source_type') or packet.source_type) for message in packet.messages
+        ),
+        'source_urls': _unique_strings(message.source_url for message in packet.messages),
+        'source_authors': _unique_strings(message.author for message in packet.messages if message.author),
+    }
     for candidate in result.candidates:
         candidate.validate_evidence()
         review_item = ReviewItem(
@@ -94,6 +102,7 @@ def create_mail_document_agent_review_items(
                     'total_tokens': result.cost.token_usage.total_tokens,
                 },
                 'uncertainty_reason': candidate.uncertainty_reason,
+                **source_payload,
                 **candidate.payload_fields,
             },
             source_links=candidate.source_links,
@@ -302,3 +311,17 @@ def _changed_source_groups(
 def _append_unique(values: list[str], value: str) -> None:
     if value not in values:
         values.append(value)
+
+
+def _unique_strings(values) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned)
+    return result

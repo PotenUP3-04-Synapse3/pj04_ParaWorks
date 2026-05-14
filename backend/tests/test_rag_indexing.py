@@ -9,6 +9,7 @@ from backend.app.models import (
     Document,
     DocumentChunk,
     DocumentVersion,
+    ReviewItem,
     Source,
     SyncJob,
     Todo,
@@ -65,7 +66,13 @@ class FailingEmbeddingModel:
         raise AssertionError('embedding call should be blocked by the budget gate')
 
 
-def seed_chunk(db: Session, text: str, source_id: str = 'gmail-index-source') -> int:
+def seed_chunk(
+    db: Session,
+    text: str,
+    source_id: str = 'gmail-index-source',
+    *,
+    approve_for_rag: bool = True,
+) -> int:
     source = Source(
         source_type='gmail',
         source_id=source_id,
@@ -96,6 +103,22 @@ def seed_chunk(db: Session, text: str, source_id: str = 'gmail-index-source') ->
         metadata_={'source_url': source.source_url, 'source_type': source.source_type},
     )
     db.add(chunk)
+    if approve_for_rag:
+        db.add(
+            ReviewItem(
+                item_type='history_event',
+                payload={
+                    'title': 'Approved source chunk',
+                    'summary': 'Approved source should be indexed.',
+                    'source_ids': [source_id],
+                },
+                source_links=[source.source_url],
+                source_snippets=[text[:240]],
+                confidence_score=0.88,
+                permission_level='internal',
+                status='approved',
+            )
+        )
     db.commit()
     return chunk.id
 
@@ -316,6 +339,19 @@ def test_incremental_indexing_blocks_paid_embedding_when_estimated_budget_is_exc
 
 def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_session: Session) -> None:
     chunk_id = seed_chunk(db_session, 'Redis queue state should be indexed for RAG.')
+    approved_source = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': 'Approved source chunk',
+            'summary': 'Approved Gmail source should be indexed.',
+            'source_ids': ['gmail-index-source'],
+        },
+        source_links=['https://gmail.mock/gmail-index-source'],
+        source_snippets=['Redis queue state should be indexed for RAG.'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='approved',
+    )
     approved = DecisionRecord(
         title='Use pgvector for RAG',
         decision_summary='PostgreSQL pgvector stores durable company memory embeddings.',
@@ -335,7 +371,7 @@ def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_ses
         permission_level='internal',
         review_status='pending_review',
     )
-    db_session.add_all([approved, pending])
+    db_session.add_all([approved_source, approved, pending])
     db_session.commit()
 
     documents = build_rag_index_documents(db_session)
@@ -346,6 +382,21 @@ def test_build_rag_index_documents_includes_chunks_and_approved_knowledge(db_ses
     ]
     assert documents[0].metadata['source_type'] == 'gmail'
     assert documents[1].source_url == 'https://knowledge.mock/pgvector'
+
+
+def test_build_rag_index_documents_excludes_unapproved_source_chunks(
+    db_session: Session,
+) -> None:
+    seed_chunk(
+        db_session,
+        'Unapproved source chunk should not be indexed.',
+        'gmail-unapproved-source',
+        approve_for_rag=False,
+    )
+
+    documents = build_rag_index_documents(db_session)
+
+    assert all('gmail-unapproved-source' not in document.document_id for document in documents)
 
 
 def test_build_rag_index_documents_includes_document_parser_metadata(db_session: Session) -> None:
@@ -387,6 +438,21 @@ def test_build_rag_index_documents_includes_document_parser_metadata(db_session:
         },
     )
     db_session.add(chunk)
+    db_session.add(
+        ReviewItem(
+            item_type='history_event',
+            payload={
+                'title': 'Approved parser metadata source',
+                'summary': 'Approved Drive source should preserve parser metadata.',
+                'source_ids': ['drive:file-1'],
+            },
+            source_links=['https://drive.google.com/file/d/file-1/view'],
+            source_snippets=['휴가 신청 승인자가 인사팀으로 변경되었습니다.'],
+            confidence_score=0.88,
+            permission_level='restricted',
+            status='approved',
+        )
+    )
     db_session.commit()
 
     vector_document = build_rag_index_documents(db_session)[0]
@@ -484,6 +550,21 @@ def test_reindex_endpoint_reports_parser_status_counts(client: TestClient, db_se
                 metadata_={'parser_status': 'metadata_only'},
             ),
         ]
+    )
+    db_session.add(
+        ReviewItem(
+            item_type='history_event',
+            payload={
+                'title': 'Approved parser status sources',
+                'summary': 'Approved Drive sources should report parser status counts.',
+                'source_ids': ['drive:parsed', 'drive:metadata-only'],
+            },
+            source_links=['https://drive.mock/parsed', 'https://drive.mock/metadata-only'],
+            source_snippets=['본문 파싱 완료', 'Metadata-only Drive file changed.'],
+            confidence_score=0.88,
+            permission_level='restricted',
+            status='approved',
+        )
     )
     db_session.commit()
 
