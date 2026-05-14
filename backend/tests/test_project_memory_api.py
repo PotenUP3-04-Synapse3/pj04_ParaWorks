@@ -224,3 +224,102 @@ def test_projects_api_links_timeline_items_to_approved_project_assignments(
     seed_ir = next(project for project in response.json()['projects'] if project['project_key'] == 'seed-ir')
     assert len(seed_ir['timeline_items']) == 1
     assert seed_ir['timeline_items'][0]['title'] == 'IR 피치덱 검토 완료'
+
+
+def test_projects_api_links_approved_timeline_by_project_key_without_assignment(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(
+        TimelineEvent(
+            project_key='seed-ir',
+            title='IR pitch deck review completed',
+            result_summary='Investor meeting pitch deck review was completed.',
+            source_links=['https://drive.mock/drive-ir-deck'],
+            source_snippets=['IR pitch deck review is scheduled for next week.'],
+            confidence_score=0.9,
+            permission_level='internal',
+            review_status='approved',
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    seed_ir = next(project for project in payload['projects'] if project['project_key'] == 'seed-ir')
+    assert seed_ir['evidence_count'] == 0
+    assert len(seed_ir['timeline_items']) == 1
+    assert seed_ir['timeline_items'][0]['title'] == 'IR pitch deck review completed'
+    assert seed_ir['timeline_items'][0]['project_key'] == 'seed-ir'
+
+
+def test_approved_review_item_with_project_key_appears_in_project_timeline(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    review_item = ReviewItem(
+        item_type='timeline_event',
+        payload={
+            'title': 'K-Tech proposal deadline confirmed',
+            'result_summary': 'K-Tech pilot proposal deadline was confirmed for Friday.',
+            'project_key': 'k-tech-pilot',
+        },
+        source_links=['https://slack.mock/archives/C0AUJDZUKA8/p1'],
+        source_snippets=['Please update the K-Tech pilot proposal by Friday.'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(review_item)
+    db_session.commit()
+    db_session.refresh(review_item)
+
+    approve_response = client.post(
+        f'/api/v1/review/{review_item.id}/approve',
+        headers={'X-Demo-User': 'demo-admin'},
+    )
+    assert approve_response.status_code == 200
+
+    projects_response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert projects_response.status_code == 200
+    ktech = next(project for project in projects_response.json()['projects'] if project['project_key'] == 'k-tech-pilot')
+    assert [item['title'] for item in ktech['timeline_items']] == ['K-Tech proposal deadline confirmed']
+    assert ktech['timeline_items'][0]['project_key'] == 'k-tech-pilot'
+
+
+def test_projects_api_does_not_convert_approved_knowledge_into_connector_evidence(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    review_item = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': 'Seed IR follow-up schedule changed',
+            'reason': 'Follow-up meeting schedule changed after investor request.',
+            'project_key': 'seed-ir',
+        },
+        source_links=['https://gmail.mock/message-ir'],
+        source_snippets=['The next meeting schedule should be adjusted after the investor request.'],
+        confidence_score=0.86,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(review_item)
+    db_session.commit()
+    db_session.refresh(review_item)
+
+    approve_response = client.post(
+        f'/api/v1/review/{review_item.id}/approve',
+        headers={'X-Demo-User': 'demo-admin'},
+    )
+    assert approve_response.status_code == 200
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    seed_ir = next(project for project in response.json()['projects'] if project['project_key'] == 'seed-ir')
+    assert seed_ir['evidence_count'] == 0
+    assert {item['item_type'] for item in seed_ir['timeline_items']} == {'history_event', 'timeline_event'}

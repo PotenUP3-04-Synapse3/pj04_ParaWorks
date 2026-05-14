@@ -1,8 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.agent_runtime import AgentRunCost, ReviewCandidate, TokenUsage
+from backend.app.agents.slack_agent import sync_service
+from backend.app.connectors.mock import get_mock_connector
 from backend.app.core.config import Settings, get_settings
-from backend.app.models import ReviewItem
+from backend.app.core.demo_auth import DemoUser, get_demo_user
+from backend.app.models import AgentRun, ReviewItem
 
 
 def test_slack_agent_review_endpoint_creates_agent_review_item(client, db_session: Session) -> None:
@@ -29,6 +33,93 @@ def test_slack_agent_review_endpoint_creates_agent_review_item(client, db_sessio
     assert agent_item.payload['estimated_cost_usd'] > 0
     assert agent_item.source_links
     assert agent_item.source_snippets
+
+
+def test_slack_sync_uses_agent_slack_llm_pipeline_when_provider_key_exists(
+    client,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    def override_settings() -> Settings:
+        return Settings(paraworks_demo_mode=False, openai_api_key='openai-key')
+
+    observed: list[dict[str, object]] = []
+
+    def fake_process_daily_slack_sync(
+        channel_id: str,
+        messages: list[dict],
+        openai_api_key: str | None = None,
+        gemini_api_key: str | None = None,
+    ) -> dict:
+        observed.append(
+            {
+                'channel_id': channel_id,
+                'message_count': len(messages),
+                'openai_api_key': openai_api_key,
+            }
+        )
+        return {
+            'model_name': 'gpt-4o-mini',
+            'is_work_related': True,
+            'run_cost': AgentRunCost(
+                model_name='gpt-4o-mini',
+                token_usage=TokenUsage(input_tokens=120, output_tokens=40),
+                estimated_cost_usd=0.000042,
+                cache_hit=False,
+            ),
+            'candidates': [
+                ReviewCandidate(
+                    item_type='decision_record',
+                    title='Slack LLM 결정사항',
+                    summary='agent_slack LLM 파이프라인이 동기화된 Slack 근거에서 결정사항을 추출했다.',
+                    source_links=[f'https://example.slack.com/archives/{channel_id}/p1777600800000100'],
+                    source_snippets=['Redis 진행 상태를 Slack 근거로 확인했다.'],
+                    confidence_score=0.91,
+                    permission_level='internal',
+                    payload_fields={
+                        'category': 'Project',
+                        'topic_tag': 'Redis',
+                        'importance': 'High',
+                    },
+                )
+            ],
+        }
+
+    client.app.dependency_overrides[get_settings] = override_settings
+    client.app.dependency_overrides[get_demo_user] = lambda: DemoUser(
+        id='demo-admin',
+        email='admin@paraworks.local',
+        role='admin',
+        permission_levels={'public', 'internal', 'restricted'},
+        name='관리자',
+        title='관리자',
+        department='Platform',
+    )
+    monkeypatch.setattr(
+        'backend.app.api.v1.integrations.get_sync_connector',
+        lambda *args, **kwargs: get_mock_connector('slack'),
+    )
+    monkeypatch.setattr(sync_service, 'process_daily_slack_sync', fake_process_daily_slack_sync)
+
+    response = client.post('/api/v1/integrations/slack/sync')
+
+    assert response.status_code == 200
+    assert response.json()['created_review_items'] == len(observed)
+    assert sum(item['message_count'] for item in observed) == len(response.json()['changed_source_ids'])
+    assert {item['openai_api_key'] for item in observed} == {'openai-key'}
+
+    agent_runs = db_session.scalars(select(AgentRun).where(AgentRun.agent_name == 'slack_agent_v2')).all()
+    assert len(agent_runs) == len(observed)
+    assert {agent_run.model_name for agent_run in agent_runs} == {'gpt-4o-mini'}
+    assert {agent_run.source_window for agent_run in agent_runs} == {
+        f"slack:{item['channel_id']}" for item in observed
+    }
+
+    review_items = db_session.scalars(select(ReviewItem)).all()
+    assert len(review_items) == len(observed)
+    assert {review_item.payload['title'] for review_item in review_items} == {'Slack LLM 결정사항'}
+    assert {review_item.payload['prompt_version'] for review_item in review_items} == {'slack-taxonomy:v3'}
+    assert all(review_item.payload['source_ids'] for review_item in review_items)
 
 
 def test_slack_llm_preflight_requires_explicit_enablement(client) -> None:

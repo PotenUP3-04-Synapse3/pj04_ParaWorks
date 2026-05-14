@@ -2,6 +2,42 @@
 
 Updated: 2026-05-14
 
+## 2026-05-14 Project/Timeline/RAG Approval Visibility Fix
+
+- Approved knowledge records now preserve `project_key` into project timeline
+  API items, so `/api/v1/projects` can attach promoted Timeline, History,
+  Decision, and Todo records directly to the matching project.
+- `/projects` now shows approved workflow items from `timeline_items` in
+  addition to connector assignment evidence.
+- Mail/Document ReviewItems now preserve `source_ids`, `source_types`,
+  `source_urls`, and `source_authors`, allowing approved source chunks to enter
+  RAG indexing through the approval-based policy.
+- `backend/app/rag/indexing.py` already had `ReviewItem` imported in the
+  current checkout; the old `NameError` was not present during this session.
+- RAG tests were updated to the current policy: original source chunks are
+  indexed only when their external `Source.source_id` appears in an approved
+  ReviewItem payload; approved knowledge records are still indexed separately.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_rag_indexing.py -q
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+Result:
+
+- targeted backend tests: 44 passed;
+- frontend TypeScript check: passed;
+- frontend build: passed.
+
+- Broader backend suite status should still distinguish unrelated existing
+  Slack OAuth PKCE and fake client contract failures from this targeted fix.
+- If old local rows still have `timeline_events.project_key = NULL`, rerun
+  project classification and approve fresh Review Queue candidates, or use a
+  deliberate local-only migration after inspecting source links.
+
 ## 2026-05-14 AI Assistant Service NameError Hotfix
 
 - Symptom: `/api/v1/assistant/conversations/{conversation_id}/messages`
@@ -1074,3 +1110,30 @@ Residual note:
   contracts, and RAG indexing tests that still expect all chunks to index
   without approved ReviewItem source ids. The sync/assistant tests listed above
   are green after this change.
+
+## 2026-05-14 Slack sync와 agent_slack LLM 파이프라인 연결
+
+- 사용자가 Slack sync 후 `review_items`에 `Redis 큐 관련 결정사항 추출됨` 1건만
+  생성된다고 보고했다.
+- 확인 결과 해당 항목은 실제 LLM 결과가 아니라
+  `DeterministicSlackAgentModel`의 결정론/fake 결과였다.
+- `backend/app/agents/slack_agent/sync_service.py`에는 이미
+  `agent_slack.process_daily_slack_sync()` 결과를 `slack_agent_v2` AgentRun과
+  ReviewItem으로 저장하는 `trigger_slack_agent_analysis()`가 있었다.
+- 이번 변경으로 `/api/v1/integrations/slack/sync`가 운영형 local/prod 모드와
+  provider key가 있는 경우 위 `agent_slack` LLM 파이프라인을 호출한다.
+- `trigger_slack_agent_analysis()`는 이제 `source_ids`를 받을 수 있다.
+  Slack sync에서 방금 변경된 source만 넘기므로 최근 7일 전체 재분석과 중복 비용을
+  피한다.
+- demo/test 모드 또는 provider key가 없는 환경에서는 기존 결정론 스모크 경로를
+  유지한다. 자동 테스트가 live LLM API를 호출하지 않게 하기 위한 경계다.
+- 관련 검증:
+
+```powershell
+uv run pytest backend/tests/test_slack_agent_api.py::test_slack_sync_uses_agent_slack_llm_pipeline_when_provider_key_exists -q
+uv run pytest backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py backend/tests/test_integration_runtime_status.py::test_sync_returns_configuration_error_when_connector_is_not_configured -q
+uv run ruff check backend/app/api/v1/integrations.py backend/app/agents/slack_agent/sync_service.py backend/tests/test_slack_agent_api.py
+uv run pytest backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py -q
+```
+
+Result: `1 passed`, `8 passed`, ruff passed, `23 passed`.
