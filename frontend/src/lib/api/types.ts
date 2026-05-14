@@ -374,6 +374,18 @@ export type ReviewItem = {
   reviewer_id?: string | null;
 };
 
+export type ReviewPromotionResult = {
+  target_type: string;
+  created_record_ids: number[];
+  created_timeline_event_ids: number[];
+  project_key?: string | null;
+  next_routes: string[];
+};
+
+export type ReviewApprovalResponse = ReviewItem & {
+  promotion_result?: ReviewPromotionResult;
+};
+
 export type ReviewPromotionPreview = {
   target_type: string;
   can_approve: boolean;
@@ -624,12 +636,12 @@ export type AgentReviewResponse = {
   agent_name: string;
   status: string;
   created_review_items: number;
-  preflight?: SlackLlmPreflight;
+  preflight?: AgentLlmPreflight;
 };
 
 export type SlackAgentReviewResponse = AgentReviewResponse;
 
-export type SlackLlmPreflight = {
+export type AgentLlmPreflight = {
   action: "run" | "skip" | "blocked" | "use_cache" | string;
   reason: string;
   budget_status: string;
@@ -646,6 +658,10 @@ export type SlackLlmPreflight = {
   source_window?: string;
   requires_paid_confirmation: boolean;
 };
+
+export type SlackLlmPreflight = AgentLlmPreflight;
+
+export type MailDocumentLlmPreflight = AgentLlmPreflight;
 
 export type SlackRuntimeStatus = {
   connector_type: "slack";

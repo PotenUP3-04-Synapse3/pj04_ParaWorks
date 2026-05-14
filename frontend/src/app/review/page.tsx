@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Layers,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
@@ -21,9 +22,11 @@ import type {
   ReviewItem,
   ReviewGroup,
   ReviewEvidenceRequest,
+  ReviewApprovalResponse,
   ReviewItemUpdate,
   ReviewPromotionPreview,
   ReviewResponse,
+  ReviewPromotionResult,
 } from "@/lib/api/types";
 
 
@@ -57,6 +60,30 @@ function itemSummary(item: ReviewItem) {
   return summary || "요약을 생성하지 못했습니다. 근거를 확인한 뒤 수정하거나 추가 근거를 요청하세요.";
 }
 
+function mailDocsWorkFields(item: ReviewItem) {
+  const agentName = stringField(item.payload.agent_name);
+  if (agentName !== "mail_document_agent") return undefined;
+  const nextStep = stringField(item.payload.recommended_next_step);
+  const taskSummary = stringField(item.payload.task_summary);
+  const businessContext = stringField(item.payload.business_context);
+  if (!nextStep && !taskSummary && !businessContext) return undefined;
+  return {
+    nextStep,
+    taskSummary,
+    businessContext,
+    assignee: stringField(item.payload.assignee),
+    dueDate: stringField(item.payload.due_date),
+    counterparty: stringField(item.payload.counterparty),
+  };
+}
+
+function routeLabel(route: string) {
+  if (route === "/projects") return "프로젝트에서 보기";
+  if (route === "/timeline") return "타임라인에서 보기";
+  if (route === "/knowledge") return "지식 보관함에서 보기";
+  return `${route} 열기`;
+}
+
 function itemTypeLabel(itemType: string) {
   const labels: Record<string, string> = {
     decision_record: "결정 기록",
@@ -74,18 +101,25 @@ function formatCost(value: unknown) {
   return `$${cost.toFixed(6)}`;
 }
 
+type PromotionNotice = {
+  itemTitle: string;
+  result: ReviewPromotionResult;
+};
+
 export default function ReviewPage() {
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<number>();
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
+  const [editNextStep, setEditNextStep] = useState("");
   const [evidenceRequestId, setEvidenceRequestId] = useState<number>();
   const [evidenceRequestNote, setEvidenceRequestNote] = useState("");
   const [previews, setPreviews] = useState<Record<number, ReviewPromotionPreview>>({});
   const [pendingAction, setPendingAction] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [promotionNotice, setPromotionNotice] = useState<PromotionNotice>();
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -123,6 +157,7 @@ export default function ReviewPage() {
     setEditingId(item.id);
     setEditTitle(itemTitle(item));
     setEditSummary(itemSummary(item));
+    setEditNextStep(stringField(item.payload.recommended_next_step));
     setError(undefined);
   }
 
@@ -136,7 +171,13 @@ export default function ReviewPage() {
     setError(undefined);
 
     try {
-      await apiPost<ReviewItem>(`/api/v1/review/${item.id}/${action}`, body);
+      const result = await apiPost<ReviewApprovalResponse | ReviewItem>(`/api/v1/review/${item.id}/${action}`, body);
+      if (action === "approve" && "promotion_result" in result && result.promotion_result) {
+        setPromotionNotice({
+          itemTitle: itemTitle(item),
+          result: result.promotion_result,
+        });
+      }
       await loadItems();
       notifyReviewQueueUpdated();
 
@@ -157,6 +198,7 @@ export default function ReviewPage() {
         ...item.payload,
         title: editTitle,
         [key]: editSummary,
+        ...(mailDocsWorkFields(item) ? { recommended_next_step: editNextStep } : {}),
       },
     };
 
@@ -209,6 +251,30 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
+      {promotionNotice ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold">승인 완료</p>
+              <p className="mt-1">
+                {promotionNotice.itemTitle} 항목이 {itemTypeLabel(promotionNotice.result.target_type)} 지식으로 연결되었습니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {promotionNotice.result.next_routes.map((route) => (
+                <Link
+                  key={route}
+                  href={route}
+                  className="inline-flex h-9 items-center rounded-lg border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                >
+                  {routeLabel(route)}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="space-y-4">
         {groups.map((group) => {
           const isExpanded = expandedGroups[group.group_id];
@@ -257,6 +323,7 @@ export default function ReviewPage() {
                     const evidenceRows = item.source_evidence ?? [];
                     const isEvidenceRequestOpen = evidenceRequestId === item.id;
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
+                    const workFields = mailDocsWorkFields(item);
 
                     return (
                       <div key={item.id} className="p-5">
@@ -297,9 +364,47 @@ export default function ReviewPage() {
                                     className="mt-1 w-full rounded-lg border border-[var(--line-soft)] px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-[#21132b]"
                                   />
                                 </label>
+                                {mailDocsWorkFields(item) ? (
+                                  <label className="block text-sm font-semibold">
+                                    다음 행동
+                                    <textarea
+                                      value={editNextStep}
+                                      onChange={(event) => setEditNextStep(event.target.value)}
+                                      rows={2}
+                                      className="mt-1 w-full rounded-lg border border-[var(--line-soft)] px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-[#21132b]"
+                                    />
+                                  </label>
+                                ) : null}
                               </div>
                             ) : (
                               <>
+                                {workFields ? (
+                                  <div className="mt-4 max-w-3xl rounded-lg border border-[var(--line-soft)] bg-white/70 p-4">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ink-muted)]">
+                                      Mail/Docs 업무 판단
+                                    </p>
+                                    {workFields.nextStep ? (
+                                      <p className="mt-2 text-sm font-bold leading-6 text-[var(--ink)]">
+                                        다음 행동: {workFields.nextStep}
+                                      </p>
+                                    ) : null}
+                                    {workFields.taskSummary ? (
+                                      <p className="mt-2 text-sm leading-6 text-[var(--ink)]">
+                                        할 일: {workFields.taskSummary}
+                                      </p>
+                                    ) : null}
+                                    {workFields.businessContext ? (
+                                      <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+                                        맥락: {workFields.businessContext}
+                                      </p>
+                                    ) : null}
+                                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-[var(--ink-muted)]">
+                                      {workFields.assignee ? <span>담당자: {workFields.assignee}</span> : null}
+                                      {workFields.dueDate ? <span>기한: {workFields.dueDate}</span> : null}
+                                      {workFields.counterparty ? <span>상대: {workFields.counterparty}</span> : null}
+                                    </div>
+                                  </div>
+                                ) : null}
                                 <h4 className="mt-3 text-sm font-bold text-[var(--ink-muted)]">#{item.id} 상세 내용</h4>
                                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink)]">
                                   {itemSummary(item)}

@@ -15,10 +15,11 @@ from backend.app.agent_runtime import (
 from backend.app.agents.mail_document_agent import (
     MAIL_DOCUMENT_AGENT_NAME,
     MAIL_DOCUMENT_AGENT_PROMPT_VERSION,
+    MAIL_DOCUMENT_SOURCE_TYPES,
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
     build_mail_document_evidence_packet,
-    create_mail_document_agent_review_items,
+    create_mail_document_agent_review_items_for_changed_sources,
 )
 from backend.app.agents.memory_extraction_agent import (
     build_memory_extraction_evidence_packet,
@@ -49,6 +50,7 @@ DEFAULT_OUTPUT_COST_PER_1M = 0.60
 DEFAULT_ESTIMATED_OUTPUT_TOKENS = 32
 ORCHESTRATED_SLACK_MAX_EVIDENCE_MESSAGES = 12
 ORCHESTRATED_SLACK_SOURCE_WINDOW = f'orchestrated-slack:ranked:{ORCHESTRATED_SLACK_MAX_EVIDENCE_MESSAGES}'
+ORCHESTRATED_MAIL_DOCUMENT_SOURCE_WINDOW = 'orchestrated-mail-docs:grouped'
 
 
 @dataclass(frozen=True)
@@ -64,7 +66,7 @@ def run_company_memory_agent_orchestration(
     user: DemoUser,
     question: str,
 ) -> CompanyMemoryOrchestrationResult:
-    permission_context = PermissionContext(user_id=user.id, role=user.role)
+    permission_context = _permission_context(user)
     cost_plan = build_company_memory_cost_plan(db=db, question=question, user=user)
     workflow = build_agent_workflow(
         (
@@ -94,7 +96,7 @@ def build_company_memory_cost_plan(
     question: str,
     user: DemoUser,
 ) -> dict[str, dict[str, float | int | str | None]]:
-    permission_context = PermissionContext(user_id=user.id, role=user.role)
+    permission_context = _permission_context(user)
     slack_packet = build_slack_evidence_packet(
         db=db,
         permission_context=permission_context,
@@ -105,11 +107,11 @@ def build_company_memory_cost_plan(
     mail_document_packet = build_mail_document_evidence_packet(
         db=db,
         permission_context=permission_context,
-        source_window='orchestrated-mail-docs:all',
+        source_window=ORCHESTRATED_MAIL_DOCUMENT_SOURCE_WINDOW,
     )
     rag_packet = _build_planning_rag_packet(db=db, user=user, question=question, permission_context=permission_context)
     slack_token_estimate = _estimate_tokens_for_packet(slack_packet)
-    mail_document_token_estimate = _estimate_tokens_for_sources(db=db, source_types=('gmail', 'gmail_attachment', 'drive', 'calendar'))
+    mail_document_token_estimate = _estimate_tokens_for_packet(mail_document_packet)
     question_token_estimate = _estimate_tokens(question)
 
     return {
@@ -180,11 +182,12 @@ def _draft_review_candidates_node(
             )
         mail_document_items = []
         if cost_plan['mail_document_agent']['action'] == 'run':
-            mail_document_items = create_mail_document_agent_review_items(
+            mail_document_items = create_mail_document_agent_review_items_for_changed_sources(
                 db=db,
                 agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
                 permission_context=permission_context,
-                source_window='orchestrated-mail-docs:all',
+                source_window=ORCHESTRATED_MAIL_DOCUMENT_SOURCE_WINDOW,
+                source_ids=_mail_document_source_ids(db=db, permission_context=permission_context),
             )
         memory_items = []
         if slack_items or mail_document_items:
@@ -250,6 +253,31 @@ def _count_chunks(*, db: Session, source_types: tuple[str, ...]) -> int:
         )
         or 0
     )
+
+
+def _permission_context(user: DemoUser) -> PermissionContext:
+    return PermissionContext(
+        user_id=user.id,
+        role=user.role,
+        allowed_permission_levels=tuple(user.permission_levels),
+    )
+
+
+def _mail_document_source_ids(*, db: Session, permission_context: PermissionContext) -> list[str]:
+    rows = db.scalars(
+        select(Source.source_id)
+        .join(DocumentChunk, DocumentChunk.source_id == Source.id)
+        .where(Source.source_type.in_(MAIL_DOCUMENT_SOURCE_TYPES))
+        .where(DocumentChunk.permission_level.in_(permission_context.allowed_permission_levels))
+        .order_by(Source.id)
+    ).all()
+    seen: set[str] = set()
+    source_ids: list[str] = []
+    for source_id in rows:
+        if source_id not in seen:
+            source_ids.append(source_id)
+            seen.add(source_id)
+    return source_ids
 
 
 def _estimate_tokens_for_sources(*, db: Session, source_types: tuple[str, ...]) -> int:
