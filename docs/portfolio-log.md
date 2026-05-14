@@ -3900,3 +3900,7 @@ Cost/security note:
   - Scoped Slack and Mail/Document evidence packets by changed source ids so Gmail, Drive, and Slack review candidates are generated only from the connector that just changed.
   - Added a confidence-gated low-cost AI 비서 routing layer for email drafts and lightweight replies, preserving RAG for ambiguous/company-memory questions.
   - Verification: targeted backend sync/assistant/review tests passed (`46`, `29`, and `17` tests); ruff passed; `npm.cmd run lint` and `npm.cmd run build` passed.
+- `fix: improve developer b google review ingestion`
+  - Updated the Mail/Document Agent sync path so changed Google Drive files create separate Review Queue candidates instead of one over-aggregated item, while Gmail keeps parent email and attachment evidence grouped together.
+  - Tightened live Gmail collection with a business-focused query window and spam/trash/social/promotions/forums exclusions, plus explicit Gmail message `content_signature` metadata for safer dedupe.
+  - Verification: 63 targeted Google/Mail-Document/connector runtime tests passed; ruff passed on touched backend files.

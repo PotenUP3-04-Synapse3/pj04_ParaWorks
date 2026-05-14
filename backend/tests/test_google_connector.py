@@ -137,6 +137,7 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     assert event.raw_metadata['required_scopes'] == list(GOOGLE_CONNECTOR_SCOPES['gmail'])
     assert event.raw_metadata['sync_partition'] == 'gmail'
     assert event.raw_metadata['sync_cursor'] == '1777600800000'
+    assert event.raw_metadata['content_signature'] == 'gmail:msg-1:1777600800000'
     assert event.raw_metadata['thread_id'] == 'thread-1'
     assert event.raw_metadata['thread_context_key'] == 'thread-1:msg-1'
     assert event.raw_metadata['label_ids'] == ['INBOX', 'IMPORTANT']
@@ -590,6 +591,29 @@ def test_google_web_api_client_paginates_and_hydrates_gmail_messages() -> None:
     assert detail_request.url.params['format'] == 'full'
 
 
+def test_google_web_api_client_uses_business_focused_gmail_query_by_default() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={'messages': []})
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert client.gmail_messages() == []
+
+    list_request = requests[0]
+    query = list_request.url.params['q']
+    assert 'newer_than:90d' in query
+    assert '-in:spam' in query
+    assert '-in:trash' in query
+    assert '-category:promotions' in query
+    assert '-category:social' in query
+
+
 def test_google_web_api_client_paginates_drive_files() -> None:
     requests: list[httpx.Request] = []
 
@@ -694,7 +718,12 @@ def test_google_web_api_client_sends_delta_params_for_gmail_drive_and_calendar()
     gmail_request = next(request for request in requests if request.url.path == '/gmail/v1/users/me/messages')
     drive_request = next(request for request in requests if request.url.path == '/drive/v3/files')
     calendar_request = next(request for request in requests if request.url.path == '/calendar/v3/calendars/primary/events')
-    assert gmail_request.url.params['q'] == 'after:1777600800'
+    gmail_query = gmail_request.url.params['q']
+    assert 'after:1777600800' in gmail_query
+    assert '-in:spam' in gmail_query
+    assert '-in:trash' in gmail_query
+    assert '-category:promotions' in gmail_query
+    assert '-category:social' in gmail_query
     assert drive_request.url.params['q'] == "modifiedTime > '2026-05-01T09:00:00Z'"
     assert calendar_request.url.params['updatedMin'] == '2026-05-01T10:00:00Z'
 

@@ -111,6 +111,41 @@ def create_mail_document_agent_review_items(
     return review_items
 
 
+def create_mail_document_agent_review_items_for_changed_sources(
+    *,
+    db: Session,
+    agent: MailDocumentAgent,
+    permission_context: PermissionContext,
+    source_window: str,
+    source_ids: list[str],
+    source_types: tuple[str, ...] = MAIL_DOCUMENT_SOURCE_TYPES,
+) -> list[ReviewItem]:
+    """
+    동기화에서 변경된 소스를 검토 큐에 반영합니다.
+
+    Google Drive 문서는 파일 단위로, Gmail은 본문과 첨부를 메일 단위로 묶어
+    실행합니다. 이렇게 해야 여러 문서가 한 개 후보로 뭉개지지 않고, 첨부만
+    바뀐 경우에도 부모 메일 문맥을 함께 보존할 수 있습니다.
+    """
+    review_items: list[ReviewItem] = []
+    for group_source_ids in _changed_source_groups(
+        db=db,
+        source_ids=source_ids,
+        source_types=source_types,
+    ):
+        review_items.extend(
+            create_mail_document_agent_review_items(
+                db=db,
+                agent=agent,
+                permission_context=permission_context,
+                source_window=source_window,
+                source_ids=group_source_ids,
+                source_types=source_types,
+            )
+        )
+    return review_items
+
+
 def build_mail_document_evidence_packet(
     *,
     db: Session,
@@ -229,3 +264,41 @@ def _source_quality_metadata(chunk: DocumentChunk) -> dict[str, object]:
 
 def _estimate_tokens(packet: EvidencePacket) -> int:
     return sum(max(1, len(message.text.strip()) // 4) for message in packet.messages if message.text.strip())
+
+
+def _changed_source_groups(
+    *,
+    db: Session,
+    source_ids: list[str],
+    source_types: tuple[str, ...],
+) -> list[list[str]]:
+    if not source_ids:
+        return []
+
+    rows = db.scalars(
+        select(Source)
+        .where(Source.source_id.in_(source_ids))
+        .where(Source.source_type.in_(source_types))
+        .order_by(Source.id)
+    ).all()
+
+    groups: dict[str, list[str]] = {}
+    for source in rows:
+        raw_metadata = source.raw_metadata or {}
+        if source.source_type == 'gmail_attachment':
+            group_key = str(raw_metadata.get('parent_source_id') or source.source_id)
+            parent_source_id = raw_metadata.get('parent_source_id')
+            if isinstance(parent_source_id, str) and parent_source_id:
+                _append_unique(groups.setdefault(group_key, []), parent_source_id)
+            _append_unique(groups.setdefault(group_key, []), source.source_id)
+            continue
+
+        group_key = source.source_id
+        _append_unique(groups.setdefault(group_key, []), source.source_id)
+
+    return list(groups.values())
+
+
+def _append_unique(values: list[str], value: str) -> None:
+    if value not in values:
+        values.append(value)

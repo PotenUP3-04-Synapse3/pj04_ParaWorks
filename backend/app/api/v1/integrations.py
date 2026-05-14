@@ -12,6 +12,7 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgent,
     build_mail_document_agent_preflight,
     create_mail_document_agent_review_items,
+    create_mail_document_agent_review_items_for_changed_sources,
 )
 from backend.app.agents.memory_extraction_agent import (
     build_memory_extraction_agent_preflight,
@@ -283,7 +284,7 @@ def _run_connector_agent_review(
         return len(review_items)
 
     if connector_type in GOOGLE_OAUTH_CONNECTOR_TYPES:
-        review_items = create_mail_document_agent_review_items(
+        review_items = create_mail_document_agent_review_items_for_changed_sources(
             db=db,
             agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
             permission_context=PermissionContext(user_id=user.id, role=user.role),

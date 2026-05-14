@@ -50,7 +50,7 @@ def test_gmail_sync_runs_agent_only_for_changed_gmail_sources(client, db_session
     assert not any('drive.mock' in link for link in review_item.source_links)
 
 
-def test_drive_sync_runs_agent_only_for_changed_drive_sources(client, db_session) -> None:
+def test_drive_sync_creates_review_item_per_changed_drive_source(client, db_session) -> None:
     _set_csrf_cookie(client)
 
     response = client.post('/api/v1/integrations/drive/sync', headers=CSRF_HEADERS)
@@ -58,11 +58,13 @@ def test_drive_sync_runs_agent_only_for_changed_drive_sources(client, db_session
     assert response.status_code == 200
     payload = response.json()
     assert payload['connector_type'] == 'drive'
-    assert payload['created_review_items'] == 1
-    review_item = db_session.query(ReviewItem).one()
-    assert review_item.payload['agent_name'] == 'mail_document_agent'
-    assert all('drive.mock' in link for link in review_item.source_links)
-    assert not any('gmail.mock' in link for link in review_item.source_links)
+    assert payload['created_review_items'] == 2
+    review_items = db_session.query(ReviewItem).order_by(ReviewItem.id).all()
+    assert len(review_items) == 2
+    assert all(item.payload['agent_name'] == 'mail_document_agent' for item in review_items)
+    assert all(len(item.source_links) == 1 for item in review_items)
+    assert all('drive.mock' in item.source_links[0] for item in review_items)
+    assert not any('gmail.mock' in link for item in review_items for link in item.source_links)
 
 
 def test_duplicate_gmail_sync_does_not_rerun_agent_for_unchanged_sources(client, db_session) -> None:

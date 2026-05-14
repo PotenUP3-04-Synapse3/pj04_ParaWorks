@@ -18,6 +18,7 @@ from backend.app.agents.mail_document_agent.service import (
     build_mail_document_agent_preflight,
     build_mail_document_evidence_packet,
     create_mail_document_agent_review_items,
+    create_mail_document_agent_review_items_for_changed_sources,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     'build_mail_document_agent_preflight',
     'build_mail_document_evidence_packet',
     'create_mail_document_agent_review_items',
+    'create_mail_document_agent_review_items_for_changed_sources',
 ]
