@@ -1,14 +1,18 @@
 import json
+import sys
 from types import SimpleNamespace
 
 from backend.app.assistant.email_agent import (
     EmailIntentDecision,
     LangChainEmailDraftComposerModel,
     LangChainEmailIntentGateModel,
+    build_email_draft_composer,
+    build_email_intent_gate,
     render_email_action_context,
     render_email_draft_prompt,
     render_recent_assistant_context_for_email,
 )
+from backend.app.core.config import Settings
 
 
 class FakeChatModel:
@@ -19,6 +23,36 @@ class FakeChatModel:
     def invoke(self, messages):
         self.messages = messages
         return self.content
+
+
+def test_email_draft_composer_defaults_to_stronger_model_than_intent_gate() -> None:
+    settings = Settings()
+
+    assert settings.assistant_email_agent_model == 'gpt-4.1-nano'
+    assert settings.assistant_email_draft_agent_model == 'gpt-5.4-mini'
+
+
+def test_email_draft_composer_builder_uses_dedicated_draft_model(monkeypatch) -> None:
+    class CapturingChatOpenAI:
+        instances = []
+
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+            self.__class__.instances.append(self)
+
+    monkeypatch.setitem(sys.modules, 'langchain_openai', SimpleNamespace(ChatOpenAI=CapturingChatOpenAI))
+    settings = Settings(
+        paraworks_demo_mode=False,
+        openai_api_key='test-key',
+        assistant_email_agent_model='gpt-4.1-nano',
+        assistant_email_draft_agent_model='gpt-5.4-mini',
+    )
+
+    build_email_intent_gate(settings)
+    build_email_draft_composer(settings)
+
+    assert CapturingChatOpenAI.instances[0].kwargs['model'] == 'gpt-4.1-nano'
+    assert CapturingChatOpenAI.instances[1].kwargs['model'] == 'gpt-5.4-mini'
 
 
 def test_email_intent_gate_prompt_only_classifies_email_intent() -> None:

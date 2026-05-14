@@ -1293,3 +1293,24 @@ uv run ruff check backend/app/assistant/recipient_resolver.py backend/app/assist
 
 Result: targeted resolver/API tests passed; 37 assistant tests passed; ruff
 passed.
+
+## 2026-05-14 Email Draft Composer Model Upgrade
+
+- Split the email sub-agent model settings by responsibility:
+  `ASSISTANT_EMAIL_AGENT_MODEL` remains the low-cost intent gate model and
+  defaults to `gpt-4.1-nano`.
+- Added `ASSISTANT_EMAIL_DRAFT_AGENT_MODEL`, defaulting to `gpt-5.4-mini`, so
+  the draft composer can produce better Korean business email drafts without
+  making every email-intent classification more expensive.
+- `build_email_draft_composer()` now instantiates `ChatOpenAI` with
+  `settings.assistant_email_draft_agent_model`; `build_email_intent_gate()`
+  still uses `settings.assistant_email_agent_model`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_email_agent.py::test_email_draft_composer_defaults_to_stronger_model_than_intent_gate backend/tests/test_assistant_email_agent.py::test_email_draft_composer_builder_uses_dedicated_draft_model -q
+uv run pytest backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py -q
+uv run ruff check backend/app/core/config.py backend/app/assistant/email_agent.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py
+```
+
+Result: targeted model tests passed; 39 assistant tests passed; ruff passed.

@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     agent_llm_timeout_seconds: float = 30.0
     assistant_email_agent_enabled: bool = True
     assistant_email_agent_model: str = 'gpt-4.1-nano'
+    assistant_email_draft_agent_model: str = 'gpt-5.4-mini'
     assistant_email_agent_max_input_chars: int = 2500
     assistant_email_agent_max_output_tokens: int = 256
     assistant_email_agent_temperature: float = 0.0

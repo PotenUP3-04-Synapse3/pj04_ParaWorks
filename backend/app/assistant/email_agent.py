@@ -249,10 +249,10 @@ def build_email_draft_composer(settings: Settings) -> EmailDraftComposer | NoopE
 
     return EmailDraftComposer(
         model=LangChainEmailDraftComposerModel(
-            model_name=settings.assistant_email_agent_model,
+            model_name=settings.assistant_email_draft_agent_model,
             max_input_chars=settings.assistant_email_agent_max_input_chars,
             chat_model=ChatOpenAI(
-                model=settings.assistant_email_agent_model,
+                model=settings.assistant_email_draft_agent_model,
                 api_key=settings.openai_api_key,
                 temperature=settings.assistant_email_agent_temperature,
                 timeout=settings.assistant_email_agent_timeout_seconds,

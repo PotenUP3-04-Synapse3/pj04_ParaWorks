@@ -3993,3 +3993,11 @@ Cost/security note:
     sends still require the existing pending approval and Gmail send endpoint.
   - Verification: targeted recipient resolver/API tests passed, wider assistant
     backend tests passed with 37 tests, and ruff passed on touched files.
+- `fix: upgrade email draft composer model`
+  - Split the email sub-agent model setting so the cheap intent gate remains on
+    `gpt-4.1-nano`, while the email draft composer defaults to
+    `gpt-5.4-mini`.
+  - Added `ASSISTANT_EMAIL_DRAFT_AGENT_MODEL` to `.env.example` and wired
+    `build_email_draft_composer()` to use the dedicated stronger model.
+  - Verification: targeted model-routing tests passed, wider assistant backend
+    tests passed with 39 tests, and ruff passed on touched files.
