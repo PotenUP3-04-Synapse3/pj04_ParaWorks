@@ -12,11 +12,17 @@ from typing import Protocol
 import httpx
 
 from backend.app.connectors.base import ConnectorManifest, SourceEvent
+from backend.app.documents.adapters import (
+    DocxDocumentParser,
+    PdfDocumentParser,
+    TextDocumentParser,
+)
 from backend.app.documents.parsers import parser_adapter_decision_for_mime_type
-from backend.app.documents.adapters import PdfDocumentParser, DocxDocumentParser, TextDocumentParser
 
 GoogleQueryParams = dict[str, str | list[str]]
 GOOGLE_TEXT_BODY_LIMIT = 4_000
+GOOGLE_GMAIL_INITIAL_QUERY = 'newer_than:90d -in:spam -in:trash -category:social -category:promotions -category:forums'
+GOOGLE_GMAIL_DELTA_EXCLUDES = '-in:spam -in:trash -category:social -category:promotions -category:forums'
 GOOGLE_DRIVE_DOC_MIME_TYPE = 'application/vnd.google-apps.document'
 GOOGLE_DRIVE_TEXT_EXPORT_MIME_TYPE = 'text/plain'
 GOOGLE_DRIVE_SHEETS_MIME_TYPE = 'application/vnd.google-apps.spreadsheet'
@@ -71,6 +77,8 @@ class GoogleWebApiClient:
         page_limit: int = 100,
         max_retries: int = 2,
         sleep: Callable[[float], None] = time.sleep,
+        gmail_initial_query: str = GOOGLE_GMAIL_INITIAL_QUERY,
+        gmail_delta_excludes: str = GOOGLE_GMAIL_DELTA_EXCLUDES,
     ) -> None:
         self.oauth_token = oauth_token
         self.http_client = http_client or httpx.Client(timeout=30.0)
@@ -80,12 +88,17 @@ class GoogleWebApiClient:
         self.page_limit = page_limit
         self.max_retries = max_retries
         self.sleep = sleep
+        self.gmail_initial_query = gmail_initial_query
+        self.gmail_delta_excludes = gmail_delta_excludes
 
     def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
         messages: list[dict] = []
         params: GoogleQueryParams = {'maxResults': str(self.page_limit)}
-        if after_internal_date:
-            params['q'] = _gmail_after_query(after_internal_date)
+        params['q'] = _gmail_query(
+            after_internal_date=after_internal_date,
+            initial_query=self.gmail_initial_query,
+            delta_excludes=self.gmail_delta_excludes,
+        )
         for message_ref in self._get_paged_items(
             f'{self.gmail_base_url}/gmail/v1/users/me/messages',
             item_key='messages',
@@ -329,6 +342,7 @@ class GoogleConnector:
                 'account_id': self.config.account_id,
                 'sync_partition': 'gmail',
                 'sync_cursor': str(message.get('internalDate') or ''),
+                'content_signature': f'gmail:{message_id}:{message.get("internalDate") or ""}',
                 'body_source': body_source,
                 'body_truncated': body_truncated,
                 **domain_metadata,
@@ -528,6 +542,17 @@ def _google_error_message(response: httpx.Response) -> str:
     if isinstance(error, dict):
         return str(error.get('message') or f'Google API request failed with {response.status_code}')
     return str(error)
+
+
+def _gmail_query(
+    *,
+    after_internal_date: str | None,
+    initial_query: str,
+    delta_excludes: str,
+) -> str:
+    if after_internal_date:
+        return f'{_gmail_after_query(after_internal_date)} {delta_excludes}'.strip()
+    return initial_query
 
 
 def _gmail_after_query(after_internal_date: str) -> str:

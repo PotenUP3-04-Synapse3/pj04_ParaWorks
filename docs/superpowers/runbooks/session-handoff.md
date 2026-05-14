@@ -1111,6 +1111,31 @@ Residual note:
   without approved ReviewItem source ids. The sync/assistant tests listed above
   are green after this change.
 
+## 2026-05-14 Developer B Drive/Gmail Review Fix
+
+- Google Drive sync now runs the Mail/Document Agent per changed Drive source
+  instead of sending every changed Drive file in one evidence packet. This
+  prevents multiple synced documents from being collapsed into a single Review
+  Queue candidate.
+- Gmail sync still groups a message and its changed attachments together, so
+  attachment evidence keeps the parent email context without mixing unrelated
+  emails.
+- Gmail live fetch now sends a business-focused Gmail search query by default:
+  `newer_than:90d` plus spam/trash/social/promotions/forums exclusions. Delta
+  sync keeps the `after:<cursor>` constraint and applies the same exclusions.
+- Gmail message SourceEvents now include a `content_signature` based on the
+  message id and `internalDate`, so the ingestion boundary has an explicit
+  dedupe/update signal instead of treating every existing Gmail message as
+  same-content by fallback.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_mail_document_agent_api.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_google_connector.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_connector_factory.py backend/tests/test_integration_runtime_status.py -q
+uv run ruff check backend/app/agents/mail_document_agent/service.py backend/app/agents/mail_document_agent/__init__.py backend/app/api/v1/integrations.py backend/app/connectors/google.py backend/tests/test_mail_document_agent_api.py backend/tests/test_google_connector.py
+```
+
+Result: 63 targeted backend tests passed; ruff passed.
+
 ## 2026-05-14 Slack sync와 agent_slack LLM 파이프라인 연결
 
 - 사용자가 Slack sync 후 `review_items`에 `Redis 큐 관련 결정사항 추출됨` 1건만
