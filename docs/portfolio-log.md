@@ -2693,7 +2693,7 @@ Verification evidence:
 What changed:
 
 - Added Postgres and Redis healthchecks to the local Docker stack and made the
-  pgvector helper detect an occupied host `5432` before falling back to `55432`.
+  pgvector helper detect an occupied host `5432` before falling back to `5432`.
 - Added `scripts/check_pgvector_dev.py` so developers can verify the vector
   extension, vector table, and app indexing state table without guessing whether
   the local DB is ready.
@@ -2718,7 +2718,7 @@ Portfolio angle:
 
 Verification evidence:
 
-- `uv run python scripts/check_pgvector_dev.py --database-url postgresql+psycopg://paraworks:paraworks@127.0.0.1:55432/paraworks --expect-app-schema`
+- `uv run python scripts/check_pgvector_dev.py --database-url postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks --expect-app-schema`
   passed against the local pgvector container with vector extension `0.8.2`.
 - `uv run pytest backend/tests/test_pgvector_dev_runbook.py backend/tests/test_pgvector_integration.py backend/tests/test_pgvector_store.py backend/tests/test_rag_indexing.py backend/tests/test_rag_indexing_tasks.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_vector_retriever.py -v`
   passed with 37 tests.

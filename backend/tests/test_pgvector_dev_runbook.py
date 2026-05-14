@@ -9,7 +9,7 @@ def test_pgvector_dev_runbook_documents_safe_production_path() -> None:
     assert 'docker compose up -d postgres redis' in runbook
     assert '-SkipApp' in runbook
     assert 'scripts/check_pgvector_dev.py' in runbook
-    assert '55432' in runbook
+    assert '5432' in runbook
     assert 'OPENAI_API_KEY' in runbook
     assert 'dry_run=false' in runbook
     assert 'Do not commit `.env`' in runbook

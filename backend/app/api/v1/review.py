@@ -176,8 +176,15 @@ def update_review_item(
     item = _get_review_item_for_action(db, item_id, settings)
     ensure_can_review_permission(user, item.permission_level)
 
-    for field, value in update.model_dump(exclude_unset=True).items():
-        setattr(item, field, value)
+    update_data = update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if field == 'payload' and isinstance(value, dict):
+            # 병합(merge)하여 기존 payload의 다른 필드 유실 방지
+            new_payload = dict(item.payload or {})
+            new_payload.update(value)
+            item.payload = new_payload
+        else:
+            setattr(item, field, value)
 
     db.commit()
     db.refresh(item)

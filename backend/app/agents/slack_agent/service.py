@@ -11,6 +11,7 @@ from backend.app.agent_runtime import (
 )
 from backend.app.agents.slack_agent.agent import SlackAgent
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
+from backend.app.projects.classifier import CANONICAL_PROJECTS
 
 _DECISION_KEYWORDS = (
     '결정',
@@ -106,15 +107,20 @@ def create_slack_agent_review_items(
         
         # Phase 2: 동적 태그 전파 (Back-propagation)
         back_propagate_slack_tags(db, candidate)
+        
+        topic_tag = candidate.payload_fields.get('topic_tag', 'N/A')
+        project_key, is_new_project = _determine_project_from_tag(topic_tag, candidate.summary)
 
         payload = {
             'title': candidate.title,
             'summary': candidate.summary,
             'category': candidate.payload_fields.get('category', 'Ad-hoc'),
-            'topic_tag': candidate.payload_fields.get('topic_tag', 'N/A'),
+            'topic_tag': topic_tag,
             'importance': candidate.payload_fields.get('importance', 'Medium'),
             'assignee': candidate.payload_fields.get('assignee'),
             'due_date': candidate.payload_fields.get('due_date'),
+            'project_key': project_key,
+            'is_new_project': is_new_project,
             'agent_name': result.agent_name,
             'agent_run_id': agent_run.id,
             'prompt_version': result.prompt_version,
@@ -146,6 +152,25 @@ def create_slack_agent_review_items(
 
     return review_items
 
+def _determine_project_from_tag(topic_tag: str, summary: str) -> tuple[str | None, bool]:
+    searchable = f'{topic_tag} {summary}'.lower()
+    for project in CANONICAL_PROJECTS:
+        for alias in project.aliases:
+            if alias.lower() in {'ir', 'vc'}:
+                if re.search(rf'(?<![0-9a-z]){re.escape(alias.lower())}(?![0-9a-z])', searchable):
+                    return project.project_key, False
+            elif alias.lower() in searchable:
+                return project.project_key, False
+    
+    # 신규 프로젝트 제안 (태그가 명확한 경우)
+    if topic_tag and topic_tag not in ('N/A', 'None', '기타', '기본', 'Ad-hoc', 'ad-hoc', '미지정'):
+        import re as regex
+        # 한글, 영문, 숫자 외 제거하고 대시로 연결
+        dynamic_key = regex.sub(r'[^a-z0-9가-힣]+', '-', topic_tag.lower()).strip('-')
+        if dynamic_key:
+            return f"project-{dynamic_key}", True
+    
+    return "ad-hoc", False
 
 def back_propagate_slack_tags(db: Session, candidate: ReviewCandidate) -> None:
     """추출된 지식의 카테고리/토픽 정보를 원본 슬랙 메시지 청크에 역전파합니다."""
