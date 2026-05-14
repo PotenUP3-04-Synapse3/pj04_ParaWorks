@@ -1365,3 +1365,26 @@ uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_dr
 
 Result: targeted referenced-email tests passed; wider assistant backend tests
 passed with 49 tests; ruff passed.
+
+## 2026-05-14 Assistant Generate-Then-Email Drafts
+
+- Extended `backend/app/assistant/email_draft_context.py` with a generated
+  source request detector for messages such as
+  `ParaWorks 회사 소개서 작성해서 용희님한테 메일 보내줘.`.
+- This route now runs before `email_intent_gate`: it extracts the generation
+  question (`ParaWorks 회사 소개서 작성해줘`), retrieves/generates the answer through
+  the RAG orchestrator, resolves the recipient, and then passes the generated
+  answer to `email_draft_composer`.
+- The existing source-content guardrail also applies here, so if the draft
+  composer returns a generic body, the generated RAG answer is appended before
+  the pending approval draft is stored.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_generates_requested_content_before_email_draft -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted generate-then-email test passed; wider assistant backend tests
+passed with 50 tests; ruff passed.

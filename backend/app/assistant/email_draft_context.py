@@ -5,6 +5,18 @@ from typing import Any
 
 from backend.app.assistant.email_actions import EmailDraft
 
+GENERATE_TERMS = (
+    '작성',
+    '정리',
+    '요약',
+    '만들',
+    '써',
+    '준비',
+    'write',
+    'summarize',
+    'draft',
+)
+GENERATE_CONNECTORS = ('해서', '하고', '하여', '한 뒤', '후에', '후')
 REFERENCE_TERMS = (
     '이 내용',
     '위 내용',
@@ -79,6 +91,26 @@ class EmailSourceContext:
             ),
             'reason': self.reason,
         }
+
+
+@dataclass(frozen=True)
+class GeneratedEmailSourceRequest:
+    should_route: bool
+    question: str = ''
+    reason: str = ''
+
+
+def build_generated_email_source_request(*, latest_message: str) -> GeneratedEmailSourceRequest:
+    if not _is_generate_and_send_request(latest_message):
+        return GeneratedEmailSourceRequest(should_route=False)
+    question = _generated_source_question(latest_message)
+    if not question:
+        return GeneratedEmailSourceRequest(should_route=False)
+    return GeneratedEmailSourceRequest(
+        should_route=True,
+        question=question,
+        reason='generate_source_before_email',
+    )
 
 
 def build_email_source_context(*, messages: list[Any], latest_message: str) -> EmailSourceContext:
@@ -213,6 +245,42 @@ def _is_reference_email_request(message: str) -> bool:
     has_reference = any(term.lower() in normalized for term in REFERENCE_TERMS)
     has_send = any(term.lower() in normalized for term in SEND_TERMS)
     return has_reference and has_send
+
+
+def _is_generate_and_send_request(message: str) -> bool:
+    normalized = message.lower()
+    has_generate = any(term.lower() in normalized for term in GENERATE_TERMS)
+    has_send = any(term.lower() in normalized for term in SEND_TERMS)
+    has_connector = any(term.lower() in normalized for term in GENERATE_CONNECTORS)
+    return has_generate and has_send and has_connector
+
+
+def _generated_source_question(message: str) -> str:
+    normalized = message.strip()
+    cutoff = len(normalized)
+    for connector in GENERATE_CONNECTORS:
+        index = normalized.find(connector)
+        if index == -1:
+            continue
+        tail = normalized[index + len(connector):]
+        if any(term.lower() in tail.lower() for term in SEND_TERMS):
+            cutoff = min(cutoff, index)
+    question = normalized[:cutoff].strip(' .。!?\n\t')
+    return _complete_generation_question(question)
+
+
+def _complete_generation_question(question: str) -> str:
+    if not question:
+        return ''
+    if question.endswith(('해줘', '해주세요', '줘', '세요', '?')):
+        return question
+    if question.endswith(('작성', '정리', '요약', '준비')):
+        return f'{question}해줘'
+    if question.endswith('만들'):
+        return f'{question}어줘'
+    if question.endswith('써'):
+        return f'{question}줘'
+    return f'{question} 해줘'
 
 
 def _is_draft_revision_request(message: str) -> bool:

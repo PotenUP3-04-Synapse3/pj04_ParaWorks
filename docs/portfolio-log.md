@@ -4017,3 +4017,11 @@ Cost/security note:
     composer produces a generic body that omits the actual referenced answer.
   - Verification: targeted referenced-email tests passed, wider assistant
     backend tests passed with 49 tests, and ruff passed on touched files.
+- `fix: generate assistant content before email drafting`
+  - Added a generate-then-email path for requests like `ParaWorks 회사 소개서
+    작성해서 용희님한테 메일 보내줘`, extracting the requested artifact question,
+    running RAG first, then using that generated answer as the draft body source.
+  - This keeps combined artifact creation plus email requests out of the
+    generic clarification loop that asks the user to provide the content.
+  - Verification: targeted generate-then-email test passed, wider assistant
+    backend tests passed with 50 tests, and ruff passed on touched files.

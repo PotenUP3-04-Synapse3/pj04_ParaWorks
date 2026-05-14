@@ -457,6 +457,77 @@ def test_assistant_can_draft_email_from_rag_answer(
     assert assistant_message['metadata']['email_draft']['body'] == 'Project Alpha launch is Friday.'
 
 
+def test_assistant_generates_requested_content_before_email_draft(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    generated_intro = (
+        'ParaWorks 회사 소개\n'
+        'ParaWorks는 흩어진 업무 대화와 문서를 통합해 조직의 기억을 구축하는 AI 플랫폼입니다.\n'
+        'Slack, Gmail, Google Drive 데이터를 연결하고 Review Queue로 공식 지식을 승인합니다.'
+    )
+
+    def fail_if_email_gate_runs(*args, **kwargs):
+        raise AssertionError('작성해서 보내는 요청은 email_intent_gate에 맡기기 전에 RAG 산출물을 먼저 생성해야 합니다.')
+
+    def fake_rag_answer(**kwargs):
+        assert 'ParaWorks 회사 소개서 작성' in kwargs['question']
+        assert '메일' not in kwargs['question']
+        return SimpleNamespace(
+            answer=generated_intro,
+            citations=[],
+            source_ids=['source-1'],
+            source_links=['https://source.example/paraworks-intro'],
+            source_snippets=['ParaWorks intro source'],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=456,
+            agent_name='rag_orchestrator_agent',
+            prompt_version='rag-answer:v1',
+            question=kwargs['question'],
+        )
+
+    def compose_from_generated_source(**kwargs):
+        assert generated_intro in kwargs['rag_context']
+        assert kwargs['resolved_recipients'][0]['email'] == 'yonghee199702@gmail.com'
+        return assistant_api.EmailActionDecision(
+            action_type='email_draft',
+            to=['yonghee199702@gmail.com'],
+            subject='ParaWorks 회사 소개서 공유드립니다',
+            body='회사 소개서 초안을 공유드립니다.',
+        )
+
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=False),
+        draft_decision=compose_from_generated_source,
+    )
+    monkeypatch.setattr(assistant_api, 'build_email_intent_gate', fail_if_email_gate_runs)
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fake_rag_answer)
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': 'Generate and email'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'ParaWorks 회사 소개서 작성해서 용희님한테 메일 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    draft = assistant_message['metadata']['email_draft']
+    assert assistant_message['metadata']['action_type'] == 'email_draft'
+    assert assistant_message['metadata']['source_context']['kind'] == 'generated_rag_answer'
+    assert draft['to'] == ['yonghee199702@gmail.com']
+    assert '조직의 기억' in draft['body']
+    assert 'Review Queue' in draft['body']
+
+
 def test_assistant_referenced_answer_email_keeps_selected_content(
     client: TestClient,
     db_session: Session,
