@@ -1162,3 +1162,28 @@ uv run pytest backend/tests/test_slack_agent_review_bridge.py backend/tests/test
 ```
 
 Result: `1 passed`, `8 passed`, ruff passed, `23 passed`.
+
+## 2026-05-14 AI Assistant Model and Tool Logging
+
+- AI Assistant RAG answer generation now uses `AGENT_LLM_OPENAI_PRIMARY_MODEL`
+  as the primary OpenAI model. The default primary model is `gpt-5.4`, while
+  `AGENT_LLM_OPENAI_MODEL` remains the OpenAI fallback and defaults to
+  `gpt-5.4-mini`.
+- Added `ASSISTANT_TOOL_LOG_PATH`, defaulting to
+  `.tmp/paraworks-backend.err.log`, so local/docker runs can inspect assistant
+  routing and RAG behavior from the existing backend error log path.
+- Assistant message creation now logs email action routing, RAG retrieval, and
+  RAG answer generation in English with the format
+  `[Tool: tool_name] ...description...`.
+- The log intentionally sanitizes non-ASCII characters before writing so Korean
+  user input or model output does not become mojibake inside the tool trace.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_rag_orchestrator_service.py::test_rag_service_uses_configured_stronger_primary_model backend/tests/test_assistant_api.py::test_assistant_tool_middleware_logs_email_and_rag_tools_in_english -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/tool_logging.py backend/app/core/config.py backend/app/agents/rag_orchestrator_agent/service.py backend/app/agents/rag_orchestrator_agent/llm.py backend/tests/test_assistant_api.py backend/tests/test_rag_orchestrator_service.py
+```
+
+Result: targeted RED tests failed before implementation, then passed after the
+change; wider assistant/RAG tests passed with 40 tests; ruff passed.

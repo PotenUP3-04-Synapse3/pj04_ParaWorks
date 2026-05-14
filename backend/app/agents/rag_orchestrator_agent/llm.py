@@ -5,7 +5,7 @@ from typing import Any
 from backend.app.agent_runtime import EvidencePacket
 from backend.app.agents.rag_orchestrator_agent.agent import RagModelResponse
 
-DEFAULT_RAG_OPENAI_MODEL = 'gpt-5.4-mini'
+DEFAULT_RAG_OPENAI_MODEL = 'gpt-5.4'
 DEFAULT_RAG_GEMINI_MODEL = 'gemini-2.5-flash'
 DEFAULT_MAX_INPUT_CHARS = 12_000
 DEFAULT_MAX_OUTPUT_TOKENS = 512

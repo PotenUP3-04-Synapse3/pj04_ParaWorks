@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     agent_llm_enabled: bool = False
     agent_llm_provider_order: str = 'openai,gemini'
-    agent_llm_openai_model: str = 'gpt-4.1-mini'
+    agent_llm_openai_primary_model: str = 'gpt-5.4'
+    agent_llm_openai_model: str = 'gpt-5.4-mini'
     agent_llm_gemini_model: str = 'gemini-2.5-flash'
     agent_llm_input_cost_per_1m_tokens: float = 0.15
     agent_llm_output_cost_per_1m_tokens: float = 0.60
@@ -48,6 +49,7 @@ class Settings(BaseSettings):
     assistant_email_agent_temperature: float = 0.0
     assistant_email_agent_timeout_seconds: float = 12.0
     assistant_email_agent_min_confidence: float = 0.72
+    assistant_tool_log_path: str = '.tmp/paraworks-backend.err.log'
     rag_embedding_max_estimated_cost_usd: float | None = 0.001
     rag_use_pgvector_search: bool = False
     slack_bot_token: str | None = None

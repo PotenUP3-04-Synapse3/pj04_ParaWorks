@@ -30,6 +30,7 @@ from backend.app.assistant.service import (
     serialize_message,
     update_message_metadata,
 )
+from backend.app.assistant.tool_logging import AssistantToolLogger
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.db.session import get_db
@@ -148,12 +149,25 @@ def create_assistant_message(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     messages = list_messages(db, user, conversation.id)
+    tool_logger = AssistantToolLogger(settings.assistant_tool_log_path)
+    tool_logger.log(
+        'email_action_agent',
+        f'start conversation_id={conversation.id} message_id={user_message.id}',
+    )
     email_decision: EmailActionDecision = build_email_action_agent(settings).decide(
         conversation_context=render_email_action_context(
             messages=messages[:-1],
             max_chars=settings.assistant_email_agent_max_input_chars,
         ),
         latest_message=user_message.content,
+    )
+    tool_logger.log(
+        'email_action_agent',
+        (
+            f'result action={email_decision.action_type} '
+            f'confidence={email_decision.confidence_score:g} '
+            f'model={email_decision.model_name or "deterministic"}'
+        ),
     )
     confident_action = email_decision.confidence_score >= settings.assistant_email_agent_min_confidence
     email_draft = email_decision.to_draft() if confident_action else None
@@ -255,6 +269,7 @@ def create_assistant_message(
             question=contextual_question,
             settings=settings,
             vector_store=vector_store,
+            tool_logger=tool_logger,
         )
     except Exception as exc:
         append_failed_assistant_message(

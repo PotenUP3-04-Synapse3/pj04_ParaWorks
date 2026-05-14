@@ -70,6 +70,74 @@ def test_assistant_message_flow_stores_rag_answer_without_cost_fields(
     assert 'cache_key' not in payload['assistant_message']
 
 
+def test_assistant_tool_middleware_logs_email_and_rag_tools_in_english(
+    client: TestClient,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    log_path = tmp_path / 'paraworks-backend.err.log'
+
+    class LowConfidenceEmailActionAgent:
+        def decide(self, **kwargs):
+            return assistant_api.EmailActionDecision(
+                action_type='not_email',
+                confidence_score=0.2,
+                model_name='gpt-4.1-nano',
+            )
+
+    def fake_rag_answer(**kwargs):
+        tool_logger = kwargs['tool_logger']
+        tool_logger.log('rag_retrieval', 'result backend=keyword source_count=1 hidden_count=0')
+        tool_logger.log('rag_answer', 'start model=gpt-5.4')
+        tool_logger.log('rag_answer', 'result model=gpt-5.4 source_count=1')
+        return SimpleNamespace(
+            answer='RAG answer',
+            citations=[],
+            source_ids=['source-1'],
+            source_links=['https://source.example/1'],
+            source_snippets=['source snippet'],
+            permission_level='internal',
+            hidden_match_count=0,
+            permission_notice=None,
+            agent_run_id=123,
+            agent_name='rag_orchestrator_agent',
+            prompt_version='rag-answer:v1',
+            question=kwargs['question'],
+        )
+
+    def override_settings():
+        return assistant_api.Settings(
+            assistant_tool_log_path=str(log_path),
+            paraworks_demo_mode=False,
+            openai_api_key='test-key',
+        )
+
+    monkeypatch.setattr(assistant_api, 'build_email_action_agent', lambda settings: LowConfidenceEmailActionAgent())
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fake_rag_answer)
+    client.app.dependency_overrides[assistant_api.get_settings] = override_settings
+
+    create_response = client.post(
+        '/api/v1/assistant/conversations',
+        json={'title': 'Tool log'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+    conversation_id = create_response.json()['conversation']['id']
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation_id}/messages',
+        json={'content': 'Redis job state'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    log_text = log_path.read_text(encoding='utf-8')
+    assert '[Tool: email_action_agent] start' in log_text
+    assert '[Tool: email_action_agent] result action=not_email confidence=0.2 model=gpt-4.1-nano' in log_text
+    assert '[Tool: rag_retrieval] result backend=keyword source_count=1 hidden_count=0' in log_text
+    assert '[Tool: rag_answer] start model=gpt-5.4' in log_text
+    assert '[Tool: rag_answer] result model=gpt-5.4 source_count=1' in log_text
+
+
 def test_assistant_context_deduplicates_repeated_assistant_answers(
     db_session: Session,
 ) -> None:
