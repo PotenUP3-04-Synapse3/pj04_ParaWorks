@@ -231,11 +231,13 @@ def _score_candidates(candidates: list[RecipientCandidate], latest_message: str)
     for candidate in candidates:
         score = candidate.confidence_score
         aliases = {alias for alias in candidate.aliases if len(_normalize(alias)) >= 2}
-        if any(_normalize(alias) and _normalize(alias) in normalized_message for alias in aliases):
+        alias_matched = any(_normalize(alias) and _normalize(alias) in normalized_message for alias in aliases)
+        title_matched = bool(candidate.title and _normalize(candidate.title) in normalized_message)
+        if alias_matched:
             score += 0.2
-        if candidate.title and _normalize(candidate.title) in normalized_message:
+        if title_matched:
             score += 0.08
-        if score >= RESOLVE_THRESHOLD:
+        if (alias_matched or title_matched) and score >= RESOLVE_THRESHOLD:
             candidate.confidence_score = min(score, 1.0)
             scored.append(candidate)
     return sorted(scored, key=lambda item: (-item.confidence_score, item.email))

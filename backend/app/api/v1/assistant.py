@@ -28,6 +28,7 @@ from backend.app.assistant.email_draft_context import (
     build_generated_email_source_request,
     ensure_draft_contains_source,
     fallback_draft_from_source,
+    is_pending_draft_recipient_problem,
     merge_resolved_recipients,
     render_email_source_context,
 )
@@ -157,6 +158,52 @@ def _render_rag_answer_for_email(answer) -> str:
             'Source snippets:',
             *snippet_lines,
         ]
+    )
+
+
+def _recipient_clarification_content(recipient_resolution, *, correction: bool = False) -> str:
+    if correction:
+        return '수신자를 누구로 수정할까요? 이름이나 이메일 주소를 알려주세요.'
+    if recipient_resolution.status == 'ambiguous' and recipient_resolution.candidates:
+        lines = [
+            f'- {candidate.display_name}: {candidate.email}'
+            for candidate in recipient_resolution.candidates[:5]
+        ]
+        return '수신자를 하나로 확정하기 어렵습니다. 누구에게 보낼지 선택해 주세요.\n' + '\n'.join(lines)
+    return '수신자를 확정할 수 없습니다. 받을 사람의 정확한 이름이나 이메일 주소를 알려주세요.'
+
+
+def _append_recipient_clarification_message(
+    *,
+    db: Session,
+    user: DemoUser,
+    conversation,
+    recipient_resolution=None,
+    correction: bool = False,
+    source_context=None,
+):
+    return append_assistant_message(
+        db,
+        user,
+        conversation,
+        content=_recipient_clarification_content(recipient_resolution, correction=correction),
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level=None,
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={
+            'action_type': 'email_clarification',
+            'status': 'needs_input',
+            'prompt_version': EMAIL_ACTION_PROMPT_VERSION,
+            'agent_name': 'recipient_resolver',
+            'reason': 'recipient_correction_requested' if correction else 'recipient_not_resolved',
+            'recipient_status': getattr(recipient_resolution, 'status', 'not_found'),
+            'source_context': source_context.metadata if source_context else None,
+        },
     )
 
 
@@ -321,6 +368,22 @@ def create_assistant_message(
         messages=messages[:-1],
         max_chars=settings.assistant_email_agent_max_input_chars,
     )
+    if is_pending_draft_recipient_problem(
+        messages=messages[:-1],
+        latest_message=user_message.content,
+    ):
+        assistant_message = _append_recipient_clarification_message(
+            db=db,
+            user=user,
+            conversation=conversation,
+            correction=True,
+        )
+        return {
+            'conversation': serialize_conversation(conversation),
+            'user_message': serialize_message(user_message),
+            'assistant_message': serialize_message(assistant_message),
+        }
+
     contact_lookup = detect_contact_lookup_request(
         latest_message=user_message.content,
         conversation_context=email_context,
@@ -380,6 +443,19 @@ def create_assistant_message(
             conversation_context=email_context,
         )
         resolved_recipients = recipient_resolution.resolved_recipients
+        if recipient_resolution.status != 'resolved':
+            assistant_message = _append_recipient_clarification_message(
+                db=db,
+                user=user,
+                conversation=conversation,
+                recipient_resolution=recipient_resolution,
+            )
+            return {
+                'conversation': serialize_conversation(conversation),
+                'user_message': serialize_message(user_message),
+                'assistant_message': serialize_message(assistant_message),
+            }
+
         tool_logger.log(
             'email_generated_source',
             (
@@ -433,6 +509,20 @@ def create_assistant_message(
             recipient_resolution.resolved_recipients,
             source_context,
         )
+        if not resolved_recipients:
+            assistant_message = _append_recipient_clarification_message(
+                db=db,
+                user=user,
+                conversation=conversation,
+                recipient_resolution=recipient_resolution,
+                source_context=source_context,
+            )
+            return {
+                'conversation': serialize_conversation(conversation),
+                'user_message': serialize_message(user_message),
+                'assistant_message': serialize_message(assistant_message),
+            }
+
         tool_logger.log(
             'email_source_context',
             (

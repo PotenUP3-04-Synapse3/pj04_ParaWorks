@@ -528,6 +528,171 @@ def test_assistant_generates_requested_content_before_email_draft(
     assert 'Review Queue' in draft['body']
 
 
+def test_assistant_generate_email_unknown_recipient_does_not_reuse_pending_draft(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    def fail_if_costly_email_work_runs(*args, **kwargs):
+        raise AssertionError('수신자가 확정되지 않은 생성-메일 요청은 RAG나 초안 작성으로 진행하면 안 됩니다.')
+
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_costly_email_work_runs)
+    monkeypatch.setattr(assistant_api, 'build_email_draft_composer', fail_if_costly_email_work_runs)
+    conversation = create_conversation(db_session, USERS['viewer'], title='Unknown recipient guard')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content='기존 종우님 초안입니다.',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level=None,
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={
+            'action_type': 'email_draft',
+            'status': 'pending_approval',
+            'email_draft': {
+                'to': ['kjw4work@gmail.com'],
+                'subject': 'ParaWorks 회사 소개서 전달드립니다',
+                'body': '기존 초안 본문',
+            },
+        },
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': 'ParaWorks 회사 소개서 작성해서 한승혁님한테 메일 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['metadata']['action_type'] == 'email_clarification'
+    assert assistant_message['metadata']['reason'] == 'recipient_not_resolved'
+    assert 'kjw4work@gmail.com' not in assistant_message['content']
+
+
+def test_assistant_recipient_only_revision_preserves_pending_draft_body(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    draft_body = (
+        'ParaWorks 회사 소개\n'
+        'ParaWorks는 조직의 기억을 구축하는 AI 플랫폼입니다.\n'
+        'Review Queue와 Permission-Aware RAG를 제공합니다.'
+    )
+
+    def fail_if_rag_runs(*args, **kwargs):
+        raise AssertionError('수신자만 바꾸는 요청은 기존 초안 본문을 재사용해야 하며 RAG를 다시 호출하면 안 됩니다.')
+
+    def compose_revision(**kwargs):
+        assert draft_body in kwargs['rag_context']
+        assert kwargs['resolved_recipients'][0]['email'] == 'hanvv3@gmail.com'
+        return assistant_api.EmailActionDecision(
+            action_type='email_draft',
+            to=['hanvv3@gmail.com'],
+            subject='ParaWorks 회사 소개서 전달드립니다',
+            body='수정된 수신자로 다시 전달드립니다.',
+        )
+
+    _patch_email_flow(
+        monkeypatch,
+        intent_decision=_email_intent(email_intent=False),
+        draft_decision=compose_revision,
+    )
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_rag_runs)
+    conversation = create_conversation(db_session, USERS['viewer'], title='Recipient correction')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content='메일 초안을 작성했습니다.',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level=None,
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={
+            'action_type': 'email_draft',
+            'status': 'pending_approval',
+            'email_draft': {
+                'to': ['kjw4work@gmail.com'],
+                'subject': 'ParaWorks 회사 소개서 전달드립니다',
+                'body': draft_body,
+            },
+        },
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': 'SeungHun Han님한테 보내줘.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    draft = assistant_message['metadata']['email_draft']
+    assert draft['to'] == ['hanvv3@gmail.com']
+    assert 'Review Queue' in draft['body']
+    assert 'Permission-Aware RAG' in draft['body']
+
+
+def test_assistant_wrong_email_address_asks_for_correct_recipient(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    def fail_if_email_or_rag_runs(*args, **kwargs):
+        raise AssertionError('메일 주소 오류 지적은 새 초안이나 RAG가 아니라 수신자 수정 질문으로 처리해야 합니다.')
+
+    monkeypatch.setattr(assistant_api, 'answer_question_with_rag', fail_if_email_or_rag_runs)
+    monkeypatch.setattr(assistant_api, 'build_email_draft_composer', fail_if_email_or_rag_runs)
+    conversation = create_conversation(db_session, USERS['viewer'], title='Wrong recipient')
+    append_assistant_message(
+        db_session,
+        USERS['viewer'],
+        conversation,
+        content='메일 초안을 작성했습니다.',
+        citations=[],
+        source_ids=[],
+        source_links=[],
+        source_snippets=[],
+        permission_level=None,
+        hidden_match_count=0,
+        permission_notice=None,
+        agent_run_id=None,
+        metadata={
+            'action_type': 'email_draft',
+            'status': 'pending_approval',
+            'email_draft': {
+                'to': ['kjw4work@gmail.com'],
+                'subject': 'ParaWorks 회사 소개서 전달드립니다',
+                'body': '기존 초안 본문',
+            },
+        },
+    )
+
+    turn_response = client.post(
+        f'/api/v1/assistant/conversations/{conversation.id}/messages',
+        json={'content': '메일 주소가 잘못됐어.'},
+        headers={'X-Demo-User': 'viewer'},
+    )
+
+    assert turn_response.status_code == 200
+    assistant_message = turn_response.json()['assistant_message']
+    assert assistant_message['metadata']['action_type'] == 'email_clarification'
+    assert assistant_message['metadata']['reason'] == 'recipient_correction_requested'
+    assert '수신자' in assistant_message['content']
+
+
 def test_assistant_referenced_answer_email_keeps_selected_content(
     client: TestClient,
     db_session: Session,

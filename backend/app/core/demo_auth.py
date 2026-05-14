@@ -43,6 +43,7 @@ USERS = {
         'Hanvv Admin',
         'Workspace Administrator',
         'Platform',
+        ('한승헌', '승헌', 'SeungHun Han', 'Han SeungHun'),
     ),
     'kjw4work': DemoUser(
         'kjw4work',

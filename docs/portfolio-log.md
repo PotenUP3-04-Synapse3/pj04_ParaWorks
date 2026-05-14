@@ -4025,3 +4025,11 @@ Cost/security note:
     generic clarification loop that asks the user to provide the content.
   - Verification: targeted generate-then-email test passed, wider assistant
     backend tests passed with 50 tests, and ruff passed on touched files.
+- `fix: harden assistant recipient correction`
+  - Tightened recipient resolution so contacts only surface when the latest
+    message actually matches a name, alias, email, or title, preventing unknown
+    names from reusing previous draft recipients.
+  - Added pending-draft recipient correction handling for wrong-address feedback
+    and recipient-only follow-ups such as `SeungHun Han님한테 보내줘`.
+  - Verification: targeted recipient-correction tests passed, wider assistant
+    backend tests passed with 53 tests, and ruff passed on touched files.

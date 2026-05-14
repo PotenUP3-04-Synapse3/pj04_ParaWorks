@@ -34,6 +34,10 @@ SEND_TERMS = ('메일', '이메일', '보내', '전송', '발송', 'send', 'emai
 REVISION_TERMS = (
     '내용',
     '본문',
+    '메일 주소',
+    '이메일 주소',
+    '수신자',
+    '받는 사람',
     '안 들어',
     '안들어',
     '빠졌',
@@ -42,8 +46,20 @@ REVISION_TERMS = (
     '하나도',
     '누락',
     '수정',
+    '잘못',
+    '틀렸',
     '다시',
 )
+RECIPIENT_UPDATE_TERMS = (
+    '한테 보내',
+    '에게 보내',
+    '님한테 보내',
+    '님에게 보내',
+    '로 보내',
+    'to ',
+)
+RECIPIENT_PROBLEM_TERMS = ('메일 주소', '이메일 주소', '수신자', '받는 사람', '주소')
+WRONG_TERMS = ('잘못', '틀렸', '아니', '오류')
 EXCLUDED_ASSISTANT_ACTIONS = {
     'contact_lookup',
     'email_clarification',
@@ -117,7 +133,8 @@ def build_email_source_context(*, messages: list[Any], latest_message: str) -> E
     pending_draft = find_latest_pending_email_draft(messages)
     is_reference_request = _is_reference_email_request(latest_message)
     is_revision_request = pending_draft is not None and _is_draft_revision_request(latest_message)
-    if not is_reference_request and not is_revision_request:
+    is_recipient_update = pending_draft is not None and _is_pending_draft_recipient_update_request(latest_message)
+    if not is_reference_request and not is_revision_request and not is_recipient_update:
         return EmailSourceContext(should_route=False)
 
     artifact = find_latest_sendable_artifact(messages)
@@ -129,7 +146,10 @@ def build_email_source_context(*, messages: list[Any], latest_message: str) -> E
             kind='pending_email_draft',
             content=pending_draft.body,
             pending_draft=pending_draft,
-            reason='pending_draft_revision' if is_revision_request else 'pending_draft_reference',
+            reason=_pending_draft_reason(
+                is_revision_request=is_revision_request,
+                is_recipient_update=is_recipient_update,
+            ),
         )
 
     return EmailSourceContext(
@@ -138,8 +158,20 @@ def build_email_source_context(*, messages: list[Any], latest_message: str) -> E
         content=artifact['content'],
         source_message_id=artifact['message_id'],
         pending_draft=pending_draft,
-        reason='draft_revision' if is_revision_request else 'referenced_assistant_answer',
+        reason=_artifact_reason(
+            is_revision_request=is_revision_request,
+            is_recipient_update=is_recipient_update,
+        ),
     )
+
+
+def is_pending_draft_recipient_problem(*, messages: list[Any], latest_message: str) -> bool:
+    if find_latest_pending_email_draft(messages) is None:
+        return False
+    normalized = latest_message.lower()
+    has_recipient_term = any(term.lower() in normalized for term in RECIPIENT_PROBLEM_TERMS)
+    has_wrong_term = any(term.lower() in normalized for term in WRONG_TERMS)
+    return has_recipient_term and has_wrong_term
 
 
 def find_latest_pending_email_draft(messages: list[Any]) -> PendingEmailDraft | None:
@@ -207,6 +239,8 @@ def merge_resolved_recipients(
 ) -> list[dict[str, object]]:
     if resolved_recipients:
         return resolved_recipients
+    if source_context.reason in {'pending_draft_recipient_update', 'draft_recipient_update'}:
+        return []
     if source_context.pending_draft is None:
         return []
     return source_context.pending_draft.resolved_recipients
@@ -286,6 +320,27 @@ def _complete_generation_question(question: str) -> str:
 def _is_draft_revision_request(message: str) -> bool:
     normalized = message.lower()
     return any(term.lower() in normalized for term in REVISION_TERMS)
+
+
+def _is_pending_draft_recipient_update_request(message: str) -> bool:
+    normalized = message.lower()
+    return any(term.lower() in normalized for term in RECIPIENT_UPDATE_TERMS)
+
+
+def _pending_draft_reason(*, is_revision_request: bool, is_recipient_update: bool) -> str:
+    if is_recipient_update:
+        return 'pending_draft_recipient_update'
+    if is_revision_request:
+        return 'pending_draft_revision'
+    return 'pending_draft_reference'
+
+
+def _artifact_reason(*, is_revision_request: bool, is_recipient_update: bool) -> str:
+    if is_recipient_update:
+        return 'draft_recipient_update'
+    if is_revision_request:
+        return 'draft_revision'
+    return 'referenced_assistant_answer'
 
 
 def _source_is_already_included(body: str, source: str) -> bool:

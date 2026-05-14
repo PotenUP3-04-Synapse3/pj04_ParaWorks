@@ -1388,3 +1388,29 @@ uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_dr
 
 Result: targeted generate-then-email test passed; wider assistant backend tests
 passed with 50 tests; ruff passed.
+
+## 2026-05-14 Assistant Recipient Correction Safety
+
+- Fixed recipient resolution so known contacts are only returned when an alias,
+  email local-part, display name, or title actually matches the latest message.
+  This prevents unrelated demo users from appearing as ambiguous candidates for
+  unknown names such as `한승혁`.
+- Added a pre-RAG recipient gate for generate-then-email requests. If the
+  recipient is not resolved, the assistant asks for the exact recipient instead
+  of spending RAG/LLM draft cost or reusing a previous pending draft recipient.
+- Added a pending draft recipient-update path. Messages such as
+  `SeungHun Han님한테 보내줘.` reuse the pending draft body/source while replacing
+  only the recipient.
+- Added an explicit correction response for `메일 주소가 잘못됐어.` so it asks for
+  the corrected recipient rather than falling into contact lookup or RAG.
+- Added `SeungHun Han` / `한승헌` aliases to the demo admin contact.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_generate_email_unknown_recipient_does_not_reuse_pending_draft backend/tests/test_assistant_api.py::test_assistant_recipient_only_revision_preserves_pending_draft_body backend/tests/test_assistant_api.py::test_assistant_wrong_email_address_asks_for_correct_recipient backend/tests/test_assistant_recipient_resolver.py -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/app/assistant/recipient_resolver.py backend/app/core/demo_auth.py backend/tests/test_assistant_api.py backend/tests/test_assistant_recipient_resolver.py
+```
+
+Result: targeted recipient-correction tests passed; wider assistant backend
+tests passed with 53 tests; ruff passed.
