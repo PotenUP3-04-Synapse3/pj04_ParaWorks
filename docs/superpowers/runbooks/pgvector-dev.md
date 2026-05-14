@@ -22,7 +22,7 @@ The compose file also supports alternate host ports without editing tracked
 files:
 
 ```powershell
-$env:PARAWORKS_POSTGRES_PORT='55432'
+$env:PARAWORKS_POSTGRES_PORT='5432'
 $env:PARAWORKS_REDIS_PORT='56379'
 docker compose up -d postgres redis
 ```
@@ -30,7 +30,7 @@ docker compose up -d postgres redis
 Then point the app at the matching database URL:
 
 ```powershell
-$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:55432/paraworks'
+$env:DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks'
 ```
 
 Or start the app stack with the helper:
@@ -42,11 +42,11 @@ Or start the app stack with the helper:
 If `5432` is already taken, use the helper's port flags:
 
 ```powershell
-.\scripts\start-pgvector-dev.ps1 -PostgresPort 55432 -RedisPort 56379
+.\scripts\start-pgvector-dev.ps1 -PostgresPort 5432 -RedisPort 56379
 ```
 
 By default the helper also detects a non-ParaWorks listener on `127.0.0.1:5432`
-and falls back to `55432`. This avoids the common local failure mode where an
+and falls back to `5432`. This avoids the common local failure mode where an
 existing PostgreSQL instance answers on `5432` but rejects the ParaWorks
 `paraworks/paraworks` credentials.
 
@@ -119,7 +119,7 @@ uv run python scripts/check_pgvector_dev.py --database-url $env:DATABASE_URL --e
 ```
 
 If the check fails with a password error, you are not connected to the expected
-ParaWorks database. Use `-PostgresPort 55432`, stop the conflicting local
+ParaWorks database. Use `-PostgresPort 5432`, stop the conflicting local
 Postgres service, or reset the Docker volume intentionally with
 `docker compose down -v` when you do not need the local data.
 
@@ -193,10 +193,10 @@ uv run pytest backend/tests/test_pgvector_integration.py -v
 ```
 
 Without `PARAWORKS_PGVECTOR_TEST_DATABASE_URL`, the test is skipped.
-When the helper falls back to `55432`, use the matching URL:
+When the helper falls back to `5432`, use the matching URL:
 
 ```powershell
-$env:PARAWORKS_PGVECTOR_TEST_DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:55432/paraworks'
+$env:PARAWORKS_PGVECTOR_TEST_DATABASE_URL='postgresql+psycopg://paraworks:paraworks@127.0.0.1:5432/paraworks'
 uv run pytest backend/tests/test_pgvector_integration.py -v
 ```
 

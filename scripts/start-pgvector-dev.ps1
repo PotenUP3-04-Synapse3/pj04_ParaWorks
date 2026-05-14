@@ -50,7 +50,7 @@ function Wait-HttpOk {
 }
 
 if ([string]::IsNullOrWhiteSpace($DatabaseUrl) -and -not $NoAutoPortFallback) {
-    $fallbackPort = 55432
+    $fallbackPort = 5432
     if ($PostgresPort -eq 5432 -and (Test-HostPortInUse -Port $PostgresPort) -and -not (Test-ComposePostgresOwnsPort -Port $PostgresPort)) {
         Write-Warning "127.0.0.1:5432 is already in use. Using Postgres host port $fallbackPort for ParaWorks."
         $PostgresPort = $fallbackPort

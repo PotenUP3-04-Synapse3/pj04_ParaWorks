@@ -37,6 +37,7 @@ def promote_review_item(db: Session, item: ReviewItem) -> None:
     validate_review_item_for_approval(item)
     normalized = _normalized_payload_for_item(item)
     base_fields = {
+        'project_key': item.payload.get('project_key'),
         'source_links': item.source_links,
         'source_snippets': item.source_snippets,
         'confidence_score': item.confidence_score,
