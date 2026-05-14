@@ -219,14 +219,49 @@ def build_rag_index_documents(db: Session) -> list[VectorDocument]:
 
 
 def _chunk_documents(db: Session) -> list[VectorDocument]:
+    # Phase 2: 승인 기반 RAG (Approval-only RAG)
+    # 사람이 '승인(approved)'한 ReviewItem에 포함된 source_id 목록만 수집
+    approved_payloads = db.execute(
+        select(ReviewItem.payload).where(ReviewItem.status == 'approved')
+    ).scalars().all()
+    
+    approved_sid_set = set()
+    for p in approved_payloads:
+        if isinstance(p, dict) and 'source_ids' in p:
+            approved_sid_set.update(p['source_ids'])
+            
+    if not approved_sid_set:
+        return []
+
     rows = db.execute(
         select(DocumentChunk, Source)
         .join(Source, DocumentChunk.source_id == Source.id)
+        .where(Source.source_id.in_(list(approved_sid_set)))
         .order_by(DocumentChunk.id)
     ).all()
+    
     documents: list[VectorDocument] = []
     for chunk, source in rows:
         timestamp = source.raw_metadata.get('ts') or source.created_at.isoformat()
+        
+        # 메타데이터 보강 (정적 태그 + 동적 태그)
+        metadata = {
+            'chunk_id': chunk.id,
+            'source_pk': source.id,
+            'source_id': source.source_id,
+            'source_type': source.source_type,
+            'author': source.author,
+            'author_name': source.raw_metadata.get('author_name') or source.author,
+            'channel_name': source.raw_metadata.get('channel_name'),
+            'timestamp': str(timestamp),
+            'created_at_date': source.raw_metadata.get('created_at_date'),
+            'category': chunk.metadata_.get('category'),
+            'topic_tag': chunk.metadata_.get('topic_tag'),
+            'importance': chunk.metadata_.get('importance'),
+            'scenario': source.raw_metadata.get('scenario'),
+            **_document_parser_metadata(chunk),
+        }
+        
         documents.append(
             VectorDocument(
                 document_id=f'chunk:{chunk.id}',
@@ -234,16 +269,7 @@ def _chunk_documents(db: Session) -> list[VectorDocument]:
                 source_url=source.source_url,
                 source_snippet=chunk.source_snippet,
                 permission_level=chunk.permission_level,
-                metadata={
-                    'chunk_id': chunk.id,
-                    'source_pk': source.id,
-                    'source_id': source.source_id,
-                    'source_type': source.source_type,
-                    'author': source.author,
-                    'timestamp': str(timestamp),
-                    'scenario': source.raw_metadata.get('scenario'),
-                    **_document_parser_metadata(chunk),
-                },
+                metadata=metadata,
             )
         )
     return documents
@@ -266,6 +292,7 @@ def _document_parser_metadata(chunk: DocumentChunk) -> dict[str, object]:
 
 
 def _decision_documents(db: Session) -> list[VectorDocument]:
+    # 결정사항 테이블 조회 (이미 승인된 것만 저장됨)
     decisions = db.scalars(
         select(DecisionRecord)
         .where(DecisionRecord.review_status == 'approved')
@@ -276,7 +303,7 @@ def _decision_documents(db: Session) -> list[VectorDocument]:
             document_id=f'decision_record:{decision.id}',
             source_type='decision_record',
             title=decision.title,
-            text=f'{decision.title}\n{decision.decision_summary}',
+            text=f'결정사항: {decision.title}\n내용: {decision.decision_summary}',
             source_links=decision.source_links,
             source_snippets=decision.source_snippets,
             permission_level=decision.permission_level,
@@ -287,6 +314,7 @@ def _decision_documents(db: Session) -> list[VectorDocument]:
 
 
 def _history_documents(db: Session) -> list[VectorDocument]:
+    # 기록/공유 테이블 조회
     events = db.scalars(
         select(HistoryEvent)
         .where(HistoryEvent.review_status == 'approved')
@@ -297,7 +325,7 @@ def _history_documents(db: Session) -> list[VectorDocument]:
             document_id=f'history_event:{event.id}',
             source_type='history_event',
             title=event.title,
-            text=f'{event.title}\n{event.reason}',
+            text=f'기록/공유: {event.title}\n내용: {event.reason}',
             source_links=event.source_links,
             source_snippets=event.source_snippets,
             permission_level=event.permission_level,
@@ -308,6 +336,7 @@ def _history_documents(db: Session) -> list[VectorDocument]:
 
 
 def _todo_documents(db: Session) -> list[VectorDocument]:
+    # 할 일 테이블 조회
     todos = db.scalars(
         select(Todo)
         .where(Todo.review_status == 'approved')
@@ -318,7 +347,7 @@ def _todo_documents(db: Session) -> list[VectorDocument]:
             document_id=f'todo:{todo.id}',
             source_type='todo',
             title=todo.title,
-            text=f'{todo.title}\n{todo.priority}\n{todo.priority_reason}',
+            text=f'할 일: {todo.title}\n우선순위: {todo.priority}\n상세: {todo.priority_reason}',
             source_links=todo.source_links,
             source_snippets=todo.source_snippets,
             permission_level=todo.permission_level,
@@ -339,6 +368,7 @@ def _knowledge_document(
     permission_level: str,
     timestamp: str,
 ) -> VectorDocument:
+    # 지식 항목 인덱싱 시에도 메타데이터 최대한 보강
     return VectorDocument(
         document_id=document_id,
         text=text,
@@ -349,7 +379,7 @@ def _knowledge_document(
             'knowledge_id': document_id,
             'source_type': source_type,
             'title': title,
-            'author': None,
+            'author': 'ParaWorks AI (Verified)',
             'timestamp': timestamp,
         },
     )

@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Protocol, Any
 
 from backend.app.agent_runtime import (
     AgentManifest,
@@ -41,6 +41,7 @@ class SlackAgentModelResponse:
     output_tokens: int
     model_name: str = SLACK_AGENT_MODEL_NAME
     uncertainty_reason: str | None = None
+    extra_fields: dict[str, Any] = field(default_factory=dict)
 
 
 class SlackAgentModel(Protocol):
@@ -75,6 +76,11 @@ class DeterministicSlackAgentModel:
             confidence_score=0.78,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            extra_fields={
+                'category': 'Ad-hoc',
+                'topic_tag': 'N/A',
+                'importance': 'Medium'
+            }
         )
 
 
@@ -95,6 +101,7 @@ class SlackAgent:
             confidence_score=model_response.confidence_score,
             permission_level=packet.strictest_permission,
             uncertainty_reason=model_response.uncertainty_reason,
+            payload_fields=model_response.extra_fields,
         )
         candidate.validate_evidence()
 

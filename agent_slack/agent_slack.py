@@ -47,6 +47,11 @@ class CandidateItem(BaseModel):
     # 차원 3: 구체적 토픽/프로젝트명
     topic_tag: str = Field(description="구체적인 프로젝트명이나 서비스명 (예: '홈페이지 리뉴얼', '인사정책')")
     
+    # 차원 4: 중요도
+    importance: str = Field(
+        description="지식의 중요도: 'Low', 'Medium', 'High' 중 하나"
+    )
+    
     # 대시보드 할 일 관리를 위한 추가 정보
     assignee: Optional[str] = Field(description="할 일(todo)인 경우 담당자 이름 (없으면 null)")
     due_date: Optional[str] = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
@@ -225,6 +230,7 @@ def extract_candidate_node(state: SlackAgentState):
 2. source_snippets 배열에는 지식을 뒷받침하는 핵심 발언 원문을 그대로 채워 넣으세요. (이름을 붙이지 마세요)
 3. source_ts_list 배열에는 해당 지식의 근거가 되는 메시지의 [TS: ...] 숫자값을 반드시 1개 이상 포함하세요. (매우 중요)
 4. 지식 유형(item_type)은 반드시 'decision_record', 'todo', 'history_event' 중 하나만 사용하세요.
+5. 중요도(importance)는 대화의 긴급성이나 영향력을 판단하여 'Low', 'Medium', 'High' 중 하나를 선택하세요.
 
 카테고리 분류 기준:
 - Project (프로젝트): 명확한 기한과 목표가 있는 신규 기획/개발 건
@@ -281,6 +287,7 @@ def extract_candidate_node(state: SlackAgentState):
                 payload_fields={
                     "category": item.category,
                     "topic_tag": item.topic_tag,
+                    "importance": item.importance,
                     "original_item_type": item.item_type,
                     "assignee": item.assignee or "미지정",
                     "due_date": item.due_date or "기한없음"

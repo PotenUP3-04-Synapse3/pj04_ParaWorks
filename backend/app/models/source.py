@@ -19,7 +19,7 @@ class Source(Base):
     permission_level: Mapped[str] = mapped_column(String(32), index=True)
     raw_metadata: Mapped[dict] = mapped_column(MutableDict.as_mutable(JSON), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    documents: Mapped[list['Document']] = relationship(back_populates='source')
+    documents: Mapped[list['Document']] = relationship(back_populates='source', cascade='all, delete-orphan')
 
 
 class Document(Base):
@@ -30,7 +30,7 @@ class Document(Base):
     title: Mapped[str] = mapped_column(String(300))
     current_version: Mapped[str] = mapped_column(String(64), default='v1')
     source: Mapped[Source] = relationship(back_populates='documents')
-    versions: Mapped[list['DocumentVersion']] = relationship(back_populates='document')
+    versions: Mapped[list['DocumentVersion']] = relationship(back_populates='document', cascade='all, delete-orphan')
 
 
 class DocumentVersion(Base):
@@ -41,8 +41,8 @@ class DocumentVersion(Base):
     version: Mapped[str] = mapped_column(String(64), default='v1')
     body: Mapped[str] = mapped_column(Text)
     document: Mapped[Document] = relationship(back_populates='versions')
-    chunks: Mapped[list['DocumentChunk']] = relationship(back_populates='version')
-    parser_runs: Mapped[list['DocumentParserRun']] = relationship(back_populates='document_version')
+    chunks: Mapped[list['DocumentChunk']] = relationship(back_populates='version', cascade='all, delete-orphan')
+    parser_runs: Mapped[list['DocumentParserRun']] = relationship(back_populates='document_version', cascade='all, delete-orphan')
 
 
 class DocumentParserRun(Base):

@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime,timedelta
+from datetime import UTC, datetime, timedelta
+import hashlib
 from time import sleep as default_sleep
 from typing import Protocol
 
@@ -172,7 +173,7 @@ class SlackConnector:
 
     def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
         events: list[SourceEvent] = []
-        
+
         # 1. 사용자 목록을 가져와 ID -> 실명 매핑 생성 (작성자 이름 및 본문 멘션 치환용)
         user_map: dict[str, str] = {}
         try:
@@ -188,36 +189,47 @@ class SlackConnector:
             # 사용자 목록을 가져오지 못해도 동기화는 계속 진행
             pass
 
-        # 2. 대상 채널 결정
+        # 2. 채널 목록을 가져와 ID -> 채널명 매핑 생성 (메타데이터 보강용)
+        channel_map: dict[str, str] = {}
+        try:
+            for channel in self.client.conversations_list():
+                cid = channel.get('id')
+                cname = channel.get('name')
+                if cid and cname:
+                    channel_map[cid] = cname
+        except Exception:
+            pass
+
+        # 3. 대상 채널 결정
         configured_channel_ids = self.config.channel_ids
-        
-        # 3. 봇이 참여 중인 채널 목록 조회 (필터링용)
+
+        # 4. 봇이 참여 중인 채널 목록 조회 (필터링용)
         all_channels = self.client.conversations_list()
         joined_channel_ids = {
             c['id'] for c in all_channels 
             if c.get('is_member') or c.get('is_im') or c.get('is_mpim')
         }
-        
-        # 4. 설정된 채널 중 봇이 참여 중인 채널만 선별
+
+        # 5. 설정된 채널 중 봇이 참여 중인 채널만 선별
         if configured_channel_ids:
             # .env에 채널이 설정되어 있다면, 그중 봇이 들어있는 채널만 처리
             target_channel_ids = [cid for idx, cid in enumerate(configured_channel_ids) if cid in joined_channel_ids]
         else:
             # .env에 채널 설정이 없다면, 봇이 들어있는 모든 채널 처리
             target_channel_ids = list(joined_channel_ids)
-            
+
         for channel_id in target_channel_ids:
             # 7일 전 타임스탬프 계산
             seven_days_ago = (datetime.now(UTC) - timedelta(days=7)).timestamp()
-            
+
             # DB 기록이 없으면 최근 7일치만, 있으면 기록된 시점 이후만 가져옴
             oldest_val = latest_timestamps_by_partition.get(channel_id)
             oldest = str(max(float(oldest_val), seven_days_ago)) if oldest_val else str(seven_days_ago)
-            
+
             for message in self.client.conversation_history(channel_id, oldest=oldest):
                 if message.get('type') != 'message' or not message.get('text'):
                     continue
-                events.append(self._message_to_source_event(channel_id, message, user_map=user_map))
+                events.append(self._message_to_source_event(channel_id, message, user_map=user_map, channel_map=channel_map))
                 thread_ts = str(message.get('thread_ts') or message.get('ts') or '')
                 if not thread_ts or int(message.get('reply_count') or 0) <= 0:
                     continue
@@ -237,6 +249,7 @@ class SlackConnector:
                             parent_text=parent_text,
                             reply_index=reply_index,
                             user_map=user_map,
+                            channel_map=channel_map,
                         )
                     )
         return events
@@ -247,6 +260,7 @@ class SlackConnector:
         message: dict,
         *,
         user_map: dict[str, str],
+        channel_map: dict[str, str],
         parent_ts: str | None = None,
         parent_text: str | None = None,
         reply_index: int | None = None,
@@ -255,18 +269,27 @@ class SlackConnector:
         user_id = message.get('user') or message.get('username')
         # 사용자 ID를 실명으로 변환
         author = user_map.get(user_id, user_id) if user_id else None
-        
+
         thread_ts = str(message.get('thread_ts') or parent_ts or timestamp)
         is_thread_reply = parent_ts is not None and timestamp != parent_ts
         reply_count = int(message.get('reply_count') or 0)
-        
+
         raw_text = str(message['text'])
         # 본문 내 사용자 멘션(<@U...>)을 실명으로 치환
         body_text = _resolve_mentions(raw_text, user_map)
         resolved_parent_text = _resolve_mentions(parent_text, user_map) if parent_text else None
-        
+
         body = _thread_context_body(message_text=body_text, parent_text=resolved_parent_text)
-        
+
+        # [RAG 태그 고도화] 정적 메타데이터 보강
+        event_dt = datetime.fromtimestamp(float(timestamp), tz=UTC)
+        channel_name = channel_map.get(channel_id, channel_id)
+        if not channel_name.startswith('#') and not channel_id.startswith('D'):
+             channel_name = f"#{channel_name}"
+
+        # 중복 임베딩 방지를 위한 콘텐츠 시그니처 (해시)
+        content_signature = hashlib.sha256(body.encode('utf-8')).hexdigest()
+
         return SourceEvent(
             source_type='slack',
             source_id=f'{channel_id}:{timestamp}',
@@ -275,14 +298,19 @@ class SlackConnector:
             body=body,
             author=author,
             participants=[author] if author else [],
-            timestamp=datetime.fromtimestamp(float(timestamp), tz=UTC),
+            timestamp=event_dt,
             permission_level='internal',
             raw_metadata={
                 'channel_id': channel_id,
+                'channel_name': channel_name, # 보강된 태그
+                'author_name': author,        # 보강된 태그
                 'ts': timestamp,
                 'thread_ts': thread_ts,
+                'is_thread_reply': is_thread_reply, # 보강된 태그
+                'parent_ts': parent_ts if is_thread_reply else None, # 보강된 태그
+                'created_at_date': event_dt.strftime('%Y-%m-%d'), # 보강된 태그
+                'content_signature': content_signature, # 중복 방지 태그
                 'is_thread_parent': reply_count > 0 and thread_ts == timestamp,
-                'is_thread_reply': is_thread_reply,
                 'reply_count': reply_count,
                 'thread_parent_text': resolved_parent_text,
                 'thread_reply_index': reply_index,
@@ -313,7 +341,7 @@ def _resolve_mentions(text: str, user_map: dict[str, str]) -> str:
     def replace_mention(match):
         uid = match.group(1)
         return f"@{user_map.get(uid, uid)}"
-    
+
     return re.sub(r'<@([A-Z0-9]+)>', replace_mention, text)
 
 
@@ -328,3 +356,4 @@ def _retry_after_seconds(response: httpx.Response) -> float:
         return max(float(response.headers.get('Retry-After', '1')), 0.0)
     except ValueError:
         return 1.0
+

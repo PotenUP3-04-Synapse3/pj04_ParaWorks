@@ -4,10 +4,10 @@ from datetime import UTC, datetime, timedelta
 from typing import List, Dict, Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from backend.app.models import Source, ReviewItem, AgentRun, Document, DocumentVersion
+from backend.app.models import Source, ReviewItem, AgentRun, Document, DocumentVersion, DocumentChunk
 from backend.app.agent_runtime.contracts import ReviewCandidate, TokenUsage, AgentRunCost
 
 # 프로젝트 루트를 경로에 추가하여 agent_slack 임포트 가능하게 함
@@ -148,6 +148,7 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                     'summary': candidate.summary,
                     'category': candidate.payload_fields.get('category', 'Ad-hoc'),
                     'topic_tag': candidate.payload_fields.get('topic_tag', 'N/A'),
+                    'importance': candidate.payload_fields.get('importance', 'Medium'),
                     'assignee': candidate.payload_fields.get('assignee', '미지정'),
                     'due_date': candidate.payload_fields.get('due_date', '기한없음'),
                     'agent_run_id': agent_run.id,
@@ -158,6 +159,10 @@ def trigger_slack_agent_analysis(db: Session, days: int = 7):
                     'source_authors': source_authors # 작성자 이름 직접 저장
                 }
                 
+                # Phase 2: 동적 태그 전파 (Back-propagation)
+                from backend.app.agents.slack_agent.service import back_propagate_slack_tags
+                back_propagate_slack_tags(db, candidate)
+
                 review_item = ReviewItem(
                     status='pending_review',
                     item_type=candidate.item_type,
