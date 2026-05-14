@@ -15,7 +15,6 @@ from backend.app.connectors.slack import (
 class FakeSlackClient:
     def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
         assert channel_id == 'C123'
-        assert oldest is None
         return [
             {
                 'type': 'message',
@@ -77,6 +76,7 @@ def test_slack_connector_maps_history_messages_to_source_events() -> None:
 
 def test_slack_connector_fetches_incremental_history_after_channel_cursor() -> None:
     observed_oldest: list[str | None] = []
+    recent_cursor = str(datetime.now(UTC).timestamp() - 60)
 
     class IncrementalFakeSlackClient:
         def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
@@ -109,19 +109,20 @@ def test_slack_connector_fetches_incremental_history_after_channel_cursor() -> N
         client=IncrementalFakeSlackClient(),
     )
 
-    events = connector.fetch_events_since({'C123': '1777600800.000100'})
+    events = connector.fetch_events_since({'C123': recent_cursor})
 
-    assert observed_oldest == ['1777600800.000100']
+    assert observed_oldest == [recent_cursor]
     assert [event.source_id for event in events] == ['C123:1777600900.000100']
 
 
 def test_slack_connector_collects_thread_replies_with_parent_context() -> None:
     observed_replies: list[tuple[str, str, str | None]] = []
+    recent_cursor = str(datetime.now(UTC).timestamp() - 60)
 
     class ThreadFakeSlackClient:
         def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
             assert channel_id == 'C123'
-            assert oldest == '1777600700.000100'
+            assert oldest == recent_cursor
             return [
                 {
                     'type': 'message',
@@ -167,9 +168,9 @@ def test_slack_connector_collects_thread_replies_with_parent_context() -> None:
         client=ThreadFakeSlackClient(),
     )
 
-    events = connector.fetch_events_since({'C123': '1777600700.000100'})
+    events = connector.fetch_events_since({'C123': recent_cursor})
 
-    assert observed_replies == [('C123', '1777600800.000100', '1777600700.000100')]
+    assert observed_replies == [('C123', '1777600800.000100', recent_cursor)]
     assert [event.source_id for event in events] == [
         'C123:1777600800.000100',
         'C123:1777600810.000200',
@@ -218,6 +219,78 @@ def test_slack_connector_discovers_channels_when_empty() -> None:
     assert len(events) == 2
     assert events[0].source_id.startswith('C1:')
     assert events[1].source_id.startswith('C3:')
+
+
+def test_slack_connector_fetches_configured_channel_even_when_membership_list_is_empty() -> None:
+    observed_history_channels: list[str] = []
+
+    class ConfiguredChannelFakeSlackClient:
+        def conversations_list(self) -> list[dict]:
+            return []
+
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            observed_history_channels.append(channel_id)
+            return [{'type': 'message', 'user': 'U1', 'text': 'configured channel work item', 'ts': '1.0'}]
+
+        def conversation_replies(self, *args, **kwargs) -> list[dict]:
+            return []
+
+    connector = SlackConnector(
+        config=SlackConnectorConfig(
+            bot_token='xoxb-test',
+            channel_ids=['C123'],
+            workspace_url='https://example.slack.com',
+        ),
+        client=ConfiguredChannelFakeSlackClient(),
+    )
+
+    events = connector.fetch_events()
+
+    assert observed_history_channels == ['C123']
+    assert [event.source_id for event in events] == ['C123:1.0']
+
+
+def test_slack_connector_prefers_user_client_for_configured_channel_when_available() -> None:
+    observed: list[str] = []
+
+    class BotClient:
+        def conversations_list(self) -> list[dict]:
+            return []
+
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            raise AssertionError('bot client should not fetch configured channel when user client is available')
+
+        def conversation_replies(self, *args, **kwargs) -> list[dict]:
+            return []
+
+    class UserClient:
+        def conversations_list(self) -> list[dict]:
+            return []
+
+        def users_list(self) -> list[dict]:
+            return []
+
+        def conversation_history(self, channel_id: str, *, oldest: str | None = None) -> list[dict]:
+            observed.append(f'user:{channel_id}')
+            return [{'type': 'message', 'user': 'U1', 'text': 'user token accessible work item', 'ts': '2.0'}]
+
+        def conversation_replies(self, *args, **kwargs) -> list[dict]:
+            return []
+
+    connector = SlackConnector(
+        config=SlackConnectorConfig(
+            bot_token='xoxb-test',
+            channel_ids=['C123'],
+            workspace_url='https://example.slack.com',
+        ),
+        client=BotClient(),
+        user_client=UserClient(),
+    )
+
+    events = connector.fetch_events()
+
+    assert observed == ['user:C123']
+    assert [event.source_id for event in events] == ['C123:2.0']
 
 
 def test_slack_web_api_client_fetches_paginated_history_with_bearer_token() -> None:

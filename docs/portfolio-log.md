@@ -3967,3 +3967,78 @@ Cost/security note:
   - Slack/Gmail/Drive/Calendar source 분류는 하드코딩 목록 대신 사용자가 만든 프로젝트의 이름과 설명을 기준으로 후보 ReviewItem을 만든다.
   - Review 화면은 DB 프로젝트 목록을 받아 사용자가 LLM 제안 프로젝트를 그대로 두거나 직접 선택한 뒤 승인할 수 있는 흐름을 유지한다.
   - Verification: project/review backend tests passed (`12` and `26` tests); ruff, frontend typecheck, and frontend build passed.
+
+- `fix: harden review project timeline quality`
+  - Slack 업무 후보 추출 전에 deterministic 업무 신호 게이트를 추가해 `후...`, `부탁드립니다.` 같은 저맥락 메시지가 ReviewItem으로 넘어오지 않게 했다. 실제 `agent_slack` LLM 파이프라인도 저신호 메시지만 있으면 LLM 호출을 건너뛴다.
+  - 프로젝트 분류는 한글 token boundary를 사용해 `투자 유치`가 `투자 유치원` 같은 부분 문자열에 오탐되지 않도록 했다.
+  - `/api/v1/projects`는 등록된 프로젝트만 반환하고, 승인 지식은 `timeline_items`와 `activity_items`로 분리해 mirror `TimelineEvent`가 프로젝트 활동에서 중복 표시되지 않게 했다.
+  - Review API에 pagination metadata와 `/bulk` approve/reject를 추가했으며, Review 화면은 초기 50개만 로드하고 promotion preview는 그룹을 펼칠 때 lazy load한다.
+  - Review 화면에서 등록 프로젝트 select를 바로 노출하고, 프로젝트 탭의 “승인된 프로젝트 활동” 설명을 명확히 했다.
+  - Verification: targeted backend tests passed (`66` tests); ruff passed; frontend TypeScript check and production build passed.
+- `fix: block low-signal slack project assignments`
+  - 확인 결과 `굿굿` 같은 반응은 Slack Agent 후보가 아니라 `project_classifier`의 `project_assignment` 후보로 생성되고 있었다.
+  - 프로젝트 설명의 `slack`, `gmail`, `google drive`, `data`, `timeline` 같은 일반 매체 단어가 alias로 등록되면서 Slack source 대부분이 사용자 프로젝트에 매칭될 수 있었다.
+  - 프로젝트 분류기에서 일반 connector/매체 단어를 alias에서 제외하고, Slack source는 실제 메시지가 업무 신호를 통과할 때만 프로젝트 연결 후보가 되도록 막았다.
+  - `Thread parent: ... Thread reply: ...` 형태는 reply 본문 기준으로 업무 신호를 판단하므로 `Thread reply: 굿굿`은 새 동기화/재분류에서 더 이상 후보가 되지 않는다.
+  - Verification: `uv run pytest backend/tests/test_project_memory_api.py -q` passed with `18 passed`; `uv run pytest backend/tests/test_mock_sync.py backend/tests/test_slack_agent_quality.py -q` passed with `7 passed`; targeted Review/Project/Slack regression suite passed with `67 passed`; ruff passed for touched files.
+- `fix: recover slack review items after manual cleanup`
+  - DB에서 `review_items`만 삭제하고 Slack 원본 `sources`가 남아 있는 상태에서 다시 동기화하면, 기존에는 중복 source로 판단되어 Slack Agent 검토 후보를 다시 만들지 못했다.
+  - connector sync 복구 경로를 추가해 해당 connector의 Agent ReviewItem이 모두 사라진 경우 기존 source ids로 Slack/Mail-Document Agent review 생성을 다시 수행하도록 했다.
+  - Review Queue 정렬을 업무 지식 후보 우선으로 바꿔 `decision_record`, `todo`, `history_event`가 대량의 `project_assignment`보다 먼저 보이도록 했다.
+  - Verification: 신규 복구/정렬 회귀 테스트 2 passed; 관련 sync/review/project/slack API 묶음 43 passed; Slack/Review/Project 전체 타깃 회귀 묶음 69 passed; ruff passed.
+
+- `fix: use Slack user token and configured channel ids during live sync`
+  - 실제 Playwright 흐름에서 Slack sync는 200으로 완료됐지만, 현재 DB 기준 `fetched_events=0`, `created_review_items=0`으로 보였다. 직접 connector를 DB cursor 없이 실행하면 최근 7일 Slack 이벤트 210개를 가져와 Slack 접근 자체는 정상임을 확인했다.
+  - 원인은 두 가지로 분리됐다. 현재 DB에는 이미 Slack source 210개와 pending review 14개가 있어 incremental sync가 최신 timestamp 이후 변경분만 보며 0건을 반환한다. 또한 기존 connector는 설정된 channel id도 bot membership 목록에 없으면 history 호출 전 조용히 제외했고, 저장된 user token을 sync connector에 연결하지 않았다.
+  - `SlackConnector`에 optional `user_client`를 추가하고, 설정 채널은 membership 목록이 비어 있어도 history 조회를 시도하도록 했다. user token이 있으면 설정 채널 조회에 우선 사용하고 Slack API 오류 시 bot token으로 fallback한다.
+  - installed Slack connection의 `local:slack:{workspace}:user` token을 찾아 sync connector에 연결했다.
+  - Verification: 신규 회귀 테스트 3개 passed; Slack connector/factory/mock sync/API 묶음 35 passed; 관련 Slack/Review/Project 타깃 회귀 묶음 94 passed; ruff passed; Playwright 실제 흐름 검증 passed with `review_total_count=14`.
+
+## 2026-05-15 Slack sync ReviewItem 생성 상태 표시 개선
+
+- 증상: Slack 동기화 후 `sources`는 먼저 저장되지만, Slack Agent LLM 분석과 프로젝트 분류가 끝나기 전까지 `review_items`가 비어 보여 사용자가 동기화 실패로 오해할 수 있었다.
+- 원인: `sync_connector_events()`가 connector ingestion 직후 `SyncJob.status='complete'`와 `progress_pct=100`을 먼저 커밋했고, 실제 ReviewItem 생성은 그 이후 API 라우트에서 이어졌다.
+- 수정:
+  - ingestion 이후 Agent Review 생성 단계에서는 SyncJob을 `running`, `progress_pct=75`, `agent_review=running`으로 표시한다.
+  - Agent/프로젝트 ReviewItem 생성 후 최종 `complete`로 마무리한다.
+  - sync 응답에 `pending_review_count`를 추가하고 통합 화면에서 `새 검토 항목`과 `검토 대기`를 분리해 표시한다.
+  - Slack runtime status 오류 조치 안내를 한국어로 정리했다.
+- 검증:
+  - `uv run pytest backend/tests/test_mock_sync.py backend/tests/test_integration_runtime_status.py backend/tests/test_slack_agent_api.py backend/tests/test_audit_logs.py -q` -> `24 passed`
+  - `uv run ruff check backend/app/api/v1/integrations.py backend/tests/test_mock_sync.py` -> passed
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run build` -> passed
+  - Playwright 실제 브라우저 검증: `/integrations` Slack sync 응답의 `pending_review_count=11`과 `/api/v1/review?status=pending_review` 총량 `11`이 일치했다.
+
+## 2026-05-15 동기화 진행 모달 UX 추가
+
+- 목표: 동기화 버튼을 누른 뒤 Slack Agent 분석/프로젝트 분류가 끝나기 전까지 사용자가 빈 화면으로 오해하지 않도록 진행 모달을 표시한다.
+- 수정:
+  - `/integrations` 화면에 `SyncProgressModal`을 추가했다.
+  - 동기화 시작 즉시 모달을 열고 `원본 수집과 AI 분석`, `프로젝트 분류`, `검토 항목 저장` 단계를 표시한다.
+  - 모달이 열려 있는 동안 화면 뒤 작업은 차단된다.
+  - 오래 걸릴 경우 `백그라운드에서 계속 진행`으로 모달만 내릴 수 있고, 동기화 요청은 계속 진행된다.
+  - 완료 후 `새 검토 항목`, `검토 대기`, `검토사항으로 이동`을 보여준다.
+- 검증:
+  - 신규 Playwright 테스트 `frontend/e2e/integration-sync-modal.spec.ts` 추가.
+  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts` -> `2 passed` (desktop/mobile)
+  - `npm.cmd exec tsc -- --noEmit`, `npm.cmd run lint`, `npm.cmd run build` -> passed
+  - 관련 백엔드 회귀 테스트 `24 passed`, Slack/Review/Project/Timeline 회귀 묶음 `48 passed`
+  - 실제 로컬 서버 Playwright 검증에서 Slack source `210`, pending review `11`, sync pending count `11`, Review API total `11` 일치를 확인했다.
+  - 같은 검증에서 `굿굿`, `후...`, `부탁드립니다` 저신호 문구가 pending ReviewItem 목록에 직접 포함되지 않음을 확인했다.
+
+## 2026-05-15 검토사항 메타데이터 unknown 표시 수정
+
+- 증상: Review 화면에서 `project_classifier`가 만든 프로젝트 연결 후보 항목의 Prompt/Cost 메타데이터가 `unknown`으로 표시됐다.
+- 원인: 해당 항목은 LLM AgentRun 없이 deterministic 분류로 생성되므로 `prompt_version`, `estimated_cost_usd`, `agent_run_id`가 없다. 프론트가 이 상태를 사용자 의미로 번역하지 않고 `unknown` fallback을 그대로 노출했다.
+- 수정:
+  - Review 프론트 타입에 `agent_run_details`를 반영했다.
+  - `Unknown` 문자열을 유효한 메타데이터로 취급하지 않도록 정규화했다.
+  - AgentRun 없는 `project_classifier` 항목은 `규칙 기반 분류`, `LLM 미사용`으로 표시한다.
+  - Review API는 AgentRun 없는 항목의 기본 상세값을 `"Unknown"` 문자열 대신 `null`로 내려준다.
+- 검증:
+  - 신규 Playwright 회귀 테스트 `frontend/e2e/review-agent-metadata.spec.ts` 추가.
+  - RED: 기존 UI는 `규칙 기반 분류`를 표시하지 못해 실패.
+  - GREEN: `npm.cmd run test:visual -- review-agent-metadata.spec.ts` -> `2 passed`.
+  - 실제 로컬 `/review` Playwright 점검에서 Prompt/Cost 메타데이터 22개 중 `unknown` 0개, `규칙 기반 분류`와 `LLM 미사용` 표시 확인.
+  - `npm.cmd exec tsc -- --noEmit`, `npm.cmd run lint`, `npm.cmd run build`, `uv run ruff check backend/app/api/v1/review.py`, `uv run pytest backend/tests/test_review.py -q` 통과.

@@ -215,6 +215,8 @@ def render_slack_llm_prompt(
                 'Keep the summary concise and business-friendly.',
                 'Set confidence_score between 0 and 1.',
                 'Assign category, topic_tag, and importance to each candidate.',
+                'Exclude standalone greetings, reactions, sighs, thanks, and contextless polite requests such as "부탁드립니다" when no work object is present.',
+                'If evidence is ambiguous, state uncertainty_reason instead of inventing a project or decision.',
                 'For topic_tag, CHOOSE EXACTLY ONE from the current_projects list. If none fit, invent a short new topic name, or use "Ad-hoc" if it\'s just general chatter.',
             ],
             'source_window': packet.source_window,

@@ -1,17 +1,19 @@
-import os
-import json
-import re
 import logging
-from typing import List, Optional, Any
+import os
+import re
 from datetime import datetime
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.graph import StateGraph, START, END
-
-from backend.app.agent_runtime.contracts import ReviewCandidate, TokenUsage, AgentRunCost
-from backend.app.connectors.slack import SlackWebApiClient
+from backend.app.agent_runtime.contracts import (
+    AgentRunCost,
+    ReviewCandidate,
+    TokenUsage,
+)
+from backend.app.agents.slack_agent.quality import classify_slack_work_signal
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -53,29 +55,29 @@ class CandidateItem(BaseModel):
     )
     
     # 대시보드 할 일 관리를 위한 추가 정보
-    assignee: Optional[str] = Field(description="할 일(todo)인 경우 담당자 이름 (없으면 null)")
-    due_date: Optional[str] = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
+    assignee: str | None = Field(description="할 일(todo)인 경우 담당자 이름 (없으면 null)")
+    due_date: str | None = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
     
-    source_ts_list: List[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
-    source_snippets: List[str] = Field(description="증거가 되는 원문 일부. 핵심 발언이나 문장을 1~2개 이상 배열에 문자열로 담으세요.")
+    source_ts_list: list[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
+    source_snippets: list[str] = Field(description="증거가 되는 원문 일부. 핵심 발언이나 문장을 1~2개 이상 배열에 문자열로 담으세요.")
 
 class CandidateList(BaseModel):
-    candidate_items: List[CandidateItem] = Field(description="추출된 지식 후보들의 목록")
+    candidate_items: list[CandidateItem] = Field(description="추출된 지식 후보들의 목록")
 
 # 3. 워크플로우 상태 정의
 class SlackAgentState(BaseModel):
     channel_id: str = ""
-    messages: List[dict] = Field(default_factory=list)
+    messages: list[dict] = Field(default_factory=list)
     processed_text: str = ""
     is_work_related: bool = False
-    summary: Optional[str] = None
-    candidates: List[ReviewCandidate] = Field(default_factory=list)
+    summary: str | None = None
+    candidates: list[ReviewCandidate] = Field(default_factory=list)
     model_name: str = "gpt-4o-mini"
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
-    error: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    gemini_api_key: Optional[str] = None
+    error: str | None = None
+    openai_api_key: str | None = None
+    gemini_api_key: str | None = None
 
 def calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
     return (prompt_tokens / 1_000_000 * COST_PER_1M_INPUT) + (completion_tokens / 1_000_000 * COST_PER_1M_OUTPUT)
@@ -108,12 +110,25 @@ def preprocess_node(state: SlackAgentState):
 # 5. 노드 구현: 업무 필터링 (Tool: Work Filter / Middleware: Context Compression)
 def classify_work_node(state: SlackAgentState):
     logger.info("[Tool: Work Filter] Screening work-related messages using a low-cost model...")
+    work_signal_messages = [
+        msg for msg in state.messages if classify_slack_work_signal(str(msg.get("text", ""))).is_reviewable
+    ]
+    if not work_signal_messages:
+        logger.info("[Tool: Work Filter] No deterministic work signal found. Skipping LLM work filter.")
+        return {
+            "is_work_related": False,
+            "processed_text": "",
+            "total_prompt_tokens": state.total_prompt_tokens,
+            "total_completion_tokens": state.total_completion_tokens,
+        }
+
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=state.openai_api_key)
     
-    # 메시지 리스트에서 인덱스와 본문만 추출하여 프롬프트 구성
+    # deterministic 필터를 통과한 메시지와 최소 맥락만 저비용 LLM에 전달한다.
     simple_list = ""
-    for i, msg in enumerate(state.messages):
-        simple_list += f"[{i}] {msg.get('text', '')[:50]}\n"
+    for i, msg in enumerate(work_signal_messages):
+        user_display = msg.get("user_name") or msg.get("user", "Unknown")
+        simple_list += f"[{i}] {user_display}: {msg.get('text', '')[:200]}\n"
         
     prompt = (
         "다음 슬랙 대화 목록 중 기업 지식으로 남길 가치가 있는 업무 관련 메시지의 번호(index)만 콤마로 구분해서 답하세요. "
@@ -134,8 +149,10 @@ def classify_work_node(state: SlackAgentState):
     pt = usage.get('prompt_tokens', 0) if usage else 0
     ct = usage.get('completion_tokens', 0) if usage else 0
     # 정적 분석기를 위한 명시적 타입 확정
-    if not isinstance(pt, int): pt = 0
-    if not isinstance(ct, int): ct = 0
+    if not isinstance(pt, int):
+        pt = 0
+    if not isinstance(ct, int):
+        ct = 0
     
     if "NONE" in res_text:
         return {
@@ -147,7 +164,7 @@ def classify_work_node(state: SlackAgentState):
     # 필터링된 인덱스 추출 및 문맥 재구성 (Context Compression)
     try:
         indices = [int(idx.strip()) for idx in res_text.split(',') if idx.strip().isdigit()]
-        compressed_messages = [state.messages[i] for i in indices if i < len(state.messages)]
+        compressed_messages = [work_signal_messages[i] for i in indices if i < len(work_signal_messages)]
         
         # 압축된 텍스트 생성
         compressed_text = ""
@@ -208,8 +225,10 @@ def summarize_node(state: SlackAgentState):
     usage = response.usage_metadata
     pt = usage.get('prompt_tokens', 0) if usage else 0
     ct = usage.get('completion_tokens', 0) if usage else 0
-    if not isinstance(pt, int): pt = 0
-    if not isinstance(ct, int): ct = 0
+    if not isinstance(pt, int):
+        pt = 0
+    if not isinstance(ct, int):
+        ct = 0
     
     return {"summary": summary_text, "model_name": model, "total_prompt_tokens": state.total_prompt_tokens + pt, "total_completion_tokens": state.total_completion_tokens + ct}
 
@@ -256,8 +275,8 @@ def extract_candidate_node(state: SlackAgentState):
         
         final_candidates = []
         # 중앙 설정 시스템에서 워크스페이스 URL 로드
-        from backend.app.core.config import get_settings
         from backend.app.connectors.slack import build_slack_permalink
+        from backend.app.core.config import get_settings
         settings = get_settings()
         base_url = settings.slack_workspace_url.rstrip('/')
         
@@ -339,7 +358,7 @@ def build_slack_agent_graph():
     return workflow.compile()
 
 # 9. 실행 엔트리포인트
-def process_daily_slack_sync(channel_id: str, messages: List[dict], openai_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
+def process_daily_slack_sync(channel_id: str, messages: list[dict], openai_api_key: str | None = None, gemini_api_key: str | None = None):
     app = build_slack_agent_graph()
     initial_state = SlackAgentState(
         channel_id=channel_id, 

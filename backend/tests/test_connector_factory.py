@@ -97,6 +97,52 @@ def test_sync_connector_uses_installed_slack_connection_token_from_vault(
     assert connector.client.bot_token == 'xoxb-installed'
 
 
+def test_sync_connector_uses_installed_slack_user_token_when_available(
+    db_session: Session,
+) -> None:
+    token_vault = LocalTokenVault()
+    token_vault.store_bot_token(
+        connector_type='slack',
+        workspace_id='T123',
+        token='xoxb-installed',
+    )
+    token_vault.store_user_token(
+        connector_type='slack',
+        workspace_id='T123',
+        token='xoxp-installed',
+    )
+    db_session.add(
+        IntegrationConnection(
+            connector_type='slack',
+            workspace_id='T123',
+            workspace_name='ParaWorks',
+            bot_user_id='U999',
+            scopes=['channels:history', 'im:history'],
+            token_ref='local:slack:T123:bot',
+            masked_bot_token='xoxb...lled',
+            status='connected',
+            raw_metadata={'has_user_token': True},
+        )
+    )
+    db_session.commit()
+
+    connector = get_sync_connector(
+        'slack',
+        Settings(
+            paraworks_demo_mode=False,
+            slack_bot_token=None,
+            slack_channel_ids=' C123 ',
+            slack_workspace_url='https://example.slack.com',
+        ),
+        db=db_session,
+        token_vault=token_vault,
+    )
+
+    assert isinstance(connector, SlackConnector)
+    assert isinstance(connector.user_client, SlackWebApiClient)
+    assert connector.user_client.bot_token == 'xoxp-installed'
+
+
 def test_sync_connector_allows_slack_channel_override_for_selected_sync(
     db_session: Session,
 ) -> None:

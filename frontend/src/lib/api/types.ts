@@ -360,6 +360,13 @@ export type ReviewSourceEvidence = {
   evidence_reason?: string | null;
 };
 
+export type ReviewAgentRunDetails = {
+  model_name?: string | null;
+  prompt_version?: string | null;
+  estimated_cost_usd?: number | null;
+  total_tokens?: number | null;
+};
+
 export type ReviewItem = {
   id: number;
   item_type: string;
@@ -368,6 +375,7 @@ export type ReviewItem = {
   source_snippets: string[];
   source_evidence?: ReviewSourceEvidence[];
   agent_run_id?: number | null;
+  agent_run_details?: ReviewAgentRunDetails | null;
   confidence_score: number;
   permission_level: string;
   status: ReviewStatus;
@@ -407,6 +415,21 @@ export type ReviewGroup = {
 export type ReviewResponse = {
   groups: ReviewGroup[];
   items: ReviewItem[];
+  total_count?: number;
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
+  include_previews?: boolean;
+};
+
+export type ReviewBulkActionResponse = {
+  action: "approve" | "reject" | string;
+  approved_count: number;
+  rejected_count: number;
+  failed_items: { id: number; detail: string }[];
+  skipped_items: { id: number; detail: string }[];
+  approved_item_ids: number[];
+  rejected_item_ids: number[];
 };
 
 export type SearchResult = {
@@ -581,6 +604,7 @@ export type ProjectMemory = {
   pending_review_count: number;
   evidence: ProjectEvidence[];
   timeline_items: ProjectTimelineItem[];
+  activity_items: ProjectTimelineItem[];
 };
 
 export type ProjectsResponse = {
@@ -595,10 +619,13 @@ export type IntegrationSyncResponse = {
   connector_type: string;
   status: string;
   created_review_items: number;
+  pending_review_count: number;
   fetched_events: number;
   skipped_events: number;
   parser_status_counts?: Record<string, number>;
   changed_source_ids?: string[];
+  agent_generated_items?: number;
+  project_assignment_items?: number;
 };
 
 export type IntegrationManifest = {

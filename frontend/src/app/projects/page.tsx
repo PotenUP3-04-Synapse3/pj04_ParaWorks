@@ -218,7 +218,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="truncate text-sm font-extrabold text-ink">{project.name}</span>
                   <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-muted">
-                    {project.evidence_count + project.timeline_items.length}
+                    {project.evidence_count + project.activity_items.length}
                   </span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{project.summary}</p>
@@ -244,7 +244,7 @@ export default function ProjectsPage() {
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <Metric label="근거" value={selectedProject.evidence_count} />
-                    <Metric label="활동" value={selectedProject.timeline_items.length} />
+                    <Metric label="활동" value={selectedProject.activity_items.length} />
                     <Metric label="검토 대기" value={selectedProject.pending_review_count} />
                   </div>
                 </div>
@@ -270,11 +270,14 @@ export default function ProjectsPage() {
                   )}
                 </ProjectPanel>
 
-                <ProjectPanel title="승인된 활동 타임라인">
-                  {selectedProject.timeline_items.length === 0 ? (
-                    <EmptyState text="아직 승인된 결정, 히스토리, 타임라인, 할 일이 없습니다." />
+                <ProjectPanel
+                  title="승인된 프로젝트 활동"
+                  description="Review에서 승인된 결정, 히스토리, 할 일, 타임라인 후보를 프로젝트별로 모은 기록입니다. 각 항목은 근거와 함께 보존되며 RAG 검색, 회고, 진행 상황 파악에 사용됩니다."
+                >
+                  {selectedProject.activity_items.length === 0 ? (
+                    <EmptyState text="아직 승인된 활동이 없습니다. Review에서 이 프로젝트를 선택하고 승인하면 여기에 쌓입니다." />
                   ) : (
-                    selectedProject.timeline_items.map((item) => (
+                    selectedProject.activity_items.map((item) => (
                       <article key={item.id} className="rounded-lg border border-line bg-white p-4">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
@@ -306,10 +309,11 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function ProjectPanel({ title, children }: { title: string; children: ReactNode }) {
+function ProjectPanel({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <section className="panel reference-panel">
       <h2 className="text-base font-extrabold text-ink">{title}</h2>
+      {description ? <p className="mt-2 text-sm leading-6 text-muted">{description}</p> : null}
       <div className="mt-4 space-y-3">{children}</div>
     </section>
   );

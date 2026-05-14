@@ -126,11 +126,15 @@ def _visible_project(project, user: DemoUser):
     visible_timeline = [
         item for item in project.timeline_items if can_access_permission(user, item.permission_level)
     ]
-    visible_levels = [item.permission_level for item in visible_evidence] + [item.permission_level for item in visible_timeline]
+    visible_activity = [
+        item for item in project.activity_items if can_access_permission(user, item.permission_level)
+    ]
+    visible_levels = [item.permission_level for item in visible_evidence] + [item.permission_level for item in visible_activity]
     return replace(
         project,
         evidence=visible_evidence,
         timeline_items=visible_timeline,
+        activity_items=visible_activity,
         evidence_count=len(visible_evidence),
         permission_level=project.permission_level if visible_levels else 'internal',
     )

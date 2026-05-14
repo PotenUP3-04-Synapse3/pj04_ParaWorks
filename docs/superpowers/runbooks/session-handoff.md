@@ -2,6 +2,36 @@
 
 Updated: 2026-05-14
 
+## 2026-05-14 Slack sync ReviewItem 복구 및 검토사항 정렬
+
+- 증상:
+  - 사용자가 DB에서 `review_items` 데이터를 직접 삭제한 뒤 Slack 동기화를 다시 눌러도 검토사항 화면에 업무 후보가 보이지 않았다.
+  - 실제 API에는 `project_assignment` 후보가 많이 생성되어 첫 화면을 차지했고, Slack Agent가 만든 `decision_record`, `todo`, `history_event` 후보는 뒤로 밀려 사용자가 “검토사항이 없다”고 판단하기 쉬웠다.
+- 원인:
+  - connector sync는 `Source` 중복을 비용 절감 신호로 보고 `changed_source_ids`가 없으면 Slack Agent ReviewItem 생성을 건너뛰었다.
+  - 따라서 `Source`는 남아 있고 `ReviewItem`만 삭제된 복구 상황에서는 기존 Slack 원본을 다시 검토 후보로 승격하지 못했다.
+  - Review 목록 기본 정렬이 최신 id 기준이라 대량의 `project_assignment` 후보가 업무 지식 후보보다 먼저 표시됐다.
+- 수정:
+  - `backend/app/api/v1/integrations.py`에서 중복 sync라도 해당 connector의 Agent ReviewItem이 하나도 없고 기존 `Source`가 있으면 기존 source ids로 Slack/Mail-Document Agent review 생성을 복구하도록 했다.
+  - `backend/app/api/v1/review.py`에서 검토사항 정렬 우선순위를 `decision_record`, `todo`, `history_event`, `timeline_event`, 기타, `project_assignment` 순으로 조정했다.
+  - 서버를 재시작해 최신 코드가 실제 API 프로세스에 반영되도록 했다.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_mock_sync.py::test_duplicate_slack_sync_recreates_agent_reviews_when_review_items_were_deleted backend/tests/test_review.py::test_review_list_prioritizes_knowledge_candidates_before_project_assignments -q
+uv run pytest backend/tests/test_mock_sync.py backend/tests/test_review.py backend/tests/test_project_memory_api.py backend/tests/test_slack_agent_api.py -q
+uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q
+uv run ruff check backend/app/api/v1/integrations.py backend/app/api/v1/review.py backend/app/projects/classifier.py backend/tests/test_mock_sync.py backend/tests/test_review.py backend/tests/test_project_memory_api.py
+```
+
+결과:
+
+- 신규 복구/정렬 회귀 테스트 2 passed.
+- 관련 sync/review/project/slack API 묶음 43 passed.
+- Slack/Review/Project 전체 타깃 회귀 묶음 69 passed.
+- ruff passed.
+- 실행 중인 API에서 `/api/v1/review?status=pending_review&limit=10`가 `total_count=217`을 반환하고 첫 항목들이 `decision_record`, `todo`, `history_event` 순으로 노출되는 것을 확인했다.
+
 ## 2026-05-14 사용자 정의 프로젝트 동기화 검토사항 수정
 
 - 증상:
@@ -1310,3 +1340,168 @@ npm.cmd run build
 ```
 
 Result: `12 passed`, `26 passed`, ruff passed, frontend typecheck/build passed.
+
+## 2026-05-14 Review/Project/Timeline 품질 개선
+
+- 사용자가 제시한 8개 개선 사항을 기준으로 Review, Project, Timeline 흐름을 정리했다.
+- Slack 품질 게이트:
+  - `backend/app/agents/slack_agent/quality.py`를 추가했다.
+  - `후...`, `부탁드립니다.`, 단독 인사/반응/감사 문구는 업무 대상/행동/기한 신호가 없으면 Review 후보에서 제외된다.
+  - backend Slack ranked evidence 선정과 `agent_slack.classify_work_node()` 모두 deterministic 게이트를 먼저 사용한다.
+  - 영어 demo seed를 위해 `redis`, `queue`, `review queue`, `evidence`, `confirm`, `verify` 같은 업무 신호도 포함했다.
+- 프로젝트 분류:
+  - `backend/app/projects/classifier.py`는 한글 token boundary 기반 alias matching을 사용한다.
+  - `투자 유치`는 `투자 유치 전략 회의`에는 매칭되지만 `투자 유치원 등교 일정`에는 매칭되지 않는다.
+- 프로젝트/타임라인 API:
+  - `/api/v1/projects`는 이제 `Project` 테이블에 등록된 프로젝트만 반환한다.
+  - 승인 지식은 표시용으로 `timeline_items`와 `activity_items`를 분리한다.
+  - `history_event` 승인으로 생성된 mirror `TimelineEvent`는 활동 목록에서 중복 표시하지 않는다. 원본 승인 지식과 RAG 대상 데이터는 삭제하지 않는다.
+- Review API/UI:
+  - `GET /api/v1/review`에 `limit`, `offset`, `total_count`, `has_more` metadata를 추가했다.
+  - `POST /api/v1/review/bulk`가 현재 항목들의 일괄 approve/reject를 처리한다.
+  - `PATCH /api/v1/review/{id}`에서 `project_key`를 바꿀 때 등록된 프로젝트인지 검증하고 `project_name`을 서버에서 보정한다.
+  - Review 화면은 초기 50개만 로드하고 promotion preview는 그룹 expand 시 lazy load한다.
+  - Review 화면 상단에 “모두 승인”, “모두 반려”를 추가했고, 카드에는 등록 프로젝트 select를 바로 노출했다.
+- 프론트:
+  - `ProjectMemory` 타입에 `activity_items`를 추가했다.
+  - 프로젝트 탭의 “승인된 활동 타임라인”은 “승인된 프로젝트 활동”으로 바꾸고 설명/빈 상태를 추가했다.
+  - 타임라인 탭은 등록된 프로젝트 응답과 `timeline_items`만 사용한다.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q
+uv run ruff check agent_slack/agent_slack.py backend/app/agents/slack_agent backend/app/projects backend/app/api/v1/review.py backend/app/schemas/review.py backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_project_memory_api.py backend/tests/test_review.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+Result: `66 passed`, ruff passed, frontend typecheck/build passed.
+
+Known note:
+- Review 200개 렌더링은 이번에 pagination과 lazy preview로 1차 개선했다. DOM virtualization은 아직 추가하지 않았다. 사용자가 여전히 느리다고 느끼면 별도 작업으로 분리한다.
+## 2026-05-14 `굿굿` 저신호 Slack reply 프로젝트 후보 오탐 수정
+
+- 증상: 검토사항 상세 내용에 `굿굿` 같은 반응만 있는 Slack thread reply가 `project_assignment` 업무 후보처럼 표시됐다.
+- 원인:
+  - 이 항목은 Slack Agent 후보가 아니라 `project_classifier`가 만든 프로젝트 연결 후보였다.
+  - 사용자 프로젝트 설명의 `slack`, `gmail`, `google drive`, `data`, `timeline` 같은 일반 매체 단어가 alias로 등록되어 Slack source 대부분이 프로젝트에 매칭될 수 있었다.
+  - `Thread parent: ... Thread reply: 굿굿` source에서 parent context가 함께 snippet으로 저장되어 저신호 reply도 프로젝트 evidence처럼 보였다.
+- 수정:
+  - `backend/app/projects/classifier.py`에서 일반 connector/매체 단어를 프로젝트 alias에서 제외했다.
+  - Slack source는 실제 메시지가 `classify_slack_work_signal()`을 통과할 때만 프로젝트 연결 후보가 된다.
+  - `Thread parent: ... Thread reply: ...` 형태는 reply 본문 기준으로 업무 신호를 판단한다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py -q` -> `18 passed`
+  - `uv run pytest backend/tests/test_mock_sync.py backend/tests/test_slack_agent_quality.py -q` -> `7 passed`
+  - `uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q` -> `67 passed`
+  - `uv run ruff check backend/app/projects/classifier.py backend/tests/test_project_memory_api.py` -> passed
+- 주의:
+  - 새 동기화/재분류에서는 같은 오탐이 새로 생성되지 않는다.
+  - 이미 생성된 pending `project_assignment` 항목은 DB에 남아 있다. 현재 DB 기준 pending `project_assignment` 160개 중 새 정책으로도 유지될 항목은 5개, 예전 넓은 alias 매칭으로 생성된 항목은 155개다.
+  - 기존 오염 항목은 UI에서 반려하거나 별도 정리 작업으로 처리해야 한다.
+
+## 2026-05-15 Slack sync 0건 원인 분리 및 user token connector 보강
+
+- 증상:
+  - 서버 재시작 후 Slack 동기화 버튼을 눌러도 검토사항에 새 항목이 생기지 않는다고 보고됨.
+- Playwright 확인:
+  - `admin@paraworks.com` 로그인 후 `/integrations`에서 Slack 동기화를 눌렀다.
+  - sync 응답은 `fetched_events=0`, `created_review_items=0`, `changed_source_ids=[]`.
+  - 같은 세션에서 `/review`는 `review_total_count=14`였고, Slack Agent 후보가 보였으며 빈 상태는 표시되지 않았다.
+- 원인 분리:
+  - DB cursor 없이 live Slack connector를 직접 실행하면 최근 7일 이벤트 210개가 반환됐다. 따라서 Slack API 접근 자체는 정상이다.
+  - 현재 로컬 DB에는 이미 Slack source 210개가 있고, incremental sync는 source별 최신 timestamp 이후의 변경분만 가져오므로 일반 sync가 0건으로 끝나는 것은 현재 DB 상태에서는 정상이다.
+  - 다만 기존 `SlackConnector`는 설정된 channel id도 `conversations.list`의 bot membership 결과에 없으면 history 호출 전 조용히 제외했다.
+  - OAuth/direct-connect가 저장한 user token도 sync connector에 연결되지 않아 DM/user-token 접근 흐름이 실제 sync에 반영되지 않았다.
+- 수정:
+  - `backend/app/connectors/slack.py`에 optional `user_client`를 추가했다.
+  - 설정된 Slack channel id는 membership 목록이 비어도 history 조회를 시도한다.
+  - user token이 있으면 설정 채널 조회에 user client를 우선 사용하고, Slack API 오류 시 bot client로 fallback한다.
+  - `backend/app/connectors/factory.py`에서 installed Slack connection의 `local:slack:{workspace}:user` token을 찾아 connector에 연결한다.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_slack_connector.py::test_slack_connector_fetches_configured_channel_even_when_membership_list_is_empty backend/tests/test_slack_connector.py::test_slack_connector_prefers_user_client_for_configured_channel_when_available backend/tests/test_connector_factory.py::test_sync_connector_uses_installed_slack_user_token_when_available -q
+uv run pytest backend/tests/test_slack_connector.py backend/tests/test_connector_factory.py backend/tests/test_mock_sync.py backend/tests/test_slack_agent_api.py -q
+uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_slack_connector.py backend/tests/test_connector_factory.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q
+uv run ruff check backend/app/connectors/slack.py backend/app/connectors/factory.py backend/tests/test_slack_connector.py backend/tests/test_connector_factory.py
+```
+
+결과:
+
+- 신규 회귀 테스트 3 passed.
+- Slack connector/factory/mock sync/API 묶음 35 passed.
+- Slack/Review/Project 타깃 회귀 묶음 94 passed.
+- ruff passed.
+- 서버 재시작 후 Playwright 실제 흐름 검증 passed, `review_total_count=14`.
+
+## 2026-05-15 Slack sync ReviewItem 공백 오해 방지
+
+- 최신 확인:
+  - 로컬 DB 기준 Slack source 210개, pending ReviewItem 11개.
+  - 최신 no-op incremental sync는 새 Slack 이벤트가 없으므로 `created_review_items=0`이 정상이다.
+- 원인:
+  - `sync_connector_events()`가 원본 ingestion만 끝난 시점에 SyncJob을 `complete`로 표시했고, Slack Agent LLM/프로젝트 ReviewItem 생성은 그 뒤에 실행됐다.
+  - 긴 LLM 분석 중에는 `sources`만 보이고 `review_items`가 아직 비어 보일 수 있었다.
+- 반영된 수정:
+  - `/api/v1/integrations/{connector_type}/sync`가 ingestion 직후 Agent Review 생성 단계에 들어가면 SyncJob을 `running`, `progress_pct=75`, `agent_review=running`으로 되돌린다.
+  - ReviewItem 생성이 끝난 뒤 최종 `complete`, `progress_pct=100`으로 업데이트한다.
+  - sync 응답과 audit metadata에 `pending_review_count`를 포함한다.
+  - frontend 통합 화면 sync 결과에 `새 검토 항목`과 `검토 대기`를 분리 표시한다.
+- 검증:
+  - 신규 테스트 `test_slack_sync_keeps_job_running_until_agent_reviews_are_persisted` 추가.
+  - 관련 백엔드 테스트 `24 passed`, ruff passed, frontend typecheck/build passed.
+  - Playwright 실제 브라우저 검증에서 Slack sync 응답 `pending_review_count=11`과 Review API 총량 `11` 일치.
+- 다음 작업자 참고:
+  - 사용자가 “Slack sync 했는데 검토사항에 새 항목이 없다”고 말하면 먼저 `created_review_items`와 `pending_review_count`를 구분해 확인한다.
+  - source가 이미 들어온 상태의 incremental sync는 새 이벤트가 없으면 새 ReviewItem을 만들지 않는다. 이때 pending queue 총량이 남아 있으면 정상 경로다.
+
+## 2026-05-15 동기화 진행 모달 UX
+
+- 반영된 수정:
+  - `frontend/src/app/integrations/page.tsx`에 `SyncProgressModal`을 추가했다.
+  - sync 버튼 클릭 직후 모달을 띄우고 화면 뒤 작업을 차단한다.
+  - 모달은 `원본 수집과 AI 분석`, `프로젝트 분류`, `검토 항목 저장` 단계를 표시한다.
+  - 사용자는 `백그라운드에서 계속 진행`으로 모달만 내릴 수 있으며, sync 요청 자체는 계속 진행된다.
+  - 완료 상태에서는 `새 검토 항목`, `검토 대기`, `검토사항으로 이동`, `닫기`를 제공한다.
+- 검증:
+  - `frontend/e2e/integration-sync-modal.spec.ts` 추가.
+  - Playwright desktop/mobile `2 passed`.
+  - 실제 로컬 서버 Playwright 검증 결과:
+    - 모달 표시 확인.
+    - sync 응답 `pending_review_count=11`.
+    - Review API `total_count=11`.
+    - Slack source count `210`.
+    - 최신 sync message `fetched=0 created_review_items=0 skipped_events=0 pending_review_items=11`.
+    - `굿굿`, `후...`, `부탁드립니다` 저신호 문구가 pending ReviewItem 목록에 직접 포함되지 않음.
+  - `npm.cmd exec tsc -- --noEmit`, `npm.cmd run lint`, `npm.cmd run build` passed.
+  - 관련 backend 회귀 테스트 `24 passed`, Slack/Review/Project/Timeline 회귀 묶음 `48 passed`.
+- 다음 작업자 참고:
+  - sync API는 응답 전까지 job id를 프론트가 알 수 없으므로, 모달의 단계는 클라이언트 진행 안내이며 완료 수치는 API 응답의 실제 count를 사용한다.
+  - 더 세밀한 실시간 단계 표시가 필요하면 sync 시작 즉시 job id를 반환하고 background worker/SSE로 Agent 단계 이벤트를 내보내는 별도 구조 변경이 필요하다.
+
+## 2026-05-15 검토사항 unknown 표시 수정 인수인계
+
+- 현재 상태:
+  - Review 화면에서 `project_classifier` / `project_assignment` 항목의 Prompt/Cost가 `unknown`으로 보이던 문제를 수정했다.
+  - deterministic 프로젝트 분류 항목은 AgentRun이 없으므로 이제 Prompt는 `규칙 기반 분류`, Cost는 `LLM 미사용`으로 표시된다.
+  - 백엔드 Review API도 AgentRun 없는 항목의 `agent_run_details.model_name`, `prompt_version`, `estimated_cost_usd` 기본값을 `"Unknown"` 문자열이 아니라 `null`로 내려준다.
+- 변경 파일:
+  - `frontend/src/app/review/page.tsx`
+  - `frontend/src/lib/api/types.ts`
+  - `backend/app/api/v1/review.py`
+  - `frontend/e2e/review-agent-metadata.spec.ts`
+  - `agent_slack/20260514_project_timeline_rag_progress.md`
+  - `docs/portfolio-log.md`
+- 검증:
+  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts` -> `2 passed`
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `uv run ruff check backend/app/api/v1/review.py` -> passed
+  - `uv run pytest backend/tests/test_review.py -q` -> `15 passed`
+  - 실제 로컬 Playwright 확인에서 `/review` Prompt/Cost 메타데이터 22개 중 `unknown` 0개를 확인했다.
+- 주의:
+  - 실제 화면 본문에는 “RAG 연동 관련 근거보기 unknown 현상 수정”처럼 원본 Slack/요약 텍스트에 포함된 `unknown` 단어가 남아 있을 수 있다. 이것은 메타데이터 fallback 오류가 아니라 검토 항목 내용이다.
+  - 현재 로컬 dev 서버가 오래 떠 있으면 백엔드 API 응답에는 예전 `"Unknown"` 기본값이 보일 수 있으나, 코드 기준으로는 `null`로 수정되어 서버 재시작 후 반영된다. 프론트는 기존 `"Unknown"` 응답도 방어적으로 처리한다.

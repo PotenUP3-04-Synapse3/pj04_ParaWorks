@@ -109,6 +109,95 @@ def test_project_classifier_matches_bracketed_ir_gmail_subject(db_session: Sessi
     assert candidates[0].source_type == 'gmail'
 
 
+def test_project_classifier_does_not_match_phrase_inside_korean_word(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Project(
+            project_key='project-investment-fundraise',
+            name='투자 유치',
+            summary='투자자 미팅과 자금 유치 활동을 관리하는 프로젝트',
+        )
+    )
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='slack',
+                source_id='slack-kindergarten-dropoff',
+                title='투자 유치원 등교 일정',
+                body='오늘 유치원 등교 시간이 변경되었습니다.',
+                source_url='https://slack.mock/archives/C123/p1',
+            )
+        ],
+    )
+
+    candidates = build_project_assignment_candidates(db_session)
+
+    assert candidates == []
+
+
+def test_project_classifier_matches_complete_korean_project_phrase(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Project(
+            project_key='project-investment-fundraise',
+            name='투자 유치',
+            summary='투자자 미팅과 자금 유치 활동을 관리하는 프로젝트',
+        )
+    )
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='slack',
+                source_id='slack-fundraise-meeting',
+                title='투자 유치 전략 회의',
+                body='투자 유치 전략 회의 자료를 금요일까지 검토합니다.',
+                source_url='https://slack.mock/archives/C123/p2',
+            )
+        ],
+    )
+
+    candidates = build_project_assignment_candidates(db_session)
+
+    assert len(candidates) == 1
+    assert candidates[0].project_key == 'project-investment-fundraise'
+
+
+def test_project_classifier_ignores_generic_connector_terms_and_low_signal_slack_reply(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Project(
+            project_key='project-paraworks-mvp',
+            name='Paraworks MVP',
+            summary='Summarizes Slack, Gmail, and Google Drive data into a timeline.',
+        )
+    )
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='slack',
+                source_id='slack-good-good-reply',
+                title='Slack thread reply in C123',
+                body=(
+                    'Thread parent: 공유폴더 하나 만들죠: '
+                    '<https://drive.google.com/drive/folders/demo>\n'
+                    'Thread reply: 굿굿'
+                ),
+                source_url='https://slack.mock/archives/C123/p3',
+            )
+        ],
+    )
+
+    candidates = build_project_assignment_candidates(db_session)
+
+    assert candidates == []
+
+
 def test_projects_reclassify_creates_pending_review_without_tokens(
     client: TestClient,
     db_session: Session,
@@ -311,6 +400,13 @@ def test_projects_api_returns_approved_project_evidence_only(
     db_session: Session,
 ) -> None:
     db_session.add(
+        Project(
+            project_key='k-tech-pilot',
+            name='K테크 파일럿',
+            summary='K테크 파일럿 프로젝트',
+        )
+    )
+    db_session.add(
         ReviewItem(
             item_type='project_assignment',
             payload={
@@ -356,9 +452,8 @@ def test_projects_api_returns_approved_project_evidence_only(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload['project_count'] == 2
-    assert [project['project_key'] for project in payload['projects']] == ['k-tech-pilot', 'project-newbiegenie']
-    assert {project['name'] for project in payload['projects']} == {'K테크 파일럿', 'Project Newbiegenie'}
+    assert payload['project_count'] == 1
+    assert [project['project_key'] for project in payload['projects']] == ['k-tech-pilot']
     ktech = payload['projects'][0]
     assert ktech['evidence_count'] == 1
     assert ktech['evidence'][0]['title'] == 'K테크 파일럿 제안서 업데이트'
@@ -370,6 +465,13 @@ def test_projects_api_links_timeline_items_to_approved_project_assignments(
     client: TestClient,
     db_session: Session,
 ) -> None:
+    db_session.add(
+        Project(
+            project_key='seed-ir',
+            name='시드 투자 IR',
+            summary='시드 투자 IR 프로젝트',
+        )
+    )
     db_session.add(
         ReviewItem(
             item_type='project_assignment',
@@ -417,6 +519,13 @@ def test_projects_api_links_approved_timeline_by_project_key_without_assignment(
     db_session: Session,
 ) -> None:
     db_session.add(
+        Project(
+            project_key='seed-ir',
+            name='시드 투자 IR',
+            summary='시드 투자 IR 프로젝트',
+        )
+    )
+    db_session.add(
         TimelineEvent(
             project_key='seed-ir',
             title='IR pitch deck review completed',
@@ -445,6 +554,13 @@ def test_approved_review_item_with_project_key_appears_in_project_timeline(
     client: TestClient,
     db_session: Session,
 ) -> None:
+    db_session.add(
+        Project(
+            project_key='k-tech-pilot',
+            name='K-Tech pilot',
+            summary='K-Tech pilot project',
+        )
+    )
     review_item = ReviewItem(
         item_type='timeline_event',
         payload={
@@ -480,6 +596,13 @@ def test_projects_api_does_not_convert_approved_knowledge_into_connector_evidenc
     client: TestClient,
     db_session: Session,
 ) -> None:
+    db_session.add(
+        Project(
+            project_key='seed-ir',
+            name='Seed IR',
+            summary='Seed IR project',
+        )
+    )
     review_item = ReviewItem(
         item_type='history_event',
         payload={
@@ -508,4 +631,39 @@ def test_projects_api_does_not_convert_approved_knowledge_into_connector_evidenc
     assert response.status_code == 200
     seed_ir = next(project for project in response.json()['projects'] if project['project_key'] == 'seed-ir')
     assert seed_ir['evidence_count'] == 0
-    assert {item['item_type'] for item in seed_ir['timeline_items']} == {'history_event', 'timeline_event'}
+    assert {item['item_type'] for item in seed_ir['timeline_items']} == {'timeline_event'}
+    assert {item['item_type'] for item in seed_ir['activity_items']} == {'history_event'}
+
+
+def test_projects_api_hides_unregistered_approved_project_keys(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(
+        ReviewItem(
+            item_type='project_assignment',
+            payload={
+                'title': 'Unregistered project source',
+                'summary': 'This project was never registered.',
+                'project_key': 'project-unregistered',
+                'project_name': 'Unregistered',
+                'source_id': 'slack-unregistered',
+                'source_type': 'slack',
+                'source_title': 'Slack message in C123',
+                'task_summary': 'Unregistered evidence',
+                'evidence_reason': 'legacy dummy',
+                'timestamp': '2026-05-01T09:00:00Z',
+            },
+            source_links=['https://example.com/unregistered'],
+            source_snippets=['unregistered'],
+            confidence_score=0.88,
+            permission_level='internal',
+            status='approved',
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    assert response.json()['projects'] == []

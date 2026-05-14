@@ -10,6 +10,7 @@ from backend.app.agent_runtime import (
     ReviewCandidate,
 )
 from backend.app.agents.slack_agent.agent import SlackAgent
+from backend.app.agents.slack_agent.quality import classify_slack_work_signal
 from backend.app.models import AgentRun, DocumentChunk, ReviewItem, Source
 
 _DECISION_KEYWORDS = (
@@ -274,8 +275,12 @@ def _dedupe_and_rank_slack_rows(
 ) -> list[tuple[DocumentChunk, Source, int]]:
     best_by_text: dict[str, tuple[DocumentChunk, Source, int]] = {}
     for chunk, source in rows:
+        signal = classify_slack_work_signal(chunk.text)
+        if not signal.is_reviewable:
+            continue
         dedupe_key = _normalize_evidence_text(chunk.text) or source.source_id
         score = _evidence_importance_score(chunk, source)
+        score += signal.score
         current = best_by_text.get(dedupe_key)
         if current is None or _rank_sort_key(chunk, source, score) > _rank_sort_key(*current):
             best_by_text[dedupe_key] = (chunk, source, score)

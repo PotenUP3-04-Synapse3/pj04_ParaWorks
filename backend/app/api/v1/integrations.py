@@ -234,7 +234,30 @@ def sync_connector(
         )
         result = sync_connector_events(db=db, connector=connector)
         changed_source_ids = getattr(result, 'changed_source_ids', [])
+        if result.status == 'complete':
+            _mark_sync_job_agent_review_running(
+                db=db,
+                job_id=result.job_id,
+                fetched_events=result.fetched_events,
+                skipped_events=result.skipped_events,
+            )
         if result.status == 'complete' and not changed_source_ids:
+            recovery_source_ids = _connector_source_ids_for_review(
+                db=db,
+                connector_type=connector_type,
+                user=user,
+            )
+            if recovery_source_ids and not _has_connector_agent_review_items(
+                db=db,
+                connector_type=connector_type,
+            ):
+                agent_review_items = _run_connector_agent_review(
+                    db=db,
+                    user=user,
+                    settings=settings,
+                    connector_type=connector_type,
+                    source_ids=recovery_source_ids,
+                )
             project_assignment_items = len(create_project_assignment_review_items(db))
 
         if result.status == 'complete' and changed_source_ids:
@@ -243,7 +266,7 @@ def sync_connector(
                 user=user,
                 settings=settings,
                 connector_type=connector_type,
-                changed_source_ids=changed_source_ids,
+                source_ids=changed_source_ids,
             )
             project_assignment_items = len(create_project_assignment_review_items(db))
     except ConnectorNotConfiguredError as exc:
@@ -255,12 +278,17 @@ def sync_connector(
     total_review_items = (
         result.created_review_items + agent_review_items + project_assignment_items
     )
+    db.flush()
+    pending_review_count = _pending_review_count(db)
     sync_job = db.scalar(select(SyncJob).where(SyncJob.job_id == result.job_id))
     if sync_job is not None:
+        sync_job.status = result.status
+        sync_job.progress_pct = 100
         sync_job.message = (
             f'fetched={result.fetched_events} '
             f'created_review_items={total_review_items} '
-            f'skipped_events={result.skipped_events}'
+            f'skipped_events={result.skipped_events} '
+            f'pending_review_items={pending_review_count}'
         )
 
     record_audit_log(
@@ -279,6 +307,7 @@ def sync_connector(
             'agent_generated_items': agent_review_items,
             'project_assignment_items': project_assignment_items,
             'changed_source_ids': changed_source_ids,
+            'pending_review_count': pending_review_count,
         },
     )
     db.commit()
@@ -294,6 +323,7 @@ def sync_connector(
         'changed_source_ids': changed_source_ids,
         'agent_generated_items': agent_review_items,
         'project_assignment_items': project_assignment_items,
+        'pending_review_count': pending_review_count,
     }
 
 
@@ -303,7 +333,7 @@ def _run_connector_agent_review(
     user: DemoUser,
     settings: Settings,
     connector_type: str,
-    changed_source_ids: list[str],
+    source_ids: list[str],
 ) -> int:
     if connector_type == 'slack':
         if not settings.paraworks_demo_mode and (
@@ -313,7 +343,7 @@ def _run_connector_agent_review(
         ):
             return trigger_slack_agent_analysis(
                 db=db,
-                source_ids=changed_source_ids,
+                source_ids=source_ids,
                 settings=settings,
             )
 
@@ -322,7 +352,7 @@ def _run_connector_agent_review(
             agent=SlackAgent(model=DeterministicSlackAgentModel()),
             permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
-            source_ids=changed_source_ids,
+            source_ids=source_ids,
         )
         return len(review_items)
 
@@ -332,11 +362,55 @@ def _run_connector_agent_review(
             agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
             permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
-            source_ids=changed_source_ids,
+            source_ids=source_ids,
         )
         return len(review_items)
 
     return 0
+
+
+def _has_connector_agent_review_items(
+    *,
+    db: Session,
+    connector_type: str,
+) -> bool:
+    agent_names = {
+        'slack': {'slack_agent'},
+        'gmail': {'mail_document_agent'},
+        'google_drive': {'mail_document_agent'},
+        'google_calendar': {'mail_document_agent'},
+        'drive': {'mail_document_agent'},
+        'calendar': {'mail_document_agent'},
+    }.get(connector_type, set())
+    if not agent_names:
+        return True
+    return (
+        db.scalar(
+            select(ReviewItem.id)
+            .where(ReviewItem.payload['agent_name'].as_string().in_(agent_names))
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _connector_source_ids_for_review(
+    *,
+    db: Session,
+    connector_type: str,
+    user: DemoUser,
+) -> list[str]:
+    if connector_type == 'slack':
+        return list(
+            db.scalars(
+                select(Source.source_id)
+                .where(Source.source_type == 'slack')
+                .order_by(Source.id)
+            ).all()
+        )
+    if connector_type in GOOGLE_OAUTH_CONNECTOR_TYPES:
+        return _mail_document_source_ids(db=db, user=user)
+    return []
 
 
 @router.get('/slack/oauth/install-url')
@@ -965,6 +1039,37 @@ def _sync_job_response(job: SyncJob | None) -> dict[str, object] | None:
     }
 
 
+def _mark_sync_job_agent_review_running(
+    *,
+    db: Session,
+    job_id: str,
+    fetched_events: int,
+    skipped_events: int,
+) -> None:
+    sync_job = db.scalar(select(SyncJob).where(SyncJob.job_id == job_id))
+    if sync_job is None:
+        return
+    sync_job.status = 'running'
+    sync_job.progress_pct = 75
+    sync_job.message = (
+        f'fetched={fetched_events} '
+        'agent_review=running '
+        f'skipped_events={skipped_events}'
+    )
+    db.commit()
+
+
+def _pending_review_count(db: Session) -> int:
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(ReviewItem)
+            .where(ReviewItem.status == 'pending_review')
+        )
+        or 0
+    )
+
+
 def _sync_job_summary(job: SyncJob | None) -> dict[str, int] | None:
     if job is None:
         return None
@@ -1001,17 +1106,9 @@ def _slack_agent_bridge(db: Session) -> dict[str, int | bool]:
         )
         or 0
     )
-    pending_review_count = (
-        db.scalar(
-            select(func.count())
-            .select_from(ReviewItem)
-            .where(ReviewItem.status == 'pending_review')
-        )
-        or 0
-    )
     return {
         'slack_source_count': slack_source_count,
-        'pending_review_count': pending_review_count,
+        'pending_review_count': _pending_review_count(db),
         'ready_for_agent_test': slack_source_count > 0,
     }
 
@@ -1023,9 +1120,9 @@ def _extract_count(message: str, key: str) -> int:
 
 def _slack_error_action_hint(code: str) -> str:
     if code in {'not_in_channel', 'channel_not_found'}:
-        return 'Please add the Slack app to the selected channel and try syncing again.'
+        return 'Slack 앱을 선택한 채널에 추가한 뒤 다시 동기화하세요.'
     if code == 'missing_scope':
-        return 'Check Slack OAuth scopes and reinstall the app.'
+        return 'Slack OAuth 권한 범위를 확인한 뒤 앱을 다시 설치하세요.'
     if code == 'rate_limited':
-        return 'Please try again after the Slack API rate limit is lifted.'
-    return 'Check Slack connection, channel permissions, and token status, then try syncing again.'
+        return 'Slack API 제한이 풀린 뒤 다시 시도하세요.'
+    return 'Slack 연결, 채널 권한, 토큰 상태를 확인한 뒤 다시 동기화하세요.'

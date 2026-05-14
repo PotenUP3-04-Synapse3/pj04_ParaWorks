@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -58,6 +58,7 @@ class ProjectMemory:
     pending_review_count: int
     evidence: list[ProjectEvidence]
     timeline_items: list[ProjectTimelineItem]
+    activity_items: list[ProjectTimelineItem]
 
 
 def build_project_memory(db: Session) -> list[ProjectMemory]:
@@ -72,56 +73,31 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
     ).all()
     pending_counts = _pending_assignment_counts(db)
     memory_records = _approved_memory_records(db)
-
-    db_projects_list = db.scalars(select(Project)).all()
-    db_projects = {project.project_key: project for project in db_projects_list}
-
-    active_project_keys = set(db_projects)
-    all_approved_items = approved_assignments + approved_knowledge_items
-    for item in all_approved_items:
-        key = item.payload.get('project_key')
-        if isinstance(key, str) and key:
-            active_project_keys.add(key)
-    for item in memory_records:
-        if item.project_key:
-            active_project_keys.add(item.project_key)
+    db_projects = db.scalars(select(Project).order_by(Project.created_at.desc(), Project.id.desc())).all()
 
     projects: list[ProjectMemory] = []
-    for project_key in sorted(active_project_keys):
-        db_project = db_projects.get(project_key)
-        name, base_summary = _project_display(project_key, db_project)
-
+    all_approved_items = approved_assignments + approved_knowledge_items
+    for db_project in db_projects:
+        project_key = db_project.project_key
         project_link_items = [
             item
             for item in all_approved_items
             if item.payload.get('project_key') == project_key
         ]
-        payload_project_name = next(
-            (
-                item.payload.get('project_name')
-                for item in project_link_items
-                if isinstance(item.payload.get('project_name'), str) and item.payload.get('project_name')
-            ),
-            None,
-        )
-        if db_project is None and payload_project_name:
-            name = payload_project_name
-
         assignment_evidence_items = [
             item
             for item in approved_assignments
             if item.payload.get('project_key') == project_key
         ]
         evidence = _evidence_from_assignments(assignment_evidence_items)
-        timeline_items = _timeline_for_project(project_key, project_link_items, memory_records)
-
-        if not evidence and not timeline_items and db_project is None:
-            continue
+        linked_records = _memory_records_for_project(project_key, project_link_items, memory_records)
+        timeline_items = _timeline_items_from_records(linked_records)
+        activity_items = _dedupe_activity_items(linked_records)
 
         permission_levels = [item.permission_level for item in evidence] + [
-            item.permission_level for item in timeline_items
+            item.permission_level for item in activity_items
         ]
-        latest_candidates = [item.timestamp for item in evidence] + [item.created_at for item in timeline_items]
+        latest_candidates = [item.timestamp for item in evidence] + [item.created_at for item in activity_items]
         source_types = sorted(
             {item.source_type for item in evidence},
             key=lambda source_type: SOURCE_TYPE_RANK.get(source_type, 99),
@@ -129,8 +105,8 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
         projects.append(
             ProjectMemory(
                 project_key=project_key,
-                name=name,
-                summary=_project_summary(base_summary, evidence, timeline_items),
+                name=db_project.name,
+                summary=_project_summary(db_project.summary, evidence, activity_items),
                 source_types=source_types,
                 evidence_count=len(evidence),
                 permission_level=_strictest_permission(permission_levels),
@@ -138,19 +114,10 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
                 pending_review_count=pending_counts.get(project_key, 0),
                 evidence=evidence,
                 timeline_items=timeline_items,
+                activity_items=activity_items,
             )
         )
     return projects
-
-
-def _project_display(project_key: str, project: Project | None) -> tuple[str, str]:
-    if project is not None:
-        return project.name, project.summary
-    if project_key == 'ad-hoc':
-        return '임시 분류(Ad-hoc)', '아직 사용자가 정의한 프로젝트와 연결되지 않은 항목입니다.'
-    if project_key.startswith('project-'):
-        return project_key.replace('project-', '').replace('-', ' ').title(), 'AI가 임시로 분류한 프로젝트입니다.'
-    return f'프로젝트 {project_key.upper()}', 'AI가 임시로 분류한 프로젝트입니다.'
 
 
 def _pending_assignment_counts(db: Session) -> dict[str, int]:
@@ -267,33 +234,10 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
         )
         for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all()
     )
-    project_keys = _approved_memory_project_keys(db)
-    return [
-        replace(record, project_key=project_keys.get(record.id))
-        if record.project_key is None and project_keys.get(record.id)
-        else record
-        for record in records
-    ]
+    return records
 
 
-def _approved_memory_project_keys(db: Session) -> dict[str, str]:
-    keys: dict[str, str] = {}
-    for item in db.scalars(select(DecisionRecord).where(DecisionRecord.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'decision_record:{item.id}'] = item.project_key
-    for item in db.scalars(select(HistoryEvent).where(HistoryEvent.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'history_event:{item.id}'] = item.project_key
-    for item in db.scalars(select(TimelineEvent).where(TimelineEvent.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'timeline_event:{item.id}'] = item.project_key
-    for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'todo:{item.id}'] = item.project_key
-    return keys
-
-
-def _timeline_for_project(
+def _memory_records_for_project(
     project_key: str,
     assignments: list[ReviewItem],
     memory_records: list[ProjectTimelineItem],
@@ -325,12 +269,48 @@ def _timeline_for_project(
     return sorted(items, key=lambda item: (item.created_at, item.id), reverse=True)
 
 
-def _project_summary(base_summary: str, evidence: list[ProjectEvidence], timeline_items: list[ProjectTimelineItem]) -> str:
-    if not evidence and not timeline_items:
+def _timeline_items_from_records(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
+    return [item for item in records if item.item_type == 'timeline_event']
+
+
+def _dedupe_activity_items(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
+    non_timeline_signatures = {
+        _activity_signature(item)
+        for item in records
+        if item.item_type != 'timeline_event'
+    }
+    activity_items: list[ProjectTimelineItem] = []
+    seen: set[str] = set()
+    for item in records:
+        signature = _activity_signature(item)
+        if item.item_type == 'timeline_event' and signature in non_timeline_signatures:
+            continue
+        identity = f'{item.item_type}:{signature}'
+        if identity in seen:
+            continue
+        seen.add(identity)
+        activity_items.append(item)
+    return activity_items
+
+
+def _activity_signature(item: ProjectTimelineItem) -> str:
+    first_link = item.source_links[0] if item.source_links else ''
+    first_snippet = item.source_snippets[0] if item.source_snippets else ''
+    return '|'.join(
+        [
+            first_link.strip().lower(),
+            ' '.join(first_snippet.split()).strip().lower(),
+            ' '.join(item.summary.split()).strip().lower(),
+        ]
+    )
+
+
+def _project_summary(base_summary: str, evidence: list[ProjectEvidence], activity_items: list[ProjectTimelineItem]) -> str:
+    if not evidence and not activity_items:
         return f'{base_summary} 아직 승인된 프로젝트 근거가 없습니다.'
     return (
         f'{base_summary} 승인된 원본 근거 {len(evidence)}건과 '
-        f'승인된 활동 {len(timeline_items)}건이 연결되어 있습니다.'
+        f'승인된 프로젝트 활동 {len(activity_items)}건이 연결되어 있습니다.'
     )
 
 

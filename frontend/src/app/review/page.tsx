@@ -23,15 +23,24 @@ import type {
   ReviewGroup,
   ReviewEvidenceRequest,
   ReviewApprovalResponse,
+  ReviewBulkActionResponse,
   ReviewItemUpdate,
   ReviewPromotionPreview,
   ReviewResponse,
   ReviewPromotionResult,
 } from "@/lib/api/types";
 
+const REVIEW_PAGE_SIZE = 50;
+
 
 function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function knownStringField(value: unknown) {
+  const text = stringField(value).trim();
+  if (!text || text.toLowerCase() === "unknown") return "";
+  return text;
 }
 
 function numberField(value: unknown) {
@@ -101,6 +110,29 @@ function formatCost(value: unknown) {
   return `$${cost.toFixed(6)}`;
 }
 
+function reviewPromptLabel(item: ReviewItem, agentName: string) {
+  const payloadPrompt = knownStringField(item.payload.prompt_version);
+  if (payloadPrompt) return payloadPrompt;
+
+  const agentRunPrompt = knownStringField(item.agent_run_details?.prompt_version);
+  if (agentRunPrompt) return agentRunPrompt;
+
+  if (agentName === "project_classifier") return "규칙 기반 분류";
+  if (!item.agent_run_id) return "규칙 기반 처리";
+  return "프롬프트 정보 없음";
+}
+
+function reviewCostLabel(item: ReviewItem, agentName: string) {
+  const payloadCost = formatCost(item.payload.estimated_cost_usd);
+  if (payloadCost) return payloadCost;
+
+  const agentRunCost = numberField(item.agent_run_details?.estimated_cost_usd);
+  if (agentRunCost !== undefined && item.agent_run_id) return formatCost(agentRunCost) ?? "$0.000000";
+
+  if (agentName === "project_classifier" || !item.agent_run_id) return "LLM 미사용";
+  return "비용 정보 없음";
+}
+
 type PromotionNotice = {
   itemTitle: string;
   result: ReviewPromotionResult;
@@ -122,27 +154,25 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [promotionNotice, setPromotionNotice] = useState<PromotionNotice>();
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (nextOffset = 0, append = false) => {
     setLoading(true);
     setError(undefined);
 
     try {
-      const review = await apiGet<ReviewResponse>("/api/v1/review?status=pending_review");
-      setGroups(review.groups || []);
+      const review = await apiGet<ReviewResponse>(
+        `/api/v1/review?status=pending_review&limit=${REVIEW_PAGE_SIZE}&offset=${nextOffset}&include_previews=false`,
+      );
+      setGroups((current) => (append ? mergeReviewGroups(current, review.groups || []) : review.groups || []));
+      setTotalCount(review.total_count ?? review.items.length);
+      setLoadedOffset(nextOffset);
+      setHasMore(Boolean(review.has_more));
       
       const projectsRes = await apiGet<{projects: Array<{project_key: string, name: string}>}>("/api/v1/projects/defined");
       setDefinedProjects(projectsRes.projects || []);
-
-      // 모든 항목에 대한 프리뷰 로드
-      const allItems = (review.groups || []).flatMap(g => g.items || []);
-      const previewPairs = await Promise.all(
-        allItems.map(async (item) => [
-          item.id,
-          await apiGet<ReviewPromotionPreview>(`/api/v1/review/${item.id}/promotion-preview`),
-        ] as const),
-      );
-      setPreviews(Object.fromEntries(previewPairs));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "검토 항목을 불러오지 못했습니다.");
     } finally {
@@ -154,8 +184,22 @@ export default function ReviewPage() {
     void loadItems();
   }, [loadItems]);
 
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+  async function loadPreviewsForItems(items: ReviewItem[]) {
+    const missingItems = items.filter((item) => !previews[item.id]);
+    if (missingItems.length === 0) return;
+    const previewPairs = await Promise.all(
+      missingItems.map(async (item) => [
+        item.id,
+        await apiGet<ReviewPromotionPreview>(`/api/v1/review/${item.id}/promotion-preview`),
+      ] as const),
+    );
+    setPreviews((current) => ({ ...current, ...Object.fromEntries(previewPairs) }));
+  }
+
+  const toggleGroup = (group: ReviewGroup) => {
+    const willOpen = !expandedGroups[group.group_id];
+    setExpandedGroups(prev => ({ ...prev, [group.group_id]: willOpen }));
+    if (willOpen) void loadPreviewsForItems(group.items || []);
   };
 
   function startEdit(item: ReviewItem) {
@@ -197,6 +241,50 @@ export default function ReviewPage() {
       setPendingAction(undefined);
     }
   }
+
+  async function updateItemProject(item: ReviewItem, projectKey: string) {
+    const update: ReviewItemUpdate = {
+      payload: {
+        project_key: projectKey,
+      },
+    };
+    setPendingAction(`${item.id}:project`);
+    setError(undefined);
+    try {
+      await apiPatch<ReviewItem>(`/api/v1/review/${item.id}`, update);
+      await loadItems();
+      notifyReviewQueueUpdated();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "프로젝트를 저장하지 못했습니다.");
+    } finally {
+      setPendingAction(undefined);
+    }
+  }
+
+  async function runBulkAction(action: "approve" | "reject") {
+    const itemIds = groups.flatMap((group) => group.items.map((item) => item.id));
+    if (itemIds.length === 0) return;
+    const label = action === "approve" ? "승인" : "반려";
+    if (!window.confirm(`현재 로드된 검토 항목 ${itemIds.length}개를 모두 ${label}할까요?`)) return;
+
+    setPendingAction(`bulk:${action}`);
+    setError(undefined);
+    try {
+      const result = await apiPost<ReviewBulkActionResponse>("/api/v1/review/bulk", {
+        action,
+        item_ids: itemIds,
+      });
+      await loadItems();
+      notifyReviewQueueUpdated();
+      if (result.failed_items.length > 0) {
+        setError(`${label} 처리 중 ${result.failed_items.length}개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `모두 ${label} 처리하지 못했습니다.`);
+    } finally {
+      setPendingAction(undefined);
+    }
+  }
   async function saveEdit(item: ReviewItem) {
     const key = summaryKey(item);
     const update: ReviewItemUpdate = {
@@ -224,6 +312,8 @@ export default function ReviewPage() {
     }
   }
   const totalAgentItems = groups.reduce((acc, g) => acc + g.items.filter(i => Boolean(i.payload.agent_name)).length, 0);
+  const loadedItemCount = groups.reduce((acc, group) => acc + group.items.length, 0);
+  const authRequired = error ? error.includes("Authentication required") || error.includes("401") : false;
 
   return (
     <div className="reference-dashboard space-y-5">
@@ -238,8 +328,26 @@ export default function ReviewPage() {
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-[var(--ink-muted)] shadow-sm">
             <Bot className="h-4 w-4 text-[var(--workspace-accent)]" aria-hidden="true" />
-            Agent 후보 {totalAgentItems}개
+            Agent 후보 {totalAgentItems}개 · {loadedItemCount}/{totalCount}개 로드
           </span>
+          <button
+            type="button"
+            onClick={() => void runBulkAction("approve")}
+            disabled={Boolean(pendingAction) || loadedItemCount === 0}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
+          >
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            모두 승인
+          </button>
+          <button
+            type="button"
+            onClick={() => void runBulkAction("reject")}
+            disabled={Boolean(pendingAction) || loadedItemCount === 0}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+          >
+            <XCircle className="h-4 w-4" aria-hidden="true" />
+            모두 반려
+          </button>
           <button
             type="button"
             onClick={() => void loadItems()}
@@ -253,8 +361,23 @@ export default function ReviewPage() {
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          {error}
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          {authRequired ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-bold">로그인이 필요합니다.</p>
+                <p className="mt-1">Slack 동기화로 생성된 검토 항목은 존재하지만, 현재 세션에서는 조회 권한을 확인할 수 없습니다.</p>
+              </div>
+              <Link
+                href="/login"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-red-300 bg-white px-3 text-sm font-semibold text-red-800 hover:bg-red-100"
+              >
+                로그인으로 이동
+              </Link>
+            </div>
+          ) : (
+            error
+          )}
         </div>
       ) : null}
 
@@ -291,7 +414,7 @@ export default function ReviewPage() {
             <div key={group.group_id} className="group-container overflow-hidden rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-sm">
               {/* Group Header */}
               <div 
-                onClick={() => toggleGroup(group.group_id)}
+                onClick={() => toggleGroup(group)}
                 className="flex cursor-pointer items-center justify-between border-b border-[var(--line-soft)] bg-[var(--glass-strong)] px-4 py-3 hover:bg-[var(--glass-stronger)]"
               >
                 <div className="flex items-center gap-3">
@@ -322,9 +445,9 @@ export default function ReviewPage() {
                     const isEditing = editingId === item.id;
                     const editPending = pendingAction === `${item.id}:edit`;
                     const agentName = stringField(item.payload.agent_name);
-                    const promptVersion = stringField(item.payload.prompt_version);
-                    const cost = formatCost(item.payload.estimated_cost_usd);
                     const isAgentItem = Boolean(agentName);
+                    const promptVersion = isAgentItem ? reviewPromptLabel(item, agentName) : "";
+                    const cost = isAgentItem ? reviewCostLabel(item, agentName) : "";
                     const preview = previews[item.id];
                     const canApprove = preview?.can_approve ?? true;
                     const evidenceRows = item.source_evidence ?? [];
@@ -361,7 +484,7 @@ export default function ReviewPage() {
                                     onChange={(e) => setEditProjectKey(e.target.value)}
                                     className="mt-1 h-10 w-full rounded-lg border border-[var(--line-soft)] px-3 text-sm font-normal outline-none focus:border-[#21132b] bg-white"
                                   >
-                                    <option value="ad-hoc">기타 업무 (Ad-hoc) / 미지정</option>
+                                    <option value="">프로젝트 미지정</option>
                                     {definedProjects.map(p => (
                                       <option key={p.project_key} value={p.project_key}>{p.name}</option>
                                     ))}
@@ -425,6 +548,22 @@ export default function ReviewPage() {
                                     </div>
                                   </div>
                                 ) : null}
+                                <label className="mt-4 block max-w-sm text-sm font-semibold text-[var(--ink)]">
+                                  프로젝트 지정
+                                  <select
+                                    value={stringField(item.payload.project_key)}
+                                    onChange={(event) => void updateItemProject(item, event.target.value)}
+                                    disabled={Boolean(pendingAction)}
+                                    className="mt-1 h-10 w-full rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-normal outline-none focus:border-[#21132b] disabled:opacity-60"
+                                  >
+                                    <option value="">프로젝트 선택</option>
+                                    {definedProjects.map((project) => (
+                                      <option key={project.project_key} value={project.project_key}>
+                                        {project.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
                                 <h4 className="mt-3 text-sm font-bold text-[var(--ink-muted)]">#{item.id} 상세 내용</h4>
                                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink)]">
                                   {itemSummary(item)}
@@ -434,8 +573,8 @@ export default function ReviewPage() {
 
                             {isAgentItem ? (
                               <div className="mt-4 flex flex-wrap gap-3">
-                                <MetadataTile label="Prompt" value={promptVersion || "unknown"} />
-                                <MetadataTile label="Cost" value={cost ?? "unknown"} />
+                                <MetadataTile label="Prompt" value={promptVersion} />
+                                <MetadataTile label="Cost" value={cost} />
                               </div>
                             ) : null}
 
@@ -599,9 +738,20 @@ export default function ReviewPage() {
           );
         })}
 
-        {!loading && groups.length === 0 ? (
+        {!loading && !error && groups.length === 0 ? (
           <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-8 text-sm text-[var(--ink-muted)] shadow-sm text-center">
             대기 중인 검토 항목이 없습니다.
+          </div>
+        ) : null}
+        {!loading && hasMore ? (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => void loadItems(loadedOffset + REVIEW_PAGE_SIZE, true)}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-4 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)]"
+            >
+              더 보기
+            </button>
           </div>
         ) : null}
         {loading && groups.length === 0 ? (
@@ -624,4 +774,32 @@ function MetadataTile({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>
   );
+}
+
+function mergeReviewGroups(current: ReviewGroup[], incoming: ReviewGroup[]) {
+  const byId = new Map<string, ReviewGroup>();
+  for (const group of current) {
+    byId.set(group.group_id, { ...group, items: [...group.items] });
+  }
+  for (const group of incoming) {
+    const existing = byId.get(group.group_id);
+    if (!existing) {
+      byId.set(group.group_id, { ...group, items: [...group.items] });
+      continue;
+    }
+    const seenItemIds = new Set(existing.items.map((item) => item.id));
+    const nextItems = [...existing.items];
+    for (const item of group.items) {
+      if (!seenItemIds.has(item.id)) {
+        nextItems.push(item);
+      }
+    }
+    byId.set(group.group_id, {
+      ...existing,
+      items: nextItems,
+      total_count: nextItems.length,
+      avg_confidence: nextItems.reduce((sum, item) => sum + item.confidence_score, 0) / Math.max(nextItems.length, 1),
+    });
+  }
+  return Array.from(byId.values());
 }

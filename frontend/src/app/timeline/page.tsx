@@ -91,7 +91,7 @@ export default function TimelinePage() {
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Timeline</p>
             <h1>타임라인</h1>
-          <p>승인된 프로젝트 evidence에 연결된 결정, 히스토리, 할 일을 프로젝트별 워크플로우로 확인합니다.</p>
+          <p>등록된 프로젝트에 연결된 승인 타임라인 항목을 시간순으로 확인합니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
           <GitBranch className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
@@ -154,7 +154,7 @@ export default function TimelinePage() {
               </article>
             )) : (
               <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
-                이 프로젝트에 승인된 타임라인 항목이 아직 없습니다. Review Queue에서 프로젝트 연결 후보와 업무 후보를 승인하면 여기에 표시됩니다.
+                이 프로젝트에 승인된 타임라인 항목이 아직 없습니다. Review에서 이 프로젝트를 선택하고 타임라인 후보를 승인하면 여기에 표시됩니다.
               </div>
             )}
           </div>

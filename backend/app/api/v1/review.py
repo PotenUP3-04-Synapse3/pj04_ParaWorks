@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,8 +15,12 @@ from backend.app.knowledge.promotion import (
     promote_review_item,
     validate_review_item_for_approval,
 )
-from backend.app.models import AgentRun, ReviewItem
-from backend.app.schemas.review import ReviewEvidenceRequest, ReviewItemUpdate
+from backend.app.models import AgentRun, Project, ReviewItem
+from backend.app.schemas.review import (
+    ReviewBulkActionRequest,
+    ReviewEvidenceRequest,
+    ReviewItemUpdate,
+)
 from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/review', tags=['review'])
@@ -30,9 +34,9 @@ def _review_item_response(item: ReviewItem, agent_run: AgentRun | None = None) -
     
     # 에이전트 실행 상세 정보 추출
     agent_details = {
-        'model_name': 'Unknown',
-        'prompt_version': 'Unknown',
-        'estimated_cost_usd': 0.0,
+        'model_name': None,
+        'prompt_version': None,
+        'estimated_cost_usd': None,
         'total_tokens': 0,
     }
     
@@ -66,11 +70,16 @@ def list_review_items(
     user: CurrentUser,
     settings: AppSettings,
     status: str = 'pending_review',
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    include_previews: bool = False,
 ) -> dict:
     items = db.scalars(
         select(ReviewItem).where(ReviewItem.status == status).order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
     ).all()
-    visible_items = _visible_review_items(items, user, settings)
+    all_visible_items = _sort_review_items_for_queue(_visible_review_items(items, user, settings))
+    total_count = len(all_visible_items)
+    visible_items = all_visible_items[offset : offset + limit]
     agent_runs = _agent_runs_by_id(db, visible_items)
 
     groups: dict[str, dict] = {}
@@ -105,6 +114,11 @@ def list_review_items(
     return {
         'groups': result_groups,
         'items': [_review_item_response(item, agent_runs.get(_agent_run_id(item) or -1)) for item in visible_items],
+        'total_count': total_count,
+        'limit': limit,
+        'offset': offset,
+        'has_more': offset + limit < total_count,
+        'include_previews': include_previews,
     }
 
 
@@ -165,6 +179,76 @@ def approve_agent_review_candidates(
     }
 
 
+@router.post('/bulk')
+def bulk_review_items(
+    request: ReviewBulkActionRequest,
+    db: DbSession,
+    user: CurrentUser,
+    settings: AppSettings,
+) -> dict:
+    items = _bulk_action_items(db, request, user, settings)
+    approved_item_ids: list[int] = []
+    rejected_item_ids: list[int] = []
+    failed_items: list[dict[str, object]] = []
+    skipped_items: list[dict[str, object]] = []
+
+    for item in items:
+        try:
+            ensure_can_review_permission(user, item.permission_level)
+            if item.status != 'pending_review':
+                skipped_items.append({'id': item.id, 'detail': f'status is {item.status}'})
+                continue
+            if request.action == 'approve':
+                if not item.source_links or not item.source_snippets:
+                    raise ValueError('Review item requires source evidence')
+                validate_review_item_for_approval(item)
+                item.status = 'approved'
+                item.reviewer_id = user.id
+                item.reviewed_at = datetime.now(UTC)
+                promote_review_item(db, item)
+                approved_item_ids.append(item.id)
+            else:
+                item.status = 'rejected'
+                item.reviewer_id = user.id
+                item.reviewed_at = datetime.now(UTC)
+                rejected_item_ids.append(item.id)
+        except (HTTPException, ValueError) as exc:
+            detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            failed_items.append({'id': item.id, 'detail': detail})
+
+    record_audit_log(
+        db=db,
+        actor=user,
+        action=f'review.bulk_{request.action}',
+        target_type='review_queue',
+        target_id='bulk',
+        metadata={
+            'approved_count': len(approved_item_ids),
+            'rejected_count': len(rejected_item_ids),
+            'failed_count': len(failed_items),
+            'skipped_count': len(skipped_items),
+            'approved_item_ids': approved_item_ids,
+            'rejected_item_ids': rejected_item_ids,
+        },
+    )
+    db.commit()
+
+    return {
+        'action': request.action,
+        'approved_count': len(approved_item_ids),
+        'rejected_count': len(rejected_item_ids),
+        'failed_items': failed_items,
+        'skipped_items': skipped_items,
+        'approved_item_ids': approved_item_ids,
+        'rejected_item_ids': rejected_item_ids,
+        'cost_policy': {
+            'paid_llm_calls': False,
+            'embedding_calls': False,
+            'requires_human_review_state': True,
+        },
+    }
+
+
 @router.patch('/{item_id}')
 def update_review_item(
     item_id: int,
@@ -182,6 +266,8 @@ def update_review_item(
             # 병합(merge)하여 기존 payload의 다른 필드 유실 방지
             new_payload = dict(item.payload or {})
             new_payload.update(value)
+            if 'project_key' in value:
+                _validate_payload_project_key(db, new_payload)
             item.payload = new_payload
         else:
             setattr(item, field, value)
@@ -327,6 +413,59 @@ def reject_review_item(
 def _visible_review_items(items: list[ReviewItem], user: DemoUser, settings: Settings) -> list[ReviewItem]:
     environment_items = items if settings.paraworks_demo_mode else filter_review_items(items)
     return [item for item in environment_items if _user_can_see_review_item(user, item)]
+
+
+def _sort_review_items_for_queue(items: list[ReviewItem]) -> list[ReviewItem]:
+    return sorted(items, key=_review_queue_sort_key)
+
+
+def _review_queue_sort_key(item: ReviewItem) -> tuple[int, int]:
+    priority = {
+        'decision_record': 0,
+        'todo': 1,
+        'history_event': 2,
+        'timeline_event': 3,
+        'project_assignment': 10,
+    }.get(item.item_type, 5)
+    return (priority, -item.id)
+
+
+def _bulk_action_items(
+    db: Session,
+    request: ReviewBulkActionRequest,
+    user: DemoUser,
+    settings: Settings,
+) -> list[ReviewItem]:
+    if request.item_ids is not None:
+        if not request.item_ids:
+            return []
+        items = db.scalars(
+            select(ReviewItem)
+            .where(ReviewItem.id.in_(request.item_ids))
+            .order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
+        ).all()
+        by_id = {item.id: item for item in items}
+        items = [by_id[item_id] for item_id in request.item_ids if item_id in by_id]
+    else:
+        items = db.scalars(
+            select(ReviewItem)
+            .where(ReviewItem.status == 'pending_review')
+            .order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
+        ).all()
+    return _visible_review_items(items, user, settings)
+
+
+def _validate_payload_project_key(db: Session, payload: dict) -> None:
+    raw_key = payload.get('project_key')
+    if raw_key in (None, ''):
+        payload.pop('project_name', None)
+        return
+    if not isinstance(raw_key, str):
+        raise HTTPException(status_code=400, detail='Project key must be a string')
+    project = db.scalar(select(Project).where(Project.project_key == raw_key))
+    if project is None:
+        raise HTTPException(status_code=400, detail='Project key is not registered')
+    payload['project_name'] = project.name
 
 
 def _get_review_item_for_user(db: Session, item_id: int, user: DemoUser, settings: Settings) -> ReviewItem:
