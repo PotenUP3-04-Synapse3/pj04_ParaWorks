@@ -172,7 +172,7 @@ def test_projects_api_returns_two_canonical_projects_and_approved_evidence_only(
     payload = response.json()
     assert payload['project_count'] == 2
     assert [project['project_key'] for project in payload['projects']] == ['k-tech-pilot', 'project-newbiegenie']
-    assert {project['name'] for project in payload['projects']} == {'K테크 파일럿', '프로젝트 PROJECT-NEWBIEGENIE'}
+    assert {project['name'] for project in payload['projects']} == {'K테크 파일럿', 'Newbiegenie'}
     ktech = payload['projects'][0]
     assert ktech['evidence_count'] == 1
     assert ktech['evidence'][0]['title'] == 'K테크 파일럿 제안서 업데이트'

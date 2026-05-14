@@ -156,10 +156,14 @@ def _determine_project_from_tag(topic_tag: str, summary: str) -> tuple[str | Non
                 return project.project_key, False
     
     # 신규 프로젝트 제안 (태그가 명확한 경우)
-    if topic_tag and topic_tag not in ('N/A', 'None', '기타', '기본', 'Ad-hoc'):
-        return None, True
+    if topic_tag and topic_tag not in ('N/A', 'None', '기타', '기본', 'Ad-hoc', 'ad-hoc', '미지정'):
+        import re as regex
+        # 한글, 영문, 숫자 외 제거하고 대시로 연결
+        dynamic_key = regex.sub(r'[^a-z0-9가-힣]+', '-', topic_tag.lower()).strip('-')
+        if dynamic_key:
+            return f"project-{dynamic_key}", True
     
-    return None, False
+    return "ad-hoc", False
 
 def back_propagate_slack_tags(db: Session, candidate: ReviewCandidate) -> None:
     """추출된 지식의 카테고리/토픽 정보를 원본 슬랙 메시지 청크에 역전파합니다."""

@@ -78,7 +78,11 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
 
     # 모든 프로젝트 키 수집
     active_project_keys = set()
-    for item in approved_assignments:
+    
+    # 통합된 모든 승인 항목
+    all_approved_items = approved_assignments + approved_knowledge_items
+    
+    for item in all_approved_items:
         key = item.payload.get('project_key')
         if key: active_project_keys.add(key)
     
@@ -93,12 +97,22 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
 
     for p_key in sorted(active_project_keys):
         canonical = project_by_key(p_key)
-        name = canonical.name if canonical else f"프로젝트 {p_key.upper()}"
-        base_summary = canonical.summary if canonical else "AI에 의해 생성된 동적 프로젝트입니다."
+        
+        # 이름 변환: ad-hoc 이면 '미분류 업무', project- 로 시작하면 태그 이름 복원
+        if canonical:
+            name = canonical.name
+        elif p_key == 'ad-hoc':
+            name = '기타 업무 (Ad-hoc)'
+        elif p_key.startswith('project-'):
+            name = p_key.replace('project-', '').replace('-', ' ').title()
+        else:
+            name = f"프로젝트 {p_key.upper()}"
+            
+        base_summary = canonical.summary if canonical else "AI에 의해 분류된 동적 프로젝트입니다."
         
         assignments = [
             item
-            for item in approved_assignments
+            for item in all_approved_items
             if item.payload.get('project_key') == p_key
         ]
         
