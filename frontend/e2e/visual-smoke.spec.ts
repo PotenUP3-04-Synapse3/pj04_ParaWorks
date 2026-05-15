@@ -308,7 +308,9 @@ test("integration connector cards use consistent chrome and action layout", asyn
   for (const connectorType of ["calendar", "drive", "gmail", "slack"]) {
     const logo = page.getByTestId(`${connectorType}-connector-logo`);
     await expect(logo).toBeVisible();
-    await expect(logo.locator("svg")).toBeVisible();
+    const logoSvg = logo.locator("svg");
+    await expect(logoSvg).toBeVisible();
+    await expect(logoSvg).toHaveAttribute("data-logo-source", /official/);
   }
 
   const borderColors = await cards.evaluateAll((elements) =>
