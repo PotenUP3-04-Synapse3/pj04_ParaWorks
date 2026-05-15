@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from backend.app.models import DecisionRecord, Project, TimelineEvent, Todo
+from backend.app.models import DecisionRecord, Project, Source, TimelineEvent, Todo
 
 
 def test_dashboard_recent_timeline_uses_existing_model_fields(client, db_session) -> None:
@@ -177,4 +177,101 @@ def test_dashboard_assigned_projects_lists_registered_project_memory(client, db_
             'latest_timestamp': response.json()['assigned_projects'][0]['latest_timestamp'],
             'permission_level': 'internal',
         }
+    ]
+
+
+def test_dashboard_today_events_lists_today_calendar_sources_only(client, db_session) -> None:
+    today = datetime.now(ZoneInfo('Asia/Seoul')).date()
+    yesterday_start = f'{(today - timedelta(days=1)).isoformat()}T09:00:00+09:00'
+    today_start = f'{today.isoformat()}T10:30:00+09:00'
+    today_fallback_start = f'{today.isoformat()}T13:00:00+09:00'
+    tomorrow_start = f'{(today + timedelta(days=1)).isoformat()}T09:00:00+09:00'
+    today_event = Source(
+        source_type='calendar',
+        source_id='calendar:primary:today-event',
+        source_url='https://calendar.google.com/event?eid=today',
+        title='Customer renewal meeting',
+        author='organizer@example.com',
+        permission_level='internal',
+        raw_metadata={
+            'event_start': today_start,
+            'event_end': f'{today.isoformat()}T11:00:00+09:00',
+            'location': 'Zoom',
+            'organizer_email': 'organizer@example.com',
+            'calendar_attendee_summary': '2 accepted, 1 tentative',
+        },
+    )
+    fallback_event = Source(
+        source_type='calendar',
+        source_id='calendar:primary:today-fallback-event',
+        source_url='https://calendar.google.com/event?eid=today-fallback',
+        title='Fallback start meeting',
+        author='lead@example.com',
+        permission_level='restricted',
+        raw_metadata={
+            'start': today_fallback_start,
+            'end': f'{today.isoformat()}T13:30:00+09:00',
+            'organizer_email': 'lead@example.com',
+            'attendee_response_statuses': {'accepted': 1, 'needsAction': 2},
+        },
+    )
+
+    db_session.add_all(
+        [
+            today_event,
+            fallback_event,
+            Source(
+                source_type='calendar',
+                source_id='calendar:primary:yesterday-event',
+                source_url='https://calendar.google.com/event?eid=yesterday',
+                title='Yesterday meeting',
+                permission_level='internal',
+                raw_metadata={'event_start': yesterday_start},
+            ),
+            Source(
+                source_type='calendar',
+                source_id='calendar:primary:tomorrow-event',
+                source_url='https://calendar.google.com/event?eid=tomorrow',
+                title='Tomorrow meeting',
+                permission_level='internal',
+                raw_metadata={'event_start': tomorrow_start},
+            ),
+            Source(
+                source_type='calendar',
+                source_id='calendar:primary:bad-date',
+                source_url='https://calendar.google.com/event?eid=bad',
+                title='Bad date meeting',
+                permission_level='internal',
+                raw_metadata={'event_start': 'not-a-date'},
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/dashboard')
+
+    assert response.status_code == 200
+    assert response.json()['today_events'] == [
+        {
+            'id': today_event.id,
+            'title': 'Customer renewal meeting',
+            'start': today_start,
+            'end': f'{today.isoformat()}T11:00:00+09:00',
+            'location': 'Zoom',
+            'organizer': 'organizer@example.com',
+            'attendee_summary': '2 accepted, 1 tentative',
+            'source_url': 'https://calendar.google.com/event?eid=today',
+            'permission_level': 'internal',
+        },
+        {
+            'id': fallback_event.id,
+            'title': 'Fallback start meeting',
+            'start': today_fallback_start,
+            'end': f'{today.isoformat()}T13:30:00+09:00',
+            'location': '',
+            'organizer': 'lead@example.com',
+            'attendee_summary': 'accepted 1, needsAction 2',
+            'source_url': 'https://calendar.google.com/event?eid=today-fallback',
+            'permission_level': 'restricted',
+        },
     ]

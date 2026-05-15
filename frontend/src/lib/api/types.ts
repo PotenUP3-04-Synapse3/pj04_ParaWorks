@@ -26,6 +26,17 @@ export type DashboardResponse = {
     priority?: string;
     completed_at?: string | null;
   }[];
+  today_events?: {
+    id: number;
+    title: string;
+    start: string;
+    end: string;
+    location: string;
+    organizer: string;
+    attendee_summary: string;
+    source_url: string;
+    permission_level: string;
+  }[];
   assigned_projects?: {
     project_key: string;
     name: string;
