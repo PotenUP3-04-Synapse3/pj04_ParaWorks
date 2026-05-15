@@ -914,3 +914,24 @@
   - `npm run lint`: 통과
   - `npm run build`: 통과
   - `npm run test:visual -- timeline-project-date-groups.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop`: `2 passed`
+
+## 2026-05-15 프로젝트 원본 근거 기본 선택 및 Slack 원문 시각 보강
+
+- 요청:
+  - 프로젝트 탭의 `연결된 원본 근거`가 비어 보인다.
+  - 타임라인 날짜/시간이 Slack 대화 시각이 아니라 검토 승인 시각으로 보인다.
+- 원인:
+  - 실제 DB에서 `project-paraworks-mvp`에는 원본 근거 12건과 타임라인 6건이 있었지만, 프로젝트 탭/타임라인 탭이 최신 생성 프로젝트인 `project-k`를 기본 선택했다. `project-k`는 아직 승인된 근거와 활동이 0건이라 빈 화면으로 보였다.
+  - `backend/app/projects/service.py`는 `Source`가 source URL로 매칭되면 `raw_metadata.ts`가 없을 때 Slack permalink의 `p...` timestamp를 확인하기 전에 `Source.created_at`으로 fallback할 수 있었다. 이 경우 source 생성/동기화 시각이 실제 대화 시각처럼 보일 수 있었다.
+- 구현:
+  - 프로젝트 탭은 사용자가 별도 선택하지 않은 초기 진입 시, 승인된 원본 근거/활동/타임라인이 있는 첫 프로젝트를 기본 선택한다.
+  - 타임라인 탭은 승인된 타임라인 항목이 있는 첫 프로젝트를 기본 선택한다.
+  - Slack source URL이 Source에 매칭되더라도 `raw_metadata.ts`가 없으면 `Source.created_at`보다 Slack permalink timestamp를 먼저 사용한다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py::test_project_timeline_prefers_slack_permalink_timestamp_when_source_metadata_is_missing backend/tests/test_project_memory_api.py::test_project_timeline_items_use_slack_source_timestamp_for_occurred_at -q` → `2 passed`
+  - `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` → `47 passed`
+  - `uv run ruff check backend/app/projects/service.py backend/tests/test_project_memory_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts gmail-drive-project-routing-flow.spec.ts --project=chromium-desktop` → `6 passed`
+  - 실제 Docker DB에서 `project-paraworks-mvp`는 원본 근거 12건, 타임라인 6건으로 계산되고, 승인 시각과 Slack 원문 시각이 `created_at`/`occurred_at`으로 분리되는 것을 확인했다.

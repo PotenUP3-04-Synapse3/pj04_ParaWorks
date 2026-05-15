@@ -47,9 +47,10 @@ export default function TimelinePage() {
             .filter((item) => item.review_status === "approved")
             .map(timelineHistoryFromProjectItem),
         }));
+        const defaultProject = firstProjectWithHistories(projects);
         setProjectTimelines(projects);
-        setSelectedProjectId((current) => current || projects[0]?.id || "");
-        setExpandedDateLabel((current) => current ?? firstDateLabel(projects[0]?.histories ?? []));
+        setSelectedProjectId((current) => current || defaultProject?.id || "");
+        setExpandedDateLabel((current) => current ?? firstDateLabel(defaultProject?.histories ?? []));
       })
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : "Failed to load timeline.");
@@ -276,6 +277,10 @@ function groupHistoriesByDate(histories: TimelineHistory[]) {
 
 function firstDateLabel(histories: TimelineHistory[]) {
   return groupHistoriesByDate(histories)[0]?.dateLabel ?? null;
+}
+
+function firstProjectWithHistories(projects: ProjectTimeline[]) {
+  return projects.find((project) => project.histories.length > 0) ?? projects[0];
 }
 
 function sourceFromLinks(links: string[]): TimelineSource {

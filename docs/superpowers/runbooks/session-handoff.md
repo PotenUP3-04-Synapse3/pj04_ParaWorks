@@ -2,6 +2,25 @@
 
 Updated: 2026-05-15
 
+## 2026-05-15 프로젝트 근거 기본 선택 및 Slack 원문 시각 보강
+
+- 배경:
+  - 실제 Docker DB에는 `project-paraworks-mvp`에 원본 근거 12건과 타임라인 6건이 있었지만, `project-k`가 최신 생성 프로젝트라 프로젝트/타임라인 탭에서 먼저 선택되어 빈 화면처럼 보였다.
+  - `backend/app/projects/service.py`의 `occurred_at` 계산은 Source URL이 매칭된 뒤 `raw_metadata.ts`가 없으면 Slack permalink timestamp보다 Source 생성 시각을 먼저 fallback할 수 있었다.
+- 변경:
+  - `frontend/src/app/projects/page.tsx`는 초기 진입 시 승인된 근거/활동/타임라인이 있는 첫 프로젝트를 기본 선택한다.
+  - `frontend/src/app/timeline/page.tsx`는 초기 진입 시 승인된 타임라인 항목이 있는 첫 프로젝트를 기본 선택한다.
+  - `backend/app/projects/service.py`는 Source가 매칭되더라도 `raw_metadata.ts` 파싱 실패 후 Slack permalink의 `p...` timestamp를 먼저 확인하고, 마지막에만 `Source.created_at`으로 fallback한다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py::test_project_timeline_prefers_slack_permalink_timestamp_when_source_metadata_is_missing backend/tests/test_project_memory_api.py::test_project_timeline_items_use_slack_source_timestamp_for_occurred_at -q` -> `2 passed`
+  - `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` -> `47 passed`
+  - `uv run ruff check backend/app/projects/service.py backend/tests/test_project_memory_api.py` -> `All checks passed!`
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts gmail-drive-project-routing-flow.spec.ts --project=chromium-desktop` -> `6 passed`
+- 주의:
+  - 이미 실행 중인 backend/frontend dev server는 코드 변경을 반영하려면 재시작이 필요할 수 있다.
+
 ## 2026-05-15 Gmail/Drive 프로젝트 라우팅 승인 연결
 
 - 역할 경계:

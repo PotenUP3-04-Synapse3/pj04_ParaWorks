@@ -373,11 +373,13 @@ def _occurred_at_from_source_links(
                     return datetime.fromtimestamp(float(raw_ts), tz=UTC).isoformat()
                 except ValueError:
                     pass
-            return source.created_at.isoformat()
 
         parsed_ts = _slack_ts_from_permalink(link)
         if parsed_ts is not None:
             return datetime.fromtimestamp(parsed_ts, tz=UTC).isoformat()
+
+        if source:
+            return source.created_at.isoformat()
 
     return fallback.isoformat()
 

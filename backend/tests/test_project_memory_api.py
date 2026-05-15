@@ -654,6 +654,48 @@ def test_project_timeline_items_use_slack_source_timestamp_for_occurred_at(
     assert item['occurred_at'].startswith('2026-05-01T02:00:00')
 
 
+def test_project_timeline_prefers_slack_permalink_timestamp_when_source_metadata_is_missing(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Slack permalink fallback'))
+    source_url = 'https://example.slack.com/archives/C123/p1777600800000100'
+    db_session.add(
+        Source(
+            source_type='slack',
+            source_id='C123:1777600800.000100',
+            source_url=source_url,
+            title='Slack 원문',
+            author='김하나',
+            permission_level='internal',
+            raw_metadata={},
+            created_at=datetime(2026, 5, 15, 9, 0, tzinfo=UTC),
+        )
+    )
+    db_session.add(
+        TimelineEvent(
+            project_key='project-alpha',
+            title='Slack permalink 기준 타임라인',
+            result_summary='Source metadata가 부족해도 permalink 시간을 사용해야 합니다.',
+            source_links=[source_url],
+            source_snippets=['Slack permalink에 실제 원문 시간이 남아 있습니다.'],
+            confidence_score=0.9,
+            permission_level='internal',
+            review_status='approved',
+            created_at=datetime(2026, 5, 15, 9, 30, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    project_payload = next(project for project in response.json()['projects'] if project['project_key'] == 'project-alpha')
+    item = project_payload['timeline_items'][0]
+    assert item['created_at'].startswith('2026-05-15T09:30:00')
+    assert item['occurred_at'].startswith('2026-05-01T02:00:00')
+
+
 def test_approved_review_item_with_project_key_appears_in_project_timeline(
     client: TestClient,
     db_session: Session,

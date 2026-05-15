@@ -139,3 +139,86 @@ test("Timeline groups approved project items by date", async ({ page }) => {
   expect(popup.url()).toBe("https://slack.example/1");
   await popup.close();
 });
+
+test("Timeline opens on the first project that has approved timeline items", async ({ page }) => {
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal"],
+          name: "Admin",
+          title: "Admin",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { unread_count: 0, notifications: [] } });
+  });
+  await page.route("**/api/v1/projects", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        project_count: 2,
+        hidden_project_count: 0,
+        hidden_evidence_count: 0,
+        projects: [
+          {
+            project_key: "project-empty",
+            name: "빈 프로젝트",
+            summary: "아직 승인 타임라인이 없습니다.",
+            source_types: [],
+            evidence_count: 0,
+            permission_level: "internal",
+            latest_timestamp: "",
+            pending_review_count: 0,
+            evidence: [],
+            activity_items: [],
+            timeline_items: [],
+          },
+          {
+            project_key: "project-alpha",
+            name: "Project Alpha",
+            summary: "승인 타임라인이 있는 프로젝트입니다.",
+            source_types: ["slack"],
+            evidence_count: 0,
+            permission_level: "internal",
+            latest_timestamp: "2026-05-15T09:00:00Z",
+            pending_review_count: 0,
+            evidence: [],
+            activity_items: [],
+            timeline_items: [
+              {
+                id: "timeline_event:1",
+                item_type: "timeline_event",
+                title: "오전 점검",
+                summary: "Redis 점검",
+                source_links: ["https://slack.example/1"],
+                source_snippets: ["점검"],
+                confidence_score: 0.9,
+                permission_level: "internal",
+                review_status: "approved",
+                created_at: "2026-05-15T09:00:00Z",
+                occurred_at: "2026-05-14T01:00:00+09:00",
+                evidence_reason: "승인된 항목",
+                project_key: "project-alpha",
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+
+  await page.goto("/timeline");
+
+  await expect(page.getByRole("button", { name: "Project Alpha" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("오전 점검")).toBeVisible();
+  await expect(page.getByText("승인된 프로젝트 타임라인 항목이 아직 없습니다.")).toBeHidden();
+});
