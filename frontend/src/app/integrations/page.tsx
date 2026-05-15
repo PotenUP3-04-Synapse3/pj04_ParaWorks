@@ -62,24 +62,14 @@ type IntegrationRuntimeStatus = SlackRuntimeStatus | GoogleRuntimeStatus;
 
 const DEFAULT_INTEGRATION_MANIFESTS: IntegrationManifest[] = [
   {
-    type: "slack",
-    display_name: "Slack",
+    type: "calendar",
+    display_name: "Google Calendar",
     mode: "mock",
     status: "loading",
     auth_type: "oauth",
     required_scopes: [],
     sync_strategy: "incremental",
-    cost_policy: "변경된 원천 데이터만 처리합니다.",
-  },
-  {
-    type: "gmail",
-    display_name: "Gmail",
-    mode: "mock",
-    status: "loading",
-    auth_type: "oauth",
-    required_scopes: [],
-    sync_strategy: "incremental",
-    cost_policy: "변경된 메일만 분석합니다.",
+    cost_policy: "변경된 일정만 분석합니다.",
   },
   {
     type: "drive",
@@ -92,14 +82,24 @@ const DEFAULT_INTEGRATION_MANIFESTS: IntegrationManifest[] = [
     cost_policy: "변경된 문서만 분석합니다.",
   },
   {
-    type: "calendar",
-    display_name: "Google Calendar",
+    type: "gmail",
+    display_name: "Gmail",
     mode: "mock",
     status: "loading",
     auth_type: "oauth",
     required_scopes: [],
     sync_strategy: "incremental",
-    cost_policy: "변경된 일정만 분석합니다.",
+    cost_policy: "변경된 메일만 분석합니다.",
+  },
+  {
+    type: "slack",
+    display_name: "Slack",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 원천 데이터만 처리합니다.",
   },
 ];
 

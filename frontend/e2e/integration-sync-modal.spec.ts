@@ -86,6 +86,10 @@ test("Integrations page keeps every connector card visible while manifests are l
   await expect(page.getByRole("heading", { name: "Gmail" })).toBeVisible({ timeout: 500 });
   await expect(page.getByRole("heading", { name: "Google Drive" })).toBeVisible({ timeout: 500 });
   await expect(page.getByRole("heading", { name: "Google Calendar" })).toBeVisible({ timeout: 500 });
+  await expect(page.locator("article.integration-glass-card h3")).toHaveText(
+    ["Google Calendar", "Google Drive", "Gmail", "Slack"],
+    { timeout: 500 },
+  );
 });
 
 test("Slack sync blocks the page with a progress modal and then reports the review queue total", async ({
