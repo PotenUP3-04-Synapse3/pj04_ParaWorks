@@ -22,6 +22,17 @@ function Write-Step {
     Write-Host "[ParaWorks] $Message"
 }
 
+function Invoke-Checked {
+    param(
+        [scriptblock]$Command,
+        [string]$ErrorMessage
+    )
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw $ErrorMessage
+    }
+}
+
 function Test-HostPortInUse {
     param([int]$Port)
     $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
@@ -82,6 +93,20 @@ function Wait-DockerReady {
     } while ((Get-Date) -lt $deadline)
 
     throw "Docker daemon did not become ready within $TimeoutSeconds seconds. Open Docker Desktop and try again."
+}
+
+function Wait-PostgresReady {
+    param([int]$TimeoutSeconds = 60)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        docker exec paraworks-postgres pg_isready -U paraworks -d paraworks *> $null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Postgres did not become ready within $TimeoutSeconds seconds."
 }
 
 function Wait-HttpOk {
@@ -159,6 +184,21 @@ if ($Stop -or $Down) {
 
 New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
 
+$existingState = Read-State
+if ($null -ne $existingState) {
+    $existingBackendPort = [int]$existingState.backend_port
+    $existingFrontendPort = [int]$existingState.frontend_port
+    if ((Test-HostPortInUse -Port $existingBackendPort) -and (Test-HostPortInUse -Port $existingFrontendPort)) {
+        Write-Step "Already running"
+        Write-Host "Backend:  http://$HostAddress`:$existingBackendPort/health"
+        Write-Host "Frontend: http://127.0.0.1:$existingFrontendPort/login"
+        Write-Host ""
+        Write-Host "Stop with:"
+        Write-Host "  .\scripts\paraworks-docker.ps1 -Stop"
+        return
+    }
+}
+
 Start-DockerDesktop
 Wait-DockerReady
 
@@ -194,7 +234,12 @@ try {
     $env:PARAWORKS_REDIS_PORT = "$RedisPort"
 
     Write-Step "Starting Docker services"
-    docker compose up -d postgres redis minio
+    Invoke-Checked -ErrorMessage "Docker compose services failed to start." -Command {
+        docker compose up -d postgres redis minio
+    }
+
+    Write-Step "Waiting for Postgres"
+    Wait-PostgresReady -TimeoutSeconds 60
 
     $env:PARAWORKS_DATABASE_URL = $DatabaseUrl
     $env:DATABASE_URL = $DatabaseUrl
@@ -202,22 +247,34 @@ try {
     $env:PARAWORKS_DEMO_MODE = "false"
 
     Write-Step "Checking pgvector schema"
-    uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --ensure-vector-schema
+    Invoke-Checked -ErrorMessage "pgvector schema check failed." -Command {
+        uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --ensure-vector-schema
+    }
 
     Write-Step "Applying database migrations"
-    uv run alembic upgrade head
+    Invoke-Checked -ErrorMessage "Alembic migrations failed." -Command {
+        uv run alembic upgrade head
+    }
 
     Write-Step "Checking application schema"
-    uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+    Invoke-Checked -ErrorMessage "Application schema check failed." -Command {
+        uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+    }
 
     Write-Step "Seeding local application data"
-    uv run python -m backend.app.db.init_db
+    Invoke-Checked -ErrorMessage "Application data seed failed." -Command {
+        uv run python -m backend.app.db.init_db
+    }
 
     Write-Step "Checking final database schema"
-    uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+    Invoke-Checked -ErrorMessage "Final application schema check failed." -Command {
+        uv run python scripts/check_db_schema.py --database-url $DatabaseUrl
+    }
 
     Write-Step "Checking pgvector runtime status"
-    uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --expect-app-schema
+    Invoke-Checked -ErrorMessage "pgvector runtime status check failed." -Command {
+        uv run python scripts/check_pgvector_dev.py --database-url $DatabaseUrl --expect-app-schema
+    }
 
     if ($SkipApp) {
         Write-Step "Docker database services are ready"
@@ -246,10 +303,11 @@ npm.cmd run dev -- --hostname 127.0.0.1 --port $FrontendPort
     Write-Step "Starting backend"
     $backend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory $repoRoot -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr -ArgumentList @("-NoProfile", "-Command", $backendCommand)
 
+    Wait-HttpOk -Url "http://$HostAddress`:$BackendPort/health" -TimeoutSeconds 60
+
     Write-Step "Starting frontend"
     $frontend = Start-Process powershell -WindowStyle Hidden -PassThru -WorkingDirectory (Join-Path $repoRoot "frontend") -RedirectStandardOutput $frontendOut -RedirectStandardError $frontendErr -ArgumentList @("-NoProfile", "-Command", $frontendCommand)
 
-    Wait-HttpOk -Url "http://$HostAddress`:$BackendPort/health" -TimeoutSeconds 60
     Wait-HttpOk -Url "http://127.0.0.1:$FrontendPort/login" -TimeoutSeconds 90
 
     $state = [ordered]@{

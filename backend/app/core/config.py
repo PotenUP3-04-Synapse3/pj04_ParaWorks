@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     agent_llm_enabled: bool = False
     agent_llm_provider_order: str = 'openai,gemini'
+    agent_llm_openai_primary_model: str = 'gpt-5.4'
     agent_llm_openai_model: str = 'gpt-5.4-mini'
     agent_llm_gemini_model: str = 'gemini-2.5-flash'
     agent_llm_input_cost_per_1m_tokens: float = 0.15
@@ -43,6 +44,7 @@ class Settings(BaseSettings):
     agent_llm_timeout_seconds: float = 30.0
     assistant_email_agent_enabled: bool = True
     assistant_email_agent_model: str = 'gpt-4.1-nano'
+    assistant_email_draft_agent_model: str = 'gpt-5.4-mini'
     assistant_email_agent_max_input_chars: int = 2500
     assistant_email_agent_max_output_tokens: int = 256
     assistant_email_agent_temperature: float = 0.0

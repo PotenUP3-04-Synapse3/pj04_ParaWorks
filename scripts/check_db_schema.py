@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy.exc import SAWarning
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -95,9 +97,16 @@ def _check_native_pgvector_table(
         return [f'{NATIVE_PGVECTOR_TABLE} table is missing']
 
     inspector = inspect(engine)
-    existing_columns = {
-        column['name'] for column in inspector.get_columns(NATIVE_PGVECTOR_TABLE)
-    }
+    # pgvector 타입은 SQLAlchemy 기본 리플렉션에서 경고가 나므로, 검사용 경로에서만 숨긴다.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore',
+            message=r"Did not recognize type 'vector' of column 'embedding'",
+            category=SAWarning,
+        )
+        existing_columns = {
+            column['name'] for column in inspector.get_columns(NATIVE_PGVECTOR_TABLE)
+        }
     missing_columns = sorted(NATIVE_PGVECTOR_COLUMNS - existing_columns)
     errors = [
         f'{NATIVE_PGVECTOR_TABLE}.{column_name} column is missing'

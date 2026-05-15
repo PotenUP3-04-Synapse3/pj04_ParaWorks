@@ -3941,3 +3941,102 @@ Cost/security note:
   - `trigger_slack_agent_analysis()`가 변경된 Slack `Source.source_id`만 받아 분석하도록 좁혀, 최근 7일 전체 재분석으로 인한 중복 비용과 중복 ReviewItem 생성을 피했다.
   - demo/test 모드와 provider key가 없는 환경은 기존 결정론 스모크 경로를 유지해 테스트가 live LLM을 호출하지 않도록 했다.
   - Verification: targeted Slack sync/Agent API tests passed (`1`, `8`, and `23` tests); ruff passed.
+
+- `fix: upgrade assistant model and log tool calls`
+  - AI Assistant RAG answering now has a stronger primary OpenAI model setting:
+    `AGENT_LLM_OPENAI_PRIMARY_MODEL=gpt-5.4`, with
+    `AGENT_LLM_OPENAI_MODEL=gpt-5.4-mini` kept as the fallback.
+  - Added assistant tool-call trace logging through the Python
+    `AssistantTool` logger, using English lines such as
+    `[Tool: rag_retrieval] result backend=keyword source_count=...`; the
+    docker scripts surface these lines through the backend stderr log file.
+  - The trace covers email action routing, RAG retrieval backend selection, and
+    RAG answer model start/result/error events, making it easier to see whether
+    the assistant used a tool or company-memory retrieval.
+  - Verification: targeted model/logging tests passed, wider assistant/RAG
+    backend tests passed with 40 tests, and ruff passed on touched files.
+- `fix: split assistant email routing agents`
+  - Split the AI Assistant email path into an `email_intent_gate` that only
+    detects email intent and an `email_draft_composer` that only writes
+    approval-only drafts or clarification questions.
+  - Removed the active combined prompt that tried to classify email actions,
+    general replies, and company-memory RAG in one low-cost call; non-email
+    messages now naturally continue to the RAG answer path.
+  - Added orchestration for "RAG result to email" requests: when the intent gate
+    marks `requires_rag_result`, the assistant retrieves the company-memory
+    answer first and passes that answer/source context to the draft composer.
+  - Verification: targeted email-agent/API tests passed, wider assistant/RAG
+    backend tests passed with 43 tests, and ruff passed on touched files.
+- `fix: preserve assistant email continuation context`
+  - Fixed recipient-only email follow-ups by preserving complete recent
+    conversation JSON rows and passing recent assistant answers as explicit
+    draft source context to the email draft composer.
+  - This supports flows like "recent decisions only" -> "send this to
+    kjw4work@gmail.com" without asking for the same email content again.
+  - Adjusted `scripts/paraworks-docker.ps1` to wait for backend health before
+    starting the frontend, reducing startup `ECONNREFUSED` proxy noise.
+  - Verification: assistant/RAG/script tests passed with 47 tests; ruff and
+    PowerShell parser checks passed.
+- `fix: harden docker startup migrations`
+  - Added checked native-command execution and a Postgres readiness wait to
+    `scripts/paraworks-docker.ps1`, so Docker, Alembic, and schema failures no
+    longer scroll by before a misleading final ready message.
+  - Made the `project_key` Alembic migration idempotent for fresh databases
+    where the current-schema baseline already created those columns and
+    indexes.
+  - Kept pgvector `vector(1536)` dimension validation while suppressing the
+    expected SQLAlchemy reflection warning from the CLI schema check.
+  - Verification: Docker script tests, DB schema operation tests, pgvector
+    runbook tests, ruff, PowerShell parser check, real docker startup, backend
+    `/health`, and frontend `/login` smoke all passed.
+- `feat: resolve assistant email recipients`
+  - Added a deterministic AI Assistant recipient resolver between
+    `email_intent_gate` and `email_draft_composer` so natural-language
+    recipients can be mapped to known email addresses before draft generation.
+  - The resolver collects candidates from recent conversation contact pairs,
+    active `AuthUser` rows, `demo_auth.USERS`, and Google source metadata from
+    Gmail, Drive, and Calendar.
+  - The email draft prompt now receives `resolved_recipients`, while all actual
+    sends still require the existing pending approval and Gmail send endpoint.
+  - Verification: targeted recipient resolver/API tests passed, wider assistant
+    backend tests passed with 37 tests, and ruff passed on touched files.
+- `fix: upgrade email draft composer model`
+  - Split the email sub-agent model setting so the cheap intent gate remains on
+    `gpt-4.1-nano`, while the email draft composer defaults to
+    `gpt-5.4-mini`.
+  - Added `ASSISTANT_EMAIL_DRAFT_AGENT_MODEL` to `.env.example` and wired
+    `build_email_draft_composer()` to use the dedicated stronger model.
+  - Verification: targeted model-routing tests passed, wider assistant backend
+    tests passed with 39 tests, and ruff passed on touched files.
+- `fix: route assistant contact lookups`
+  - Added a dedicated contact lookup route before `email_intent_gate`, so
+    address lookup requests such as `김종우님 이메일 알려줘.` do not become email
+    draft clarification loops.
+  - Added Korean aliases for demo contacts and kept active `AuthUser` records
+    higher priority than demo fallback contacts.
+  - Verification: targeted contact lookup tests passed, wider assistant backend
+    tests passed with 47 tests, and ruff passed on touched files.
+- `fix: preserve referenced assistant content in email drafts`
+  - Added an explicit referenced-content email draft path so `이 내용으로
+    보내줘` and draft correction complaints use the latest sendable assistant
+    answer or pending draft state before falling through to normal RAG chat.
+  - Added a guardrail that appends the selected source content when the draft
+    composer produces a generic body that omits the actual referenced answer.
+  - Verification: targeted referenced-email tests passed, wider assistant
+    backend tests passed with 49 tests, and ruff passed on touched files.
+- `fix: generate assistant content before email drafting`
+  - Added a generate-then-email path for requests like `ParaWorks 회사 소개서
+    작성해서 용희님한테 메일 보내줘`, extracting the requested artifact question,
+    running RAG first, then using that generated answer as the draft body source.
+  - This keeps combined artifact creation plus email requests out of the
+    generic clarification loop that asks the user to provide the content.
+  - Verification: targeted generate-then-email test passed, wider assistant
+    backend tests passed with 50 tests, and ruff passed on touched files.
+- `fix: harden assistant recipient correction`
+  - Tightened recipient resolution so contacts only surface when the latest
+    message actually matches a name, alias, email, or title, preventing unknown
+    names from reusing previous draft recipients.
+  - Added pending-draft recipient correction handling for wrong-address feedback
+    and recipient-only follow-ups such as `SeungHun Han님한테 보내줘`.
+  - Verification: targeted recipient-correction tests passed, wider assistant
+    backend tests passed with 53 tests, and ruff passed on touched files.

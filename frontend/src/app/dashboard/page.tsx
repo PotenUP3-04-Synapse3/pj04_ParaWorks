@@ -7,6 +7,7 @@ import type { DashboardResponse } from "@/lib/api/types";
 export const dynamic = "force-dynamic";
 
 type TodayTask = {
+  id: number;
   title: string;
   category: string;
   assignee: string;
@@ -17,12 +18,13 @@ type TodayTask = {
 type UpcomingEvent = readonly [time: string, title: string, people: string];
 type AssignedProject = readonly [name: string, progress: string, status: string, risk: string];
 type PersonalUpdate = {
+  id: string;
   icon: typeof Sparkles;
   title: string;
   detail: string;
   time: string;
 };
-type ReviewListItem = readonly [title: string, source: string, due: string, priority: string];
+type ReviewListItem = readonly [id: number, title: string, source: string, due: string, priority: string];
 
 
 export default async function DashboardPage() {
@@ -36,6 +38,7 @@ export default async function DashboardPage() {
   });
 
   const visibleTodayTasks: TodayTask[] = dashboard?.today_todos?.map((todo) => ({
+    id: todo.id,
     title: todo.title,
     category: todo.category,
     assignee: todo.assignee,
@@ -46,12 +49,14 @@ export default async function DashboardPage() {
   const visibleAssignedProjects: AssignedProject[] = [];
   const visiblePersonalUpdates: PersonalUpdate[] = [
     ...(dashboard?.recent_decisions?.map((d) => ({
+      id: `decision-${d.id}`,
       icon: Sparkles,
       title: `[의사결정] ${d.title}`,
       detail: d.summary,
       time: new Date(d.created_at).toLocaleDateString(),
     })) ?? []),
     ...(dashboard?.recent_timeline?.map((t) => ({
+      id: `timeline-${t.id}`,
       icon: Clock3,
       title: `[타임라인] ${t.title}`,
       detail: `${t.summary} · 신뢰도 ${Math.round(t.confidence_score * 100)}%`,
@@ -59,6 +64,7 @@ export default async function DashboardPage() {
     })) ?? []),
   ];
   const visibleReviewItems: ReviewListItem[] = dashboard?.pending_items?.map((item) => [
+    item.id,
     item.title,
     item.item_type,
     "기한 없음",
@@ -98,7 +104,7 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-3 space-y-3">
               {visibleTodayTasks.length > 0 ? visibleTodayTasks.map((task) => (
-                <article key={task.title} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+                <article key={task.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-[15px] font-extrabold text-ink">{task.title}</h2>
@@ -133,8 +139,8 @@ export default async function DashboardPage() {
               </Link>
             </div>
             <div className="mt-3 grid gap-2">
-              {visibleReviewItems.map(([title, source, due, priority]) => (
-                <div key={title} className="grid gap-2 rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] sm:grid-cols-[1fr_84px_92px_58px] sm:items-center">
+              {visibleReviewItems.map(([id, title, source, due, priority]) => (
+                <div key={id} className="grid gap-2 rounded-lg border border-line bg-[var(--glass-elevated)] p-3 text-[13px] sm:grid-cols-[1fr_84px_92px_58px] sm:items-center">
                   <span className="font-extrabold text-ink">{title}</span>
                   <span className="text-muted">{source}</span>
                   <span className="text-muted">{due}</span>
@@ -194,7 +200,7 @@ export default async function DashboardPage() {
               {visiblePersonalUpdates.map((update) => {
                 const Icon = update.icon;
                 return (
-                  <article key={update.title} className="flex gap-3 rounded-lg border border-line bg-[var(--glass-elevated)] p-3">
+                  <article key={update.id} className="flex gap-3 rounded-lg border border-line bg-[var(--glass-elevated)] p-3">
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[var(--primary-soft)] text-[var(--primary-dark)]">
                       <Icon className="h-4 w-4" aria-hidden="true" />
                     </span>

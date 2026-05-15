@@ -1236,3 +1236,255 @@ uv run pytest backend/tests/test_slack_agent_review_bridge.py backend/tests/test
 ```
 
 Result: `1 passed`, `8 passed`, ruff passed, `23 passed`.
+
+## 2026-05-14 AI Assistant Model and Tool Logging
+
+- AI Assistant RAG answer generation now uses `AGENT_LLM_OPENAI_PRIMARY_MODEL`
+  as the primary OpenAI model. The default primary model is `gpt-5.4`, while
+  `AGENT_LLM_OPENAI_MODEL` remains the OpenAI fallback and defaults to
+  `gpt-5.4-mini`.
+- Assistant tool logs now follow the Slack Agent pattern and use the Python
+  `AssistantTool` logger instead of opening a path from `.env`; local/docker
+  runs still expose the lines through the backend stderr log redirection.
+- Assistant message creation now logs email action routing, RAG retrieval, and
+  RAG answer generation in English with the format
+  `[Tool: tool_name] ...description...`.
+- The log intentionally sanitizes non-ASCII characters before writing so Korean
+  user input or model output does not become mojibake inside the tool trace.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_rag_orchestrator_service.py::test_rag_service_uses_configured_stronger_primary_model backend/tests/test_assistant_api.py::test_assistant_tool_middleware_logs_email_and_rag_tools_in_english -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/tool_logging.py backend/app/core/config.py backend/app/agents/rag_orchestrator_agent/service.py backend/app/agents/rag_orchestrator_agent/llm.py backend/tests/test_assistant_api.py backend/tests/test_rag_orchestrator_service.py
+```
+
+Result: targeted RED tests failed before implementation, then passed after the
+change; wider assistant/RAG tests passed with 40 tests; ruff passed.
+
+## 2026-05-14 Email Intent Gate and Draft Composer Split
+
+- The AI Assistant email path is now split into single-purpose sub-agents:
+  `email_intent_gate` only decides whether the latest user message is an email
+  action, and `email_draft_composer` only writes the approval-only draft or a
+  clarification question after intent is accepted.
+- The old combined email prompt that also classified general replies and RAG was
+  removed from the active path. Non-email messages fall through to the normal
+  RAG answer path.
+- `EmailIntentDecision.requires_rag_result` allows a flow such as "find this in
+  company memory and email it": assistant orchestration runs RAG first, renders
+  the RAG answer/source context, then passes that context to the draft composer.
+- Tool logs now show the split route with `[Tool: email_intent_gate]`,
+  `[Tool: rag_retrieval]`, `[Tool: rag_answer]`, and
+  `[Tool: email_draft_composer]`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py::test_assistant_tool_middleware_logs_email_and_rag_tools_in_english backend/tests/test_assistant_api.py::test_assistant_can_draft_email_from_rag_answer -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_agent.py backend/app/assistant/email_actions.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted RED tests failed before implementation, then passed after the
+change; wider assistant/RAG tests passed with 43 tests; ruff passed.
+
+## 2026-05-14 Email Continuation Context and Docker Startup Order
+
+- Fixed the AI Assistant email draft path where recipient-only follow-ups such
+  as `kjw4work@gmail.com` caused the draft composer to ask for content again.
+- `render_email_action_context()` now preserves complete JSON message rows
+  instead of slicing the serialized JSON mid-string. This keeps recent user and
+  assistant messages readable for the low-cost email sub-agents.
+- Added `render_recent_assistant_context_for_email()` so the draft composer
+  receives recent assistant answers as explicit body-source context for phrases
+  like "이 내용으로" or "최근 결정된 사항만 요약해서 보내줘".
+- `scripts/paraworks-docker.ps1` now waits for backend `/health` before starting
+  the frontend, avoiding transient frontend `ECONNREFUSED 127.0.0.1:8000`
+  startup noise.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py backend/tests/test_paraworks_docker_script.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_agent.py backend/app/assistant/email_actions.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_paraworks_docker_script.py
+```
+
+Result: 47 tests passed; ruff passed; PowerShell parser check for
+`scripts/paraworks-docker.ps1` passed.
+
+## 2026-05-14 Docker Startup Guardrails
+
+- Hardened `scripts/paraworks-docker.ps1` so native command failures from
+  Docker, Alembic, and schema checks stop the script immediately instead of
+  continuing to a misleading final `Ready` state.
+- Added a Postgres readiness wait between `docker compose up -d` and the
+  pgvector schema check. This removes the transient first-run connection error
+  where Postgres had started as a container but was not yet accepting database
+  connections.
+- Made the `project_key` Alembic migration idempotent against the current-schema
+  baseline migration. Fresh databases created by `0001_create_current_schema`
+  already include these columns, so the follow-up migration now skips columns
+  and indexes that are already present.
+- Suppressed the expected SQLAlchemy reflection warning for pgvector's
+  `vector` type inside the schema checker while preserving the explicit
+  PostgreSQL type/dimension validation.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_paraworks_docker_script.py backend/tests/test_db_schema_operations.py backend/tests/test_pgvector_dev_runbook.py -q
+uv run ruff check scripts/check_db_schema.py backend/migrations/versions/5f8d874023d7_add_project_key_to_knowledge_models.py backend/tests/test_paraworks_docker_script.py backend/tests/test_db_schema_operations.py
+.\scripts\paraworks-docker.ps1
+Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:8000/health -TimeoutSec 5
+Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:3000/login -TimeoutSec 10
+```
+
+Result: 14 targeted tests passed; ruff passed; PowerShell parser check passed;
+Docker services, backend health, and frontend login smoke passed.
+
+## 2026-05-14 Assistant Recipient Resolver
+
+- Added the design note
+  `docs/superpowers/specs/2026-05-14-assistant-recipient-resolver-design.md`
+  for the AI Assistant email recipient resolution layer.
+- Added `backend/app/assistant/recipient_resolver.py`, a deterministic,
+  cost-free resolver that collects contact candidates from recent assistant
+  context, `AuthUser`, `demo_auth.USERS`, and Google `Source` metadata
+  (`gmail`, `gmail_attachment`, `drive`, `calendar`).
+- The email orchestration now runs `[Tool: recipient_resolver]` after
+  `email_intent_gate` and before `email_draft_composer`, passing
+  `resolved_recipients` into the draft prompt.
+- This supports flows such as "김용희님한테 오늘 회의 3시에 있다고 메일 보내줘" when the
+  recent conversation or synced contact metadata contains
+  `김용희 (yonghee199702@gmail.com)`.
+- Duplicate names are surfaced as `ambiguous`; department/group messages such
+  as `Product팀 전체` resolve to all matching known users.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_recipient_resolver.py backend/tests/test_assistant_api.py::test_assistant_passes_resolved_recipient_to_email_draft_composer -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py -q
+uv run ruff check backend/app/assistant/recipient_resolver.py backend/app/assistant/email_agent.py backend/app/api/v1/assistant.py backend/tests/test_assistant_recipient_resolver.py backend/tests/test_assistant_api.py
+```
+
+Result: targeted resolver/API tests passed; 37 assistant tests passed; ruff
+passed.
+
+## 2026-05-14 Email Draft Composer Model Upgrade
+
+- Split the email sub-agent model settings by responsibility:
+  `ASSISTANT_EMAIL_AGENT_MODEL` remains the low-cost intent gate model and
+  defaults to `gpt-4.1-nano`.
+- Added `ASSISTANT_EMAIL_DRAFT_AGENT_MODEL`, defaulting to `gpt-5.4-mini`, so
+  the draft composer can produce better Korean business email drafts without
+  making every email-intent classification more expensive.
+- `build_email_draft_composer()` now instantiates `ChatOpenAI` with
+  `settings.assistant_email_draft_agent_model`; `build_email_intent_gate()`
+  still uses `settings.assistant_email_agent_model`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_email_agent.py::test_email_draft_composer_defaults_to_stronger_model_than_intent_gate backend/tests/test_assistant_email_agent.py::test_email_draft_composer_builder_uses_dedicated_draft_model -q
+uv run pytest backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py -q
+uv run ruff check backend/app/core/config.py backend/app/assistant/email_agent.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py
+```
+
+Result: targeted model tests passed; 39 assistant tests passed; ruff passed.
+
+## 2026-05-14 Assistant Contact Lookup Routing
+
+- Split direct contact lookup away from the email intent/draft path with
+  `backend/app/assistant/contact_lookup.py`.
+- Requests such as `김종우님 이메일 알려줘.` now resolve known contacts directly
+  through the deterministic `recipient_resolver` and return the address instead
+  of asking the user to provide it.
+- Follow-up replies such as `너가 알려줘야지.` reuse the latest contact lookup
+  request from the conversation context, so the assistant does not accidentally
+  enter the email draft or RAG path.
+- Added Korean aliases for key `demo_auth.USERS` contacts and lowered demo
+  contact confidence so active `AuthUser` records still win when real DB users
+  are present.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_recipient_resolver.py::test_recipient_resolver_uses_demo_user_korean_alias backend/tests/test_assistant_api.py::test_assistant_contact_lookup_returns_known_email_without_email_draft backend/tests/test_assistant_api.py::test_assistant_contact_lookup_followup_uses_recent_lookup_request -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/assistant/contact_lookup.py backend/app/assistant/recipient_resolver.py backend/app/api/v1/assistant.py backend/app/core/demo_auth.py backend/tests/test_assistant_api.py backend/tests/test_assistant_recipient_resolver.py
+```
+
+Result: targeted contact lookup tests passed; wider assistant backend tests
+passed with 47 tests; ruff passed.
+
+## 2026-05-14 Assistant Referenced Email Drafts
+
+- Added `backend/app/assistant/email_draft_context.py` so the assistant can
+  treat recent AI answers and pending email drafts as explicit email body
+  sources.
+- Requests such as `이 내용을 용희님한테 메일로 보내줘.` now route before the
+  low-cost `email_intent_gate`, select the latest sendable assistant answer,
+  resolve recipients, and pass that selected source to `email_draft_composer`.
+- Draft revision complaints such as `내용이 하나도 안 들어가 있잖아.` now reuse
+  the pending draft's recipient/subject plus the earlier assistant answer,
+  creating a new approval-required draft instead of falling into RAG chat.
+- Added a source-content guardrail: if the draft composer compresses `이 내용`
+  into a generic note and omits the actual selected body, the selected source is
+  appended to the draft before storing the pending approval metadata.
+- Isolated `test_email_draft_composer_defaults_to_stronger_model_than_intent_gate`
+  from local `.env` overrides with `Settings(_env_file=None)`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_referenced_answer_email_keeps_selected_content backend/tests/test_assistant_api.py::test_assistant_revises_pending_draft_when_user_says_body_is_missing -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/app/assistant/email_agent.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted referenced-email tests passed; wider assistant backend tests
+passed with 49 tests; ruff passed.
+
+## 2026-05-14 Assistant Generate-Then-Email Drafts
+
+- Extended `backend/app/assistant/email_draft_context.py` with a generated
+  source request detector for messages such as
+  `ParaWorks 회사 소개서 작성해서 용희님한테 메일 보내줘.`.
+- This route now runs before `email_intent_gate`: it extracts the generation
+  question (`ParaWorks 회사 소개서 작성해줘`), retrieves/generates the answer through
+  the RAG orchestrator, resolves the recipient, and then passes the generated
+  answer to `email_draft_composer`.
+- The existing source-content guardrail also applies here, so if the draft
+  composer returns a generic body, the generated RAG answer is appended before
+  the pending approval draft is stored.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_generates_requested_content_before_email_draft -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted generate-then-email test passed; wider assistant backend tests
+passed with 50 tests; ruff passed.
+
+## 2026-05-14 Assistant Recipient Correction Safety
+
+- Fixed recipient resolution so known contacts are only returned when an alias,
+  email local-part, display name, or title actually matches the latest message.
+  This prevents unrelated demo users from appearing as ambiguous candidates for
+  unknown names such as `한승혁`.
+- Added a pre-RAG recipient gate for generate-then-email requests. If the
+  recipient is not resolved, the assistant asks for the exact recipient instead
+  of spending RAG/LLM draft cost or reusing a previous pending draft recipient.
+- Added a pending draft recipient-update path. Messages such as
+  `SeungHun Han님한테 보내줘.` reuse the pending draft body/source while replacing
+  only the recipient.
+- Added an explicit correction response for `메일 주소가 잘못됐어.` so it asks for
+  the corrected recipient rather than falling into contact lookup or RAG.
+- Added `SeungHun Han` / `한승헌` aliases to the demo admin contact.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_generate_email_unknown_recipient_does_not_reuse_pending_draft backend/tests/test_assistant_api.py::test_assistant_recipient_only_revision_preserves_pending_draft_body backend/tests/test_assistant_api.py::test_assistant_wrong_email_address_asks_for_correct_recipient backend/tests/test_assistant_recipient_resolver.py -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/app/assistant/recipient_resolver.py backend/app/core/demo_auth.py backend/tests/test_assistant_api.py backend/tests/test_assistant_recipient_resolver.py
+```
+
+Result: targeted recipient-correction tests passed; wider assistant backend
+tests passed with 53 tests; ruff passed.

@@ -1,6 +1,12 @@
+from contextlib import suppress
+
 from sqlalchemy.orm import Session
 
 from backend.app.agents.rag_orchestrator_agent import answer_question_with_rag
+from backend.app.agents.rag_orchestrator_agent.service import (
+    build_default_rag_orchestrator_agent,
+)
+from backend.app.core.config import Settings
 from backend.app.core.demo_auth import USERS
 from backend.app.models import (
     AgentRun,
@@ -182,3 +188,33 @@ def test_rag_service_can_answer_from_vector_store_matches(db_session: Session) -
     assert answer.source_links == ['https://vector.mock/project-alpha']
     assert answer.source_snippets == ['Project Alpha launch history']
     assert answer.hidden_match_count == 0
+
+
+def test_rag_service_uses_configured_stronger_primary_model(monkeypatch) -> None:
+    captured = {}
+
+    def fake_build_langchain_rag_orchestrator_model(settings):
+        captured['primary'] = settings.openai_primary_model
+        captured['fallback'] = settings.openai_fallback_model
+        raise RuntimeError('stop after settings capture')
+
+    monkeypatch.setattr(
+        'backend.app.agents.rag_orchestrator_agent.service.build_langchain_rag_orchestrator_model',
+        fake_build_langchain_rag_orchestrator_model,
+    )
+
+    with suppress(RuntimeError):
+        build_default_rag_orchestrator_agent(
+            Settings(
+                paraworks_demo_mode=False,
+                openai_api_key='test-key',
+                agent_llm_enabled=True,
+                agent_llm_openai_primary_model='gpt-5.4',
+                agent_llm_openai_model='gpt-5.4-mini',
+            )
+        )
+
+    assert captured == {
+        'primary': 'gpt-5.4',
+        'fallback': 'gpt-5.4-mini',
+    }
