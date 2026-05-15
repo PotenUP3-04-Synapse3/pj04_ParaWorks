@@ -740,3 +740,25 @@
 - 주의:
   - 새 Slack LLM 경로는 `LLM 프로젝트 분류` 카드로 계속 표시된다.
   - 기존 DB에 남아 있는 `project_assignment` pending 항목은 규칙 기반 fallback 항목이므로 LLM 사용 항목으로 표시하지 않는다.
+
+## 2026-05-15 Slack 프로젝트 Tool Routing 통합 작업계획서 작성
+
+- 요청:
+  - `project_assignment`도 규칙 기반이 아니라 할 일, 결정 기록, 히스토리처럼 LangChain tool 기반 LLM 판단으로 프로젝트에 묶이게 한다.
+  - Slack 업무 후보가 등록 프로젝트에 해당하면 Review의 프로젝트 지정에 자동 선택되게 한다.
+  - 등록 프로젝트에 해당하지 않으면 `프로젝트 선택` 상태로 두고, 사용자가 프로젝트를 선택하지 않으면 승인할 수 없게 한다.
+  - 승인 후 타임라인은 프로젝트별/날짜별로 표시하고 프로젝트 탭에도 활동이 반영되게 한다.
+  - 프로젝트 탭의 근거/활동/검토 metric 겹침도 Playwright로 확인한다.
+- 계획서 위치:
+  - `docs/superpowers/plans/2026-05-15-unified-slack-project-tool-routing.md`
+- 계획 핵심:
+  - 신규 Slack sync에서 규칙 기반 `project_assignment` 생성을 중단한다.
+  - `backend/app/agents/slack_agent/sync_service.py`의 `topic_tag` 기반 fallback 프로젝트 지정도 제거한다.
+  - Slack Agent 후보의 프로젝트 연결은 `agent_slack` LangGraph `project_route` node의 tool routing 결과만 사용한다.
+  - 프로젝트 미선택 Slack Agent 후보는 promotion preview와 approve API에서 `project_key` 누락으로 승인 불가가 되게 한다.
+  - Review UI는 `프로젝트 선택 후 승인 가능`과 `새 프로젝트 만들기` 링크를 보여준다.
+  - Timeline UI는 날짜 단위 그룹을 추가한다.
+  - Project UI는 metric 영역 모바일 겹침을 방지한다.
+- 테스트 계획:
+  - backend TDD: router unmatched 계약, sync service fallback 제거, Slack deterministic `project_assignment` 생성 중단, 승인 전 project_key 필수화, 프로젝트 메모리 연결 검증.
+  - Playwright: Review 프로젝트 선택 필수, Timeline 날짜 그룹, Project metric 모바일 레이아웃, `/integrations -> /review -> /timeline -> /projects` 통합 흐름.
