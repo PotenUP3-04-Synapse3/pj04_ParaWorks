@@ -585,7 +585,9 @@ export default function IntegrationsPage() {
     try {
       const result = await apiPost<IntegrationSyncResponse>(
         `/api/v1/integrations/${type}/sync`,
-        type === "slack" ? { selected_channel_ids: selectedSlackChannels, run_async: true } : undefined,
+        type === "slack"
+          ? { selected_channel_ids: selectedSlackChannels, run_async: true }
+          : { run_async: true },
       );
       setActiveJobId(result.job_id);
       setSyncProgress((current) =>

@@ -476,3 +476,181 @@ test("Slack sync polling timeout stays in background-running state instead of fa
   await expect(modal).toBeVisible();
   await expect(modal.getByTestId("sync-progress-percent")).toContainText("75%");
 });
+
+test("Gmail sync uses async job polling so the modal reflects runtime progress", async ({
+  page,
+}) => {
+  let syncQueued = false;
+  let syncCompleted = false;
+  let postedBody: unknown;
+
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal", "restricted"],
+          name: "ParaWorks Admin",
+          title: "Workspace Administrator",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: [
+        {
+          type: "gmail",
+          display_name: "Gmail",
+          mode: "live",
+          status: "ready",
+          auth_type: "oauth",
+          required_scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+          sync_strategy: "incremental",
+          cost_policy: "changed messages only",
+        },
+      ],
+    });
+  });
+  await page.route("**/api/v1/integrations/connections", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: [] });
+  });
+  await page.route("**/api/v1/dashboard", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        pending_review_count: syncCompleted ? 9 : 7,
+        source_counts: { slack: 0, gmail: 23, drive: 0, calendar: 0, other: 0 },
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/slack/oauth/install-url", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "slack",
+        configured: false,
+        install_url: null,
+        state: null,
+        required_scopes: [],
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/slack/runtime-status", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "slack",
+        mode: "live",
+        configured_channel_ids: [],
+        selected_channel_ids: [],
+        channel_options: [],
+        connection_status: "disconnected",
+        credential_status: "missing",
+        latest_sync: null,
+        latest_sync_summary: null,
+        last_error: null,
+        agent_bridge: {
+          slack_source_count: 0,
+          pending_review_count: 0,
+          ready_for_agent_test: false,
+        },
+        cost_policy: {
+          status_lookup_triggers_sync: false,
+          status_lookup_triggers_llm: false,
+          thread_reply_fetch_is_incremental: true,
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/slack/agent-review/llm/preflight", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: preflight });
+  });
+  await page.route("**/api/v1/integrations/mail-docs/agent-review/llm/preflight", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: preflight });
+  });
+  await page.route("**/api/v1/integrations/{drive,calendar}/**", async (route) => {
+    await route.fulfill({ status: 404, contentType: "application/json", json: { detail: "not configured" } });
+  });
+  await page.route("**/api/v1/integrations/gmail/oauth/install-url", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "gmail",
+        configured: false,
+        install_url: null,
+        state: null,
+        required_scopes: [],
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/gmail/runtime-status", async (route) => {
+    const latestSync = syncQueued
+      ? {
+          job_id: "gmail-async-progress-test",
+          status: syncCompleted ? "complete" : "running",
+          message: syncCompleted
+            ? "fetched=23 created_review_items=2 skipped_events=0 pending_review_items=9"
+            : "fetched=23 agent_review=running skipped_events=0",
+          progress_pct: syncCompleted ? 100 : 75,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      : null;
+
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "gmail",
+        mode: "live",
+        connection_status: "connected",
+        credential_status: "available",
+        account_name: "para@example.com",
+        latest_sync: latestSync,
+        cost_policy: {
+          status_lookup_triggers_sync: false,
+          status_lookup_triggers_llm: false,
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/gmail/sync", async (route) => {
+    postedBody = route.request().postDataJSON();
+    syncQueued = true;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        job_id: "gmail-async-progress-test",
+        connector_type: "gmail",
+        status: "queued",
+        created_review_items: 0,
+        pending_review_count: 7,
+        fetched_events: 0,
+        skipped_events: 0,
+        parser_status_counts: {},
+        changed_source_ids: [],
+        agent_generated_items: 0,
+        project_assignment_items: 0,
+      },
+    });
+  });
+
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+  await page.goto("/integrations");
+  await page.waitForLoadState("networkidle");
+
+  await page.getByTestId("gmail-card-actions").getByRole("button").first().click();
+  const modal = page.getByTestId("sync-progress-modal");
+
+  await expect(modal).toBeVisible();
+  await expect(modal.getByTestId("sync-progress-percent")).toContainText("75%");
+  expect(postedBody).toMatchObject({ run_async: true });
+
+  syncCompleted = true;
+  await expect(modal.getByTestId("sync-progress-percent")).toContainText("100%");
+});
