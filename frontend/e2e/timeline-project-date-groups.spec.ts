@@ -71,6 +71,36 @@ test("Timeline groups approved project items by date", async ({ page }) => {
                 project_key: "project-alpha",
               },
               {
+                id: "timeline_event:4",
+                item_type: "timeline_event",
+                title: "QA 승인",
+                summary: "QA 승인 완료",
+                source_links: ["https://slack.example/4"],
+                source_snippets: ["QA 승인"],
+                confidence_score: 0.9,
+                permission_level: "internal",
+                review_status: "approved",
+                created_at: "2026-05-15T12:00:00Z",
+                occurred_at: "2026-05-14T07:00:00+09:00",
+                evidence_reason: "승인된 항목",
+                project_key: "project-alpha",
+              },
+              {
+                id: "timeline_event:5",
+                item_type: "timeline_event",
+                title: "릴리즈 노트 정리",
+                summary: "릴리즈 노트 완료",
+                source_links: ["https://slack.example/5"],
+                source_snippets: ["릴리즈 노트"],
+                confidence_score: 0.9,
+                permission_level: "internal",
+                review_status: "approved",
+                created_at: "2026-05-15T13:00:00Z",
+                occurred_at: "2026-05-14T08:00:00+09:00",
+                evidence_reason: "승인된 항목",
+                project_key: "project-alpha",
+              },
+              {
                 id: "timeline_event:3",
                 item_type: "timeline_event",
                 title: "전날 회의",
@@ -98,31 +128,38 @@ test("Timeline groups approved project items by date", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /5월 14일/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /5월 13일/ })).toBeVisible();
   await expect(page.getByText("2026년 5월 15일")).toBeHidden();
-  await expect(page.getByText("오전 점검")).toBeVisible();
+  await expect(page.getByText("릴리즈 노트 정리")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QA 승인" })).toBeVisible();
   await expect(page.getByText("오후 배포")).toBeVisible();
+  await expect(page.getByText("오전 점검")).toBeHidden();
+  await page.getByRole("button", { name: /1건 더 보기/ }).click();
+  await expect(page.getByText("오전 점검")).toBeVisible();
   await expect(page.getByText("전날 회의")).toBeHidden();
   await expect(page.getByText("Redis 점검")).toBeHidden();
   await expect(page.getByText("History: Redis 점검")).toBeHidden();
-  await expect(page.getByText(/01:00/)).toBeVisible();
-  await expect(page.getByText("Slack").first()).toBeVisible();
+  await expect(page.getByText(/오전 01:00|01:00/)).toBeVisible();
+  await expect(page.locator("span", { hasText: "Slack" }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "2026년 5월 14일" }).click();
+  await page.getByRole("button", { name: /2026년 5월 14일/ }).click();
   await expect(page.getByText("오전 점검")).toBeHidden();
   await expect(page.getByText("오후 배포")).toBeHidden();
   await expect(page.getByRole("heading", { name: /5월 14일/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /5월 13일/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "2026년 5월 14일" }).click();
-  await expect(page.getByText("오전 점검")).toBeVisible();
+  await page.getByRole("button", { name: /2026년 5월 14일/ }).click();
+  await expect(page.getByText("오전 점검")).toBeHidden();
   await expect(page.getByText("Redis 점검")).toBeHidden();
-  await expect(page.getByText(/01:00/)).toBeVisible();
+  await page.getByRole("button", { name: /1건 더 보기/ }).click();
+  await expect(page.getByText("오전 점검")).toBeVisible();
+  await expect(page.getByText(/오전 01:00|01:00/)).toBeVisible();
 
-  await page.getByRole("button", { name: "2026년 5월 13일" }).click();
+  await page.getByRole("button", { name: /2026년 5월 13일/ }).click();
   await expect(page.getByText("오전 점검")).toBeHidden();
   await expect(page.getByText("전날 회의")).toBeVisible();
   await expect(page.getByText("회의 완료")).toBeHidden();
 
-  await page.getByRole("button", { name: "2026년 5월 14일" }).click();
+  await page.getByRole("button", { name: /2026년 5월 14일/ }).click();
+  await page.getByRole("button", { name: /1건 더 보기/ }).click();
   await page.getByRole("button", { name: "Open 오전 점검" }).click();
   await expect(page.getByText("Redis 점검")).toBeVisible();
   const sourceLink = page.getByRole("link", { name: "Open source" });

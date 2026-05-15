@@ -23,6 +23,18 @@ export type DashboardResponse = {
     assignee: string;
     due_date: string;
     category: string;
+    priority?: string;
+    completed_at?: string | null;
+  }[];
+  assigned_projects?: {
+    project_key: string;
+    name: string;
+    summary: string;
+    evidence_count: number;
+    activity_count: number;
+    pending_review_count: number;
+    latest_timestamp: string;
+    permission_level: string;
   }[];
   recent_decisions: {
     id: number;
@@ -592,6 +604,8 @@ export type ProjectTimelineItem = {
   occurred_at?: string;
   evidence_reason: string;
   project_key?: string | null;
+  completed_at?: string | null;
+  completed_by?: string | null;
 };
 
 export type ProjectMemory = {
