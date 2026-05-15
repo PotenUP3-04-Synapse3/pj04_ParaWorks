@@ -696,6 +696,53 @@ def test_project_timeline_prefers_slack_permalink_timestamp_when_source_metadata
     assert item['occurred_at'].startswith('2026-05-01T02:00:00')
 
 
+def test_project_timeline_items_use_calendar_event_start_for_occurred_at(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Calendar time test'))
+    source_url = 'https://calendar.google.com/event?eid=event-alpha'
+    db_session.add(
+        Source(
+            source_type='calendar',
+            source_id='calendar:team@example.com:event-alpha',
+            source_url=source_url,
+            title='Project Alpha milestone meeting',
+            author='lead@example.com',
+            permission_level='internal',
+            raw_metadata={
+                'calendar_id': 'team@example.com',
+                'calendar_summary': 'Team Calendar',
+                'event_start': '2026-06-10T10:00:00+09:00',
+                'event_end': '2026-06-10T11:00:00+09:00',
+            },
+            created_at=datetime(2026, 5, 15, 9, 0, tzinfo=UTC),
+        )
+    )
+    db_session.add(
+        TimelineEvent(
+            project_key='project-alpha',
+            title='Project Alpha milestone confirmed',
+            result_summary='Calendar evidence confirmed the launch milestone meeting.',
+            source_links=[source_url],
+            source_snippets=['Project Alpha launch milestone meeting'],
+            confidence_score=0.9,
+            permission_level='internal',
+            review_status='approved',
+            created_at=datetime(2026, 5, 15, 9, 30, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    project_payload = next(project for project in response.json()['projects'] if project['project_key'] == 'project-alpha')
+    item = project_payload['timeline_items'][0]
+    assert item['created_at'].startswith('2026-05-15T09:30:00')
+    assert item['occurred_at'].startswith('2026-06-10T01:00:00')
+
+
 def test_approved_review_item_with_project_key_appears_in_project_timeline(
     client: TestClient,
     db_session: Session,

@@ -86,6 +86,9 @@ class DeterministicMailDocumentAgentModel:
                 uncertainty_reason='personal_or_low_signal_evidence',
                 is_business_related=False,
             )
+        calendar_response = _extract_calendar_candidate(packet, input_tokens=input_tokens)
+        if calendar_response is not None:
+            return calendar_response
         title = '메일 및 문서 히스토리 후보'
         summary = 'Gmail 및 Google Drive 증거 데이터가 검토 가능한 회사 메모리 후보로 요약되었습니다.'
         item_type = 'history_event'
@@ -219,6 +222,8 @@ def _parser_uncertainty_confidence(packet: EvidencePacket) -> float:
 def _normalized_item_type(item_type: str) -> str:
     if item_type == 'decision':
         return 'decision_record'
+    if item_type == 'timeline':
+        return 'timeline_event'
     return item_type
 
 
@@ -230,6 +235,192 @@ def _safe_payload_fields(fields: dict[str, Any] | None) -> dict[str, Any]:
         for key, value in fields.items()
         if key not in _RESERVED_REVIEW_PAYLOAD_FIELDS
     }
+
+
+def _extract_calendar_candidate(
+    packet: EvidencePacket,
+    *,
+    input_tokens: int,
+) -> MailDocumentAgentModelResponse | None:
+    calendar_messages = [
+        message
+        for message in packet.messages
+        if message.metadata.get('source_type') == 'calendar'
+    ]
+    if not calendar_messages:
+        return None
+    message = calendar_messages[0]
+    text = message.text.strip()
+    lowered = text.lower()
+    status = str(message.metadata.get('event_status') or '').lower()
+    if status and status not in {'confirmed', 'tentative'}:
+        return _calendar_not_reviewable_response(input_tokens=input_tokens, reason='calendar_event_not_confirmed')
+
+    if _looks_like_calendar_action(text):
+        summary = _calendar_summary_sentence(message)
+        structured_data = {
+            **_calendar_payload_fields(message),
+            'task_summary': summary,
+            'evidence_sentence': message.source_snippet,
+            'evidence_reason': 'Calendar evidence contains preparation, deadline, or follow-up wording.',
+            'source_type': 'calendar',
+            'action_required': 'true',
+            'recommended_next_step': summary,
+            'summary_quality': 'actionable_calendar_event',
+        }
+        due_date = _calendar_due_date(message.metadata)
+        if due_date:
+            structured_data['due_date'] = due_date
+        return MailDocumentAgentModelResponse(
+            title=_calendar_title(message),
+            summary=summary,
+            item_type='todo',
+            confidence_score=0.78,
+            input_tokens=input_tokens,
+            output_tokens=max(32, len(summary) // 4),
+            is_business_related=True,
+            project_tag='General',
+            structured_data=structured_data,
+        )
+
+    if _looks_like_calendar_timeline_event(text):
+        summary = _calendar_summary_sentence(message)
+        return MailDocumentAgentModelResponse(
+            title=_calendar_title(message),
+            summary=summary,
+            item_type='timeline_event',
+            confidence_score=0.82,
+            input_tokens=input_tokens,
+            output_tokens=max(32, len(summary) // 4),
+            is_business_related=True,
+            project_tag='General',
+            structured_data={
+                **_calendar_payload_fields(message),
+                'result_summary': summary,
+                'evidence_reason': 'Calendar evidence confirms a meeting, milestone, or schedule.',
+                'source_type': 'calendar',
+                'summary_quality': 'calendar_timeline_event',
+            },
+        )
+
+    personal_cues = ('dentist', 'doctor', 'personal', 'private', 'birthday', 'lunch', 'vacation', 'holiday')
+    business_cues = ('project', 'customer', 'client', 'launch', 'milestone', 'proposal', 'contract', 'meeting')
+    reason = (
+        'personal_or_low_signal_calendar_event'
+        if any(cue in lowered for cue in personal_cues) and not any(cue in lowered for cue in business_cues)
+        else 'low_signal_calendar_event'
+    )
+    return _calendar_not_reviewable_response(input_tokens=input_tokens, reason=reason)
+
+
+def _calendar_not_reviewable_response(
+    *,
+    input_tokens: int,
+    reason: str,
+) -> MailDocumentAgentModelResponse:
+    return MailDocumentAgentModelResponse(
+        title='Non-reviewable Calendar event',
+        summary='Calendar evidence did not contain a reviewable company work object.',
+        item_type='history_event',
+        confidence_score=0.2,
+        input_tokens=input_tokens,
+        output_tokens=32,
+        uncertainty_reason=reason,
+        is_business_related=False,
+        structured_data={'reviewability_decision': 'not_reviewable', 'summary_quality': reason},
+    )
+
+
+def _calendar_payload_fields(message: EvidenceMessage) -> dict[str, str]:
+    metadata = message.metadata
+    fields = {
+        'calendar_id': _metadata_string(metadata, 'calendar_id'),
+        'calendar_name': _metadata_string(metadata, 'calendar_summary') or _metadata_string(metadata, 'calendar_name'),
+        'calendar_start': _metadata_string(metadata, 'event_start') or _metadata_string(metadata, 'start'),
+        'calendar_end': _metadata_string(metadata, 'event_end') or _metadata_string(metadata, 'end'),
+        'calendar_location': _metadata_string(metadata, 'location'),
+        'calendar_organizer': _metadata_string(metadata, 'organizer_email'),
+        'calendar_attendee_summary': _calendar_attendee_summary(metadata),
+        'event_context_key': _metadata_string(metadata, 'event_context_key'),
+    }
+    return {key: value for key, value in fields.items() if value}
+
+
+def _calendar_attendee_summary(metadata: dict[str, Any]) -> str:
+    value = metadata.get('attendee_domains')
+    if isinstance(value, list):
+        return ', '.join(str(item) for item in value if str(item).strip())
+    if isinstance(value, str):
+        return value
+    return ''
+
+
+def _metadata_string(metadata: dict[str, Any], key: str) -> str:
+    value = metadata.get(key)
+    return value.strip() if isinstance(value, str) else ''
+
+
+def _looks_like_calendar_action(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        cue in lowered
+        for cue in (
+            'prepare',
+            'preparation',
+            'deadline',
+            'due',
+            'follow-up',
+            'follow up',
+            'todo',
+            'action item',
+            'submit',
+            'review by',
+            'please',
+            '마감',
+            '준비',
+            '후속',
+        )
+    )
+
+
+def _looks_like_calendar_timeline_event(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        cue in lowered
+        for cue in (
+            'meeting',
+            'milestone',
+            'launch',
+            'kickoff',
+            'review',
+            'confirmed',
+            'customer',
+            'client',
+            'project',
+            'contract',
+            '회의',
+            '일정',
+            '확정',
+        )
+    )
+
+
+def _calendar_title(message: EvidenceMessage) -> str:
+    first_line = next((line.strip() for line in message.text.splitlines() if line.strip()), '')
+    return first_line[:200] if first_line else 'Calendar event candidate'
+
+
+def _calendar_summary_sentence(message: EvidenceMessage) -> str:
+    summary = _business_context_summary(message)
+    start = _metadata_string(message.metadata, 'event_start') or _metadata_string(message.metadata, 'start')
+    calendar_name = _metadata_string(message.metadata, 'calendar_summary')
+    suffix = ' '.join(part for part in [f'Calendar: {calendar_name}' if calendar_name else '', f'Start: {start}' if start else ''] if part)
+    return f'{summary} {suffix}'.strip()[:500]
+
+
+def _calendar_due_date(metadata: dict[str, Any]) -> str:
+    start = _metadata_string(metadata, 'event_start') or _metadata_string(metadata, 'start')
+    return start.split('T', 1)[0] if start else ''
 
 
 def _extract_assignment(packet: EvidencePacket) -> dict[str, str]:

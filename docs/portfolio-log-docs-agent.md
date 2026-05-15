@@ -1,6 +1,36 @@
 # Document Agent Portfolio Log
 
-Last updated: 2026-05-14
+Last updated: 2026-05-15
+
+## Google Calendar All-Calendars Operating MVP
+
+Recorded on 2026-05-15.
+
+- Expanded the Mail/Document Agent operating scope to Mail/Docs/Calendar
+  without creating a separate Calendar Agent.
+- Changed Google Calendar sync from `primary` only to all accessible calendars
+  through `calendarList`, with bounded initial collection and per-calendar
+  `updatedMin` delta cursors.
+- Made Calendar source ids collision-safe with
+  `calendar:{calendar_id}:{event_id}` and preserved calendar/event metadata
+  through Source, DocumentChunk, AgentRun evidence summary, ReviewItem payload,
+  Review source evidence, and Project/Timeline display timing.
+- Added Calendar candidate behavior: confirmed meetings and milestones become
+  `timeline_event`, preparation/deadline/follow-up events become `todo`, and
+  personal/low-signal events produce no ReviewItem.
+- Kept the existing Review Queue trust boundary: Calendar output remains a
+  pending ReviewItem until approved, and approved source ids continue to gate
+  RAG indexing.
+
+Verification:
+
+```powershell
+uv run pytest backend/tests/test_google_connector.py backend/tests/test_connector_golden_dataset.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py backend/tests/test_rag_indexing.py -q
+uv run ruff check backend/app/connectors/google.py backend/app/agents/mail_document_agent/agent.py backend/app/agents/mail_document_agent/llm.py backend/app/agents/mail_document_agent/service.py backend/app/agent_runtime/evidence_summary.py backend/app/api/v1/review.py backend/app/projects/service.py
+cd frontend
+npm.cmd run lint
+npm.cmd run build
+```
 
 This file records Document Agent specific product, architecture, verification,
 and demo evidence. Do not store Document Agent progress entries in

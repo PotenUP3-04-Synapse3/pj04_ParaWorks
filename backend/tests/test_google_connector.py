@@ -21,6 +21,7 @@ class FakeGoogleClient:
         self.gmail_after_internal_date: str | None = None
         self.drive_modified_after: str | None = None
         self.calendar_updated_min: str | None = None
+        self.calendar_event_calls: list[dict[str, str | None]] = []
         self.drive_export_requests: list[tuple[str, str]] = []
         self._drive_files = drive_files
         self._drive_exports = drive_exports or {}
@@ -85,8 +86,33 @@ class FakeGoogleClient:
             return self._drive_exports[(file_id, export_mime_type)]
         return '휴가 신청은 HR 시스템에서 진행합니다.\n승인은 팀장이 검토합니다.'
 
-    def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
+    def calendar_list(self) -> list[dict]:
+        return [
+            {
+                'id': 'primary',
+                'summary': 'Primary Calendar',
+                'primary': True,
+                'accessRole': 'owner',
+            }
+        ]
+
+    def calendar_events(
+        self,
+        *,
+        calendar_id: str,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        updated_min: str | None = None,
+    ) -> list[dict]:
         self.calendar_updated_min = updated_min
+        self.calendar_event_calls.append(
+            {
+                'calendar_id': calendar_id,
+                'time_min': time_min,
+                'time_max': time_max,
+                'updated_min': updated_min,
+            }
+        )
         return [
             {
                 'id': 'event-1',
@@ -512,10 +538,91 @@ def test_google_connector_fetches_calendar_events_since_latest_cursor() -> None:
         client=client,
     )
 
-    events = connector.fetch_events_since({'calendar': '2026-05-01T10:00:00Z'})
+    events = connector.fetch_events_since({'calendar:primary': '2026-05-01T10:00:00Z'})
 
     assert len(events) == 1
     assert client.calendar_updated_min == '2026-05-01T10:00:00Z'
+    assert client.calendar_event_calls == [
+        {
+            'calendar_id': 'primary',
+            'time_min': None,
+            'time_max': None,
+            'updated_min': '2026-05-01T10:00:00Z',
+        }
+    ]
+
+
+def test_google_connector_fetches_all_calendar_events_with_initial_window() -> None:
+    class MultiCalendarClient(FakeGoogleClient):
+        def calendar_list(self) -> list[dict]:
+            return [
+                {'id': 'primary', 'summary': 'Primary Calendar', 'primary': True, 'accessRole': 'owner'},
+                {'id': 'team@example.com', 'summary': 'Team Calendar', 'accessRole': 'reader'},
+            ]
+
+    client = MultiCalendarClient()
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='calendar',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    events = connector.fetch_events()
+
+    assert [event.source_id for event in events] == [
+        'calendar:primary:event-1',
+        'calendar:team@example.com:event-1',
+    ]
+    assert [call['calendar_id'] for call in client.calendar_event_calls] == ['primary', 'team@example.com']
+    assert all(call['updated_min'] is None for call in client.calendar_event_calls)
+    assert all(call['time_min'] for call in client.calendar_event_calls)
+    assert all(call['time_max'] for call in client.calendar_event_calls)
+
+
+def test_google_connector_uses_calendar_partition_cursors_per_calendar() -> None:
+    class MultiCalendarClient(FakeGoogleClient):
+        def calendar_list(self) -> list[dict]:
+            return [
+                {'id': 'primary', 'summary': 'Primary Calendar', 'primary': True, 'accessRole': 'owner'},
+                {'id': 'team@example.com', 'summary': 'Team Calendar', 'accessRole': 'reader'},
+            ]
+
+    client = MultiCalendarClient()
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='calendar',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    connector.fetch_events_since(
+        {
+            'calendar:primary': '2026-05-01T10:00:00Z',
+            'calendar:team@example.com': '2026-05-02T10:00:00Z',
+        }
+    )
+
+    assert client.calendar_event_calls == [
+        {
+            'calendar_id': 'primary',
+            'time_min': None,
+            'time_max': None,
+            'updated_min': '2026-05-01T10:00:00Z',
+        },
+        {
+            'calendar_id': 'team@example.com',
+            'time_min': None,
+            'time_max': None,
+            'updated_min': '2026-05-02T10:00:00Z',
+        },
+    ]
 
 
 def test_google_connector_maps_calendar_events_to_source_events() -> None:
@@ -534,7 +641,7 @@ def test_google_connector_maps_calendar_events_to_source_events() -> None:
     assert len(events) == 1
     event = events[0]
     assert event.source_type == 'calendar'
-    assert event.source_id == 'calendar:event-1'
+    assert event.source_id == 'calendar:primary:event-1'
     assert event.source_url == 'https://calendar.google.com/event?eid=event-1'
     assert event.title == 'PM 회의'
     assert event.body == (
@@ -544,8 +651,15 @@ def test_google_connector_maps_calendar_events_to_source_events() -> None:
     assert event.author == 'pm@example.com'
     assert event.participants == ['pm@example.com', 'dev@example.com', 'client@customer.co.kr']
     assert event.timestamp == datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
-    assert event.raw_metadata['sync_partition'] == 'calendar'
+    assert event.raw_metadata['sync_partition'] == 'calendar:primary'
     assert event.raw_metadata['sync_cursor'] == '2026-05-01T10:00:00Z'
+    assert event.raw_metadata['calendar_id'] == 'primary'
+    assert event.raw_metadata['calendar_summary'] == 'Primary Calendar'
+    assert event.raw_metadata['calendar_primary'] is True
+    assert event.raw_metadata['calendar_access_role'] == 'owner'
+    assert event.raw_metadata['content_signature'] == 'calendar:primary:event-1:2026-05-01T10:00:00Z'
+    assert event.raw_metadata['event_start'] == '2026-05-02T09:00:00+09:00'
+    assert event.raw_metadata['event_end'] == '2026-05-02T10:00:00+09:00'
     assert event.raw_metadata['location'] == '회의실 A'
     assert event.raw_metadata['attendee_count'] == 3
     assert event.raw_metadata['event_context_key'] == 'event-1:2026-05-01T10:00:00Z'
@@ -707,7 +821,35 @@ def test_google_web_api_client_exports_drive_file_as_text() -> None:
     assert requests[0].url.params['mimeType'] == 'text/plain'
 
 
-def test_google_web_api_client_paginates_calendar_events() -> None:
+def test_google_web_api_client_paginates_calendar_list() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.params.get('pageToken') is None:
+            return httpx.Response(
+                200,
+                json={
+                    'items': [{'id': 'primary', 'summary': 'Primary'}],
+                    'nextPageToken': 'calendar-page-2',
+                },
+            )
+        return httpx.Response(200, json={'items': [{'id': 'team@example.com', 'summary': 'Team'}]})
+
+    client = GoogleWebApiClient(
+        oauth_token='google-oauth-token',
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        page_limit=1,
+    )
+
+    calendars = client.calendar_list()
+
+    assert [calendar['id'] for calendar in calendars] == ['primary', 'team@example.com']
+    assert requests[0].url.path == '/calendar/v3/users/me/calendarList'
+    assert requests[1].url.params['pageToken'] == 'calendar-page-2'
+
+
+def test_google_web_api_client_paginates_calendar_events_for_calendar_id() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -728,10 +870,10 @@ def test_google_web_api_client_paginates_calendar_events() -> None:
         page_limit=1,
     )
 
-    events = client.calendar_events()
+    events = client.calendar_events(calendar_id='team@example.com')
 
     assert [event['id'] for event in events] == ['event-1', 'event-2']
-    assert requests[0].url.path == '/calendar/v3/calendars/primary/events'
+    assert requests[0].url.path == '/calendar/v3/calendars/team@example.com/events'
     assert requests[1].url.params['pageToken'] == 'calendar-page-2'
 
 
@@ -744,7 +886,7 @@ def test_google_web_api_client_sends_delta_params_for_gmail_drive_and_calendar()
             return httpx.Response(200, json={'messages': []})
         if request.url.path == '/drive/v3/files':
             return httpx.Response(200, json={'files': []})
-        if request.url.path == '/calendar/v3/calendars/primary/events':
+        if request.url.path == '/calendar/v3/calendars/team@example.com/events':
             return httpx.Response(200, json={'items': []})
         raise AssertionError(f'unexpected request: {request.url}')
 
@@ -755,11 +897,16 @@ def test_google_web_api_client_sends_delta_params_for_gmail_drive_and_calendar()
 
     assert client.gmail_messages(after_internal_date='1777600800000') == []
     assert client.drive_files(modified_after='2026-05-01T09:00:00Z') == []
-    assert client.calendar_events(updated_min='2026-05-01T10:00:00Z') == []
+    assert client.calendar_events(
+        calendar_id='team@example.com',
+        time_min='2026-04-01T00:00:00Z',
+        time_max='2026-11-01T00:00:00Z',
+        updated_min='2026-05-01T10:00:00Z',
+    ) == []
 
     gmail_request = next(request for request in requests if request.url.path == '/gmail/v1/users/me/messages')
     drive_request = next(request for request in requests if request.url.path == '/drive/v3/files')
-    calendar_request = next(request for request in requests if request.url.path == '/calendar/v3/calendars/primary/events')
+    calendar_request = next(request for request in requests if request.url.path == '/calendar/v3/calendars/team@example.com/events')
     gmail_query = gmail_request.url.params['q']
     assert 'after:1777600800' in gmail_query
     assert '-in:spam' in gmail_query
@@ -768,6 +915,8 @@ def test_google_web_api_client_sends_delta_params_for_gmail_drive_and_calendar()
     assert '-category:social' in gmail_query
     assert drive_request.url.params['q'] == "modifiedTime > '2026-05-01T09:00:00Z'"
     assert calendar_request.url.params['updatedMin'] == '2026-05-01T10:00:00Z'
+    assert calendar_request.url.params['timeMin'] == '2026-04-01T00:00:00Z'
+    assert calendar_request.url.params['timeMax'] == '2026-11-01T00:00:00Z'
 
 
 def test_google_web_api_client_retries_rate_limited_requests_with_retry_after() -> None:

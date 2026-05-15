@@ -547,27 +547,46 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
         else:
             source_snippet = snippets[-1] if snippets else '원문 발췌 내용이 없습니다.'
             
-        rows.append(
-            {
-                'index': index + 1,
-                'rank': index + 1,
-                'source_id': source_id,
-                'source_url': source_url,
-                'source_type': summary.get('source_type') or item.payload.get('source_type') or 'slack',
-                'source_snippet': source_snippet,
-                'permission_level': item.permission_level,
-                'confidence_score': item.confidence_score,
-                'importance_score': summary.get('importance_score', 0),
-                'timestamp': summary.get('timestamp'),
-                'author': author,
-                'agent_run_id': agent_run_id,
-                'parser_status': summary.get('parser_status'),
-                'section_path': summary.get('section_path'),
-                'evidence_reason': summary.get('evidence_reason'),
-            }
-        )
+        row = {
+            'index': index + 1,
+            'rank': index + 1,
+            'source_id': source_id,
+            'source_url': source_url,
+            'source_type': summary.get('source_type') or item.payload.get('source_type') or 'slack',
+            'source_snippet': source_snippet,
+            'permission_level': item.permission_level,
+            'confidence_score': item.confidence_score,
+            'importance_score': summary.get('importance_score', 0),
+            'timestamp': summary.get('timestamp'),
+            'author': author,
+            'agent_run_id': agent_run_id,
+            'parser_status': summary.get('parser_status'),
+            'section_path': summary.get('section_path'),
+            'evidence_reason': summary.get('evidence_reason'),
+        }
+        calendar_fields = {
+            'calendar_id': summary.get('calendar_id') or item.payload.get('calendar_id'),
+            'calendar_name': summary.get('calendar_summary') or item.payload.get('calendar_name'),
+            'calendar_start': summary.get('event_start') or item.payload.get('calendar_start'),
+            'calendar_end': summary.get('event_end') or item.payload.get('calendar_end'),
+            'calendar_location': summary.get('location') or item.payload.get('calendar_location'),
+            'calendar_organizer': summary.get('organizer_email') or item.payload.get('calendar_organizer'),
+            'calendar_attendee_summary': _calendar_attendee_summary(summary, item.payload),
+            'event_context_key': summary.get('event_context_key') or item.payload.get('event_context_key'),
+        }
+        row.update({key: value for key, value in calendar_fields.items() if value})
+        rows.append(row)
 
     return rows
+
+
+def _calendar_attendee_summary(summary: dict, payload: dict) -> str | None:
+    value = summary.get('attendee_domains') or payload.get('calendar_attendee_summary')
+    if isinstance(value, list):
+        return ', '.join(str(item) for item in value if str(item).strip()) or None
+    if isinstance(value, str):
+        return value
+    return None
 
 
 def _normalize_slack_url(url: str | None) -> str | None:

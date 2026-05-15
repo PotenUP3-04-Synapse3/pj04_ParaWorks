@@ -47,6 +47,8 @@ class ProjectTimelineItem:
     occurred_at: str
     evidence_reason: str
     project_key: str | None = None
+    completed_at: str | None = None
+    completed_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +188,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 의사결정 기록이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
+            completed_at=None,
+            completed_by=None,
         )
         for item in db.scalars(select(DecisionRecord).where(DecisionRecord.review_status == 'approved')).all()
     )
@@ -204,6 +208,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 히스토리 기록이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
+            completed_at=None,
+            completed_by=None,
         )
         for item in db.scalars(select(HistoryEvent).where(HistoryEvent.review_status == 'approved')).all()
     )
@@ -222,6 +228,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 타임라인 항목이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
+            completed_at=None,
+            completed_by=None,
         )
         for item in db.scalars(select(TimelineEvent).where(TimelineEvent.review_status == 'approved')).all()
     )
@@ -240,6 +248,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 할 일이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
+            completed_at=item.completed_at.isoformat() if item.completed_at else None,
+            completed_by=item.completed_by,
         )
         for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all()
     )
@@ -279,7 +289,11 @@ def _memory_records_for_project(
 
 
 def _timeline_items_from_records(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
-    return [item for item in records if item.item_type == 'timeline_event']
+    return [
+        item
+        for item in records
+        if item.item_type == 'timeline_event' or (item.item_type == 'todo' and item.completed_at)
+    ]
 
 
 def _dedupe_activity_items(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
@@ -367,7 +381,15 @@ def _occurred_at_from_source_links(
     for link in source_links:
         source = source_by_url.get(link)
         if source:
-            raw_ts = (source.raw_metadata or {}).get('ts')
+            raw_metadata = source.raw_metadata or {}
+            if source.source_type == 'calendar':
+                raw_event_start = raw_metadata.get('event_start') or raw_metadata.get('start')
+                if isinstance(raw_event_start, str) and raw_event_start.strip():
+                    try:
+                        return datetime.fromisoformat(raw_event_start.replace('Z', '+00:00')).astimezone(UTC).isoformat()
+                    except ValueError:
+                        pass
+            raw_ts = raw_metadata.get('ts')
             if isinstance(raw_ts, str):
                 try:
                     return datetime.fromtimestamp(float(raw_ts), tz=UTC).isoformat()

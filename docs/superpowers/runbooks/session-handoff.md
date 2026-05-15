@@ -2,6 +2,60 @@
 
 Updated: 2026-05-15
 
+## 2026-05-15 Google Calendar all-calendars MVP
+
+- Scope:
+  - Calendar stayed under Developer B's Mail/Document ownership and is now
+    treated as Mail/Docs/Calendar evidence. No separate Calendar Agent or new
+    endpoint was added.
+- Backend changes:
+  - `backend/app/connectors/google.py` now calls Google `calendarList` and then
+    fetches events for each accessible calendar.
+  - Initial Calendar collection uses `now-30d` to `now+180d`; delta collection
+    uses per-calendar `updatedMin` from `sync_partition=calendar:{calendar_id}`.
+  - Calendar source ids are `calendar:{calendar_id}:{event_id}`.
+  - Calendar metadata is preserved through Source/DocumentChunk, Mail/Docs
+    evidence packets, AgentRun evidence summary, ReviewItem payload/source
+    evidence, and Projects/Timeline occurrence time.
+  - Mail/Docs deterministic extraction now emits `timeline_event` for confirmed
+    meetings/milestones, `todo` for preparation/deadline/follow-up, and skips
+    low-signal personal calendar events.
+  - `backend/app/projects/service.py` now prefers `event_start`/`start` from a
+    Calendar source when computing `occurred_at`.
+- Frontend changes:
+  - Review source evidence can display Calendar name/start/end/location/
+    organizer/attendee summary.
+- Verification to rerun if continuing:
+  - `uv run pytest backend/tests/test_google_connector.py backend/tests/test_connector_golden_dataset.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py backend/tests/test_rag_indexing.py -q`
+  - `uv run ruff check backend/app/connectors/google.py backend/app/agents/mail_document_agent/agent.py backend/app/agents/mail_document_agent/llm.py backend/app/agents/mail_document_agent/service.py backend/app/agent_runtime/evidence_summary.py backend/app/api/v1/review.py backend/app/projects/service.py`
+  - `npm.cmd run lint`
+  - `npm.cmd run build`
+## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 개선
+
+- 변경 배경:
+  - `frontend/src/app/dashboard/page.tsx`에서 `visibleAssignedProjects`가 빈 배열로 하드코딩되어 `내 담당 프로젝트`가 항상 비어 있었다.
+  - `backend/app/api/v1/dashboard.py`의 `today_todos`는 `pending_review` todo ReviewItem을 날짜 필터 없이 내려주고 있었다.
+- 변경:
+  - `backend/app/api/v1/dashboard.py`
+    - 승인된 `ReviewItem(item_type="todo", status="approved")` 중 `payload.due_date`가 오늘(Asia/Seoul 기준) 이후인 항목을 가까운 마감일 순으로 `today_todos`에 반환한다.
+    - `today_todos`에 `priority`를 포함한다.
+    - `assigned_projects`를 추가해 `build_project_memory()` 결과의 프로젝트명, 요약, 근거 수, 활동 수, 검토 대기 수를 반환한다.
+  - `frontend/src/app/dashboard/page.tsx`
+    - 클라이언트 컴포넌트로 전환해 `/api/v1/dashboard`를 로드한다.
+    - 오늘 할 일 카드에 완료 버튼을 추가하고, 클릭 시 현재 대시보드 state에서만 숨긴다.
+    - `내 담당 프로젝트`에 `assigned_projects` 목록을 표시한다.
+- 검증:
+  - `uv run pytest backend/tests/test_dashboard_api.py -q` -> `3 passed`
+  - `uv run ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` -> `All checks passed!`
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` -> `1 passed`
+  - 실제 Docker DB 기준 `2026-05-18`, `2026-05-22` 마감 승인 todo 2건이 수정된 코드에서 반환됨을 확인했다.
+- 주의:
+  - 현재는 별도 “프로젝트 담당자” 모델이 없어서 `내 담당 프로젝트`는 사용자가 볼 수 있는 등록 프로젝트/프로젝트 메모리를 표시한다.
+  - 완료 버튼은 의도대로 서버 상태를 변경하지 않는다. 새로고침하면 API 기준 오늘 이후 할 일이 다시 표시될 수 있다.
+  - 이미 실행 중인 backend 서버는 재시작해야 변경된 `today_todos` 기준이 반영된다.
+
 ## 2026-05-15 프로젝트 근거 기본 선택 및 Slack 원문 시각 보강
 
 - 배경:
@@ -1750,3 +1804,27 @@ tests passed with 53 tests; ruff passed.
   - `npm run lint` → 통과
   - `npm run build` → 통과
   - `npm run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop` → `3 passed`
+
+## 2026-05-15 대시보드 todo 완료 상태 영구 저장
+
+- 변경 요약:
+  - `Todo` 모델과 Postgres schema에 `assignee`, `due_date`, `completed_at`, `completed_by`를 추가했다.
+  - 새 migration은 기존 approved todo ReviewItem payload에서 담당자와 마감일을 backfill한다.
+  - Review 승인 시 todo의 담당자/마감일을 trusted `Todo` row에 저장한다.
+  - `POST /api/v1/todos/{todo_id}/complete`가 완료 시각과 완료자 ID를 저장한다.
+  - 완료 API는 사용자가 접근할 수 없는 permission level의 todo를 403으로 거부한다.
+  - 대시보드 `today_todos`는 approved ReviewItem이 아니라 승인된 미완료 `Todo`를 읽는다.
+  - 완료된 todo는 대시보드에서 빠지고, 프로젝트 activity/timeline item에는 `completed_at`, `completed_by`가 내려간다.
+  - 타임라인에서는 완료된 todo가 `완료` 상태로 보이고, 프로젝트 활동 카드에도 `완료` 배지가 표시된다.
+- 로컬 DB:
+  - `alembic upgrade head`로 Docker Postgres에 `b4b6d9f4d3e1` migration을 적용했다.
+  - 기존 todo 2건의 `assignee`, `due_date` backfill 확인 완료.
+- 검증:
+  - `uv run ... pytest backend/tests/test_project_memory_api.py backend/tests/test_dashboard_api.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_todos_api.py -q` → `36 passed`
+  - `uv run ... ruff check ...` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts timeline-project-date-groups.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `5 passed`
+- 주의:
+  - 실행 중인 backend 서버가 이전 코드로 떠 있으면 새 `/api/v1/todos/{id}/complete` endpoint가 없으므로 서버 재시작이 필요하다.
+  - 현재 임시 Python 테스트 환경은 `.tmp/uv-test-venv`를 사용했다. 기본 `.venv`는 기존 uv Python 경로 문제로 바로 실행되지 않았다.

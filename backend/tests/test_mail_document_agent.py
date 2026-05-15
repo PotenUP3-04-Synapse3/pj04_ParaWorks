@@ -347,6 +347,124 @@ def test_deterministic_mail_document_agent_skips_personal_email() -> None:
     assert result.candidates == []
 
 
+def test_deterministic_mail_document_agent_extracts_calendar_meeting_as_timeline_event() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs-calendar:meeting',
+        messages=[
+            EvidenceMessage(
+                source_id='calendar:team@example.com:event-launch',
+                source_url='https://calendar.google.com/event?eid=event-launch',
+                text=(
+                    'Project Alpha launch milestone meeting\n\n'
+                    'Description: Customer launch date and milestone scope are confirmed.\n'
+                    'Start: 2026-06-10T10:00:00+09:00\n'
+                    'End: 2026-06-10T11:00:00+09:00'
+                ),
+                author='lead@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={
+                    'source_type': 'calendar',
+                    'calendar_id': 'team@example.com',
+                    'calendar_summary': 'Team Calendar',
+                    'event_status': 'confirmed',
+                    'event_start': '2026-06-10T10:00:00+09:00',
+                    'event_end': '2026-06-10T11:00:00+09:00',
+                    'location': 'Meet',
+                    'organizer_email': 'lead@example.com',
+                    'attendee_domains': ['example.com', 'customer.co.kr'],
+                    'event_context_key': 'event-launch:2026-05-13T09:00:00Z',
+                },
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.item_type == 'timeline_event'
+    assert candidate.payload_fields['calendar_id'] == 'team@example.com'
+    assert candidate.payload_fields['calendar_name'] == 'Team Calendar'
+    assert candidate.payload_fields['calendar_start'] == '2026-06-10T10:00:00+09:00'
+    assert candidate.payload_fields['calendar_end'] == '2026-06-10T11:00:00+09:00'
+    assert candidate.payload_fields['calendar_location'] == 'Meet'
+    assert candidate.payload_fields['calendar_organizer'] == 'lead@example.com'
+    assert candidate.payload_fields['calendar_attendee_summary'] == 'example.com, customer.co.kr'
+    assert candidate.payload_fields['event_context_key'] == 'event-launch:2026-05-13T09:00:00Z'
+
+
+def test_deterministic_mail_document_agent_extracts_calendar_preparation_as_todo() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs-calendar:todo',
+        messages=[
+            EvidenceMessage(
+                source_id='calendar:primary:event-prep',
+                source_url='https://calendar.google.com/event?eid=event-prep',
+                text=(
+                    'Customer proposal preparation deadline\n\n'
+                    'Description: Please prepare the proposal deck before the customer meeting.\n'
+                    'Start: 2026-06-03T09:00:00+09:00\n'
+                    'End: 2026-06-03T09:30:00+09:00'
+                ),
+                author='lead@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={
+                    'source_type': 'calendar',
+                    'calendar_id': 'primary',
+                    'calendar_summary': 'Primary Calendar',
+                    'event_status': 'confirmed',
+                    'event_start': '2026-06-03T09:00:00+09:00',
+                    'event_end': '2026-06-03T09:30:00+09:00',
+                    'organizer_email': 'lead@example.com',
+                    'attendee_domains': ['example.com'],
+                    'event_context_key': 'event-prep:2026-05-13T09:00:00Z',
+                },
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+    candidate = result.candidates[0]
+
+    assert candidate.item_type == 'todo'
+    assert candidate.payload_fields['calendar_id'] == 'primary'
+    assert candidate.payload_fields['calendar_start'] == '2026-06-03T09:00:00+09:00'
+
+
+def test_deterministic_mail_document_agent_skips_low_signal_personal_calendar_event() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs-calendar:personal',
+        messages=[
+            EvidenceMessage(
+                source_id='calendar:primary:event-dentist',
+                source_url='https://calendar.google.com/event?eid=event-dentist',
+                text='Dentist appointment\n\nStart: 2026-06-03T09:00:00+09:00',
+                author='me@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={
+                    'source_type': 'calendar',
+                    'calendar_id': 'primary',
+                    'calendar_summary': 'Primary Calendar',
+                    'event_status': 'confirmed',
+                    'event_start': '2026-06-03T09:00:00+09:00',
+                },
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+
+    assert result.candidates == []
+
+
 def test_mail_document_llm_prompt_requires_reviewable_business_decision() -> None:
     packet = EvidencePacket(
         source_type='mail_document',
