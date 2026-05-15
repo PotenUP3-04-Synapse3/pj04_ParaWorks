@@ -2202,17 +2202,23 @@ button:disabled,
   }
 
   .source-bar-row {
-    display: grid;
-    grid-template-columns: minmax(7.25rem, 1fr) 4.5rem minmax(7rem, 1.2fr);
-    align-items: center;
-    gap: 0.45rem;
-    margin-top: 0.95rem;
+    display: block;
+    margin-top: 1.1rem;
     color: var(--ink-subtle);
-    font-size: 0.8rem;
+    font-size: 0.92rem;
   }
 
-  .source-bar-row div {
-    height: 0.25rem;
+  .source-bar-row-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 1.55rem;
+  }
+
+  .source-bar-track {
+    height: 0.28rem;
+    margin-top: 0.45rem;
     border-radius: 999px;
     background: #e5eaf2;
     overflow: hidden;
@@ -2246,6 +2252,7 @@ button:disabled,
     font-weight: 700;
     text-align: right;
     font-variant-numeric: tabular-nums;
+    min-width: 4.5rem;
   }
 
   .keyword-cloud {

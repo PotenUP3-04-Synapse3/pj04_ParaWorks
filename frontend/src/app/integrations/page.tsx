@@ -1221,9 +1221,11 @@ function SourceOperationRow({
   const percent = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
     <div className="source-bar-row" data-testid={`source-operation-${id}`}>
-      <span>{label}</span>
-      <strong data-testid={`source-operation-${id}-count`}>{value.toLocaleString()}</strong>
-      <div>
+      <div className="source-bar-row-header" data-testid={`source-operation-${id}-header`}>
+        <span>{label}</span>
+        <strong data-testid={`source-operation-${id}-count`}>{value.toLocaleString()}</strong>
+      </div>
+      <div className="source-bar-track" data-testid={`source-operation-${id}-bar`}>
         <i className={tone} style={{ width: `${Math.max(percent, value > 0 ? 4 : 0)}%` }} />
       </div>
     </div>

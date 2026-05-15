@@ -233,7 +233,17 @@ test("integration sync shows connector counts", async ({ page }) => {
 
   const sourcePanel = page.getByTestId("source-operations-panel");
   await expect(sourcePanel).toBeVisible();
+  await expect(page.getByTestId("source-operation-slack-header")).toContainText("Slack");
   await expect(page.getByTestId("source-operation-slack-count")).toBeVisible();
+  await expect(page.getByTestId("source-operation-slack-bar")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const header = await page.getByTestId("source-operation-slack-header").boundingBox();
+      const bar = await page.getByTestId("source-operation-slack-bar").boundingBox();
+      if (!header || !bar) return false;
+      return bar.y > header.y + header.height - 1;
+    })
+    .toBe(true);
   await expect(sourcePanel).not.toContainText("%");
 });
 
@@ -259,7 +269,9 @@ test("Gmail source status keeps count separate from the progress bar", async ({ 
   await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
   await page.getByTestId("gmail-card-actions").getByRole("button").first().click();
 
+  await expect(page.getByTestId("source-operation-gmail-header")).toContainText("Gmail");
   await expect(page.getByTestId("source-operation-gmail-count")).toBeVisible();
+  await expect(page.getByTestId("source-operation-gmail-bar")).toBeVisible();
   await expect(page.getByTestId("source-operations-panel")).not.toContainText("%");
 });
 
