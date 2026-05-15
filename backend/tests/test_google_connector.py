@@ -127,7 +127,7 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     event = events[0]
     assert event.source_type == 'gmail'
     assert event.source_id == 'gmail:msg-1'
-    assert event.source_url == 'https://mail.google.com/mail/u/0/#all/thread-1'
+    assert event.source_url == 'https://mail.google.com/mail/u/?authuser=para%40example.com#all/thread-1'
     assert event.title == '계약 검토 일정'
     assert event.body == '계약 검토 일정\n\nFrom: min@example.com\nDate: Fri, 1 May 2026 10:00:00 +0900\n\n계약 검토 일정은 금요일까지 확정합니다.'
     assert event.author == 'min@example.com'
@@ -242,7 +242,7 @@ def test_google_connector_maps_gmail_attachments_to_source_events() -> None:
     ]
     attachment = events[1]
     assert attachment.source_type == 'gmail_attachment'
-    assert attachment.source_url == 'https://mail.google.com/mail/u/0/#all/thread-attach-1'
+    assert attachment.source_url == 'https://mail.google.com/mail/u/?authuser=para%40example.com#all/thread-attach-1'
     assert attachment.title == 'Attachment: proposal.pdf'
     assert attachment.body == (
         'Gmail attachment: proposal.pdf\n'

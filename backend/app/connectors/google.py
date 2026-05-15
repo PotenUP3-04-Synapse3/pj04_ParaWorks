@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from typing import Protocol
+from urllib.parse import quote
 
 import httpx
 
@@ -328,7 +329,11 @@ class GoogleConnector:
         return SourceEvent(
             source_type='gmail',
             source_id=f'gmail:{message_id}',
-            source_url=_gmail_web_url(message_id=message_id, thread_id=thread_id),
+            source_url=_gmail_web_url(
+                message_id=message_id,
+                thread_id=thread_id,
+                account_name=self.config.account_name,
+            ),
             title=subject,
             body='\n\n'.join(part for part in [subject, '\n'.join(header_lines), body_text] if part).strip(),
             author=author,
@@ -609,8 +614,11 @@ def _decode_header_value(value: str) -> str:
     return decoded
 
 
-def _gmail_web_url(*, message_id: str, thread_id: str) -> str:
+def _gmail_web_url(*, message_id: str, thread_id: str, account_name: str) -> str:
     target = thread_id or message_id
+    account_addresses = _email_addresses(account_name)
+    if account_addresses:
+        return f'https://mail.google.com/mail/u/?authuser={quote(account_addresses[0], safe="")}#all/{target}'
     return f'https://mail.google.com/mail/u/0/#all/{target}'
 
 
