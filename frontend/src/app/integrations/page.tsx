@@ -2,31 +2,23 @@
 
 import {
   ArrowRight,
-  Bot,
-  Calendar,
   CheckCircle2,
-  Database,
   ExternalLink,
   FileText,
   KeyRound,
   LockKeyhole,
-  Mail,
-  MessageSquare,
   PlugZap,
   Radio,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useJobStatus } from "@/hooks/useJobStatus";
+import type { ReactNode } from "react";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
-  AgentReviewResponse,
-  AgentLlmPreflight,
   GoogleRuntimeStatus,
   IntegrationConnection,
   IntegrationManifest,
@@ -55,6 +47,7 @@ type SyncProgressState = {
   status: "running" | "complete" | "error";
   stageIndex: number;
   progressPct: number;
+  targetProgressPct: number;
   backgrounded: boolean;
   jobId?: string;
   lastMessage?: string;
@@ -63,36 +56,75 @@ type SyncProgressState = {
 };
 
 type IntegrationRuntimeStatus = SlackRuntimeStatus | GoogleRuntimeStatus;
+type ConnectorLogo = () => ReactNode;
+
+const DEFAULT_INTEGRATION_MANIFESTS: IntegrationManifest[] = [
+  {
+    type: "calendar",
+    display_name: "Google Calendar",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 일정만 분석합니다.",
+  },
+  {
+    type: "drive",
+    display_name: "Google Drive",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 문서만 분석합니다.",
+  },
+  {
+    type: "gmail",
+    display_name: "Gmail",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 메일만 분석합니다.",
+  },
+  {
+    type: "slack",
+    display_name: "Slack",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 원천 데이터만 처리합니다.",
+  },
+];
 
 /**
  * 연동 도구별 시각적 요소(아이콘, 색상, 설명 등) 정의
  */
 const integrationVisuals = {
   slack: {
-    icon: MessageSquare,
-    accent: "bg-[#21132b] text-white",
+    logo: SlackLogo,
     description: "채널 메시지를 수집해 타임라인, 히스토리, 결정 후보를 만듭니다.",
   },
   gmail: {
-    icon: Mail,
-    accent: "bg-blue-50 text-blue-700",
+    logo: GmailLogo,
     description: "메일 흐름을 요약하고 결정, 후속 작업, 히스토리 후보를 추출합니다.",
   },
   drive: {
-    icon: Database,
-    accent: "bg-emerald-50 text-emerald-700",
+    logo: GoogleDriveLogo,
     description: "사내 문서와 버전 정보를 회사 메모리의 근거로 연결합니다.",
   },
   calendar: {
-    icon: Calendar,
-    accent: "bg-amber-50 text-amber-700",
+    logo: GoogleCalendarLogo,
     description: "회의 일정과 시간 맥락을 히스토리 이벤트의 타임라인 근거로 사용합니다.",
   },
 } satisfies Record<
   string,
   {
-    icon: typeof MessageSquare;
-    accent: string;
+    logo: ConnectorLogo;
     description: string;
   }
 >;
@@ -101,8 +133,7 @@ const integrationVisuals = {
  * 정의되지 않은 연동 도구에 대한 기본 시각적 설정
  */
 const fallbackVisual = {
-  icon: PlugZap,
-  accent: "bg-neutral-100 text-neutral-700",
+  logo: FallbackConnectorLogo,
   description: "공통 ingestion contract를 통해 회사 메모리로 연결됩니다.",
 };
 
@@ -121,6 +152,15 @@ function stageIndexFromProgress(progressPct?: number) {
     return 1;
   }
   return 2;
+}
+
+function nextDisplayedProgress(currentPct: number, targetPct: number) {
+  const current = Math.max(0, Math.min(100, Math.round(currentPct)));
+  const target = Math.max(0, Math.min(100, Math.round(targetPct)));
+  if (current >= target) {
+    return current;
+  }
+  return Math.min(target, current + 8);
 }
 
 function countFromSyncMessage(message: string | undefined, key: string) {
@@ -204,25 +244,16 @@ function syncResponseFromRuntimeStatus(
 
 export default function IntegrationsPage() {
   const [manifests, setManifests] = useState<IntegrationManifest[]>([]);
-  const [activeJobId, setActiveJobId] = useState<string>();
-  const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
-  const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
-  const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
-  const [slackLlmPreflight, setSlackLlmPreflight] = useState<AgentLlmPreflight>();
-  const [mailDocsLlmPreflight, setMailDocsLlmPreflight] = useState<AgentLlmPreflight>();
+  const [, setSlackRuntime] = useState<SlackRuntimeStatus>();
   const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
-  const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
+  const [, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
   const [dashboardSummary, setDashboardSummary] = useState<DashboardResponse>();
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
   const [syncProgress, setSyncProgress] = useState<SyncProgressState>();
   const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [llmAgentRunning, setLlmAgentRunning] = useState(false);
-  const [mailDocsLlmAgentRunning, setMailDocsLlmAgentRunning] = useState(false);
-  const [error, setError] = useState<string>();
-  const jobStatus = useJobStatus(activeJobId);
 
   // 초기 로드 시 다양한 연동 정보 및 상태 조회
   useEffect(() => {
@@ -235,9 +266,9 @@ export default function IntegrationsPage() {
           setManifests(manifestResult);
         }
       })
-      .catch((caught) => {
+      .catch(() => {
         if (active) {
-          setError(caught instanceof Error ? caught.message : "연동 정보를 불러오지 못했습니다.");
+          setManifests([]);
         }
       });
 
@@ -297,31 +328,6 @@ export default function IntegrationsPage() {
       .catch(() => {
         if (active) {
           setSlackRuntime(undefined);
-        }
-      });
-
-    // Slack LLM 에이전트 실행 전 검사(예산, 모델 등)
-    apiGet<AgentLlmPreflight>("/api/v1/integrations/slack/agent-review/llm/preflight")
-      .then((preflight) => {
-        if (active) {
-          setSlackLlmPreflight(preflight);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setSlackLlmPreflight(undefined);
-        }
-      });
-
-    apiGet<AgentLlmPreflight>("/api/v1/integrations/mail-docs/agent-review/llm/preflight")
-      .then((preflight) => {
-        if (active) {
-          setMailDocsLlmPreflight(preflight);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setMailDocsLlmPreflight(undefined);
         }
       });
 
@@ -396,6 +402,40 @@ export default function IntegrationsPage() {
     return () => window.clearInterval(timer);
   }, [syncProgress?.connectorType, syncProgress?.status]);
 
+  const displayedProgressPct = syncProgress?.progressPct;
+  const targetProgressPct = syncProgress?.targetProgressPct;
+
+  useEffect(() => {
+    if (syncProgress?.status !== "running") {
+      return undefined;
+    }
+    if (displayedProgressPct === undefined || targetProgressPct === undefined) {
+      return undefined;
+    }
+    if (displayedProgressPct >= targetProgressPct) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setSyncProgress((current) => {
+        if (!current || current.status !== "running") {
+          return current;
+        }
+        return {
+          ...current,
+          progressPct: nextDisplayedProgress(current.progressPct, current.targetProgressPct),
+        };
+      });
+    }, 500);
+
+    return () => window.clearInterval(timer);
+  }, [
+    syncProgress?.connectorType,
+    syncProgress?.status,
+    displayedProgressPct,
+    targetProgressPct,
+  ]);
+
 
   async function refreshDashboardSummary() {
     try {
@@ -463,7 +503,7 @@ export default function IntegrationsPage() {
             ? {
                 ...current,
                 stageIndex: stageIndexFromProgress(latest.progress_pct),
-                progressPct: latest.progress_pct,
+                targetProgressPct: latest.progress_pct,
                 jobId: latest.job_id,
                 lastMessage: latest.message,
               }
@@ -496,7 +536,7 @@ export default function IntegrationsPage() {
             ? {
                 ...current,
                 stageIndex: stageIndexFromProgress(latest.progress_pct),
-                progressPct: latest.progress_pct,
+                targetProgressPct: latest.progress_pct,
                 jobId: latest.job_id,
                 lastMessage: latest.message,
               }
@@ -517,8 +557,6 @@ export default function IntegrationsPage() {
   }
 
   async function markSyncComplete(type: string, result: IntegrationSyncResponse) {
-    setSyncResult(result);
-    setActiveJobId(result.job_id);
     setSyncProgress((current) =>
       current?.connectorType === type
         ? {
@@ -526,6 +564,7 @@ export default function IntegrationsPage() {
             status: "complete",
             stageIndex: SYNC_RUNNING_STAGES.length - 1,
             progressPct: 100,
+            targetProgressPct: 100,
             jobId: result.job_id,
             result,
           }
@@ -535,21 +574,7 @@ export default function IntegrationsPage() {
   }
 
   const visibleManifests = useMemo(
-    () =>
-      manifests.length > 0
-        ? manifests
-        : [
-            {
-              type: "slack",
-              display_name: "Slack",
-              mode: "mock",
-              status: "loading",
-              auth_type: "oauth",
-              required_scopes: [],
-              sync_strategy: "incremental",
-              cost_policy: "변경된 원천 데이터만 처리합니다.",
-            },
-          ],
+    () => (manifests.length > 0 ? manifests : DEFAULT_INTEGRATION_MANIFESTS),
     [manifests],
   );
 
@@ -560,13 +585,13 @@ export default function IntegrationsPage() {
     const displayName = connectorDisplayName(type, manifests);
     const startedAtMs = Date.now();
     setPendingType(type);
-    setError(undefined);
     setSyncProgress({
       connectorType: type,
       displayName,
       status: "running",
       stageIndex: 0,
       progressPct: 0,
+      targetProgressPct: 10,
       backgrounded: false,
     });
     setSyncModalOpen(true);
@@ -585,15 +610,17 @@ export default function IntegrationsPage() {
     try {
       const result = await apiPost<IntegrationSyncResponse>(
         `/api/v1/integrations/${type}/sync`,
-        type === "slack" ? { selected_channel_ids: selectedSlackChannels, run_async: true } : undefined,
+        type === "slack"
+          ? { selected_channel_ids: selectedSlackChannels, run_async: true }
+          : { run_async: true },
       );
-      setActiveJobId(result.job_id);
       setSyncProgress((current) =>
         current?.connectorType === type
           ? {
               ...current,
               jobId: result.job_id,
               progressPct: result.status === "complete" ? 100 : current.progressPct,
+              targetProgressPct: result.status === "complete" ? 100 : Math.max(current.targetProgressPct, 10),
             }
           : current,
       );
@@ -611,7 +638,6 @@ export default function IntegrationsPage() {
         try {
           const recovered = await recoverCompletedSyncAfterLostResponse(type, startedAtMs);
           if (recovered) {
-            setError(undefined);
             await markSyncComplete(type, recovered);
             return;
           }
@@ -620,12 +646,12 @@ export default function IntegrationsPage() {
             recoveryError instanceof Error
               ? recoveryError.message
               : "동기화 작업 상태 확인에 실패했습니다.";
-          setError(recoveryMessage);
           setSyncProgress((current) =>
             current?.connectorType === type
               ? {
                   ...current,
                   status: "error",
+                  targetProgressPct: current.progressPct,
                   errorMessage: recoveryMessage,
                 }
               : current,
@@ -634,25 +660,25 @@ export default function IntegrationsPage() {
         }
       }
       if (isBackgroundSyncContinuation(message)) {
-        setError(undefined);
         setSyncProgress((current) =>
           current?.connectorType === type
             ? {
                 ...current,
                 status: "running",
                 backgrounded: true,
+                targetProgressPct: Math.max(current.targetProgressPct, 10),
                 errorMessage: BACKGROUND_SYNC_CONTINUES_MESSAGE,
               }
             : current,
         );
         return;
       }
-      setError(message);
       setSyncProgress((current) =>
         current?.connectorType === type
           ? {
               ...current,
               status: "error",
+              targetProgressPct: current.progressPct,
               errorMessage: message,
             }
           : current,
@@ -661,18 +687,6 @@ export default function IntegrationsPage() {
       window.clearTimeout(backgroundNoticeTimer);
       setPendingType(undefined);
     }
-  }
-
-  /**
-   * Slack 채널 선택 상태를 토글합니다.
-   */
-  function toggleSlackChannel(channelId: string) {
-    setSelectedSlackChannels((current) => {
-      if (current.includes(channelId)) {
-        return current.filter((selectedChannelId) => selectedChannelId !== channelId);
-      }
-      return [...current, channelId];
-    });
   }
 
   async function refreshBackgroundSyncProgress(type: string) {
@@ -694,6 +708,7 @@ export default function IntegrationsPage() {
               ...current,
               status: "error",
               progressPct: 100,
+              targetProgressPct: 100,
               stageIndex: SYNC_RUNNING_STAGES.length - 1,
               lastMessage: latest.message,
               errorMessage: latest.message || "동기화 작업이 실패했습니다.",
@@ -708,7 +723,7 @@ export default function IntegrationsPage() {
         ? {
             ...current,
             status: "running",
-            progressPct: latest.progress_pct,
+            targetProgressPct: latest.progress_pct,
             stageIndex: stageIndexFromProgress(latest.progress_pct),
             jobId: latest.job_id,
             lastMessage: latest.message,
@@ -730,28 +745,6 @@ export default function IntegrationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncProgress?.connectorType, syncProgress?.status, syncProgress?.backgrounded]);
 
-  function openRuntimeSyncProgress(type: string, runtime: IntegrationRuntimeStatus) {
-    const latest = runtime.latest_sync;
-    if (!latest) return;
-    const displayName = connectorDisplayName(type, manifests);
-    const isComplete = latest.status === "complete";
-    const isError = latest.status === "failed";
-    setActiveJobId(latest.job_id);
-    setSyncProgress({
-      connectorType: type,
-      displayName,
-      status: isComplete ? "complete" : isError ? "error" : "running",
-      stageIndex: stageIndexFromProgress(latest.progress_pct),
-      progressPct: latest.progress_pct,
-      backgrounded: false,
-      jobId: latest.job_id,
-      lastMessage: latest.message,
-      errorMessage: isError ? latest.message : undefined,
-      result: isComplete ? syncResponseFromRuntimeStatus(type, runtime) : undefined,
-    });
-    setSyncModalOpen(true);
-  }
-
   /**
    * 연동 해제(Disconnect)를 실행합니다.
    */
@@ -760,7 +753,6 @@ export default function IntegrationsPage() {
       return;
     }
 
-    setError(undefined);
     try {
       await apiDelete(`/api/v1/integrations/${type}`);
       
@@ -782,52 +774,13 @@ export default function IntegrationsPage() {
         setSlackRuntime(undefined);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "연동 해제에 실패했습니다.");
-    }
-  }
-
-  /**
-   * Slack LLM 에이전트(비용이 발생하는 실제 LLM 호출)를 실행합니다.
-   */
-  async function runSlackLlmAgent() {
-    setLlmAgentRunning(true);
-    setError(undefined);
-
-    try {
-      const result = await apiPost<AgentReviewResponse>("/api/v1/integrations/slack/agent-review/llm", {
-        confirm_paid_run: true,
-      });
-      setAgentResult(result);
-      setSlackLlmPreflight(result.preflight);
-      await refreshDashboardSummary();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "실제 LLM Agent 실행에 실패했습니다.");
-    } finally {
-      setLlmAgentRunning(false);
-    }
-  }
-
-  async function runMailDocsLlmAgent() {
-    setMailDocsLlmAgentRunning(true);
-    setError(undefined);
-
-    try {
-      const result = await apiPost<AgentReviewResponse>("/api/v1/integrations/mail-docs/agent-review/llm", {
-        confirm_paid_run: true,
-      });
-      setAgentResult(result);
-      setMailDocsLlmPreflight(result.preflight);
-      await refreshDashboardSummary();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Mail/Docs LLM Agent 실행에 실패했습니다.");
-    } finally {
-      setMailDocsLlmAgentRunning(false);
+      window.alert(caught instanceof Error ? caught.message : "연동 해제에 실패했습니다.");
     }
   }
 
   async function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
     if (!oauth?.install_url) {
-      setError(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
+      window.alert(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
       return;
     }
 
@@ -848,7 +801,7 @@ export default function IntegrationsPage() {
           .catch(() => undefined);
           
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Slack 직접 연결에 실패했습니다.");
+        window.alert(caught instanceof Error ? caught.message : "Slack 직접 연결에 실패했습니다.");
       }
       return;
     }
@@ -887,14 +840,18 @@ export default function IntegrationsPage() {
         <div className="grid gap-4 sm:grid-cols-2 items-start">
           {visibleManifests.map((manifest) => {
             const visual = integrationVisuals[manifest.type as keyof typeof integrationVisuals] ?? fallbackVisual;
-            const Icon = visual.icon;
+            const Logo = visual.logo;
             const pending = pendingType === manifest.type;
-            const featured = manifest.type === "slack";
             const connection = connections.find((item) => item.connector_type === manifest.type);
             const credentialAvailable = connection?.credential_status === "available";
             const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
             const canStartOAuth = Boolean(oauthInstall?.configured && (!connection || !credentialAvailable));
             const showOAuthStatus = manifest.auth_type === "oauth";
+            const showSyncAction = !showOAuthStatus || Boolean(connection);
+            const showDisconnectAction = Boolean(connection);
+            const showDocumentsAction = manifest.type === "drive";
+            const showMockModeNote = manifest.mode === "mock";
+            const showCardFooter = showMockModeNote || showSyncAction || showDisconnectAction || showDocumentsAction;
             const oauthTheme =
               manifest.type === "slack"
                 ? {
@@ -916,23 +873,19 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col ${
-                  featured ? "border-[#c9b7d5]" : "border-[var(--line-soft)]"
-                }`}
+                className="integration-glass-card min-h-[24.5rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">
-                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${visual.accent}`}>
-                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    <span
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--line-soft)] bg-white shadow-sm"
+                      data-testid={`${manifest.type}-connector-logo`}
+                    >
+                      <Logo />
                     </span>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold">{manifest.display_name}</h3>
-                        {featured ? (
-                          <span className="rounded-full bg-[var(--workspace-accent)] px-2 py-0.5 text-xs font-bold text-[#13231f]">
-                            우선순위
-                          </span>
-                        ) : null}
                       </div>
                       <p className="mt-1 text-xs font-semibold text-[var(--workspace-rail-active)]">
                         {manifest.mode} · {manifest.sync_strategy}
@@ -975,9 +928,14 @@ export default function IntegrationsPage() {
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`rounded-full bg-[var(--glass-elevated)] px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
-                          {connection ? (credentialAvailable ? connection.status : "token missing") : "ready"}
-                        </span>
+                        {connection ? (
+                          <span
+                            data-testid={`${manifest.type}-oauth-state-pill`}
+                            className={`rounded-full bg-[var(--glass-elevated)] px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}
+                          >
+                            {credentialAvailable ? connection.status : "token missing"}
+                          </span>
+                        ) : null}
                         {canStartOAuth ? (
                           <button
                             type="button"
@@ -1002,41 +960,43 @@ export default function IntegrationsPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-auto pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)]">
-                  <span className="text-xs text-[var(--ink-muted)]">
-                    {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
-                  </span>
-                  <div data-testid={`${manifest.type}-card-actions`} className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void startSync(manifest.type)}
-                      disabled={Boolean(pendingType)}
-                      className="liquid-primary inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
-                    >
-                      <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                      {pending ? "동기화 중" : "동기화"}
-                    </button>
-                    {connection ? (
+                {showCardFooter ? (
+                  <div className="mt-3 flex flex-col gap-2 border-t border-[var(--line-soft)] pt-3">
+                    {showMockModeNote ? <span className="text-xs text-[var(--ink-muted)]">현재 mock 데이터 사용</span> : null}
+                    <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-9 flex-wrap content-end items-center justify-end gap-1.5">
+                      {showSyncAction ? (
+                        <button
+                          type="button"
+                          onClick={() => void startSync(manifest.type)}
+                          disabled={Boolean(pendingType)}
+                          className="liquid-primary inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+                        >
+                          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                          {pending ? "동기화 중" : "동기화"}
+                        </button>
+                      ) : null}
+                      {showDisconnectAction ? (
                       <button
                         type="button"
                         onClick={() => void disconnect(manifest.type)}
-                        className="liquid-control inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
+                        className="liquid-control inline-flex h-9 min-w-[4.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                         해제
                       </button>
                     ) : null}
-                    {manifest.type === "drive" ? (
+                    {showDocumentsAction ? (
                       <a
                         href="/documents"
-                        className="liquid-control inline-flex h-9 items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
+                        className="liquid-control inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold text-[var(--ink-strong)]"
                       >
                         <FileText className="h-4 w-4" aria-hidden="true" />
-                        문서 현황 보기 →
+                        문서 현황
                       </a>
                     ) : null}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </article>
             );
           })}
@@ -1046,84 +1006,13 @@ export default function IntegrationsPage() {
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-[var(--workspace-rail-active)]" aria-hidden="true" />
-              <h3 className="text-sm font-semibold">작업 스트림</h3>
+              <h3 className="text-sm font-semibold">소스별 연동 현황</h3>
             </div>
-            <p className="mt-1 text-xs text-[var(--ink-muted)]">동기화와 Review 후보 생성 상태</p>
+            <p className="mt-1 text-xs text-[var(--ink-muted)]">수집된 근거의 소스 분포</p>
           </div>
 
-          <div className="space-y-3 p-4">
+          <div className="p-4">
             <SourceOperationsPanel summary={dashboardSummary} />
-
-            {syncProgress && !syncModalOpen ? (
-              <SyncProgressSummaryCard progress={syncProgress} onOpen={() => setSyncModalOpen(true)} />
-            ) : null}
-
-            {!syncProgress && slackRuntime?.latest_sync && ["queued", "running"].includes(slackRuntime.latest_sync.status) ? (
-              <RuntimeSyncProgressSummaryCard
-                displayName="Slack"
-                latest={slackRuntime.latest_sync}
-                onOpen={() => openRuntimeSyncProgress("slack", slackRuntime)}
-              />
-            ) : null}
-
-            {slackRuntime ? (
-              <SlackRuntimeStatusPanel
-                status={slackRuntime}
-                llmPreflight={slackLlmPreflight}
-                llmAgentRunning={llmAgentRunning}
-                selectedChannelIds={selectedSlackChannels}
-                onRunLlmAgent={runSlackLlmAgent}
-                onToggleChannel={toggleSlackChannel}
-              />
-            ) : null}
-            <GoogleRuntimeStatusList statuses={googleRuntimeByType} />
-            <AgentLlmPreflightPanel
-              title="Mail/Docs LLM 테스트"
-              preflight={mailDocsLlmPreflight}
-              agentRunning={mailDocsLlmAgentRunning}
-              onRunAgent={runMailDocsLlmAgent}
-            />
-
-            {error ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
-            ) : null}
-
-            {agentResult ? (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
-                <p className="font-semibold">{formatAgentName(agentResult.agent_name)} 완료</p>
-                <p className="mt-1">Review Queue 후보 {agentResult.created_review_items}개를 생성했습니다.</p>
-              </div>
-            ) : null}
-
-            {syncResult ? (
-              <div className="space-y-3 text-sm">
-                <div className="rounded-lg bg-[var(--glass-strong)] p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Job</p>
-                  <p className="mt-1 break-all font-medium">{syncResult.job_id}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3" data-testid="sync-result-metrics">
-                  <ResultMetric label="Fetched" value={syncResult.fetched_events} />
-                  <ResultMetric label="새 검토 항목" value={syncResult.created_review_items} />
-                  <ResultMetric label="검토 대기" value={syncResult.pending_review_count} />
-                  <ResultMetric label="Skipped" value={syncResult.skipped_events} />
-                  <ResultMetric label="Status" value={syncResult.status} />
-                </div>
-                <ParserQualityBreakdown counts={syncResult.parser_status_counts} />
-                <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
-                  <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--ink-muted)]">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    SSE status
-                  </p>
-                  <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-md bg-[#21132b] p-3 text-xs leading-5 text-white/82">
-                    {jobStatus || syncResult.status}
-                  </pre>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-[var(--line-soft)] bg-[var(--glass-strong)] p-5 text-sm leading-6 text-[var(--ink-muted)]">
-                왼쪽 도구에서 동기화를 실행하면 작업 스트림과 생성된 Review 후보 수를 확인할 수 있습니다.
-              </div>
-            )}
           </div>
         </aside>
       </section>
@@ -1136,86 +1025,6 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
-    </div>
-  );
-}
-
-function SyncProgressSummaryCard({
-  progress,
-  onOpen,
-}: {
-  progress: SyncProgressState;
-  onOpen: () => void;
-}) {
-  const currentStage = SYNC_RUNNING_STAGES[progress.stageIndex] ?? SYNC_RUNNING_STAGES[0];
-  const isComplete = progress.status === "complete";
-  const isError = progress.status === "error";
-  const toneClass = isComplete
-    ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-    : isError
-      ? "border-red-200 bg-red-50 text-red-950"
-      : "border-amber-200 bg-amber-50 text-amber-950";
-  const subTextClass = isComplete ? "text-emerald-900" : isError ? "text-red-900" : "text-amber-900";
-  const title = isComplete
-    ? `${progress.displayName} 동기화 완료`
-    : isError
-      ? `${progress.displayName} 동기화 실패`
-      : `${progress.displayName} 동기화 진행 중`;
-  return (
-    <div
-      data-testid="background-sync-progress"
-      className={`rounded-lg border p-3 text-sm ${toneClass}`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">{title}</p>
-          <p className={`mt-1 text-xs leading-5 ${subTextClass}`}>{currentStage}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-current bg-white px-3 text-xs font-bold hover:bg-white/70"
-        >
-          {progress.status === "running" ? "진행 창 열기" : "결과 보기"}
-        </button>
-      </div>
-      <ProgressBar progressPct={progress.progressPct} />
-      {progress.lastMessage ? <p className={`mt-2 break-all text-xs ${subTextClass}`}>{progress.lastMessage}</p> : null}
-    </div>
-  );
-}
-
-function RuntimeSyncProgressSummaryCard({
-  displayName,
-  latest,
-  onOpen,
-}: {
-  displayName: string;
-  latest: NonNullable<SlackRuntimeStatus["latest_sync"]>;
-  onOpen: () => void;
-}) {
-  return (
-    <div
-      data-testid="runtime-sync-progress"
-      className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">{displayName} 동기화 진행 중</p>
-          <p className="mt-1 text-xs leading-5 text-blue-900">
-            {SYNC_RUNNING_STAGES[stageIndexFromProgress(latest.progress_pct)]}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-blue-300 bg-white px-3 text-xs font-bold text-blue-950 hover:bg-blue-100"
-        >
-          진행 창 열기
-        </button>
-      </div>
-      <ProgressBar progressPct={latest.progress_pct} />
-      {latest.message ? <p className="mt-2 break-all text-xs text-blue-900">{latest.message}</p> : null}
     </div>
   );
 }
@@ -1248,6 +1057,8 @@ function SyncProgressModal({
   const isComplete = progress.status === "complete";
   const isError = progress.status === "error";
   const result = progress.result;
+  const createdReviewItems = result?.created_review_items ?? 0;
+  const pendingReviewCount = result?.pending_review_count ?? 0;
 
   return (
     <div
@@ -1316,12 +1127,12 @@ function SyncProgressModal({
         {result ? (
           <>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <ResultMetric label="새 검토 항목" value={`${result.created_review_items.toLocaleString()}개`} />
-              <ResultMetric label="검토 대기" value={`${result.pending_review_count.toLocaleString()}개`} />
+              <ResultMetric label="새 검토 항목" value={`${createdReviewItems.toLocaleString()}개`} />
+              <ResultMetric label="검토 대기" value={`${pendingReviewCount.toLocaleString()}개`} />
             </div>
             <p className="mt-3 text-sm font-medium text-[var(--ink-strong)]">
-              새 검토 항목 {result.created_review_items.toLocaleString()}개, 검토 대기{" "}
-              {result.pending_review_count.toLocaleString()}개입니다.
+              새 검토 항목 {createdReviewItems.toLocaleString()}개, 검토 대기{" "}
+              {pendingReviewCount.toLocaleString()}개입니다.
             </p>
           </>
         ) : null}
@@ -1394,383 +1205,154 @@ function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
     (counts.slack ?? 0) +
     (counts.gmail ?? 0) +
     (counts.drive ?? 0) +
-    (counts.calendar ?? 0) +
-    (counts.other ?? 0);
+    (counts.calendar ?? 0);
 
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
+    <div
+      data-testid="source-operations-panel"
+      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3"
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <h4 className="text-sm font-semibold text-[var(--ink-strong)]">소스별 연동 현황</h4>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">수집량과 커넥터별 비중</p>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">수집된 근거 수</p>
         </div>
         <span className="rounded-full bg-[var(--glass-strong)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
           총 {total.toLocaleString()}
         </span>
       </div>
       <div className="mt-3 space-y-2">
-        <SourceOperationRow label="Slack" value={counts.slack ?? 0} total={total} tone="purple" />
-        <SourceOperationRow label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
-        <SourceOperationRow label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
-        <SourceOperationRow label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
-        <SourceOperationRow label="기타" value={counts.other ?? 0} total={total} tone="gray" />
+        <SourceOperationRow id="slack" label="Slack" value={counts.slack ?? 0} total={total} tone="purple" />
+        <SourceOperationRow id="gmail" label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
+        <SourceOperationRow id="drive" label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
+        <SourceOperationRow id="calendar" label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
       </div>
     </div>
   );
 }
 
-function SourceOperationRow({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
+function SourceOperationRow({
+  id,
+  label,
+  value,
+  total,
+  tone,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  total: number;
+  tone: string;
+}) {
   const percent = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="source-bar-row">
-      <span>{label}</span>
-      <div>
+    <div className="source-bar-row" data-testid={`source-operation-${id}`}>
+      <div className="source-bar-row-header" data-testid={`source-operation-${id}-header`}>
+        <span>{label}</span>
+        <strong data-testid={`source-operation-${id}-count`}>{value.toLocaleString()}</strong>
+      </div>
+      <div className="source-bar-track" data-testid={`source-operation-${id}-bar`}>
         <i className={tone} style={{ width: `${Math.max(percent, value > 0 ? 4 : 0)}%` }} />
       </div>
-      <strong>{value.toLocaleString()}</strong>
-      <em>({percent}%)</em>
     </div>
   );
 }
 
-/**
- * 파싱 품질(Body 파싱 성공 여부 등) 통계를 보여주는 컴포넌트
- */
-function ParserQualityBreakdown({ counts }: { counts?: Record<string, number> }) {
-  const rows = parserQualityRows(counts);
-  if (rows.length === 0) {
-    return null;
-  }
-
-  const total = rows.reduce((sum, row) => sum + row.count, 0);
-
+function SlackLogo() {
   return (
-    <div
-      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-xs"
-      data-testid="sync-parser-quality"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-semibold text-[var(--ink-strong)]">Parser quality</p>
-        <span className="text-[var(--ink-muted)]">{total.toLocaleString()} sources</span>
-      </div>
-      <div className="mt-2 grid gap-2">
-        {rows.map((row) => (
-          <div key={row.status} className="flex items-center justify-between gap-3 rounded-md bg-[var(--glass-strong)] px-2 py-1.5">
-            <span className="font-medium">{row.label}</span>
-            <span className={`rounded-full px-2 py-0.5 font-semibold ${row.className}`}>
-              {row.count.toLocaleString()}
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 leading-5 text-[var(--ink-muted)]">
-        Metadata-only and unsupported files remain reviewable, but they are not treated as full body-parsed evidence.
-      </p>
-    </div>
+    <svg className="h-7 w-7" viewBox="0 0 127 127" aria-hidden="true" data-logo-source="official-slack-mark">
+      <path
+        d="M27.2 80c0 7.3-5.9 13.2-13.2 13.2C6.7 93.2.8 87.3.8 80c0-7.3 5.9-13.2 13.2-13.2h13.2V80zm6.6 0c0-7.3 5.9-13.2 13.2-13.2 7.3 0 13.2 5.9 13.2 13.2v33c0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V80z"
+        fill="#E01E5A"
+      />
+      <path
+        d="M47 27c-7.3 0-13.2-5.9-13.2-13.2C33.8 6.5 39.7.6 47 .6c7.3 0 13.2 5.9 13.2 13.2V27H47zm0 6.7c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H13.9C6.6 60.1.7 54.2.7 46.9c0-7.3 5.9-13.2 13.2-13.2H47z"
+        fill="#36C5F0"
+      />
+      <path
+        d="M99.9 46.9c0-7.3 5.9-13.2 13.2-13.2 7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H99.9V46.9zm-6.6 0c0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V13.8C66.9 6.5 72.8.6 80.1.6c7.3 0 13.2 5.9 13.2 13.2v33.1z"
+        fill="#2EB67D"
+      />
+      <path
+        d="M80.1 99.8c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V99.8h13.2zm0-6.6c-7.3 0-13.2-5.9-13.2-13.2 0-7.3 5.9-13.2 13.2-13.2h33.1c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H80.1z"
+        fill="#ECB22E"
+      />
+    </svg>
   );
 }
 
-function SlackRuntimeStatusPanel({
-  status,
-  llmPreflight,
-  llmAgentRunning,
-  selectedChannelIds,
-  onRunLlmAgent,
-  onToggleChannel,
-}: {
-  status: SlackRuntimeStatus;
-  llmPreflight?: AgentLlmPreflight;
-  llmAgentRunning: boolean;
-  selectedChannelIds: string[];
-  onRunLlmAgent: () => void;
-  onToggleChannel: (channelId: string) => void;
-}) {
-  const channelOptions =
-    status.channel_options.length > 0
-      ? status.channel_options
-      : status.configured_channel_ids.map((channelId) => ({
-          id: channelId,
-          name: channelId,
-          is_selected: true,
-          is_configured: true,
-        }));
-  const channelLabel = selectedChannelIds.length > 0 ? selectedChannelIds.join(", ") : "선택 채널 없음";
-  const latestSync = status.latest_sync;
-  const syncSummary = status.latest_sync_summary;
-
+function GmailLogo() {
   return (
-    <div
-      data-testid="slack-runtime-status"
-      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--ink-strong)]">Slack 운영 상태</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">
-            상태 조회는 sync나 LLM 호출을 실행하지 않습니다.
-          </p>
-        </div>
-        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-          <span>{status.mode}</span>
-        </span>
-      </div>
-      <div className="mt-3 grid gap-2 text-xs">
-        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">Sync 대상</span>
-          <span className="max-w-[210px] truncate font-semibold">{channelLabel}</span>
-        </div>
-        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">연결</span>
-          <span className="font-semibold">{status.connection_status}</span>
-        </div>
-        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">자격 증명</span>
-          <span className="font-semibold">{status.credential_status}</span>
-        </div>
-      </div>
-
-      {channelOptions.length > 0 ? (
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between gap-3 text-xs">
-            <span className="font-semibold text-[var(--ink-strong)]">채널 선택</span>
-            <span className="text-[var(--ink-muted)]">{selectedChannelIds.length.toLocaleString()}개 선택</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {channelOptions.map((channel) => {
-              const selected = selectedChannelIds.includes(channel.id);
-              return (
-                <button
-                  key={channel.id}
-                  type="button"
-                  onClick={() => onToggleChannel(channel.id)}
-                  className={`liquid-control inline-flex h-8 items-center gap-2 rounded-[18px] px-3 text-xs font-semibold ${
-                    selected ? "text-[var(--ink-strong)]" : "text-[var(--ink-muted)] opacity-80"
-                  }`}
-                  aria-pressed={selected}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      selected ? "bg-[var(--workspace-rail-active)]" : "bg-[var(--line-strong)]"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  {channel.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <p className="mt-3 rounded-md border border-dashed border-[var(--line-soft)] px-3 py-2 text-xs text-[var(--ink-muted)]">
-          Slack 채널 ID를 설정하면 여기서 sync 대상을 선택할 수 있습니다.
-        </p>
-      )}
-
-      <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-semibold">Agent 연결</span>
-          <span className="font-semibold">
-            {status.agent_bridge.ready_for_agent_test ? "테스트 가능" : "sync 필요"}
-          </span>
-        </div>
-        <p className="mt-1 text-[var(--ink-muted)]">
-          Slack source {status.agent_bridge.slack_source_count.toLocaleString()}개 · 대기 review{" "}
-          {status.agent_bridge.pending_review_count.toLocaleString()}개
-        </p>
-      </div>
-
-      {llmPreflight ? (
-        <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold">실제 LLM 테스트</span>
-            <span className="font-semibold">{llmPreflight.budget_status}</span>
-          </div>
-          <p className="mt-1 text-[var(--ink-muted)]">
-            {llmPreflight.model_name ?? "모델 미설정"} · {llmPreflight.available_providers.join(" → ") || "API key 필요"}
-          </p>
-          <p className="mt-1 text-[var(--ink-muted)]">
-            예상 {llmPreflight.estimated_total_tokens.toLocaleString()} tokens · $
-            {llmPreflight.estimated_cost_usd.toFixed(6)}
-            {llmPreflight.budget_limit_usd ? ` / $${llmPreflight.budget_limit_usd}` : ""}
-          </p>
-          <p className="mt-1 text-[var(--ink-muted)]">
-            중요 evidence {llmPreflight.evidence_message_count.toLocaleString()} /{" "}
-            {llmPreflight.max_evidence_messages.toLocaleString()}개 사용
-            {llmPreflight.source_window ? ` · ${llmPreflight.source_window}` : ""}
-          </p>
-          <button
-            type="button"
-            onClick={() => onRunLlmAgent()}
-            disabled={llmAgentRunning || llmPreflight.action !== "run"}
-            className="liquid-primary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
-          >
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            {llmAgentRunning ? "실제 LLM 실행 중" : "실제 LLM 테스트 실행"}
-          </button>
-          {llmPreflight.action !== "run" ? (
-            <p className="mt-2 text-[var(--ink-muted)]">상태: {llmPreflight.reason}</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {status.last_error ? (
-        <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-          <div className="flex items-center justify-between gap-3 font-semibold">
-            <span>Slack 오류</span>
-            <span>{status.last_error.code}</span>
-          </div>
-          <p className="mt-1">{status.last_error.action_hint}</p>
-        </div>
-      ) : null}
-
-      {latestSync ? (
-        <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold">최근 sync</span>
-            <span className="font-semibold">{latestSync.status}</span>
-          </div>
-          <p className="mt-1 truncate text-[var(--ink-muted)]">{latestSync.message}</p>
-          {syncSummary ? (
-            <p className="mt-1 text-[var(--ink-muted)]">
-              수집 {syncSummary.fetched_events.toLocaleString()} · 후보{" "}
-              {syncSummary.created_review_items.toLocaleString()} · 중복{" "}
-              {syncSummary.skipped_events.toLocaleString()}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <svg className="h-7 w-8" viewBox="52 42 88 66" aria-hidden="true" data-logo-source="official-gmail-2020">
+      <path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6" />
+      <path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15" />
+      <path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2" />
+      <path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92" />
+      <path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2" />
+    </svg>
   );
 }
 
-function AgentLlmPreflightPanel({
-  title,
-  preflight,
-  agentRunning,
-  onRunAgent,
-}: {
-  title: string;
-  preflight?: AgentLlmPreflight;
-  agentRunning: boolean;
-  onRunAgent: () => void;
-}) {
-  if (!preflight) {
-    return null;
-  }
-
+function GoogleDriveLogo() {
   return (
-    <div className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--ink-strong)]">{title}</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">
-            명시 확인 후에만 유료 LLM을 실행합니다. Mail/Docs는 GPT-5.4 mini로 업무 후보를 생성합니다.
-          </p>
-        </div>
-        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-          <span>{preflight.budget_status}</span>
-        </span>
-      </div>
-      <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-        <p className="font-semibold">
-          {preflight.model_name ?? "모델 미설정"} · {preflight.available_providers.join(" → ") || "API key 필요"}
-        </p>
-        <p className="mt-1 text-[var(--ink-muted)]">
-          예상 {preflight.estimated_total_tokens.toLocaleString()} tokens · $
-          {preflight.estimated_cost_usd.toFixed(6)}
-          {preflight.budget_limit_usd ? ` / $${preflight.budget_limit_usd}` : ""}
-        </p>
-        <p className="mt-1 text-[var(--ink-muted)]">
-          evidence {preflight.evidence_message_count.toLocaleString()} /{" "}
-          {preflight.max_evidence_messages.toLocaleString()}개
-          {preflight.source_window ? ` · ${preflight.source_window}` : ""}
-        </p>
-        <button
-          type="button"
-          onClick={() => onRunAgent()}
-          disabled={agentRunning || preflight.action !== "run"}
-          className="liquid-primary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
-        >
-          <Bot className="h-4 w-4" aria-hidden="true" />
-          {agentRunning ? "LLM 실행 중" : title.includes("Mail/Docs") ? "GPT-5.4 mini로 업무 후보 생성" : "유료 LLM 실행"}
-        </button>
-        {preflight.action !== "run" ? (
-          <p className="mt-2 text-[var(--ink-muted)]">상태: {preflight.reason}</p>
-        ) : null}
-      </div>
-    </div>
+    <svg className="h-7 w-8" viewBox="0 0 87.3 78" aria-hidden="true" data-logo-source="official-google-drive-2020">
+      <path
+        d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z"
+        fill="#0066da"
+      />
+      <path
+        d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z"
+        fill="#00ac47"
+      />
+      <path
+        d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z"
+        fill="#ea4335"
+      />
+      <path
+        d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z"
+        fill="#00832d"
+      />
+      <path
+        d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z"
+        fill="#2684fc"
+      />
+      <path
+        d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z"
+        fill="#ffba00"
+      />
+    </svg>
   );
 }
 
-function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, GoogleRuntimeStatus> }) {
-  const rows = GOOGLE_CONNECTOR_TYPES.map((connectorType) => statuses[connectorType]).filter(Boolean);
-  if (rows.length === 0) {
-    return null;
-  }
-
+function GoogleCalendarLogo() {
   return (
-    <div
-      data-testid="google-runtime-status"
-      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--ink-strong)]">Google 운영 상태</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">Gmail, Drive, Calendar 상태를 한 번에 확인합니다.</p>
-        </div>
-        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-          <span>{rows[0]?.mode ?? "mock"}</span>
-        </span>
-      </div>
-      <div className="mt-3 space-y-2">
-        {rows.map((status) => (
-          <div key={status.connector_type} className="glass-row rounded-md px-2 py-2 text-xs">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-semibold">{formatConnectorName(status.connector_type)}</span>
-              <span className="font-semibold">{status.connection_status}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between gap-3 text-[var(--ink-muted)]">
-              <span className="max-w-[180px] truncate">{status.account_name ?? "계정 미연결"}</span>
-              <span>{status.credential_status}</span>
-            </div>
-            {status.latest_sync ? (
-              <p className="mt-1 truncate text-[var(--ink-muted)]">
-                최근 sync: {status.latest_sync.status} · {status.latest_sync.message}
-              </p>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
+    <svg className="h-7 w-7" viewBox="0 0 200 200" aria-hidden="true" data-logo-source="official-google-calendar-2020">
+      <g transform="translate(3.75 3.75)">
+        <path
+          fill="#FFFFFF"
+          d="M148.882,43.618l-47.368-5.263l-57.895,5.263L38.355,96.25l5.263,52.632l52.632,6.579l52.632-6.579l5.263-53.947L148.882,43.618z"
+        />
+        <path
+          fill="#1A73E8"
+          d="M65.211,125.276c-3.934-2.658-6.658-6.539-8.145-11.671l9.132-3.763c0.829,3.158,2.276,5.605,4.342,7.342c2.053,1.737,4.553,2.592,7.474,2.592c2.987,0,5.553-0.908,7.697-2.724s3.224-4.132,3.224-6.934c0-2.868-1.132-5.211-3.395-7.026s-5.105-2.724-8.5-2.724h-5.276v-9.039H76.5c2.921,0,5.382-0.789,7.382-2.368c2-1.579,3-3.737,3-6.487c0-2.447-0.895-4.395-2.684-5.855s-4.053-2.197-6.803-2.197c-2.684,0-4.816,0.711-6.395,2.145s-2.724,3.197-3.447,5.276l-9.039-3.763c1.197-3.395,3.395-6.395,6.618-8.987c3.224-2.592,7.342-3.895,12.342-3.895c3.697,0,7.026,0.711,9.974,2.145c2.947,1.434,5.263,3.421,6.934,5.947c1.671,2.539,2.5,5.382,2.5,8.539c0,3.224-0.776,5.947-2.329,8.184c-1.553,2.237-3.461,3.947-5.724,5.145v0.539c2.987,1.25,5.421,3.158,7.342,5.724c1.908,2.566,2.868,5.632,2.868,9.211s-0.908,6.776-2.724,9.579c-1.816,2.803-4.329,5.013-7.513,6.618c-3.197,1.605-6.789,2.421-10.776,2.421C73.408,129.263,69.145,127.934,65.211,125.276z"
+        />
+        <path fill="#1A73E8" d="M121.25,79.961l-9.974,7.25l-5.013-7.605l17.987-12.974h6.895v61.197h-9.895L121.25,79.961z" />
+        <path fill="#EA4335" d="M148.882,196.25l47.368-47.368l-23.684-10.526l-23.684,10.526l-10.526,23.684L148.882,196.25z" />
+        <path fill="#34A853" d="M33.092,172.566l10.526,23.684h105.263v-47.368H43.618L33.092,172.566z" />
+        <path
+          fill="#4285F4"
+          d="M12.039-3.75C3.316-3.75-3.75,3.316-3.75,12.039v136.842l23.684,10.526l23.684-10.526V43.618h105.263l10.526-23.684L148.882-3.75H12.039z"
+        />
+        <path fill="#188038" d="M-3.75,148.882v31.579c0,8.724,7.066,15.789,15.789,15.789h31.579v-47.368H-3.75z" />
+        <path fill="#FBBC04" d="M148.882,43.618v105.263h47.368V43.618l-23.684-10.526L148.882,43.618z" />
+        <path fill="#1967D2" d="M196.25,43.618V12.039c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368H196.25z" />
+      </g>
+    </svg>
   );
 }
 
-function parserQualityRows(counts?: Record<string, number>) {
-  const statusLabels: Record<string, string> = {
-    parsed: "Parsed",
-    metadata_only: "Metadata only",
-    unsupported: "Unsupported",
-  };
-  const statusClasses: Record<string, string> = {
-    parsed: "bg-emerald-50 text-emerald-800",
-    metadata_only: "bg-amber-50 text-amber-800",
-    unsupported: "bg-red-50 text-red-800",
-  };
-
-  return Object.entries(counts ?? {})
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => {
-      const order = ["parsed", "metadata_only", "unsupported"];
-      const leftIndex = order.indexOf(left);
-      const rightIndex = order.indexOf(right);
-      return (leftIndex === -1 ? order.length : leftIndex) - (rightIndex === -1 ? order.length : rightIndex);
-    })
-    .map(([status, count]) => ({
-      status,
-      count,
-      label: statusLabels[status] ?? status,
-      className: statusClasses[status] ?? "bg-[var(--glass-strong)] text-[var(--ink-strong)]",
-    }));
+function FallbackConnectorLogo() {
+  return <PlugZap className="h-5 w-5 text-[var(--workspace-accent)]" aria-hidden="true" />;
 }
 
 function formatScopes(scopes: string[]) {
@@ -1781,16 +1363,6 @@ function formatScopes(scopes: string[]) {
     return scopes.join(", ");
   }
   return `${scopes[0]}, ${scopes[1]} 외 ${scopes.length - 2}개`;
-}
-
-function formatAgentName(agentName: string) {
-  if (agentName === "slack_agent") {
-    return "Slack Agent";
-  }
-  if (agentName === "mail_document_agent") {
-    return "Mail/Docs Agent";
-  }
-  return agentName;
 }
 
 function connectorDisplayName(type: string, manifests: IntegrationManifest[]) {

@@ -7,7 +7,10 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from email.header import decode_header, make_header
+from email.utils import parseaddr
 from typing import Protocol
+from urllib.parse import quote
 from urllib.parse import quote
 
 import httpx
@@ -383,7 +386,11 @@ class GoogleConnector:
         return SourceEvent(
             source_type='gmail',
             source_id=f'gmail:{message_id}',
-            source_url=f'https://mail.google.com/mail/u/0/#all/{message_id}',
+            source_url=_gmail_web_url(
+                message_id=message_id,
+                thread_id=thread_id,
+                account_name=self.config.account_name,
+            ),
             title=subject,
             body='\n\n'.join(part for part in [subject, '\n'.join(header_lines), body_text] if part).strip(),
             author=author,
@@ -665,8 +672,32 @@ def _header_value(message: dict, name: str) -> str | None:
     headers = (message.get('payload') or {}).get('headers') or []
     for header in headers:
         if str(header.get('name', '')).lower() == name.lower():
-            return str(header.get('value') or '')
+            return _decode_header_value(str(header.get('value') or ''))
     return None
+
+
+def _decode_header_value(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return ''
+    try:
+        decoded = str(make_header(decode_header(value)))
+    except (LookupError, UnicodeDecodeError, ValueError):
+        return value
+    display_name, address = parseaddr(decoded)
+    if address and display_name:
+        return f'{display_name} <{address}>'
+    if address and decoded.strip() == address:
+        return address
+    return decoded
+
+
+def _gmail_web_url(*, message_id: str, thread_id: str, account_name: str) -> str:
+    target = thread_id or message_id
+    account_addresses = _email_addresses(account_name)
+    if account_addresses:
+        return f'https://mail.google.com/mail/u/?authuser={quote(account_addresses[0], safe="")}#all/{target}'
+    return f'https://mail.google.com/mail/u/0/#all/{target}'
 
 
 def _gmail_participants(*, author: str | None, to_header: str, cc_header: str) -> list[str]:
