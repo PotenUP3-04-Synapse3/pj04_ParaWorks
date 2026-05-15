@@ -748,6 +748,39 @@ def test_approved_slack_llm_project_routing_item_appears_in_project_timeline(
         for timeline_item in project_payload['timeline_items']
     )
 
+def test_pending_mail_document_project_routed_item_counts_on_project_card(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Gmail and Drive work'))
+    db_session.add(
+        ReviewItem(
+            item_type='todo',
+            payload={
+                'title': 'Reply with Drive plan',
+                'priority': 'high',
+                'priority_reason': 'Customer requested the plan.',
+                'agent_name': 'mail_document_agent',
+                'project_assignment_method': 'llm_tool',
+                'project_key': 'project-alpha',
+                'project_name': 'Project Alpha',
+                'source_ids': ['gmail:message-1', 'drive:file-1'],
+            },
+            source_links=['https://mail.google.com/mail/u/0/#inbox/message-1', 'https://drive.mock/file-1'],
+            source_snippets=['Customer requested the plan.', 'Drive plan evidence.'],
+            confidence_score=0.86,
+            permission_level='internal',
+            status='pending_review',
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    project = next(project for project in response.json()['projects'] if project['project_key'] == 'project-alpha')
+    assert project['pending_review_count'] == 1
+
 
 def test_projects_api_hides_unregistered_approved_project_keys(
     client: TestClient,

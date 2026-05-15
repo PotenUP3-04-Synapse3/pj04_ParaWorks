@@ -11,6 +11,7 @@ type TimelineHistory = {
   id: string;
   createdAt: string;
   time: string;
+  createdAt: string;
   source: TimelineSource;
   title: string;
   summary: string;
@@ -67,6 +68,7 @@ export default function TimelinePage() {
   );
   const selectedHistory = selectedProject?.histories.find((history) => history.id === selectedHistoryId);
   const historyCount = selectedProject?.histories.length ?? 0;
+  const historyGroups = selectedProject ? groupHistoriesByDate(selectedProject.histories) : [];
 
   if (loading || !selectedProject) {
     return (
@@ -129,7 +131,7 @@ export default function TimelinePage() {
           </div>
 
           <div className="mt-4 space-y-5">
-            {selectedProject.histories.length > 0 ? groupHistoriesByDate(selectedProject.histories).map((group) => (
+            {historyGroups.length > 0 ? historyGroups.map((group) => (
               <section key={group.dateLabel} className="space-y-3">
                 <h3 className="text-[13px] font-extrabold text-muted">{group.dateLabel}</h3>
                 {group.items.map((item) => (
@@ -221,6 +223,7 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
     id: item.id,
     createdAt: item.created_at,
     time: formatTime(item.created_at),
+    createdAt: item.created_at,
     source: sourceFromLinks(item.source_links),
     title: item.title,
     summary: item.summary,

@@ -466,6 +466,8 @@ def _validate_payload_project_key(db: Session, payload: dict) -> None:
     if project is None:
         raise HTTPException(status_code=400, detail='Project key is not registered')
     payload['project_name'] = project.name
+    if payload.get('project_assignment_method') == 'llm_tool':
+        payload['project_needs_user_selection'] = False
 
 
 def _get_review_item_for_user(db: Session, item_id: int, user: DemoUser, settings: Settings) -> ReviewItem:
