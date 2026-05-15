@@ -25,6 +25,16 @@ def test_project_key_migration_is_idempotent_with_current_schema_baseline() -> N
     assert "op.add_column('decision_records'" not in migration
 
 
+def test_projects_table_migration_is_idempotent_with_current_schema_baseline() -> None:
+    migration = Path('backend/migrations/versions/9451b1f116b5_add_projects_table.py').read_text(
+        encoding='utf-8',
+    )
+
+    assert '_create_projects_table_if_missing' in migration
+    assert '_create_index_if_missing' in migration
+    assert "op.create_table('projects'" not in migration
+
+
 def test_schema_checker_reports_missing_model_tables() -> None:
     engine = create_engine('sqlite:///:memory:')
 
