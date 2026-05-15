@@ -209,7 +209,7 @@ function ShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-app text-ink">
       {/* 데스크탑 사이드바 */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[240px] border-r border-white/70 bg-white/85 px-5 py-7 shadow-[18px_0_48px_rgba(15,23,42,0.05)] backdrop-blur lg:flex lg:flex-col">
+      <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[240px] border-r border-white/70 bg-white/85 px-5 py-7 shadow-[18px_0_48px_rgba(15,23,42,0.05)] backdrop-blur lg:flex lg:flex-col">
         {/* 로고 영역 */}
         <Link href="/dashboard" className="flex items-start gap-3">
           <span className="brand-logo" aria-hidden="true">
@@ -221,7 +221,7 @@ function ShellContent({ children }: { children: ReactNode }) {
         </Link>
 
         {/* 네비게이션 메뉴 */}
-        <nav className="mt-6 flex-1 overflow-y-auto">
+        <nav className="app-sidebar-nav mt-6 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {visibleNavGroups.map((group, groupIndex) => (
             <div key={groupIndex} className="border-t border-line py-4 first:border-t-0 first:pt-0">
               <div className="space-y-2">

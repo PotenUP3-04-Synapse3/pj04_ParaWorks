@@ -97,6 +97,15 @@ test("dashboard renders polished SaaS layout with interactive calendar", async (
   await expect(page.getByText("금요일 주간 마감 정리")).toBeVisible();
   await expect(page.getByText("내게 온 업데이트")).toHaveCount(0);
 
+  const sidebarOverflow = await page.locator(".app-sidebar").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(sidebarOverflow.scrollWidth).toBeLessThanOrEqual(sidebarOverflow.clientWidth);
+  expect(sidebarOverflow.scrollHeight).toBeLessThanOrEqual(sidebarOverflow.clientHeight);
+
   await page.getByTestId("calendar-day-2026-05-16").hover();
   await expect(page.getByText("일정 없음")).toBeVisible();
 });
