@@ -142,6 +142,58 @@ test("login pending state centers loading affordance over dimmed page", async ({
   releaseLogin();
 });
 
+test("google login callback centers loading state", async ({ page }) => {
+  let releaseCallback!: () => void;
+  const callbackPending = new Promise<void>((resolve) => {
+    releaseCallback = resolve;
+  });
+
+  await page.route("**/api/v1/auth/google/callback?**", async (route) => {
+    await callbackPending;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "google-hanvv-employee",
+          email: "hanvv3@gmail.com",
+          name: "한승헌",
+          role: "employee",
+          department: "Operations",
+        },
+      },
+    });
+  });
+
+  await page.goto("/login/google/callback?code=test-code&state=test-state");
+
+  const pageShell = page.getByTestId("google-login-callback-page");
+  const statusCard = page.getByTestId("google-login-callback-status");
+
+  await expect(pageShell).toBeVisible();
+  await expect(statusCard).toBeVisible();
+  await expect(statusCard).toContainText("Google 로그인 결과를 확인하고 있습니다.");
+
+  const shellBox = await pageShell.boundingBox();
+  const cardBox = await statusCard.boundingBox();
+  const viewport = page.viewportSize();
+  expect(shellBox).not.toBeNull();
+  expect(cardBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+
+  if (shellBox && viewport) {
+    expect(shellBox.height).toBeGreaterThanOrEqual(viewport.height);
+  }
+
+  if (cardBox && viewport) {
+    const cardCenterX = cardBox.x + cardBox.width / 2;
+    const cardCenterY = cardBox.y + cardBox.height / 2;
+    expect(Math.abs(cardCenterX - viewport.width / 2)).toBeLessThan(6);
+    expect(Math.abs(cardCenterY - viewport.height / 2)).toBeLessThan(6);
+  }
+
+  releaseCallback();
+});
+
 test("admin console is blocked for employee accounts", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "google-hanvv-employee"));
   await page.goto("/admin");

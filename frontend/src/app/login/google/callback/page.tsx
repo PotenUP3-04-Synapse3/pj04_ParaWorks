@@ -6,9 +6,11 @@ import { Suspense, useEffect, useState } from "react";
 import { DEMO_USER_STORAGE_KEY, apiGet, setStoredDemoUserId } from "@/lib/api/client";
 import type { AuthUserResponse } from "@/lib/api/types";
 
+type CallbackState = "loading" | "success" | "error";
+
 export default function GoogleLoginCallbackPage() {
   return (
-    <main className="w-full px-4 py-6 md:px-6">
+    <main className="login-callback-page" data-testid="google-login-callback-page">
       <Suspense fallback={<CallbackStatus status="loading" message="Google 로그인 결과를 확인하고 있습니다." />}>
         <GoogleLoginCallbackClient />
       </Suspense>
@@ -19,7 +21,7 @@ export default function GoogleLoginCallbackPage() {
 function GoogleLoginCallbackClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<CallbackState>("loading");
   const [message, setMessage] = useState("Google 로그인 결과를 확인하고 있습니다.");
 
   useEffect(() => {
@@ -57,25 +59,18 @@ function GoogleLoginCallbackClient() {
   return <CallbackStatus status={status} message={message} />;
 }
 
-function CallbackStatus({ status, message }: { status: "loading" | "success" | "error"; message: string }) {
+function CallbackStatus({ status, message }: { status: CallbackState; message: string }) {
   const Icon = status === "loading" ? Loader2 : status === "success" ? CheckCircle2 : AlertTriangle;
-  const iconClass =
-    status === "loading"
-      ? "animate-spin text-[var(--workspace-accent)]"
-      : status === "success"
-        ? "text-emerald-500"
-        : "text-amber-500";
+  const title = status === "loading" ? "로그인 확인 중" : status === "success" ? "로그인 완료" : "로그인 확인 실패";
 
   return (
-    <section className="liquid-surface rounded-lg p-6">
-      <div className="flex items-start gap-3">
-        <Icon className={`mt-1 h-5 w-5 ${iconClass}`} aria-hidden="true" />
-        <div>
-          <p className="text-sm font-semibold text-[var(--workspace-rail-active)]">Google Identity</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-normal">로그인 확인</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-muted)]">{message}</p>
-        </div>
+    <section className={`login-callback-card ${status}`} data-testid="google-login-callback-status" role="status" aria-live="polite">
+      <div className="login-callback-icon">
+        <Icon className={status === "loading" ? "animate-spin" : ""} aria-hidden="true" />
       </div>
+      <p>Google Identity</p>
+      <h1>{title}</h1>
+      <span>{message}</span>
     </section>
   );
 }
