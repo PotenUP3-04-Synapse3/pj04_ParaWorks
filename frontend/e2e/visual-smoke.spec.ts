@@ -228,16 +228,16 @@ test("shell chrome uses distinct theme tokens across viewport modes", async ({ p
 
 test("integration sync shows connector counts", async ({ page }) => {
   await page.goto("/integrations");
-  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
+  await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
   await page.getByRole("button", { name: "동기화" }).first().click();
 
-  const syncMetrics = page.getByTestId("sync-result-metrics");
-  await expect(syncMetrics.getByText("Fetched", { exact: true })).toBeVisible();
-  await expect(syncMetrics.getByText("Review items", { exact: true })).toBeVisible();
-  await expect(syncMetrics.getByText("Skipped", { exact: true })).toBeVisible();
+  const sourcePanel = page.getByTestId("source-operations-panel");
+  await expect(sourcePanel).toBeVisible();
+  await expect(page.getByTestId("source-operation-slack-count")).toBeVisible();
+  await expect(sourcePanel).not.toContainText("%");
 });
 
-test("Gmail sync shows parser quality counts", async ({ page }) => {
+test("Gmail source status keeps count separate from the progress bar", async ({ page }) => {
   await page.route("**/api/v1/integrations/gmail/sync", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -256,18 +256,18 @@ test("Gmail sync shows parser quality counts", async ({ page }) => {
   });
 
   await page.goto("/integrations");
-  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
+  await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
   await page.getByTestId("gmail-card-actions").getByRole("button").first().click();
 
-  await expect(page.getByTestId("sync-parser-quality")).toContainText("Parser quality");
-  await expect(page.getByTestId("sync-parser-quality")).toContainText("Metadata only");
+  await expect(page.getByTestId("source-operation-gmail-count")).toBeVisible();
+  await expect(page.getByTestId("source-operations-panel")).not.toContainText("%");
 });
 
 test("integrations page shows Slack OAuth connection status without secrets", async ({ page }) => {
   await page.goto("/integrations");
 
   await expect(page.locator('[data-testid="slack-oauth-status"]')).toBeVisible();
-  await expect(page.getByTestId("slack-runtime-status")).toBeVisible();
+  await expect(page.getByTestId("slack-runtime-status")).toHaveCount(0);
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("xoxb-");
@@ -280,7 +280,7 @@ test("Slack card keeps OAuth install outside primary action row", async ({ page 
 
   const slackActions = page.getByTestId("slack-card-actions");
   await expect(slackActions.getByRole("button", { name: "동기화" })).toBeVisible();
-  await expect(slackActions.getByRole("button", { name: "Slack Agent 실행" })).toBeVisible();
+  await expect(slackActions.getByRole("button", { name: "Slack Agent 실행" })).toHaveCount(0);
   await expect(slackActions.getByRole("button", { name: "Slack 연결" })).toHaveCount(0);
 });
 
@@ -350,7 +350,8 @@ test("Google connector cards show OAuth readiness outside primary action rows", 
       page.getByTestId(`${connector.type}-card-actions`).getByRole("button", { name: `${connector.label} 연결` }),
     ).toHaveCount(0);
   }
-  await expect(page.getByTestId("google-runtime-status")).toBeVisible();
+  await expect(page.getByTestId("google-runtime-status")).toHaveCount(0);
+  await expect(page.getByTestId("source-operations-panel")).toBeVisible();
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("google-secret");

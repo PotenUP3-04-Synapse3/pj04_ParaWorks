@@ -2203,7 +2203,7 @@ button:disabled,
 
   .source-bar-row {
     display: grid;
-    grid-template-columns: minmax(7rem, 1fr) 4.8rem auto auto;
+    grid-template-columns: minmax(7.25rem, 1fr) 4.5rem minmax(7rem, 1.2fr);
     align-items: center;
     gap: 0.45rem;
     margin-top: 0.95rem;
@@ -2241,11 +2241,11 @@ button:disabled,
     background: #f18400;
   }
 
-  .source-bar-row strong,
-  .source-bar-row em {
+  .source-bar-row strong {
     color: var(--muted);
-    font-style: normal;
     font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 
   .keyword-cloud {

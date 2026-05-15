@@ -2,7 +2,6 @@
 
 import {
   ArrowRight,
-  Bot,
   Calendar,
   CheckCircle2,
   Database,
@@ -16,17 +15,13 @@ import {
   Radio,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useJobStatus } from "@/hooks/useJobStatus";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
-  AgentReviewResponse,
-  AgentLlmPreflight,
   GoogleRuntimeStatus,
   IntegrationConnection,
   IntegrationManifest,
@@ -214,25 +209,16 @@ function syncResponseFromRuntimeStatus(
 
 export default function IntegrationsPage() {
   const [manifests, setManifests] = useState<IntegrationManifest[]>([]);
-  const [activeJobId, setActiveJobId] = useState<string>();
-  const [syncResult, setSyncResult] = useState<IntegrationSyncResponse>();
-  const [agentResult, setAgentResult] = useState<AgentReviewResponse>();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
-  const [slackRuntime, setSlackRuntime] = useState<SlackRuntimeStatus>();
-  const [slackLlmPreflight, setSlackLlmPreflight] = useState<AgentLlmPreflight>();
-  const [mailDocsLlmPreflight, setMailDocsLlmPreflight] = useState<AgentLlmPreflight>();
+  const [, setSlackRuntime] = useState<SlackRuntimeStatus>();
   const [selectedSlackChannels, setSelectedSlackChannels] = useState<string[]>([]);
-  const [googleRuntimeByType, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
+  const [, setGoogleRuntimeByType] = useState<Record<string, GoogleRuntimeStatus>>({});
   const [dashboardSummary, setDashboardSummary] = useState<DashboardResponse>();
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
   const [syncProgress, setSyncProgress] = useState<SyncProgressState>();
   const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [llmAgentRunning, setLlmAgentRunning] = useState(false);
-  const [mailDocsLlmAgentRunning, setMailDocsLlmAgentRunning] = useState(false);
-  const [error, setError] = useState<string>();
-  const jobStatus = useJobStatus(activeJobId);
 
   // 초기 로드 시 다양한 연동 정보 및 상태 조회
   useEffect(() => {
@@ -245,9 +231,9 @@ export default function IntegrationsPage() {
           setManifests(manifestResult);
         }
       })
-      .catch((caught) => {
+      .catch(() => {
         if (active) {
-          setError(caught instanceof Error ? caught.message : "연동 정보를 불러오지 못했습니다.");
+          setManifests([]);
         }
       });
 
@@ -307,31 +293,6 @@ export default function IntegrationsPage() {
       .catch(() => {
         if (active) {
           setSlackRuntime(undefined);
-        }
-      });
-
-    // Slack LLM 에이전트 실행 전 검사(예산, 모델 등)
-    apiGet<AgentLlmPreflight>("/api/v1/integrations/slack/agent-review/llm/preflight")
-      .then((preflight) => {
-        if (active) {
-          setSlackLlmPreflight(preflight);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setSlackLlmPreflight(undefined);
-        }
-      });
-
-    apiGet<AgentLlmPreflight>("/api/v1/integrations/mail-docs/agent-review/llm/preflight")
-      .then((preflight) => {
-        if (active) {
-          setMailDocsLlmPreflight(preflight);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setMailDocsLlmPreflight(undefined);
         }
       });
 
@@ -561,8 +522,6 @@ export default function IntegrationsPage() {
   }
 
   async function markSyncComplete(type: string, result: IntegrationSyncResponse) {
-    setSyncResult(result);
-    setActiveJobId(result.job_id);
     setSyncProgress((current) =>
       current?.connectorType === type
         ? {
@@ -605,7 +564,6 @@ export default function IntegrationsPage() {
     const displayName = connectorDisplayName(type, manifests);
     const startedAtMs = Date.now();
     setPendingType(type);
-    setError(undefined);
     setSyncProgress({
       connectorType: type,
       displayName,
@@ -635,7 +593,6 @@ export default function IntegrationsPage() {
           ? { selected_channel_ids: selectedSlackChannels, run_async: true }
           : { run_async: true },
       );
-      setActiveJobId(result.job_id);
       setSyncProgress((current) =>
         current?.connectorType === type
           ? {
@@ -660,7 +617,6 @@ export default function IntegrationsPage() {
         try {
           const recovered = await recoverCompletedSyncAfterLostResponse(type, startedAtMs);
           if (recovered) {
-            setError(undefined);
             await markSyncComplete(type, recovered);
             return;
           }
@@ -669,7 +625,6 @@ export default function IntegrationsPage() {
             recoveryError instanceof Error
               ? recoveryError.message
               : "동기화 작업 상태 확인에 실패했습니다.";
-          setError(recoveryMessage);
           setSyncProgress((current) =>
             current?.connectorType === type
               ? {
@@ -684,7 +639,6 @@ export default function IntegrationsPage() {
         }
       }
       if (isBackgroundSyncContinuation(message)) {
-        setError(undefined);
         setSyncProgress((current) =>
           current?.connectorType === type
             ? {
@@ -698,7 +652,6 @@ export default function IntegrationsPage() {
         );
         return;
       }
-      setError(message);
       setSyncProgress((current) =>
         current?.connectorType === type
           ? {
@@ -713,18 +666,6 @@ export default function IntegrationsPage() {
       window.clearTimeout(backgroundNoticeTimer);
       setPendingType(undefined);
     }
-  }
-
-  /**
-   * Slack 채널 선택 상태를 토글합니다.
-   */
-  function toggleSlackChannel(channelId: string) {
-    setSelectedSlackChannels((current) => {
-      if (current.includes(channelId)) {
-        return current.filter((selectedChannelId) => selectedChannelId !== channelId);
-      }
-      return [...current, channelId];
-    });
   }
 
   async function refreshBackgroundSyncProgress(type: string) {
@@ -783,29 +724,6 @@ export default function IntegrationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncProgress?.connectorType, syncProgress?.status, syncProgress?.backgrounded]);
 
-  function openRuntimeSyncProgress(type: string, runtime: IntegrationRuntimeStatus) {
-    const latest = runtime.latest_sync;
-    if (!latest) return;
-    const displayName = connectorDisplayName(type, manifests);
-    const isComplete = latest.status === "complete";
-    const isError = latest.status === "failed";
-    setActiveJobId(latest.job_id);
-    setSyncProgress({
-      connectorType: type,
-      displayName,
-      status: isComplete ? "complete" : isError ? "error" : "running",
-      stageIndex: stageIndexFromProgress(latest.progress_pct),
-      progressPct: latest.progress_pct,
-      targetProgressPct: latest.progress_pct,
-      backgrounded: false,
-      jobId: latest.job_id,
-      lastMessage: latest.message,
-      errorMessage: isError ? latest.message : undefined,
-      result: isComplete ? syncResponseFromRuntimeStatus(type, runtime) : undefined,
-    });
-    setSyncModalOpen(true);
-  }
-
   /**
    * 연동 해제(Disconnect)를 실행합니다.
    */
@@ -814,7 +732,6 @@ export default function IntegrationsPage() {
       return;
     }
 
-    setError(undefined);
     try {
       await apiDelete(`/api/v1/integrations/${type}`);
       
@@ -836,52 +753,13 @@ export default function IntegrationsPage() {
         setSlackRuntime(undefined);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "연동 해제에 실패했습니다.");
-    }
-  }
-
-  /**
-   * Slack LLM 에이전트(비용이 발생하는 실제 LLM 호출)를 실행합니다.
-   */
-  async function runSlackLlmAgent() {
-    setLlmAgentRunning(true);
-    setError(undefined);
-
-    try {
-      const result = await apiPost<AgentReviewResponse>("/api/v1/integrations/slack/agent-review/llm", {
-        confirm_paid_run: true,
-      });
-      setAgentResult(result);
-      setSlackLlmPreflight(result.preflight);
-      await refreshDashboardSummary();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "실제 LLM Agent 실행에 실패했습니다.");
-    } finally {
-      setLlmAgentRunning(false);
-    }
-  }
-
-  async function runMailDocsLlmAgent() {
-    setMailDocsLlmAgentRunning(true);
-    setError(undefined);
-
-    try {
-      const result = await apiPost<AgentReviewResponse>("/api/v1/integrations/mail-docs/agent-review/llm", {
-        confirm_paid_run: true,
-      });
-      setAgentResult(result);
-      setMailDocsLlmPreflight(result.preflight);
-      await refreshDashboardSummary();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Mail/Docs LLM Agent 실행에 실패했습니다.");
-    } finally {
-      setMailDocsLlmAgentRunning(false);
+      window.alert(caught instanceof Error ? caught.message : "연동 해제에 실패했습니다.");
     }
   }
 
   async function startOAuth(displayName: string, oauth?: OAuthInstallUrlResponse) {
     if (!oauth?.install_url) {
-      setError(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
+      window.alert(`${displayName} OAuth 설정이 아직 준비되지 않았습니다. .env의 client id와 redirect URI를 확인하세요.`);
       return;
     }
 
@@ -902,7 +780,7 @@ export default function IntegrationsPage() {
           .catch(() => undefined);
           
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Slack 직접 연결에 실패했습니다.");
+        window.alert(caught instanceof Error ? caught.message : "Slack 직접 연결에 실패했습니다.");
       }
       return;
     }
@@ -1100,84 +978,13 @@ export default function IntegrationsPage() {
           <div className="border-b border-[var(--line-soft)] px-4 py-4">
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-[var(--workspace-rail-active)]" aria-hidden="true" />
-              <h3 className="text-sm font-semibold">작업 스트림</h3>
+              <h3 className="text-sm font-semibold">소스별 연동 현황</h3>
             </div>
-            <p className="mt-1 text-xs text-[var(--ink-muted)]">동기화와 Review 후보 생성 상태</p>
+            <p className="mt-1 text-xs text-[var(--ink-muted)]">수집된 근거의 소스 분포</p>
           </div>
 
-          <div className="space-y-3 p-4">
+          <div className="p-4">
             <SourceOperationsPanel summary={dashboardSummary} />
-
-            {syncProgress && !syncModalOpen ? (
-              <SyncProgressSummaryCard progress={syncProgress} onOpen={() => setSyncModalOpen(true)} />
-            ) : null}
-
-            {!syncProgress && slackRuntime?.latest_sync && ["queued", "running"].includes(slackRuntime.latest_sync.status) ? (
-              <RuntimeSyncProgressSummaryCard
-                displayName="Slack"
-                latest={slackRuntime.latest_sync}
-                onOpen={() => openRuntimeSyncProgress("slack", slackRuntime)}
-              />
-            ) : null}
-
-            {slackRuntime ? (
-              <SlackRuntimeStatusPanel
-                status={slackRuntime}
-                llmPreflight={slackLlmPreflight}
-                llmAgentRunning={llmAgentRunning}
-                selectedChannelIds={selectedSlackChannels}
-                onRunLlmAgent={runSlackLlmAgent}
-                onToggleChannel={toggleSlackChannel}
-              />
-            ) : null}
-            <GoogleRuntimeStatusList statuses={googleRuntimeByType} />
-            <AgentLlmPreflightPanel
-              title="Mail/Docs LLM 테스트"
-              preflight={mailDocsLlmPreflight}
-              agentRunning={mailDocsLlmAgentRunning}
-              onRunAgent={runMailDocsLlmAgent}
-            />
-
-            {error ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
-            ) : null}
-
-            {agentResult ? (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
-                <p className="font-semibold">{formatAgentName(agentResult.agent_name)} 완료</p>
-                <p className="mt-1">Review Queue 후보 {agentResult.created_review_items}개를 생성했습니다.</p>
-              </div>
-            ) : null}
-
-            {syncResult ? (
-              <div className="space-y-3 text-sm">
-                <div className="rounded-lg bg-[var(--glass-strong)] p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Job</p>
-                  <p className="mt-1 break-all font-medium">{syncResult.job_id}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3" data-testid="sync-result-metrics">
-                  <ResultMetric label="Fetched" value={syncResult.fetched_events} />
-                  <ResultMetric label="새 검토 항목" value={syncResult.created_review_items} />
-                  <ResultMetric label="검토 대기" value={syncResult.pending_review_count} />
-                  <ResultMetric label="Skipped" value={syncResult.skipped_events} />
-                  <ResultMetric label="Status" value={syncResult.status} />
-                </div>
-                <ParserQualityBreakdown counts={syncResult.parser_status_counts} />
-                <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
-                  <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--ink-muted)]">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    SSE status
-                  </p>
-                  <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-md bg-[#21132b] p-3 text-xs leading-5 text-white/82">
-                    {jobStatus || syncResult.status}
-                  </pre>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-[var(--line-soft)] bg-[var(--glass-strong)] p-5 text-sm leading-6 text-[var(--ink-muted)]">
-                왼쪽 도구에서 동기화를 실행하면 작업 스트림과 생성된 Review 후보 수를 확인할 수 있습니다.
-              </div>
-            )}
           </div>
         </aside>
       </section>
@@ -1190,86 +997,6 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
-    </div>
-  );
-}
-
-function SyncProgressSummaryCard({
-  progress,
-  onOpen,
-}: {
-  progress: SyncProgressState;
-  onOpen: () => void;
-}) {
-  const currentStage = SYNC_RUNNING_STAGES[progress.stageIndex] ?? SYNC_RUNNING_STAGES[0];
-  const isComplete = progress.status === "complete";
-  const isError = progress.status === "error";
-  const toneClass = isComplete
-    ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-    : isError
-      ? "border-red-200 bg-red-50 text-red-950"
-      : "border-amber-200 bg-amber-50 text-amber-950";
-  const subTextClass = isComplete ? "text-emerald-900" : isError ? "text-red-900" : "text-amber-900";
-  const title = isComplete
-    ? `${progress.displayName} 동기화 완료`
-    : isError
-      ? `${progress.displayName} 동기화 실패`
-      : `${progress.displayName} 동기화 진행 중`;
-  return (
-    <div
-      data-testid="background-sync-progress"
-      className={`rounded-lg border p-3 text-sm ${toneClass}`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">{title}</p>
-          <p className={`mt-1 text-xs leading-5 ${subTextClass}`}>{currentStage}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-current bg-white px-3 text-xs font-bold hover:bg-white/70"
-        >
-          {progress.status === "running" ? "진행 창 열기" : "결과 보기"}
-        </button>
-      </div>
-      <ProgressBar progressPct={progress.progressPct} />
-      {progress.lastMessage ? <p className={`mt-2 break-all text-xs ${subTextClass}`}>{progress.lastMessage}</p> : null}
-    </div>
-  );
-}
-
-function RuntimeSyncProgressSummaryCard({
-  displayName,
-  latest,
-  onOpen,
-}: {
-  displayName: string;
-  latest: NonNullable<SlackRuntimeStatus["latest_sync"]>;
-  onOpen: () => void;
-}) {
-  return (
-    <div
-      data-testid="runtime-sync-progress"
-      className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">{displayName} 동기화 진행 중</p>
-          <p className="mt-1 text-xs leading-5 text-blue-900">
-            {SYNC_RUNNING_STAGES[stageIndexFromProgress(latest.progress_pct)]}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-blue-300 bg-white px-3 text-xs font-bold text-blue-950 hover:bg-blue-100"
-        >
-          진행 창 열기
-        </button>
-      </div>
-      <ProgressBar progressPct={latest.progress_pct} />
-      {latest.message ? <p className="mt-2 break-all text-xs text-blue-900">{latest.message}</p> : null}
     </div>
   );
 }
@@ -1302,6 +1029,8 @@ function SyncProgressModal({
   const isComplete = progress.status === "complete";
   const isError = progress.status === "error";
   const result = progress.result;
+  const createdReviewItems = result?.created_review_items ?? 0;
+  const pendingReviewCount = result?.pending_review_count ?? 0;
 
   return (
     <div
@@ -1370,12 +1099,12 @@ function SyncProgressModal({
         {result ? (
           <>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <ResultMetric label="새 검토 항목" value={`${result.created_review_items.toLocaleString()}개`} />
-              <ResultMetric label="검토 대기" value={`${result.pending_review_count.toLocaleString()}개`} />
+              <ResultMetric label="새 검토 항목" value={`${createdReviewItems.toLocaleString()}개`} />
+              <ResultMetric label="검토 대기" value={`${pendingReviewCount.toLocaleString()}개`} />
             </div>
             <p className="mt-3 text-sm font-medium text-[var(--ink-strong)]">
-              새 검토 항목 {result.created_review_items.toLocaleString()}개, 검토 대기{" "}
-              {result.pending_review_count.toLocaleString()}개입니다.
+              새 검토 항목 {createdReviewItems.toLocaleString()}개, 검토 대기{" "}
+              {pendingReviewCount.toLocaleString()}개입니다.
             </p>
           </>
         ) : null}
@@ -1452,379 +1181,53 @@ function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
     (counts.other ?? 0);
 
   return (
-    <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3">
+    <div
+      data-testid="source-operations-panel"
+      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3"
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <h4 className="text-sm font-semibold text-[var(--ink-strong)]">소스별 연동 현황</h4>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">수집량과 커넥터별 비중</p>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">수집된 근거 수</p>
         </div>
         <span className="rounded-full bg-[var(--glass-strong)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
           총 {total.toLocaleString()}
         </span>
       </div>
       <div className="mt-3 space-y-2">
-        <SourceOperationRow label="Slack" value={counts.slack ?? 0} total={total} tone="purple" />
-        <SourceOperationRow label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
-        <SourceOperationRow label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
-        <SourceOperationRow label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
-        <SourceOperationRow label="기타" value={counts.other ?? 0} total={total} tone="gray" />
+        <SourceOperationRow id="slack" label="Slack" value={counts.slack ?? 0} total={total} tone="purple" />
+        <SourceOperationRow id="gmail" label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
+        <SourceOperationRow id="drive" label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
+        <SourceOperationRow id="calendar" label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
+        <SourceOperationRow id="other" label="기타" value={counts.other ?? 0} total={total} tone="gray" />
       </div>
     </div>
   );
 }
 
-function SourceOperationRow({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
+function SourceOperationRow({
+  id,
+  label,
+  value,
+  total,
+  tone,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  total: number;
+  tone: string;
+}) {
   const percent = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="source-bar-row">
+    <div className="source-bar-row" data-testid={`source-operation-${id}`}>
       <span>{label}</span>
+      <strong data-testid={`source-operation-${id}-count`}>{value.toLocaleString()}</strong>
       <div>
         <i className={tone} style={{ width: `${Math.max(percent, value > 0 ? 4 : 0)}%` }} />
       </div>
-      <strong>{value.toLocaleString()}</strong>
-      <em>({percent}%)</em>
     </div>
   );
-}
-
-/**
- * 파싱 품질(Body 파싱 성공 여부 등) 통계를 보여주는 컴포넌트
- */
-function ParserQualityBreakdown({ counts }: { counts?: Record<string, number> }) {
-  const rows = parserQualityRows(counts);
-  if (rows.length === 0) {
-    return null;
-  }
-
-  const total = rows.reduce((sum, row) => sum + row.count, 0);
-
-  return (
-    <div
-      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-xs"
-      data-testid="sync-parser-quality"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-semibold text-[var(--ink-strong)]">Parser quality</p>
-        <span className="text-[var(--ink-muted)]">{total.toLocaleString()} sources</span>
-      </div>
-      <div className="mt-2 grid gap-2">
-        {rows.map((row) => (
-          <div key={row.status} className="flex items-center justify-between gap-3 rounded-md bg-[var(--glass-strong)] px-2 py-1.5">
-            <span className="font-medium">{row.label}</span>
-            <span className={`rounded-full px-2 py-0.5 font-semibold ${row.className}`}>
-              {row.count.toLocaleString()}
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 leading-5 text-[var(--ink-muted)]">
-        Metadata-only and unsupported files remain reviewable, but they are not treated as full body-parsed evidence.
-      </p>
-    </div>
-  );
-}
-
-function SlackRuntimeStatusPanel({
-  status,
-  llmPreflight,
-  llmAgentRunning,
-  selectedChannelIds,
-  onRunLlmAgent,
-  onToggleChannel,
-}: {
-  status: SlackRuntimeStatus;
-  llmPreflight?: AgentLlmPreflight;
-  llmAgentRunning: boolean;
-  selectedChannelIds: string[];
-  onRunLlmAgent: () => void;
-  onToggleChannel: (channelId: string) => void;
-}) {
-  const channelOptions =
-    status.channel_options.length > 0
-      ? status.channel_options
-      : status.configured_channel_ids.map((channelId) => ({
-          id: channelId,
-          name: channelId,
-          is_selected: true,
-          is_configured: true,
-        }));
-  const channelLabel = selectedChannelIds.length > 0 ? selectedChannelIds.join(", ") : "선택 채널 없음";
-  const latestSync = status.latest_sync;
-  const syncSummary = status.latest_sync_summary;
-
-  return (
-    <div
-      data-testid="slack-runtime-status"
-      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--ink-strong)]">Slack 운영 상태</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">
-            상태 조회는 sync나 LLM 호출을 실행하지 않습니다.
-          </p>
-        </div>
-        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-          <span>{status.mode}</span>
-        </span>
-      </div>
-      <div className="mt-3 grid gap-2 text-xs">
-        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">Sync 대상</span>
-          <span className="max-w-[210px] truncate font-semibold">{channelLabel}</span>
-        </div>
-        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">연결</span>
-          <span className="font-semibold">{status.connection_status}</span>
-        </div>
-        <div className="glass-row flex items-center justify-between gap-3 rounded-md px-2 py-2">
-          <span className="text-[var(--ink-muted)]">자격 증명</span>
-          <span className="font-semibold">{status.credential_status}</span>
-        </div>
-      </div>
-
-      {channelOptions.length > 0 ? (
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between gap-3 text-xs">
-            <span className="font-semibold text-[var(--ink-strong)]">채널 선택</span>
-            <span className="text-[var(--ink-muted)]">{selectedChannelIds.length.toLocaleString()}개 선택</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {channelOptions.map((channel) => {
-              const selected = selectedChannelIds.includes(channel.id);
-              return (
-                <button
-                  key={channel.id}
-                  type="button"
-                  onClick={() => onToggleChannel(channel.id)}
-                  className={`liquid-control inline-flex h-8 items-center gap-2 rounded-[18px] px-3 text-xs font-semibold ${
-                    selected ? "text-[var(--ink-strong)]" : "text-[var(--ink-muted)] opacity-80"
-                  }`}
-                  aria-pressed={selected}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      selected ? "bg-[var(--workspace-rail-active)]" : "bg-[var(--line-strong)]"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  {channel.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <p className="mt-3 rounded-md border border-dashed border-[var(--line-soft)] px-3 py-2 text-xs text-[var(--ink-muted)]">
-          Slack 채널 ID를 설정하면 여기서 sync 대상을 선택할 수 있습니다.
-        </p>
-      )}
-
-      <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-semibold">Agent 연결</span>
-          <span className="font-semibold">
-            {status.agent_bridge.ready_for_agent_test ? "테스트 가능" : "sync 필요"}
-          </span>
-        </div>
-        <p className="mt-1 text-[var(--ink-muted)]">
-          Slack source {status.agent_bridge.slack_source_count.toLocaleString()}개 · 대기 review{" "}
-          {status.agent_bridge.pending_review_count.toLocaleString()}개
-        </p>
-      </div>
-
-      {llmPreflight ? (
-        <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold">실제 LLM 테스트</span>
-            <span className="font-semibold">{llmPreflight.budget_status}</span>
-          </div>
-          <p className="mt-1 text-[var(--ink-muted)]">
-            {llmPreflight.model_name ?? "모델 미설정"} · {llmPreflight.available_providers.join(" → ") || "API key 필요"}
-          </p>
-          <p className="mt-1 text-[var(--ink-muted)]">
-            예상 {llmPreflight.estimated_total_tokens.toLocaleString()} tokens · $
-            {llmPreflight.estimated_cost_usd.toFixed(6)}
-            {llmPreflight.budget_limit_usd ? ` / $${llmPreflight.budget_limit_usd}` : ""}
-          </p>
-          <p className="mt-1 text-[var(--ink-muted)]">
-            중요 evidence {llmPreflight.evidence_message_count.toLocaleString()} /{" "}
-            {llmPreflight.max_evidence_messages.toLocaleString()}개 사용
-            {llmPreflight.source_window ? ` · ${llmPreflight.source_window}` : ""}
-          </p>
-          <button
-            type="button"
-            onClick={() => onRunLlmAgent()}
-            disabled={llmAgentRunning || llmPreflight.action !== "run"}
-            className="liquid-primary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
-          >
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            {llmAgentRunning ? "실제 LLM 실행 중" : "실제 LLM 테스트 실행"}
-          </button>
-          {llmPreflight.action !== "run" ? (
-            <p className="mt-2 text-[var(--ink-muted)]">상태: {llmPreflight.reason}</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {status.last_error ? (
-        <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-          <div className="flex items-center justify-between gap-3 font-semibold">
-            <span>Slack 오류</span>
-            <span>{status.last_error.code}</span>
-          </div>
-          <p className="mt-1">{status.last_error.action_hint}</p>
-        </div>
-      ) : null}
-
-      {latestSync ? (
-        <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold">최근 sync</span>
-            <span className="font-semibold">{latestSync.status}</span>
-          </div>
-          <p className="mt-1 truncate text-[var(--ink-muted)]">{latestSync.message}</p>
-          {syncSummary ? (
-            <p className="mt-1 text-[var(--ink-muted)]">
-              수집 {syncSummary.fetched_events.toLocaleString()} · 후보{" "}
-              {syncSummary.created_review_items.toLocaleString()} · 중복{" "}
-              {syncSummary.skipped_events.toLocaleString()}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function AgentLlmPreflightPanel({
-  title,
-  preflight,
-  agentRunning,
-  onRunAgent,
-}: {
-  title: string;
-  preflight?: AgentLlmPreflight;
-  agentRunning: boolean;
-  onRunAgent: () => void;
-}) {
-  if (!preflight) {
-    return null;
-  }
-
-  return (
-    <div className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--ink-strong)]">{title}</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">
-            명시 확인 후에만 유료 LLM을 실행합니다. Mail/Docs는 GPT-5.4 mini로 업무 후보를 생성합니다.
-          </p>
-        </div>
-        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-          <span>{preflight.budget_status}</span>
-        </span>
-      </div>
-      <div className="glass-row mt-3 rounded-md px-2 py-2 text-xs">
-        <p className="font-semibold">
-          {preflight.model_name ?? "모델 미설정"} · {preflight.available_providers.join(" → ") || "API key 필요"}
-        </p>
-        <p className="mt-1 text-[var(--ink-muted)]">
-          예상 {preflight.estimated_total_tokens.toLocaleString()} tokens · $
-          {preflight.estimated_cost_usd.toFixed(6)}
-          {preflight.budget_limit_usd ? ` / $${preflight.budget_limit_usd}` : ""}
-        </p>
-        <p className="mt-1 text-[var(--ink-muted)]">
-          evidence {preflight.evidence_message_count.toLocaleString()} /{" "}
-          {preflight.max_evidence_messages.toLocaleString()}개
-          {preflight.source_window ? ` · ${preflight.source_window}` : ""}
-        </p>
-        <button
-          type="button"
-          onClick={() => onRunAgent()}
-          disabled={agentRunning || preflight.action !== "run"}
-          className="liquid-primary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
-        >
-          <Bot className="h-4 w-4" aria-hidden="true" />
-          {agentRunning ? "LLM 실행 중" : title.includes("Mail/Docs") ? "GPT-5.4 mini로 업무 후보 생성" : "유료 LLM 실행"}
-        </button>
-        {preflight.action !== "run" ? (
-          <p className="mt-2 text-[var(--ink-muted)]">상태: {preflight.reason}</p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function GoogleRuntimeStatusList({ statuses }: { statuses: Record<string, GoogleRuntimeStatus> }) {
-  const rows = GOOGLE_CONNECTOR_TYPES.map((connectorType) => statuses[connectorType]).filter(Boolean);
-  if (rows.length === 0) {
-    return null;
-  }
-
-  return (
-    <div
-      data-testid="google-runtime-status"
-      className="integration-glass-card rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 text-sm"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--ink-strong)]">Google 운영 상태</p>
-          <p className="mt-1 text-xs text-[var(--ink-muted)]">Gmail, Drive, Calendar 상태를 한 번에 확인합니다.</p>
-        </div>
-        <span className="liquid-control inline-flex rounded-full px-2 py-1 text-xs font-semibold text-[var(--ink-strong)]">
-          <span>{rows[0]?.mode ?? "mock"}</span>
-        </span>
-      </div>
-      <div className="mt-3 space-y-2">
-        {rows.map((status) => (
-          <div key={status.connector_type} className="glass-row rounded-md px-2 py-2 text-xs">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-semibold">{formatConnectorName(status.connector_type)}</span>
-              <span className="font-semibold">{status.connection_status}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between gap-3 text-[var(--ink-muted)]">
-              <span className="max-w-[180px] truncate">{status.account_name ?? "계정 미연결"}</span>
-              <span>{status.credential_status}</span>
-            </div>
-            {status.latest_sync ? (
-              <p className="mt-1 truncate text-[var(--ink-muted)]">
-                최근 sync: {status.latest_sync.status} · {status.latest_sync.message}
-              </p>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function parserQualityRows(counts?: Record<string, number>) {
-  const statusLabels: Record<string, string> = {
-    parsed: "Parsed",
-    metadata_only: "Metadata only",
-    unsupported: "Unsupported",
-  };
-  const statusClasses: Record<string, string> = {
-    parsed: "bg-emerald-50 text-emerald-800",
-    metadata_only: "bg-amber-50 text-amber-800",
-    unsupported: "bg-red-50 text-red-800",
-  };
-
-  return Object.entries(counts ?? {})
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => {
-      const order = ["parsed", "metadata_only", "unsupported"];
-      const leftIndex = order.indexOf(left);
-      const rightIndex = order.indexOf(right);
-      return (leftIndex === -1 ? order.length : leftIndex) - (rightIndex === -1 ? order.length : rightIndex);
-    })
-    .map(([status, count]) => ({
-      status,
-      count,
-      label: statusLabels[status] ?? status,
-      className: statusClasses[status] ?? "bg-[var(--glass-strong)] text-[var(--ink-strong)]",
-    }));
 }
 
 function formatScopes(scopes: string[]) {
@@ -1835,16 +1238,6 @@ function formatScopes(scopes: string[]) {
     return scopes.join(", ");
   }
   return `${scopes[0]}, ${scopes[1]} 외 ${scopes.length - 2}개`;
-}
-
-function formatAgentName(agentName: string) {
-  if (agentName === "slack_agent") {
-    return "Slack Agent";
-  }
-  if (agentName === "mail_document_agent") {
-    return "Mail/Docs Agent";
-  }
-  return agentName;
 }
 
 function connectorDisplayName(type: string, manifests: IntegrationManifest[]) {

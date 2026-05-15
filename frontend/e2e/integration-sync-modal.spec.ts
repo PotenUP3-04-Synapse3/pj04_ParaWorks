@@ -177,8 +177,11 @@ test("Slack sync blocks the page with a progress modal and then reports the revi
   await expect(modal).toContainText("검토 대기 14개");
   await page.getByRole("button", { name: "닫기", exact: true }).click();
   await expect(modal).toBeHidden();
-  await expect(page.getByTestId("sync-result-metrics")).toContainText("검토 대기");
-  await expect(page.getByTestId("sync-result-metrics")).toContainText("14");
+  await expect(page.getByTestId("sync-result-metrics")).toHaveCount(0);
+  await expect(page.getByTestId("source-operations-panel")).toBeVisible();
+  await expect(page.getByTestId("source-operation-slack-count")).toContainText("210");
+  await expect(page.getByTestId("source-operations-panel")).not.toContainText("%");
+  await expect(page.getByTestId("slack-runtime-status")).toHaveCount(0);
 });
 
 test("Slack sync recovers when the final POST response is lost after the backend job completes", async ({
@@ -314,7 +317,8 @@ test("Slack sync recovers when the final POST response is lost after the backend
   await expect(modal).toContainText("11", { timeout: 10_000 });
   await expect(modal).not.toContainText("Internal Server Error");
   await page.getByRole("button", { name: "닫기", exact: true }).click();
-  await expect(page.getByTestId("sync-result-metrics")).toContainText("11");
+  await expect(page.getByTestId("sync-result-metrics")).toHaveCount(0);
+  await expect(page.getByTestId("source-operations-panel")).toBeVisible();
 });
 
 test("Slack sync polling timeout stays in background-running state instead of failure", async ({
@@ -447,9 +451,8 @@ test("Slack sync polling timeout stays in background-running state instead of fa
   await page.goto("/integrations");
   await page.waitForLoadState("networkidle");
 
-  const runtimeProgress = page.getByTestId("runtime-sync-progress");
-  await expect(runtimeProgress).toBeVisible();
-  await expect(runtimeProgress.getByTestId("sync-progress-percent")).toContainText("75%");
+  await expect(page.getByTestId("runtime-sync-progress")).toHaveCount(0);
+  await expect(page.getByTestId("source-operations-panel")).toBeVisible();
 
   await page.getByTestId("slack-card-actions").getByRole("button", { name: "동기화" }).click();
   const modal = page.getByTestId("sync-progress-modal");
@@ -468,13 +471,8 @@ test("Slack sync polling timeout stays in background-running state instead of fa
   await page.getByRole("button", { name: "백그라운드에서 계속 진행" }).click();
   await expect(modal).toBeHidden();
 
-  const backgroundProgress = page.getByTestId("background-sync-progress");
-  await expect(backgroundProgress).toBeVisible();
-  await expect(backgroundProgress.getByTestId("sync-progress-percent")).toContainText("75%");
-
-  await backgroundProgress.getByRole("button", { name: "진행 창 열기" }).click();
-  await expect(modal).toBeVisible();
-  await expect(modal.getByTestId("sync-progress-percent")).toContainText("75%");
+  await expect(page.getByTestId("background-sync-progress")).toHaveCount(0);
+  await expect(page.getByTestId("source-operations-panel")).toBeVisible();
 });
 
 test("Gmail sync uses async job polling so the modal reflects runtime progress", async ({
