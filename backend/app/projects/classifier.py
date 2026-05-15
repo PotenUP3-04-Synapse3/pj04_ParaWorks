@@ -30,7 +30,7 @@ NON_PROJECT_MARKERS = (
     '정보 보안 정책',
 )
 
-PROJECT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar', 'slack')
+PROJECT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar')
 
 _GENERIC_PROJECT_ALIAS_TERMS = {
     'data',

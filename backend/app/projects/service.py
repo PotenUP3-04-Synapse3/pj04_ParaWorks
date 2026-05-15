@@ -122,12 +122,12 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
 
 def _pending_assignment_counts(db: Session) -> dict[str, int]:
     pending = db.scalars(
-        select(ReviewItem).where(ReviewItem.item_type == 'project_assignment', ReviewItem.status == 'pending_review')
+        select(ReviewItem).where(ReviewItem.status == 'pending_review')
     ).all()
     counts: dict[str, int] = {}
     for item in pending:
         project_key = item.payload.get('project_key')
-        if isinstance(project_key, str):
+        if isinstance(project_key, str) and project_key:
             counts[project_key] = counts.get(project_key, 0) + 1
     return counts
 

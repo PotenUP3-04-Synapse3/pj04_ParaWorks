@@ -809,3 +809,60 @@
 - 작업 경계:
   - B는 Slack Agent, Review UI, promotion, RAG, 프로젝트 서비스 영역을 직접 수정하지 않는다.
   - C는 Gmail/Drive connector와 Mail/Document Agent 내부 추출 로직을 직접 수정하지 않는다.
+
+## 2026-05-15 Slack 프로젝트 Tool Routing 통합 완료
+
+- 계획서:
+  - `docs/superpowers/plans/2026-05-15-unified-slack-project-tool-routing.md`
+- 구현:
+  - 신규 Slack sync에서 규칙 기반 `project_assignment` 생성을 중단했다.
+  - Slack Agent 저장 경로에서 `topic_tag` 기반 fallback 프로젝트 지정과 tag back-propagation을 제거했다.
+  - Slack Agent 후보의 프로젝트 지정은 LangChain tool routing payload(`project_assignment_method=llm_tool`)만 신뢰한다.
+  - 프로젝트 미선택 Slack Agent 후보는 promotion preview와 approve API에서 `project_key` 누락으로 승인할 수 없게 했다.
+  - Review 화면에 `프로젝트 선택 후 승인 가능` 안내와 `새 프로젝트 만들기` 링크를 추가했다.
+  - Timeline 화면은 승인된 프로젝트 타임라인 항목을 날짜 단위로 묶어 표시한다.
+  - Projects 화면의 metric 영역은 모바일에서도 겹치지 않도록 1열/3열 반응형 grid와 `project-metric` test id를 적용했다.
+- 테스트:
+  - backend targeted: `65 passed`
+  - ruff: `All checks passed!`
+  - frontend TypeScript: passed
+  - frontend lint: passed
+  - frontend build: passed
+  - Playwright:
+    - `review-project-routing-required.spec.ts`
+    - `timeline-project-date-groups.spec.ts`
+    - `projects-responsive-metrics.spec.ts`
+    - `slack-project-routing-flow.spec.ts`
+    - desktop/mobile 총 `8 passed`
+
+## 2026-05-15 동기화 진행률 재진입 UX 개선
+
+- 요청:
+  - Slack 동기화가 백그라운드에서 계속 실행될 때 사용자가 진행률을 알 수 없고, 닫은 진행 창을 다시 열 수 없는 문제를 수정한다.
+- 구현:
+  - `frontend/src/app/integrations/page.tsx`의 동기화 상태에 `progressPct`, `jobId`, `lastMessage`를 추가했다.
+  - runtime status의 `latest_sync.progress_pct`와 `message`를 동기화 모달에 표시하도록 연결했다.
+  - 동기화를 백그라운드로 보낸 뒤에도 작업 스트림 영역에 진행률 카드가 남고, `진행 창 열기`로 모달을 다시 열 수 있게 했다.
+  - 페이지 로드 시 runtime status에 실행 중인 Slack sync가 있으면 진행률 카드를 바로 표시할 수 있도록 했다.
+  - 백그라운드 실행 중에도 주기적으로 runtime status를 polling해서 완료/실패/진행률을 갱신한다.
+- 테스트:
+  - `npm run lint`: 통과
+  - `npm run build`: 통과
+  - `npm run test:visual -- integration-sync-modal.spec.ts --project=chromium-desktop`: `3 passed`
+  - Playwright는 샌드박스에서 Chromium `spawn EPERM`으로 실패해 승인 후 재실행했다.
+
+## 2026-05-15 타임라인/프로젝트 원본 링크 개선
+
+- 요청:
+  - 타임라인에서 `Open source`를 누르면 새 탭으로 열리게 한다.
+  - 프로젝트 탭에서도 원본 근거를 볼 수 있는 링크를 제공한다.
+- 구현:
+  - `frontend/src/app/timeline/page.tsx`의 `Open source` 링크에 `target="_blank"`와 `rel="noopener noreferrer"`를 추가했다.
+  - `frontend/src/app/projects/page.tsx`의 `연결된 원본 근거` 카드에 `source_url` 기반 `원본 근거` 링크를 추가했다.
+  - `승인된 프로젝트 활동` 카드에도 첫 번째 `source_links`를 사용해 `원본 근거` 링크를 추가했다.
+- 테스트:
+  - `projects-source-links.spec.ts`를 추가해 프로젝트 근거/활동 링크의 href, 새 탭, rel 속성을 검증했다.
+  - `timeline-project-date-groups.spec.ts`에 타임라인 `Open source` 새 탭 검증을 추가했다.
+  - `npm run lint`: 통과
+  - `npm run build`: 통과
+  - `npm run test:visual -- projects-source-links.spec.ts timeline-project-date-groups.spec.ts --project=chromium-desktop`: `2 passed`
