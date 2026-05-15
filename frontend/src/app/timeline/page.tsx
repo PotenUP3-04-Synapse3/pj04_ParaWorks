@@ -97,7 +97,7 @@ export default function TimelinePage() {
       <section className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Timeline</p>
-            <h1>타임라인</h1>
+          <h1>타임라인</h1>
           <p>등록된 프로젝트에 연결된 승인 타임라인 항목을 시간순으로 확인합니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
@@ -183,7 +183,7 @@ export default function TimelinePage() {
                           </div>
                         </article>
                       ))}
-                      </div>
+                    </div>
                   ) : null}
                 </section>
               );

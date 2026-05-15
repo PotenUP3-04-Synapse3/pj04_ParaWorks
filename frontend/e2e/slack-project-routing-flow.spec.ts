@@ -318,7 +318,7 @@ test("Slack project routing flows from sync to review approval and project timel
 
   await page.goto("/review");
   await page.locator(".group-container > div:first-child").click();
-  await expect(page.getByText("프로젝트 선택 후 승인 가능")).toBeVisible();
+  await expect(page.getByText("프로젝트 선택 후 승인할 수 있습니다.")).toBeVisible();
   await page.getByLabel("프로젝트 지정").selectOption("project-alpha");
   await expect(page.getByRole("button", { name: "승인", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "승인", exact: true }).click();

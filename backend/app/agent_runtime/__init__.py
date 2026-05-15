@@ -21,6 +21,18 @@ from backend.app.agent_runtime.orchestration import (
     build_agent_workflow,
     build_company_memory_workflow,
 )
+from backend.app.agent_runtime.project_routing import (
+    LangChainProjectRouterModel,
+    ProjectOption,
+    ProjectRouterModel,
+    ProjectRoutingCandidate,
+    ProjectRoutingDecision,
+    ProjectRoutingResult,
+    apply_project_routing_to_payload,
+    build_project_tools,
+    route_projects_for_candidates,
+    score_project_aliases,
+)
 from backend.app.agent_runtime.registry import AgentRegistry
 
 __all__ = [
@@ -34,12 +46,22 @@ __all__ = [
     'EvidenceMessage',
     'EvidencePacket',
     'PermissionContext',
+    'LangChainProjectRouterModel',
+    'ProjectOption',
+    'ProjectRouterModel',
+    'ProjectRoutingCandidate',
+    'ProjectRoutingDecision',
+    'ProjectRoutingResult',
     'ReviewCandidate',
     'TokenUsage',
+    'apply_project_routing_to_payload',
+    'build_project_tools',
     'build_evidence_cache_key',
     'build_evidence_summary',
     'build_agent_workflow',
     'build_company_memory_workflow',
     'evaluate_agent_cost_budget',
     'estimate_agent_run_cost',
+    'route_projects_for_candidates',
+    'score_project_aliases',
 ]
