@@ -11,7 +11,6 @@ from email.header import decode_header, make_header
 from email.utils import parseaddr
 from typing import Protocol
 from urllib.parse import quote
-from urllib.parse import quote
 
 import httpx
 
@@ -341,7 +340,16 @@ class GoogleConnector:
             partition = f'calendar:{calendar_id}'
             updated_min = latest_cursors_by_partition.get(partition) if latest_cursors_by_partition else None
             if updated_min:
-                fetched = self.client.calendar_events(calendar_id=calendar_id, updated_min=updated_min)
+                try:
+                    fetched = self.client.calendar_events(calendar_id=calendar_id, updated_min=updated_min)
+                except GoogleApiError as exc:
+                    if not _is_calendar_updated_min_too_old(exc):
+                        raise
+                    fetched = self.client.calendar_events(
+                        calendar_id=calendar_id,
+                        time_min=time_min,
+                        time_max=time_max,
+                    )
             else:
                 fetched = self.client.calendar_events(
                     calendar_id=calendar_id,
@@ -662,6 +670,10 @@ def _calendar_initial_window() -> tuple[str, str]:
         _rfc3339_utc(now - timedelta(days=GOOGLE_CALENDAR_INITIAL_PAST_DAYS)),
         _rfc3339_utc(now + timedelta(days=GOOGLE_CALENDAR_INITIAL_FUTURE_DAYS)),
     )
+
+
+def _is_calendar_updated_min_too_old(exc: GoogleApiError) -> bool:
+    return 'requested minimum modification time lies too far in the past' in str(exc).lower()
 
 
 def _rfc3339_utc(value: datetime) -> str:

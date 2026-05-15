@@ -16,7 +16,12 @@ type TodayTask = {
   priority?: string;
 };
 
-type UpcomingEvent = readonly [time: string, title: string, people: string];
+type UpcomingEvent = {
+  id: number;
+  time: string;
+  title: string;
+  detail: string;
+};
 type PersonalUpdate = {
   id: string;
   icon: typeof Sparkles;
@@ -73,7 +78,16 @@ export default function DashboardPage() {
         })),
     [completedTaskIds, dashboard?.today_todos],
   );
-  const visibleUpcomingEvents: UpcomingEvent[] = [];
+  const visibleUpcomingEvents: UpcomingEvent[] = useMemo(
+    () =>
+      (dashboard?.today_events ?? []).map((event) => ({
+        id: event.id,
+        time: formatEventTime(event.start),
+        title: event.title,
+        detail: event.attendee_summary || event.organizer || event.location || "Calendar",
+      })),
+    [dashboard?.today_events],
+  );
   const visibleAssignedProjects = dashboard?.assigned_projects ?? [];
   const highPriorityCount = visibleTodayTasks.filter((task) => priorityTone(task.priority) === "danger").length;
   const visiblePersonalUpdates: PersonalUpdate[] = [
@@ -247,12 +261,12 @@ export default function DashboardPage() {
           <Panel>
             <PanelTitle title="오늘 일정" />
             <div className="mt-3 space-y-2">
-              {visibleUpcomingEvents.map(([time, title, people]) => (
-                <div key={`${time}-${title}`} className="flex gap-3 rounded-lg border border-line bg-surface-soft p-3">
-                  <span className="w-12 shrink-0 text-[12px] font-extrabold text-[var(--primary-dark)]">{time}</span>
+              {visibleUpcomingEvents.map((event) => (
+                <div key={event.id} className="flex gap-3 rounded-lg border border-line bg-surface-soft p-3">
+                  <span className="w-12 shrink-0 text-[12px] font-extrabold text-[var(--primary-dark)]">{event.time}</span>
                   <div>
-                    <p className="text-[13px] font-extrabold text-ink">{title}</p>
-                    <p className="mt-1 text-[12px] text-muted">{people}</p>
+                    <p className="text-[13px] font-extrabold text-ink">{event.title}</p>
+                    <p className="mt-1 text-[12px] text-muted">{event.detail}</p>
                   </div>
                 </div>
               ))}
@@ -344,4 +358,15 @@ function priorityLabel(priority?: string) {
   if (priority === "low") return "낮음";
   if (priority === "medium") return "보통";
   return priority || "보통";
+}
+
+function formatEventTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return date.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Seoul",
+  });
 }

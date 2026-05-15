@@ -42,6 +42,19 @@ test("Dashboard completes approved todo through the API and hides it", async ({ 
             completed_at: null,
           },
         ],
+        today_events: [
+          {
+            id: 201,
+            title: "Customer renewal meeting",
+            start: `${today}T10:30:00+09:00`,
+            end: `${today}T11:00:00+09:00`,
+            location: "Zoom",
+            organizer: "organizer@example.com",
+            attendee_summary: "2 accepted, 1 tentative",
+            source_url: "https://calendar.google.com/event?eid=today",
+            permission_level: "internal",
+          },
+        ],
         assigned_projects: [
           {
             project_key: "project-alpha",
@@ -77,6 +90,9 @@ test("Dashboard completes approved todo through the API and hides it", async ({ 
   await page.goto("/dashboard");
 
   await expect(page.getByText("오늘 고객사 공유본 보내기")).toBeVisible();
+  await expect(page.getByText("Customer renewal meeting")).toBeVisible();
+  await expect(page.getByText("10:30")).toBeVisible();
+  await expect(page.getByText("2 accepted, 1 tentative")).toBeVisible();
   await expect(page.getByText("Project Alpha").first()).toBeVisible();
   await expect(page.getByText("근거 2건 · 활동 3건 · 검토 대기 1건")).toBeVisible();
 

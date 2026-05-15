@@ -625,6 +625,76 @@ def test_google_connector_uses_calendar_partition_cursors_per_calendar() -> None
     ]
 
 
+def test_google_connector_refetches_calendar_window_when_updated_min_is_too_old() -> None:
+    class ExpiredCursorClient(FakeGoogleClient):
+        def calendar_events(
+            self,
+            *,
+            calendar_id: str,
+            time_min: str | None = None,
+            time_max: str | None = None,
+            updated_min: str | None = None,
+        ) -> list[dict]:
+            self.calendar_event_calls.append(
+                {
+                    'calendar_id': calendar_id,
+                    'time_min': time_min,
+                    'time_max': time_max,
+                    'updated_min': updated_min,
+                }
+            )
+            if updated_min:
+                raise GoogleApiError('The requested minimum modification time lies too far in the past.')
+            return [
+                {
+                    'id': 'event-refetched',
+                    'summary': 'Refetched event',
+                    'updated': '2026-05-15T09:00:00Z',
+                    'start': {'dateTime': '2026-05-15T15:00:00+09:00'},
+                    'end': {'dateTime': '2026-05-15T16:00:00+09:00'},
+                }
+            ]
+
+    client = ExpiredCursorClient()
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='calendar',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=client,
+    )
+
+    events = connector.fetch_events_since({'calendar:primary': '2026-04-10T17:52:54.663Z'})
+
+    assert [event.source_id for event in events] == ['calendar:primary:event-refetched']
+    assert client.calendar_event_calls[0] == {
+        'calendar_id': 'primary',
+        'time_min': None,
+        'time_max': None,
+        'updated_min': '2026-04-10T17:52:54.663Z',
+    }
+    assert client.calendar_event_calls[1]['calendar_id'] == 'primary'
+    assert client.calendar_event_calls[1]['updated_min'] is None
+    assert client.calendar_event_calls[1]['time_min'] is not None
+    assert client.calendar_event_calls[1]['time_max'] is not None
+    assert client.calendar_event_calls == [
+        {
+            'calendar_id': 'primary',
+            'time_min': None,
+            'time_max': None,
+            'updated_min': '2026-04-10T17:52:54.663Z',
+        },
+        {
+            'calendar_id': 'primary',
+            'time_min': client.calendar_event_calls[1]['time_min'],
+            'time_max': client.calendar_event_calls[1]['time_max'],
+            'updated_min': None,
+        },
+    ]
+
+
 def test_google_connector_maps_calendar_events_to_source_events() -> None:
     connector = GoogleConnector(
         config=GoogleConnectorConfig(

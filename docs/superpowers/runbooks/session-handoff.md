@@ -2,6 +2,59 @@
 
 Updated: 2026-05-15
 
+## 2026-05-15 Google Calendar updatedMin fallback
+
+- Symptom:
+  - Google Calendar sync jobs failed with
+    `failed: The requested minimum modification time lies too far in the past.`
+- Root cause:
+  - Calendar sync uses per-calendar `updatedMin` cursors from existing
+    `Source.raw_metadata.sync_cursor` values.
+  - The local Postgres database had an older holiday-calendar cursor
+    (`calendar:ko.south_korea#holiday@group.v.calendar.google.com`,
+    latest cursor `2026-04-10T17:52:54.663Z`), which Google Calendar rejected
+    as `updatedMinTooLongAgo`.
+- Fix:
+  - `backend/app/connectors/google.py` now catches only this Calendar
+    `updatedMin` expiry error and refetches that calendar through the existing
+    initial Calendar window (`now-30d` to `now+180d`) instead of failing the
+    whole sync.
+  - Other Google API errors still fail normally.
+- Verification:
+  - RED regression:
+    `uv run pytest backend/tests/test_google_connector.py::test_google_connector_refetches_calendar_window_when_updated_min_is_too_old -q`
+    failed before implementation with the original `GoogleApiError`.
+  - GREEN verification:
+    `uv run pytest backend/tests/test_google_connector.py -q` -> `30 passed`.
+  - `uv run pytest backend/tests/test_connector_ingestion_contract.py backend/tests/test_google_connector.py -q`
+    -> `41 passed`.
+  - `uv run ruff check backend/app/connectors/google.py backend/tests/test_google_connector.py`
+    -> passed.
+
+## 2026-05-15 Dashboard Calendar today events visibility
+
+- Scope:
+  - Connected Calendar source visibility to the existing Dashboard schedule
+    panel. This did not add a Calendar Agent or promote raw Calendar events into
+    trusted knowledge.
+- Backend changes:
+  - `backend/app/api/v1/dashboard.py` now returns `today_events` from Calendar
+    `Source` rows whose `raw_metadata.event_start` or `raw_metadata.start` falls
+    within today's Asia/Seoul date.
+  - Invalid Calendar datetime strings and events outside today are ignored.
+  - Returned fields are `id`, `title`, `start`, `end`, `location`, `organizer`,
+    `attendee_summary`, `source_url`, and `permission_level`.
+- Frontend changes:
+  - `frontend/src/lib/api/types.ts` includes `DashboardResponse.today_events`.
+  - `frontend/src/app/dashboard/page.tsx` maps `today_events` into the top
+    schedule count and right-side "today schedule" list.
+- Verification:
+  - `uv run pytest backend/tests/test_dashboard_api.py -q` -> 4 passed.
+  - `uv run ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` -> passed.
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` -> 1 passed.
+  - `npm.cmd run lint` -> passed with pre-existing timeline unused-import warnings.
+  - `npm.cmd run build` -> passed.
+
 ## 2026-05-15 Google Calendar all-calendars MVP
 
 - Scope:
