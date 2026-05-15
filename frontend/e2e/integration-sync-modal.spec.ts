@@ -18,6 +18,76 @@ const preflight = {
   requires_paid_confirmation: true,
 };
 
+test("Integrations page keeps every connector card visible while manifests are loading", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal", "restricted"],
+          name: "ParaWorks Admin",
+          title: "Workspace Administrator",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.fulfill({ contentType: "application/json", json: [] });
+  });
+  await page.route("**/api/v1/integrations/connections", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: [] });
+  });
+  await page.route("**/api/v1/dashboard", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        pending_review_count: 0,
+        source_counts: { slack: 0, gmail: 0, drive: 0, calendar: 0, other: 0 },
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/*/oauth/install-url", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "unknown",
+        configured: false,
+        install_url: null,
+        state: null,
+        required_scopes: [],
+      },
+    });
+  });
+  await page.route("**/api/v1/integrations/*/runtime-status", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        connector_type: "unknown",
+        mode: "mock",
+        connection_status: "disconnected",
+        credential_status: "missing",
+        account_name: null,
+        latest_sync: null,
+      },
+    });
+  });
+
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+  await page.goto("/integrations");
+
+  await expect(page.getByRole("heading", { name: "Slack" })).toBeVisible({ timeout: 500 });
+  await expect(page.getByRole("heading", { name: "Gmail" })).toBeVisible({ timeout: 500 });
+  await expect(page.getByRole("heading", { name: "Google Drive" })).toBeVisible({ timeout: 500 });
+  await expect(page.getByRole("heading", { name: "Google Calendar" })).toBeVisible({ timeout: 500 });
+});
+
 test("Slack sync blocks the page with a progress modal and then reports the review queue total", async ({
   page,
 }) => {

@@ -60,6 +60,49 @@ type SyncProgressState = {
 
 type IntegrationRuntimeStatus = SlackRuntimeStatus | GoogleRuntimeStatus;
 
+const DEFAULT_INTEGRATION_MANIFESTS: IntegrationManifest[] = [
+  {
+    type: "slack",
+    display_name: "Slack",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 원천 데이터만 처리합니다.",
+  },
+  {
+    type: "gmail",
+    display_name: "Gmail",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 메일만 분석합니다.",
+  },
+  {
+    type: "drive",
+    display_name: "Google Drive",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 문서만 분석합니다.",
+  },
+  {
+    type: "calendar",
+    display_name: "Google Calendar",
+    mode: "mock",
+    status: "loading",
+    auth_type: "oauth",
+    required_scopes: [],
+    sync_strategy: "incremental",
+    cost_policy: "변경된 일정만 분석합니다.",
+  },
+];
+
 /**
  * 연동 도구별 시각적 요소(아이콘, 색상, 설명 등) 정의
  */
@@ -539,21 +582,7 @@ export default function IntegrationsPage() {
   }
 
   const visibleManifests = useMemo(
-    () =>
-      manifests.length > 0
-        ? manifests
-        : [
-            {
-              type: "slack",
-              display_name: "Slack",
-              mode: "mock",
-              status: "loading",
-              auth_type: "oauth",
-              required_scopes: [],
-              sync_strategy: "incremental",
-              cost_policy: "변경된 원천 데이터만 처리합니다.",
-            },
-          ],
+    () => (manifests.length > 0 ? manifests : DEFAULT_INTEGRATION_MANIFESTS),
     [manifests],
   );
 
