@@ -95,6 +95,53 @@ test("demo login switches the active API user", async ({ page }) => {
   expect(storedUser).toBe("demo-admin");
 });
 
+test("login pending state centers loading affordance over dimmed page", async ({ page }) => {
+  let releaseLogin!: () => void;
+  const loginPending = new Promise<void>((resolve) => {
+    releaseLogin = resolve;
+  });
+
+  await page.route("**/api/v1/auth/login", async (route) => {
+    await loginPending;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          name: "ParaWorks Admin",
+          role: "admin",
+          department: "Operations",
+        },
+      },
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByTestId("login-submit").click();
+
+  const overlay = page.getByTestId("login-loading-overlay");
+  const card = page.getByTestId("login-loading-card");
+
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toHaveCSS("position", "fixed");
+  await expect(overlay).toHaveCSS("background-color", "rgba(15, 23, 42, 0.72)");
+
+  const cardBox = await card.boundingBox();
+  const viewport = page.viewportSize();
+  expect(cardBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+
+  if (cardBox && viewport) {
+    const cardCenterX = cardBox.x + cardBox.width / 2;
+    const cardCenterY = cardBox.y + cardBox.height / 2;
+    expect(Math.abs(cardCenterX - viewport.width / 2)).toBeLessThan(4);
+    expect(Math.abs(cardCenterY - viewport.height / 2)).toBeLessThan(4);
+  }
+
+  releaseLogin();
+});
+
 test("admin console is blocked for employee accounts", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "google-hanvv-employee"));
   await page.goto("/admin");
