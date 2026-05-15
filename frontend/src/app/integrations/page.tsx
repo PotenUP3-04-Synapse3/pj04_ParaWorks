@@ -955,16 +955,16 @@ export default function IntegrationsPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-auto min-h-[4.5rem] pt-4 flex flex-wrap items-start justify-between gap-3 border-t border-[var(--line-soft)]">
+                <div className="mt-auto min-h-[4.5rem] pt-4 flex flex-col justify-end gap-2 border-t border-[var(--line-soft)]">
                   <span className="text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
                   </span>
-                  <div data-testid={`${manifest.type}-card-actions`} className="grid min-h-9 grid-cols-2 gap-2">
+                  <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-9 flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => void startSync(manifest.type)}
                       disabled={Boolean(pendingType)}
-                      className="liquid-primary inline-flex h-9 min-w-0 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+                      className="liquid-primary inline-flex h-9 min-w-[5.75rem] items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
                     >
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
@@ -973,7 +973,7 @@ export default function IntegrationsPage() {
                       <button
                         type="button"
                         onClick={() => void disconnect(manifest.type)}
-                        className="liquid-control inline-flex h-9 min-w-0 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
+                        className="liquid-control inline-flex h-9 min-w-[4.75rem] items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                         해제
@@ -982,10 +982,10 @@ export default function IntegrationsPage() {
                     {manifest.type === "drive" ? (
                       <a
                         href="/documents"
-                        className="liquid-control inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
+                        className="liquid-control inline-flex h-9 min-w-[6rem] items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
                       >
                         <FileText className="h-4 w-4" aria-hidden="true" />
-                        문서 현황 보기 →
+                        문서 현황
                       </a>
                     ) : null}
                   </div>

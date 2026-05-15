@@ -320,6 +320,16 @@ test("integration connector cards use consistent chrome and action layout", asyn
     elements.map((element) => Math.round(element.getBoundingClientRect().height)),
   );
   expect(Math.max(...actionHeights) - Math.min(...actionHeights)).toBeLessThanOrEqual(1);
+
+  const actionDisplays = await page.locator('[data-testid$="-card-actions"]').evaluateAll((elements) =>
+    elements.map((element) => window.getComputedStyle(element).display),
+  );
+  expect(new Set(actionDisplays)).toEqual(new Set(["flex"]));
+
+  const driveActionLabels = await page.getByTestId("drive-card-actions").locator("button, a").evaluateAll((elements) =>
+    elements.map((element) => element.textContent?.replace(/\s+/g, " ").trim()),
+  );
+  expect(driveActionLabels).toEqual(["동기화", "문서 현황"]);
 });
 
 test("Slack OAuth callback route renders a safe local error without secrets", async ({ page }) => {
