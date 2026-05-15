@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.connectors.base import SourceEvent
 from backend.app.ingestion.service import ingest_events
-from backend.app.models import Project, ReviewItem, TimelineEvent
+from backend.app.models import HistoryEvent, Project, ReviewItem, Source, TimelineEvent
 from backend.app.projects.classifier import build_project_assignment_candidates
 
 
@@ -606,10 +606,94 @@ def test_projects_api_links_approved_timeline_by_project_key_without_assignment(
     assert response.status_code == 200
     payload = response.json()
     seed_ir = next(project for project in payload['projects'] if project['project_key'] == 'seed-ir')
-    assert seed_ir['evidence_count'] == 0
+    assert seed_ir['evidence_count'] == 1
+    assert seed_ir['evidence'][0]['source_url'] == 'https://drive.mock/drive-ir-deck'
     assert len(seed_ir['timeline_items']) == 1
     assert seed_ir['timeline_items'][0]['title'] == 'IR pitch deck review completed'
     assert seed_ir['timeline_items'][0]['project_key'] == 'seed-ir'
+
+
+def test_project_timeline_items_use_slack_source_timestamp_for_occurred_at(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    project = Project(
+        project_key='project-alpha',
+        name='Project Alpha',
+        summary='Slack source time test',
+    )
+    source = Source(
+        source_type='slack',
+        source_id='C123:1777600800.000100',
+        source_url='https://example.slack.com/archives/C123/p1777600800000100',
+        title='Slack 원문',
+        author='김하나',
+        permission_level='internal',
+        raw_metadata={'ts': '1777600800.000100', 'channel_id': 'C123'},
+    )
+    timeline = TimelineEvent(
+        project_key='project-alpha',
+        title='실제 Slack 대화 기준 타임라인',
+        result_summary='승인 시각이 아니라 Slack 대화 시각으로 보여야 합니다.',
+        source_links=['https://example.slack.com/archives/C123/p1777600800000100'],
+        source_snippets=['Slack에서 오전에 논의했습니다.'],
+        confidence_score=0.9,
+        permission_level='internal',
+        review_status='approved',
+        created_at=datetime(2026, 5, 15, 9, 0, tzinfo=UTC),
+    )
+    db_session.add_all([project, source, timeline])
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    project_payload = next(project for project in response.json()['projects'] if project['project_key'] == 'project-alpha')
+    item = project_payload['timeline_items'][0]
+    assert item['created_at'].startswith('2026-05-15T09:00:00')
+    assert item['occurred_at'].startswith('2026-05-01T02:00:00')
+
+
+def test_project_timeline_prefers_slack_permalink_timestamp_when_source_metadata_is_missing(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Slack permalink fallback'))
+    source_url = 'https://example.slack.com/archives/C123/p1777600800000100'
+    db_session.add(
+        Source(
+            source_type='slack',
+            source_id='C123:1777600800.000100',
+            source_url=source_url,
+            title='Slack 원문',
+            author='김하나',
+            permission_level='internal',
+            raw_metadata={},
+            created_at=datetime(2026, 5, 15, 9, 0, tzinfo=UTC),
+        )
+    )
+    db_session.add(
+        TimelineEvent(
+            project_key='project-alpha',
+            title='Slack permalink 기준 타임라인',
+            result_summary='Source metadata가 부족해도 permalink 시간을 사용해야 합니다.',
+            source_links=[source_url],
+            source_snippets=['Slack permalink에 실제 원문 시간이 남아 있습니다.'],
+            confidence_score=0.9,
+            permission_level='internal',
+            review_status='approved',
+            created_at=datetime(2026, 5, 15, 9, 30, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert response.status_code == 200
+    project_payload = next(project for project in response.json()['projects'] if project['project_key'] == 'project-alpha')
+    item = project_payload['timeline_items'][0]
+    assert item['created_at'].startswith('2026-05-15T09:30:00')
+    assert item['occurred_at'].startswith('2026-05-01T02:00:00')
 
 
 def test_approved_review_item_with_project_key_appears_in_project_timeline(
@@ -654,47 +738,40 @@ def test_approved_review_item_with_project_key_appears_in_project_timeline(
     assert ktech['timeline_items'][0]['project_key'] == 'k-tech-pilot'
 
 
-def test_projects_api_does_not_convert_approved_knowledge_into_connector_evidence(
+def test_projects_api_builds_evidence_from_approved_project_activity_sources(
     client: TestClient,
     db_session: Session,
 ) -> None:
     db_session.add(
         Project(
-            project_key='seed-ir',
-            name='Seed IR',
-            summary='Seed IR project',
+            project_key='project-alpha',
+            name='Project Alpha',
+            summary='Approved activity evidence test',
         )
     )
-    review_item = ReviewItem(
-        item_type='history_event',
-        payload={
-            'title': 'Seed IR follow-up schedule changed',
-            'reason': 'Follow-up meeting schedule changed after investor request.',
-            'project_key': 'seed-ir',
-        },
-        source_links=['https://gmail.mock/message-ir'],
-        source_snippets=['The next meeting schedule should be adjusted after the investor request.'],
-        confidence_score=0.86,
+    history = HistoryEvent(
+        project_key='project-alpha',
+        title='Redis 큐 상태 확인',
+        reason='Slack에서 Redis 큐 상태를 확인했습니다.',
+        source_links=['https://example.slack.com/archives/C123/p1777600800000100'],
+        source_snippets=['Redis 큐 상태 확인 완료'],
+        confidence_score=0.91,
         permission_level='internal',
-        status='pending_review',
+        review_status='approved',
+        created_at=datetime(2026, 5, 15, 9, 0, tzinfo=UTC),
     )
-    db_session.add(review_item)
+    db_session.add(history)
     db_session.commit()
-    db_session.refresh(review_item)
-
-    approve_response = client.post(
-        f'/api/v1/review/{review_item.id}/approve',
-        headers={'X-Demo-User': 'demo-admin'},
-    )
-    assert approve_response.status_code == 200
 
     response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
 
     assert response.status_code == 200
-    seed_ir = next(project for project in response.json()['projects'] if project['project_key'] == 'seed-ir')
-    assert seed_ir['evidence_count'] == 0
-    assert {item['item_type'] for item in seed_ir['timeline_items']} == {'timeline_event'}
-    assert {item['item_type'] for item in seed_ir['activity_items']} == {'history_event'}
+    project_payload = next(project for project in response.json()['projects'] if project['project_key'] == 'project-alpha')
+    assert project_payload['evidence_count'] == 1
+    assert project_payload['source_types'] == ['slack']
+    assert project_payload['evidence'][0]['title'] == 'Redis 큐 상태 확인'
+    assert project_payload['evidence'][0]['source_url'] == 'https://example.slack.com/archives/C123/p1777600800000100'
+    assert project_payload['evidence'][0]['source_snippet'] == 'Redis 큐 상태 확인 완료'
 
 
 def test_approved_slack_llm_project_routing_item_appears_in_project_timeline(

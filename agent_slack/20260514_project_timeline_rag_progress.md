@@ -866,3 +866,72 @@
   - `npm run lint`: 통과
   - `npm run build`: 통과
   - `npm run test:visual -- projects-source-links.spec.ts timeline-project-date-groups.spec.ts --project=chromium-desktop`: `2 passed`
+
+## 2026-05-15 타임라인 실제 source 시각 및 프로젝트 근거 개선
+
+- 계획서:
+  - `docs/superpowers/plans/2026-05-15-timeline-project-evidence-ux.md`
+- 구현:
+  - 프로젝트 API의 `ProjectTimelineItem`에 `occurred_at`을 추가했다.
+  - Slack source URL 또는 `Source.raw_metadata.ts`에서 실제 Slack 대화 시각을 계산하고, 없으면 기존 승인/생성 시각으로 fallback한다.
+  - 프로젝트 탭의 `연결된 원본 근거`는 legacy `project_assignment`뿐 아니라 승인된 프로젝트 활동의 source link/snippet에서도 생성하도록 바꿨다.
+  - 타임라인 탭 리스트는 기본적으로 title만 보이게 정리했다.
+  - 타임라인 날짜/시간은 `occurred_at` 기준으로 묶고 표시한다.
+  - 타임라인은 기본적으로 최신 날짜 그룹만 보여주며, `날짜 전체 보기`와 날짜별 `자세히 보기/간단히 보기` 버튼으로 날짜 단위 compact/detail 전환이 가능하다.
+  - Slack history 상세의 `Open source` 새 탭 동작을 popup까지 Playwright로 검증했다.
+- 테스트:
+  - backend: `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` → `44 passed`
+  - ruff: `uv run ruff check backend/app/projects/service.py backend/tests/test_project_memory_api.py` → 통과
+  - frontend: `npm run lint` → 통과
+  - frontend: `npm run build` → 통과
+  - Playwright: `npm run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop` → `3 passed`
+
+## 2026-05-15 타임라인 날짜 Accordion UX 조정
+
+- 요청:
+  - 날짜를 기준으로 묶고, 날짜를 누르면 날짜만 보이거나 해당 날짜의 타임라인이 보이도록 한다.
+  - 기존 `자세히 보기`에 있던 시간/source/status 정보를 title과 같은 카드 안에 함께 표시한다.
+- 구현:
+  - `날짜 전체 보기`, `자세히 보기`, `간단히 보기` 버튼을 제거하고 날짜 헤더 자체를 클릭 가능한 accordion 버튼으로 바꿨다.
+  - 모든 날짜 헤더는 항상 표시한다.
+  - 기본으로 최신 날짜가 펼쳐지고, 펼쳐진 날짜를 다시 누르면 날짜 헤더만 남도록 접힌다.
+  - 닫힌 날짜를 누르면 해당 날짜의 타임라인 카드만 펼쳐진다.
+  - 펼쳐진 타임라인 카드에는 title, 실제 source 시간, source type, 승인 상태, summary가 함께 표시된다.
+- 테스트:
+  - `npm run lint`: 통과
+  - `npm run build`: 통과
+  - `npm run test:visual -- timeline-project-date-groups.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop`: `2 passed`
+
+## 2026-05-15 타임라인 목록 summary 노출 제거
+
+- 요청:
+  - Slack history를 누르기 전 화면에 `result_summary`가 보이므로, 해당 내용은 Slack history 상세에서만 보이게 한다.
+- 구현:
+  - 펼쳐진 날짜의 타임라인 카드에서 summary 문단을 제거했다.
+  - 타임라인 카드에는 title, 실제 source 시간, source type, 승인 상태, history 버튼만 남긴다.
+  - Slack history 버튼을 누르면 오른쪽 상세 패널에서 기존 summary/history 내용을 볼 수 있다.
+- 테스트:
+  - `npm run lint`: 통과
+  - `npm run build`: 통과
+  - `npm run test:visual -- timeline-project-date-groups.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop`: `2 passed`
+
+## 2026-05-15 프로젝트 원본 근거 기본 선택 및 Slack 원문 시각 보강
+
+- 요청:
+  - 프로젝트 탭의 `연결된 원본 근거`가 비어 보인다.
+  - 타임라인 날짜/시간이 Slack 대화 시각이 아니라 검토 승인 시각으로 보인다.
+- 원인:
+  - 실제 DB에서 `project-paraworks-mvp`에는 원본 근거 12건과 타임라인 6건이 있었지만, 프로젝트 탭/타임라인 탭이 최신 생성 프로젝트인 `project-k`를 기본 선택했다. `project-k`는 아직 승인된 근거와 활동이 0건이라 빈 화면으로 보였다.
+  - `backend/app/projects/service.py`는 `Source`가 source URL로 매칭되면 `raw_metadata.ts`가 없을 때 Slack permalink의 `p...` timestamp를 확인하기 전에 `Source.created_at`으로 fallback할 수 있었다. 이 경우 source 생성/동기화 시각이 실제 대화 시각처럼 보일 수 있었다.
+- 구현:
+  - 프로젝트 탭은 사용자가 별도 선택하지 않은 초기 진입 시, 승인된 원본 근거/활동/타임라인이 있는 첫 프로젝트를 기본 선택한다.
+  - 타임라인 탭은 승인된 타임라인 항목이 있는 첫 프로젝트를 기본 선택한다.
+  - Slack source URL이 Source에 매칭되더라도 `raw_metadata.ts`가 없으면 `Source.created_at`보다 Slack permalink timestamp를 먼저 사용한다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py::test_project_timeline_prefers_slack_permalink_timestamp_when_source_metadata_is_missing backend/tests/test_project_memory_api.py::test_project_timeline_items_use_slack_source_timestamp_for_occurred_at -q` → `2 passed`
+  - `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` → `47 passed`
+  - `uv run ruff check backend/app/projects/service.py backend/tests/test_project_memory_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts gmail-drive-project-routing-flow.spec.ts --project=chromium-desktop` → `6 passed`
+  - 실제 Docker DB에서 `project-paraworks-mvp`는 원본 근거 12건, 타임라인 6건으로 계산되고, 승인 시각과 Slack 원문 시각이 `created_at`/`occurred_at`으로 분리되는 것을 확인했다.

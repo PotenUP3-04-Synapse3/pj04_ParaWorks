@@ -150,24 +150,20 @@ def test_slack_agent_review_item_requires_project_before_approval(client, db_ses
     db_session.commit()
     db_session.refresh(item)
 
-    response = client.patch(f"/api/v1/review/{item.id}", json={'payload': {'project_key': 'project-alpha'}})
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body['payload']['project_key'] == 'project-alpha'
-    assert body['payload']['project_name'] == 'Project Alpha'
-    assert body['payload']['project_needs_user_selection'] is False
     preview = client.get(f'/api/v1/review/{item.id}/promotion-preview')
     blocked = client.post(f'/api/v1/review/{item.id}/approve')
-    patched = client.patch(f'/api/v1/review/{item.id}', json={'payload': {'project_key': 'project-alpha'}})
+    response = client.patch(f"/api/v1/review/{item.id}", json={'payload': {'project_key': 'project-alpha'}})
     approved = client.post(f'/api/v1/review/{item.id}/approve')
 
     assert preview.status_code == 200
     assert preview.json()['can_approve'] is False
     assert 'project_key' in preview.json()['missing_required_fields']
     assert blocked.status_code == 400
-    assert patched.status_code == 200
-    assert patched.json()['payload']['project_name'] == 'Project Alpha'
+    assert response.status_code == 200
+    body = response.json()
+    assert body['payload']['project_key'] == 'project-alpha'
+    assert body['payload']['project_name'] == 'Project Alpha'
+    assert body['payload']['project_needs_user_selection'] is False
     assert approved.status_code == 200
     assert approved.json()['promotion_result']['project_key'] == 'project-alpha'
 

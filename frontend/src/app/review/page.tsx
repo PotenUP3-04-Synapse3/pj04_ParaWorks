@@ -111,13 +111,6 @@ function projectRoutingReason(item: ReviewItem) {
   return reason || undefined;
 }
 
-function needsProjectSelection(item: ReviewItem, preview?: ReviewPromotionPreview) {
-  return (
-    item.payload.project_assignment_method === "llm_tool" &&
-    (!stringField(item.payload.project_key) || preview?.missing_required_fields?.includes("project_key"))
-  );
-}
-
 function projectAssignmentFields(item: ReviewItem) {
   if (item.item_type !== "project_assignment") return undefined;
   const projectName = stringField(item.payload.project_name).trim();
@@ -523,7 +516,6 @@ export default function ReviewPage() {
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
                     const workFields = mailDocsWorkFields(item);
                     const assignmentFields = projectAssignmentFields(item);
-                    const requiresProjectSelection = needsProjectSelection(item, preview);
 
                     return (
                       <div key={item.id} className="p-5">

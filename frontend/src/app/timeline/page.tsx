@@ -11,7 +11,6 @@ type TimelineHistory = {
   id: string;
   createdAt: string;
   time: string;
-  createdAt: string;
   source: TimelineSource;
   title: string;
   summary: string;
@@ -31,6 +30,7 @@ export default function TimelinePage() {
   const [projectTimelines, setProjectTimelines] = useState<ProjectTimeline[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | undefined>();
+  const [expandedDateLabel, setExpandedDateLabel] = useState<string | null | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
 
@@ -47,8 +47,10 @@ export default function TimelinePage() {
             .filter((item) => item.review_status === "approved")
             .map(timelineHistoryFromProjectItem),
         }));
+        const defaultProject = firstProjectWithHistories(projects);
         setProjectTimelines(projects);
-        setSelectedProjectId((current) => current || projects[0]?.id || "");
+        setSelectedProjectId((current) => current || defaultProject?.id || "");
+        setExpandedDateLabel((current) => current ?? firstDateLabel(defaultProject?.histories ?? []));
       })
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : "Failed to load timeline.");
@@ -68,7 +70,10 @@ export default function TimelinePage() {
   );
   const selectedHistory = selectedProject?.histories.find((history) => history.id === selectedHistoryId);
   const historyCount = selectedProject?.histories.length ?? 0;
-  const historyGroups = selectedProject ? groupHistoriesByDate(selectedProject.histories) : [];
+  const groupedHistories = useMemo(
+    () => (selectedProject ? groupHistoriesByDate(selectedProject.histories) : []),
+    [selectedProject],
+  );
 
   if (loading || !selectedProject) {
     return (
@@ -93,7 +98,7 @@ export default function TimelinePage() {
       <section className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Timeline</p>
-            <h1>타임라인</h1>
+          <h1>타임라인</h1>
           <p>등록된 프로젝트에 연결된 승인 타임라인 항목을 시간순으로 확인합니다.</p>
         </div>
         <div className="panel inline-flex h-fit w-fit items-center gap-2 px-4 py-3 text-[13px] font-bold">
@@ -116,6 +121,7 @@ export default function TimelinePage() {
             onClick={() => {
               setSelectedProjectId(project.id);
               setSelectedHistoryId(undefined);
+              setExpandedDateLabel(firstDateLabel(project.histories));
             }}
           >
             {project.name}
@@ -131,36 +137,58 @@ export default function TimelinePage() {
           </div>
 
           <div className="mt-4 space-y-5">
-            {historyGroups.length > 0 ? historyGroups.map((group) => (
-              <section key={group.dateLabel} className="space-y-3">
-                <h3 className="text-[13px] font-extrabold text-muted">{group.dateLabel}</h3>
-                {group.items.map((item) => (
-                  <article key={item.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <time className="text-[12px] font-extrabold text-muted">{item.time}</time>
-                        <span className="badge blue">{item.source}</span>
-                        <span className="badge green">{item.status}</span>
-                      </div>
-                      <button
-                        type="button"
-                        aria-pressed={selectedHistoryId === item.id}
-                        className={`icon-button small ${selectedHistoryId === item.id ? "active" : ""}`}
-                        aria-label={`Open ${item.title}`}
-                        onClick={() => setSelectedHistoryId((current) => (current === item.id ? undefined : item.id))}
-                      >
-                        <FileClock className="h-4 w-4" aria-hidden="true" />
-                      </button>
+            {selectedProject.histories.length > 0 ? groupedHistories.map((group) => {
+              const isExpanded = expandedDateLabel === group.dateLabel;
+              return (
+                <section key={group.dateLabel} className="space-y-3">
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition ${
+                      isExpanded
+                        ? "border-[var(--primary)] bg-[var(--primary-soft)] text-ink"
+                        : "border-line bg-[var(--glass-elevated)] text-muted hover:bg-surface-soft"
+                    }`}
+                    onClick={() => {
+                      setExpandedDateLabel((current) => (current === group.dateLabel ? null : group.dateLabel));
+                      setSelectedHistoryId(undefined);
+                    }}
+                  >
+                    <h3 className="text-[13px] font-extrabold">{group.dateLabel}</h3>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-muted">
+                      {group.items.length.toLocaleString()}건
+                    </span>
+                  </button>
+                  {isExpanded ? (
+                    <div className="space-y-3">
+                      {group.items.map((item) => (
+                        <article key={item.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="text-[15px] font-extrabold text-ink">{item.title}</h3>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-bold text-muted">
+                                <time>{item.time}</time>
+                                <span className="badge blue">{item.source}</span>
+                                <span className="badge green">{item.status}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              aria-pressed={selectedHistoryId === item.id}
+                              className={`icon-button small shrink-0 ${selectedHistoryId === item.id ? "active" : ""}`}
+                              aria-label={`Open ${item.title}`}
+                              onClick={() => setSelectedHistoryId((current) => (current === item.id ? undefined : item.id))}
+                            >
+                              <FileClock className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
                     </div>
-                    <h3 className="mt-3 text-[15px] font-extrabold text-ink">{item.title}</h3>
-                    <p className="mt-1 text-[13px] leading-6 text-muted">{item.summary}</p>
-                    <div className="mt-3 rounded-md bg-surface-soft px-3 py-2 text-[12px] font-bold leading-5 text-muted">
-                      History: {item.history}
-                    </div>
-                  </article>
-                ))}
-              </section>
-            )) : (
+                  ) : null}
+                </section>
+              );
+            }) : (
               <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
                 이 프로젝트에 승인된 타임라인 항목이 아직 없습니다. Review에서 이 프로젝트를 선택하고 타임라인 후보를 승인하면 여기에 표시됩니다.
               </div>
@@ -219,11 +247,11 @@ export default function TimelinePage() {
 }
 
 function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
+  const occurredAt = item.occurred_at || item.created_at;
   return {
     id: item.id,
-    createdAt: item.created_at,
-    time: formatTime(item.created_at),
-    createdAt: item.created_at,
+    createdAt: occurredAt,
+    time: formatTime(occurredAt),
     source: sourceFromLinks(item.source_links),
     title: item.title,
     summary: item.summary,
@@ -233,18 +261,26 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
     snippets: item.source_snippets.map((snippet) => ({
       author: `${sourceFromLinks(item.source_links)} evidence · ${item.evidence_reason || "승인된 프로젝트 근거"}`,
       body: snippet,
-      time: formatTime(item.created_at),
+      time: formatTime(occurredAt),
     })),
   };
 }
 
 function groupHistoriesByDate(histories: TimelineHistory[]) {
   const groups = new Map<string, TimelineHistory[]>();
-  for (const history of histories) {
+  for (const history of [...histories].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {
     const label = formatDate(history.createdAt);
     groups.set(label, [...(groups.get(label) ?? []), history]);
   }
   return Array.from(groups.entries()).map(([dateLabel, items]) => ({ dateLabel, items }));
+}
+
+function firstDateLabel(histories: TimelineHistory[]) {
+  return groupHistoriesByDate(histories)[0]?.dateLabel ?? null;
+}
+
+function firstProjectWithHistories(projects: ProjectTimeline[]) {
+  return projects.find((project) => project.histories.length > 0) ?? projects[0];
 }
 
 function sourceFromLinks(links: string[]): TimelineSource {
@@ -259,7 +295,11 @@ function sourceFromLinks(links: string[]): TimelineSource {
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--:--";
-  return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Seoul",
+  }).format(date);
 }
 
 function formatDate(value: string) {
@@ -269,6 +309,6 @@ function formatDate(value: string) {
     year: "numeric",
     month: "long",
     day: "numeric",
-    timeZone: "UTC",
+    timeZone: "Asia/Seoul",
   }).format(date);
 }
