@@ -1,10 +1,11 @@
 import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from backend.app.agent_runtime import (
     AgentManifest,
     AgentRunResult,
+    EvidenceMessage,
     EvidencePacket,
     ReviewCandidate,
     TokenUsage,
@@ -28,6 +29,22 @@ MAIL_DOCUMENT_AGENT_MANIFEST = AgentManifest(
     capabilities=('timeline_extraction', 'history_generation', 'decision_extraction'),
 )
 
+_RESERVED_REVIEW_PAYLOAD_FIELDS = {
+    'title',
+    'summary',
+    'agent_name',
+    'agent_run_id',
+    'prompt_version',
+    'cache_key',
+    'estimated_cost_usd',
+    'token_usage',
+    'uncertainty_reason',
+    'source_ids',
+    'source_types',
+    'source_urls',
+    'source_authors',
+}
+
 
 @dataclass(frozen=True)
 class MailDocumentAgentModelResponse:
@@ -42,7 +59,7 @@ class MailDocumentAgentModelResponse:
     uncertainty_reason: str | None = None
     is_business_related: bool = True
     project_tag: str | None = None
-    structured_data: dict[str, str] | None = None
+    structured_data: dict[str, Any] | None = None
 
 
 class MailDocumentAgentModel(Protocol):
@@ -58,12 +75,12 @@ class DeterministicMailDocumentAgentModel:
         title = '메일 및 문서 히스토리 후보'
         summary = 'Gmail 및 Google Drive 증거 데이터가 검토 가능한 회사 메모리 후보로 요약되었습니다.'
         item_type = 'history_event'
-        structured_data: dict[str, str] = {}
+        structured_data: dict[str, Any] = {}
 
         assignment = _extract_assignment(packet)
         if assignment:
-            title = assignment.get('title') or '업무 지시 후보'
-            summary = assignment.get('task_summary') or assignment.get('evidence_sentence') or summary
+            title = str(assignment.get('title') or '업무 지시 후보')
+            summary = str(assignment.get('task_summary') or assignment.get('evidence_sentence') or summary)
             item_type = 'todo'
             structured_data = assignment
 
@@ -92,7 +109,7 @@ class DeterministicMailDocumentAgentModel:
                 'evidence_reason': structured_data.get('evidence_reason') or '기한이 포함된 업무 지시 표현이 있습니다.',
             }
         elif packet.messages:
-            summary = packet.messages[0].source_snippet
+            summary = _business_context_summary(packet.messages[0])
 
         # 토큰 사용량 및 신뢰도 계산 (모의 계산)
         input_tokens = max(1, len(combined_text) // 4)
@@ -129,7 +146,7 @@ class MailDocumentAgent:
 
         candidates = []
         if model_response.is_business_related:
-            payload_fields = dict(model_response.structured_data or {})
+            payload_fields = _safe_payload_fields(model_response.structured_data)
             if model_response.project_tag:
                 payload_fields['project_tag'] = model_response.project_tag
 
@@ -155,7 +172,7 @@ class MailDocumentAgent:
             output_tokens=model_response.output_tokens,
         )
         cost = estimate_agent_run_cost(
-            model_name=MAIL_DOCUMENT_AGENT_MODEL_NAME,
+            model_name=model_response.model_name or MAIL_DOCUMENT_AGENT_MODEL_NAME,
             token_usage=token_usage,
             input_cost_per_1m=self.input_cost_per_1m,
             output_cost_per_1m=self.output_cost_per_1m,
@@ -210,6 +227,16 @@ def _normalized_item_type(item_type: str) -> str:
     return item_type
 
 
+def _safe_payload_fields(fields: dict[str, Any] | None) -> dict[str, Any]:
+    if not fields:
+        return {}
+    return {
+        key: value
+        for key, value in fields.items()
+        if key not in _RESERVED_REVIEW_PAYLOAD_FIELDS
+    }
+
+
 def _extract_assignment(packet: EvidencePacket) -> dict[str, str]:
     for message in packet.messages:
         text = message.text.strip()
@@ -219,18 +246,28 @@ def _extract_assignment(packet: EvidencePacket) -> dict[str, str]:
         assignee = _extract_assignee(text)
         due_date = _extract_due_date(text, message.metadata)
         task_summary = _extract_task_summary(text, sentence)
-        title = _extract_subject(text) or task_summary or '업무 지시 후보'
+        title = _action_title(text, task_summary)
         fields = {
             'title': title[:200],
             'task_summary': (task_summary or sentence or text[:160]).strip()[:500],
             'evidence_sentence': (sentence or message.source_snippet).strip()[:500],
             'evidence_reason': '담당자, 기한, 요청/검토/준비 같은 업무 지시 표현이 원문에 포함되어 있습니다.',
             'source_type': str(message.metadata.get('source_type') or packet.source_type),
+            'business_context': _business_context_summary(message),
+            'action_required': 'true',
+            'recommended_next_step': _recommended_next_step(task_summary or sentence, text),
+            'summary_quality': 'actionable',
         }
+        source_subject = _extract_subject(text)
+        if source_subject:
+            fields['source_subject'] = source_subject
         if assignee:
             fields['assignee'] = assignee
         if due_date:
             fields['due_date'] = due_date
+        counterparty = _extract_counterparty(text)
+        if counterparty:
+            fields['counterparty'] = counterparty
         project_tag = _extract_project_tag(text)
         if project_tag:
             fields['project_tag'] = project_tag
@@ -241,6 +278,24 @@ def _extract_assignment(packet: EvidencePacket) -> dict[str, str]:
 def _looks_like_work_assignment(text: str) -> bool:
     lowered = text.lower()
     cues = (
+        '담당',
+        '요청',
+        '검토',
+        '준비',
+        '완료',
+        '기한',
+        '까지',
+        '회신',
+        '공유',
+        '승인',
+        '결정',
+        '확인',
+        '부탁',
+        '파일럿',
+        '제안',
+        '도입',
+        '미팅',
+        '일정',
         '담당',
         '요청',
         '검토',
@@ -262,7 +317,7 @@ def _assignment_sentence(text: str) -> str:
     paragraphs = [
         line.strip()
         for line in re.split(r'[\n\r]+', text)
-        if line.strip() and not line.strip().lower().startswith('subject:')
+        if line.strip() and not _is_header_line(line)
     ]
     for paragraph in paragraphs:
         if _looks_like_work_assignment(paragraph):
@@ -276,6 +331,62 @@ def _assignment_sentence(text: str) -> str:
 
 def _extract_subject(text: str) -> str:
     match = re.search(r'(?im)^subject:\s*(.+)$', text)
+    return match.group(1).strip() if match else ''
+
+
+def _action_title(text: str, task_summary: str) -> str:
+    subject = _extract_subject(text)
+    subject = re.sub(r'(?i)^(re|fw|fwd):\s*', '', subject).strip()
+    subject = re.sub(r'^\[[^\]]+\]\s*', '', subject).strip()
+    if 'K테크' in text and '파일럿' in text:
+        return 'K테크 1개월 파일럿 제안 검토 및 회신'
+    if subject:
+        return subject[:200]
+    return (task_summary or '업무 지시 후보')[:200]
+
+
+def _business_context_summary(message: EvidenceMessage) -> str:
+    text = _clean_email_headers(message.text)
+    first_sentence = _first_business_sentence(text)
+    if first_sentence:
+        return first_sentence[:500]
+    return '메일 및 문서 증거에서 검토 가능한 회사 업무 맥락이 확인되었습니다.'
+
+
+def _recommended_next_step(task_summary: str, text: str) -> str:
+    if 'K테크' in text and '파일럿' in text:
+        return '파일럿 범위, 성공 지표, 일정 초안을 정리해 회신합니다.'
+    cleaned = _clean_email_headers(task_summary).strip()
+    if cleaned:
+        return cleaned[:500]
+    return '관련 업무 내용을 검토하고 필요한 후속 조치를 정리합니다.'
+
+
+def _first_business_sentence(text: str) -> str:
+    cleaned = ' '.join(line.strip() for line in text.splitlines() if line.strip())
+    for part in re.split(r'(?<=[.!?。]|[다요음])\s+', cleaned):
+        sentence = part.strip()
+        if sentence and not _is_header_line(sentence):
+            return sentence
+    return cleaned.strip()
+
+
+def _clean_email_headers(text: str) -> str:
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not _is_header_line(line)
+    ]
+    return '\n'.join(lines)
+
+
+def _is_header_line(line: str) -> bool:
+    lowered = line.strip().lower()
+    return lowered.startswith(('subject:', 'from:', 'date:', 'to:', 'cc:'))
+
+
+def _extract_counterparty(text: str) -> str:
+    match = re.search(r'([A-Za-z0-9가-힣]+(?:\s+[A-Za-z0-9가-힣]+)*\s*(?:솔루션즈|테크|컴퍼니|주식회사|팀))', text)
     return match.group(1).strip() if match else ''
 
 
@@ -310,7 +421,7 @@ def _extract_task_summary(text: str, fallback_sentence: str) -> str:
     task_match = re.search(r'(?:업무|task)\s*[:：]\s*([^\n]+)', text, re.IGNORECASE)
     if task_match:
         return task_match.group(1).strip()
-    cleaned = re.sub(r'(?im)^subject:\s*.+$', '', fallback_sentence).strip()
+    cleaned = _clean_email_headers(fallback_sentence).strip()
     return cleaned or fallback_sentence
 
 

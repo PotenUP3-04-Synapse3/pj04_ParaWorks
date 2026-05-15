@@ -8,10 +8,14 @@ from sqlalchemy.orm import Session
 
 from backend.app.agent_runtime import EvidencePacket, PermissionContext
 from backend.app.agents.mail_document_agent import (
+    MAIL_DOCUMENT_SOURCE_TYPES,
     DeterministicMailDocumentAgentModel,
     MailDocumentAgent,
-    build_mail_document_agent_preflight,
-    create_mail_document_agent_review_items,
+    MailDocumentLlmProviderError,
+    MailDocumentLlmSettings,
+    build_langchain_mail_document_agent_model,
+    build_mail_document_evidence_packet,
+    build_mail_document_llm_preflight,
     create_mail_document_agent_review_items_for_changed_sources,
 )
 from backend.app.agents.memory_extraction_agent import (
@@ -55,7 +59,13 @@ from backend.app.core.demo_auth import DemoUser, get_demo_user
 from backend.app.core.redaction import redact_secret_text
 from backend.app.db.session import get_db
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.models import IntegrationConnection, ReviewItem, Source, SyncJob
+from backend.app.models import (
+    DocumentChunk,
+    IntegrationConnection,
+    ReviewItem,
+    Source,
+    SyncJob,
+)
 from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
@@ -290,7 +300,7 @@ def _run_connector_agent_review(
         review_items = create_slack_agent_review_items(
             db=db,
             agent=SlackAgent(model=DeterministicSlackAgentModel()),
-            permission_context=PermissionContext(user_id=user.id, role=user.role),
+            permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
             source_ids=changed_source_ids,
         )
@@ -300,7 +310,7 @@ def _run_connector_agent_review(
         review_items = create_mail_document_agent_review_items_for_changed_sources(
             db=db,
             agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
-            permission_context=PermissionContext(user_id=user.id, role=user.role),
+            permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
             source_ids=changed_source_ids,
         )
@@ -541,7 +551,7 @@ def run_slack_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | 
     review_items = create_slack_agent_review_items(
         db=db,
         agent=agent,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        permission_context=_permission_context(user),
         source_window='mock-slack:all',
     )
     record_audit_log(
@@ -602,7 +612,7 @@ def run_slack_llm_agent_review(
         review_items = create_slack_agent_review_items(
             db=db,
             agent=agent,
-            permission_context=PermissionContext(user_id=user.id, role=user.role),
+            permission_context=_permission_context(user),
             source_window=_slack_llm_source_window(llm_settings),
             max_messages=llm_settings.max_evidence_messages,
             selection_strategy='ranked',
@@ -634,11 +644,13 @@ def run_slack_llm_agent_review(
 @router.post('/mail-docs/agent-review')
 def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | str]:
     agent = MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
-    review_items = create_mail_document_agent_review_items(
+    source_ids = _mail_document_source_ids(db=db, user=user)
+    review_items = create_mail_document_agent_review_items_for_changed_sources(
         db=db,
         agent=agent,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
-        source_window='mock-mail-docs:all',
+        permission_context=_permission_context(user),
+        source_window='mock-mail-docs:grouped',
+        source_ids=source_ids,
     )
     record_audit_log(
         db=db,
@@ -646,7 +658,12 @@ def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str
         action='agent.review.run',
         target_type='agent',
         target_id='mail_document_agent',
-        metadata={'created_review_items': len(review_items)},
+        metadata={
+            'created_review_items': len(review_items),
+            'source_count': len(source_ids),
+            'source_window': 'mock-mail-docs:grouped',
+            'selection_strategy': 'source_group',
+        },
     )
     db.commit()
 
@@ -658,19 +675,85 @@ def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str
 
 
 @router.get('/mail-docs/agent-review/llm/preflight')
-def get_mail_document_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
-    return build_mail_document_agent_preflight(
+def get_mail_document_agent_preflight(
+    db: DbSession,
+    settings: AppSettings,
+    user: CurrentUser,
+) -> dict[str, object]:
+    llm_settings = _mail_document_llm_settings(settings)
+    packet = _build_mail_document_llm_evidence_packet(db=db, user=user, settings=llm_settings)
+    preflight = build_mail_document_llm_preflight(packet=packet, settings=llm_settings)
+    preflight['source_window'] = packet.source_window
+    return preflight
+
+
+@router.post('/mail-docs/agent-review/llm')
+def run_mail_document_llm_agent_review(
+    request: SlackLlmRunRequest,
+    db: DbSession,
+    settings: AppSettings,
+    user: CurrentUser,
+) -> dict[str, int | str | float | dict[str, object]]:
+    llm_settings = _mail_document_llm_settings(settings)
+    packet = _build_mail_document_llm_evidence_packet(db=db, user=user, settings=llm_settings)
+    preflight = build_mail_document_llm_preflight(packet=packet, settings=llm_settings)
+    preflight['source_window'] = packet.source_window
+    if preflight['action'] != 'run':
+        raise HTTPException(status_code=400, detail=preflight)
+    if not request.confirm_paid_run:
+        raise HTTPException(status_code=400, detail='Paid LLM run requires confirm_paid_run=true')
+
+    try:
+        agent = MailDocumentAgent(
+            model=build_langchain_mail_document_agent_model(llm_settings),
+            input_cost_per_1m=llm_settings.input_cost_per_1m,
+            output_cost_per_1m=llm_settings.output_cost_per_1m,
+        )
+        review_items = create_mail_document_agent_review_items_for_changed_sources(
+            db=db,
+            agent=agent,
+            permission_context=_permission_context(user),
+            source_window=_mail_document_llm_source_window(llm_settings),
+            source_ids=_mail_document_source_ids(db=db, user=user),
+        )
+    except MailDocumentLlmProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    record_audit_log(
         db=db,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
-        source_window='mail-docs:preflight',
+        actor=user,
+        action='agent.review.llm_run',
+        target_type='agent',
+        target_id='mail_document_agent',
+        metadata={
+            'created_review_items': len(review_items),
+            'preflight': preflight,
+            'source_window': packet.source_window,
+            'evidence_message_count': len(packet.messages),
+            'included_source_types': sorted({
+                str(message.metadata.get('source_type'))
+                for message in packet.messages
+                if message.metadata.get('source_type')
+            }),
+            'parser_status_counts': _parser_status_counts(packet),
+            'selection_strategy': 'source_group',
+        },
     )
+    db.commit()
+
+    return {
+        'agent_name': 'mail_document_agent',
+        'status': 'complete',
+        'created_review_items': len(review_items),
+        'preflight': preflight,
+    }
 
 
 @router.get('/memory-extraction/agent-review/llm/preflight')
 def get_memory_extraction_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
     return build_memory_extraction_agent_preflight(
         db=db,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        permission_context=_permission_context(user),
         source_window='memory-extraction:preflight',
     )
 
@@ -698,8 +781,31 @@ def _slack_llm_settings(settings: Settings) -> SlackLlmSettings:
     )
 
 
+def _mail_document_llm_settings(settings: Settings) -> MailDocumentLlmSettings:
+    return MailDocumentLlmSettings(
+        enabled=settings.agent_llm_enabled,
+        provider_order=tuple(_configured_channel_ids(settings.agent_llm_provider_order)),
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key or settings.google_api_key,
+        openai_model=settings.agent_llm_openai_model,
+        gemini_model=settings.agent_llm_gemini_model,
+        input_cost_per_1m=settings.agent_llm_input_cost_per_1m_tokens,
+        output_cost_per_1m=settings.agent_llm_output_cost_per_1m_tokens,
+        max_estimated_cost_usd=settings.agent_llm_max_estimated_cost_usd,
+        max_input_chars=settings.agent_llm_max_input_chars,
+        max_evidence_messages=settings.agent_llm_max_evidence_messages,
+        max_output_tokens=settings.agent_llm_max_output_tokens,
+        temperature=settings.agent_llm_temperature,
+        timeout_seconds=settings.agent_llm_timeout_seconds,
+    )
+
+
 def _slack_llm_source_window(settings: SlackLlmSettings) -> str:
     return f'slack:live:ranked:{settings.max_evidence_messages}'
+
+
+def _mail_document_llm_source_window(settings: MailDocumentLlmSettings) -> str:
+    return f'mail-docs:live:ranked:{settings.max_evidence_messages}'
 
 
 def _build_slack_llm_evidence_packet(
@@ -710,11 +816,60 @@ def _build_slack_llm_evidence_packet(
 ) -> EvidencePacket:
     return build_slack_evidence_packet(
         db=db,
-        permission_context=PermissionContext(user_id=user.id, role=user.role),
+        permission_context=_permission_context(user),
         source_window=_slack_llm_source_window(settings),
         max_messages=settings.max_evidence_messages,
         selection_strategy='ranked',
     )
+
+
+def _build_mail_document_llm_evidence_packet(
+    *,
+    db: Session,
+    user: CurrentUser,
+    settings: MailDocumentLlmSettings,
+) -> EvidencePacket:
+    return build_mail_document_evidence_packet(
+        db=db,
+        permission_context=_permission_context(user),
+        source_window=_mail_document_llm_source_window(settings),
+        max_messages=settings.max_evidence_messages,
+        selection_strategy='ranked',
+    )
+
+
+def _permission_context(user: DemoUser) -> PermissionContext:
+    return PermissionContext(
+        user_id=user.id,
+        role=user.role,
+        allowed_permission_levels=tuple(user.permission_levels),
+    )
+
+
+def _mail_document_source_ids(*, db: Session, user: DemoUser) -> list[str]:
+    rows = db.scalars(
+        select(Source.source_id)
+        .join(DocumentChunk, DocumentChunk.source_id == Source.id)
+        .where(Source.source_type.in_(MAIL_DOCUMENT_SOURCE_TYPES))
+        .where(DocumentChunk.permission_level.in_(tuple(user.permission_levels)))
+        .order_by(Source.id)
+    ).all()
+    seen: set[str] = set()
+    source_ids: list[str] = []
+    for source_id in rows:
+        if source_id not in seen:
+            source_ids.append(source_id)
+            seen.add(source_id)
+    return source_ids
+
+
+def _parser_status_counts(packet: EvidencePacket) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for message in packet.messages:
+        status = message.metadata.get('parser_status')
+        if isinstance(status, str) and status:
+            counts[status] = counts.get(status, 0) + 1
+    return counts
 
 
 def _clean_channel_ids(channel_ids: list[str] | None) -> list[str]:
