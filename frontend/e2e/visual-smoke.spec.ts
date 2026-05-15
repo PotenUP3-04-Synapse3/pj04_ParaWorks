@@ -298,6 +298,30 @@ test("Slack card keeps OAuth install outside primary action row", async ({ page 
   await expect(slackActions.getByRole("button", { name: "Slack 연결" })).toHaveCount(0);
 });
 
+test("integration connector cards use consistent chrome and action layout", async ({ page }) => {
+  await page.goto("/integrations");
+  await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
+
+  const cards = page.locator("article.integration-glass-card");
+  await expect(cards).toHaveCount(4);
+  await expect(cards.filter({ has: page.getByRole("heading", { name: "Slack" }) })).not.toContainText("우선순위");
+
+  const borderColors = await cards.evaluateAll((elements) =>
+    elements.map((element) => window.getComputedStyle(element).borderColor),
+  );
+  expect(new Set(borderColors).size).toBe(1);
+
+  const heights = await cards.evaluateAll((elements) =>
+    elements.map((element) => Math.round(element.getBoundingClientRect().height)),
+  );
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+
+  const actionHeights = await page.locator('[data-testid$="-card-actions"]').evaluateAll((elements) =>
+    elements.map((element) => Math.round(element.getBoundingClientRect().height)),
+  );
+  expect(Math.max(...actionHeights) - Math.min(...actionHeights)).toBeLessThanOrEqual(1);
+});
+
 test("Slack OAuth callback route renders a safe local error without secrets", async ({ page }) => {
   await page.goto("/integrations/slack/callback");
 

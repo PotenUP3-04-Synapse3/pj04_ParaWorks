@@ -850,7 +850,6 @@ export default function IntegrationsPage() {
             const visual = integrationVisuals[manifest.type as keyof typeof integrationVisuals] ?? fallbackVisual;
             const Icon = visual.icon;
             const pending = pendingType === manifest.type;
-            const featured = manifest.type === "slack";
             const connection = connections.find((item) => item.connector_type === manifest.type);
             const credentialAvailable = connection?.credential_status === "available";
             const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
@@ -877,9 +876,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className={`integration-glass-card rounded-lg border bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col ${
-                  featured ? "border-[#c9b7d5]" : "border-[var(--line-soft)]"
-                }`}
+                className="integration-glass-card min-h-[27rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">
@@ -889,11 +886,6 @@ export default function IntegrationsPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold">{manifest.display_name}</h3>
-                        {featured ? (
-                          <span className="rounded-full bg-[var(--workspace-accent)] px-2 py-0.5 text-xs font-bold text-[#13231f]">
-                            우선순위
-                          </span>
-                        ) : null}
                       </div>
                       <p className="mt-1 text-xs font-semibold text-[var(--workspace-rail-active)]">
                         {manifest.mode} · {manifest.sync_strategy}
@@ -963,16 +955,16 @@ export default function IntegrationsPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-auto pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-soft)]">
+                <div className="mt-auto min-h-[4.5rem] pt-4 flex flex-wrap items-start justify-between gap-3 border-t border-[var(--line-soft)]">
                   <span className="text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
                   </span>
-                  <div data-testid={`${manifest.type}-card-actions`} className="flex flex-wrap gap-2">
+                  <div data-testid={`${manifest.type}-card-actions`} className="grid min-h-9 grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => void startSync(manifest.type)}
                       disabled={Boolean(pendingType)}
-                      className="liquid-primary inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+                      className="liquid-primary inline-flex h-9 min-w-0 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
                     >
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
@@ -981,7 +973,7 @@ export default function IntegrationsPage() {
                       <button
                         type="button"
                         onClick={() => void disconnect(manifest.type)}
-                        className="liquid-control inline-flex h-9 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
+                        className="liquid-control inline-flex h-9 min-w-0 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                         해제
@@ -990,7 +982,7 @@ export default function IntegrationsPage() {
                     {manifest.type === "drive" ? (
                       <a
                         href="/documents"
-                        className="liquid-control inline-flex h-9 items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
+                        className="liquid-control inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
                       >
                         <FileText className="h-4 w-4" aria-hidden="true" />
                         문서 현황 보기 →
