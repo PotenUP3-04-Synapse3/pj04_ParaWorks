@@ -6,6 +6,29 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-15 Slack 프로젝트 Router Tool Agent 추가
+
+- 기존 `agent_slack` LangGraph 흐름에 `project_route` 노드를 추가했다.
+- Slack Agent는 업무 후보를 추출한 뒤 LangChain tool-calling 기반 프로젝트 router를 실행해, 등록 프로젝트 중 연결 후보를 고르고 프로젝트 활동 요약과 근거를 생성한다.
+- Router는 `list_registered_projects`, `score_project_candidates` tool을 사용하며, 결과는 승인 전 trusted knowledge가 아니라 `ReviewItem.payload`에 `project_assignment_method=llm_tool`, 요약, 근거, 확신도, 대체 후보로 보존된다.
+- Slack LLM project routing으로 후보가 생성된 sync에서는 기존 deterministic `project_assignment` 중복 생성을 건너뛰되, Agent 후보가 새로 생성되지 않은 no-op sync에서는 fallback 분류를 막지 않도록 조건을 좁혔다.
+- Review 화면은 LLM 프로젝트 분류 요약과 연결 근거를 표시하고, 사용자가 등록 프로젝트 select에서 프로젝트를 바꾼 뒤 승인할 수 있는 흐름을 유지한다.
+- 현재 Slack Agent LangGraph 문서를 `agent_slack/slack_agent_langgraph.md`에 추가했다.
+- 검증: 관련 백엔드 회귀 테스트 60개 통과, ruff 통과, 프론트엔드 TypeScript/lint/build 통과, Playwright review project routing desktop/mobile 2개 통과.
+
+포트폴리오 관점:
+
+- Slack 원본 대화가 “업무 후보 추출”에서 끝나지 않고, 등록 프로젝트 맥락에 맞게 요약/근거와 함께 human-in-the-loop 검토로 넘어가는 흐름을 보여준다.
+- 규칙 기반 매칭의 오탐을 줄이면서도 LLM 제안을 사용자가 검토하고 수정할 수 있어, 프로젝트별 활동 타임라인의 신뢰도를 높인다.
+
+## 2026-05-15 Slack 장시간 동기화 실패 오인 수정
+
+- 실제 Playwright로 `/integrations` Slack 동기화를 눌러 네트워크 응답과 runtime-status를 확인했다.
+- 확인 결과 최신 job은 `complete`, `last_error=null`이었고, 과거 대량 sync는 약 153초가 걸려 프론트 polling 한도 135초를 넘길 수 있었다.
+- 프론트가 이 timeout을 실제 backend failure와 같은 `동기화 실패` 모달로 표시하던 문제를 수정했다.
+- 120초 이상 진행 중이거나 polling 한도를 넘긴 정상 running job은 `백그라운드에서 계속 진행 중입니다` 안내로 표시하고, 실패 상태로 오인하지 않게 했다.
+- 검증: Playwright 동기화 모달 회귀 desktop/mobile 6개 통과, TypeScript/lint/build 통과.
+
 ## 2026-05-14 사용자 정의 프로젝트 동기화 검토사항 수정
 
 - 사용자가 프로젝트를 생성하면 기존 Slack/Gmail/Drive/Calendar source를 즉시
@@ -4042,3 +4065,14 @@ Cost/security note:
   - GREEN: `npm.cmd run test:visual -- review-agent-metadata.spec.ts` -> `2 passed`.
   - 실제 로컬 `/review` Playwright 점검에서 Prompt/Cost 메타데이터 22개 중 `unknown` 0개, `규칙 기반 분류`와 `LLM 미사용` 표시 확인.
   - `npm.cmd exec tsc -- --noEmit`, `npm.cmd run lint`, `npm.cmd run build`, `uv run ruff check backend/app/api/v1/review.py`, `uv run pytest backend/tests/test_review.py -q` 통과.
+- `fix: prevent false Slack sync failure state`
+  - Slack sync now supports an async job path: the UI requests `run_async=true`, receives a queued `job_id`, and polls runtime status until ReviewItem persistence is actually complete.
+  - Runtime status now exposes `created_at` and `updated_at` for the latest sync job, allowing the frontend to distinguish a fresh completed job from an old one after a lost POST response.
+  - The integrations UI recovers from `Internal Server Error`/socket-style response loss by checking runtime status before showing failure, so completed jobs are no longer reported as failed.
+  - The sync completion modal was tightened for mobile so action buttons do not overlap or intercept each other.
+  - Verification: Playwright Slack sync modal regression passed on desktop/mobile (`4 passed`); frontend typecheck, lint, and production build passed; targeted backend sync/status/audit/connector tests passed (`22` and `25` tests).
+- `fix: clarify project assignment review items`
+  - Clarified the Review Queue distinction between Slack LLM project routing and deterministic `project_assignment` fallback items.
+  - `project_assignment` now appears as `프로젝트 연결`, with `프로젝트 분류기`, `규칙 기반 프로젝트 연결`, and a readable `프로젝트 연결 후보` detail card showing project, task summary, evidence reason, and source metadata.
+  - Existing Slack LLM routed items still show the `LLM 프로젝트 분류` card with LLM-generated summary and reason.
+  - Verification: `npm.cmd run test:visual -- review-agent-metadata.spec.ts`, `npm.cmd run test:visual -- review-project-routing.spec.ts`, `npm.cmd exec tsc -- --noEmit`, `npm.cmd run lint`, and `npm.cmd run build` passed.

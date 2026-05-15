@@ -708,6 +708,8 @@ export type SlackRuntimeStatus = {
     status: string;
     message: string;
     progress_pct: number;
+    created_at?: string | null;
+    updated_at?: string | null;
   } | null;
   latest_sync_summary?: {
     fetched_events: number;
@@ -742,6 +744,8 @@ export type GoogleRuntimeStatus = {
     status: string;
     message: string;
     progress_pct: number;
+    created_at?: string | null;
+    updated_at?: string | null;
   } | null;
   cost_policy: {
     status_lookup_triggers_sync: boolean;

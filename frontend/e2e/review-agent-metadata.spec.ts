@@ -9,6 +9,10 @@ const projectAssignmentItem = {
     agent_name: "project_classifier",
     project_key: "paraworks-mvp",
     project_name: "ParaWorks MVP",
+    source_type: "slack",
+    source_title: "마이그레이션 검증 논의",
+    task_summary: "마이그레이션 검증 체계와 Review Queue 작업을 ParaWorks MVP로 묶습니다.",
+    evidence_reason: '"ParaWorks MVP" 단서가 Slack 원문과 프로젝트 설명에서 발견되었습니다.',
   },
   source_links: ["https://example.com/slack/thread"],
   source_snippets: ["마이그레이션 검증 체계와 Review Queue 작업을 ParaWorks MVP로 묶습니다."],
@@ -107,9 +111,19 @@ test("Review page labels deterministic project classifier metadata without unkno
   await page.goto("/review");
   await expect(page.locator(".group-container")).toHaveCount(1);
 
+  await expect(page.getByText("프로젝트 연결", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("project assignment");
+
   await page.locator(".group-container > div:first-child").click();
 
-  await expect(page.getByText("규칙 기반 분류")).toBeVisible();
-  await expect(page.getByText("LLM 미사용")).toBeVisible();
+  await expect(page.getByText("프로젝트 분류기")).toBeVisible();
+  await expect(page.getByText("규칙 기반 프로젝트 연결")).toBeVisible();
+  await expect(page.getByText("추가 LLM 비용 없음")).toBeVisible();
+  await expect(page.getByText("프로젝트 연결 후보")).toBeVisible();
+  await expect(page.getByText("추천 프로젝트: ParaWorks MVP")).toBeVisible();
+  await expect(page.getByText("연결 내용: 마이그레이션 검증 체계와 Review Queue 작업을 ParaWorks MVP로 묶습니다.")).toBeVisible();
+  await expect(page.getByText('분류 근거: "ParaWorks MVP" 단서가 Slack 원문과 프로젝트 설명에서 발견되었습니다.')).toBeVisible();
+  await expect(page.getByText("원본: 마이그레이션 검증 논의")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("LLM 미사용");
   await expect(page.locator("body")).not.toContainText(/\bunknown\b/i);
 });

@@ -1,13 +1,22 @@
+import hashlib
 import logging
 import os
 import re
+from dataclasses import replace
 from datetime import datetime
+from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
+from agent_slack.project_routing import (
+    LangChainProjectRouterModel,
+    ProjectOption,
+    ProjectRoutingDecision,
+    route_projects_for_candidates,
+)
 from backend.app.agent_runtime.contracts import (
     AgentRunCost,
     ReviewCandidate,
@@ -72,6 +81,11 @@ class SlackAgentState(BaseModel):
     is_work_related: bool = False
     summary: str | None = None
     candidates: list[ReviewCandidate] = Field(default_factory=list)
+    projects: list[ProjectOption] = Field(default_factory=list)
+    project_router_model: Any | None = None
+    project_prompt_tokens: int = 0
+    project_completion_tokens: int = 0
+    project_model_name: str | None = None
     model_name: str = "gpt-4o-mini"
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
@@ -342,29 +356,153 @@ def extract_candidate_node(state: SlackAgentState):
             "total_completion_tokens": state.total_completion_tokens + 100
         }
 
-# 8. LangGraph 그래프 구축
+# 8. 노드 구현: 등록 프로젝트 분류 (LangChain Tool Agent)
+def project_route_node(state: SlackAgentState):
+    if not state.projects or not state.candidates:
+        return {
+            "candidates": state.candidates,
+            "project_prompt_tokens": state.project_prompt_tokens,
+            "project_completion_tokens": state.project_completion_tokens,
+        }
+
+    router_model = state.project_router_model or _build_project_router_model(state)
+    routing_result = route_projects_for_candidates(
+        model=router_model,
+        projects=state.projects,
+        candidates=[
+            _routing_candidate_payload(
+                item_index=index,
+                candidate=candidate,
+                channel_id=state.channel_id,
+            )
+            for index, candidate in enumerate(state.candidates)
+        ],
+    )
+    routed_candidates = _apply_project_routing_decisions(
+        candidates=state.candidates,
+        decisions=routing_result.decisions,
+    )
+    return {
+        "candidates": routed_candidates,
+        "project_prompt_tokens": state.project_prompt_tokens + routing_result.input_tokens,
+        "project_completion_tokens": state.project_completion_tokens + routing_result.output_tokens,
+        "project_model_name": routing_result.model_name,
+        "total_prompt_tokens": state.total_prompt_tokens + routing_result.input_tokens,
+        "total_completion_tokens": state.total_completion_tokens + routing_result.output_tokens,
+    }
+
+
+def _build_project_router_model(state: SlackAgentState) -> LangChainProjectRouterModel:
+    chat_model = ChatOpenAI(
+        model=state.model_name,
+        temperature=0,
+        api_key=state.openai_api_key,
+    )
+    return LangChainProjectRouterModel(
+        chat_model=chat_model,
+        projects=state.projects,
+        model_name=state.model_name,
+    )
+
+
+def _routing_candidate_payload(
+    *,
+    item_index: int,
+    candidate: ReviewCandidate,
+    channel_id: str,
+) -> dict[str, Any]:
+    return {
+        "item_index": item_index,
+        "source_id": _candidate_source_id(candidate, channel_id),
+        "title": candidate.title,
+        "summary": candidate.summary,
+        "item_type": candidate.item_type,
+        "source_links": candidate.source_links,
+        "source_snippets": candidate.source_snippets,
+        "confidence_score": candidate.confidence_score,
+    }
+
+
+def _candidate_source_id(candidate: ReviewCandidate, channel_id: str) -> str:
+    for url in candidate.source_links:
+        if "/p" not in url:
+            continue
+        raw_ts = url.split("/p")[-1].split("?")[0]
+        if len(raw_ts) >= 16:
+            return f"{channel_id}:{raw_ts[:10]}.{raw_ts[10:]}"
+    digest = hashlib.sha1(
+        f"{candidate.title}\n{candidate.summary}".encode()
+    ).hexdigest()[:12]
+    return f"{channel_id}:candidate-{digest}"
+
+
+def _apply_project_routing_decisions(
+    *,
+    candidates: list[ReviewCandidate],
+    decisions: list[ProjectRoutingDecision],
+) -> list[ReviewCandidate]:
+    decision_by_index = {decision.item_index: decision for decision in decisions}
+    routed: list[ReviewCandidate] = []
+    for index, candidate in enumerate(candidates):
+        decision = decision_by_index.get(index)
+        if decision is None:
+            routed.append(candidate)
+            continue
+        payload_fields = {
+            **candidate.payload_fields,
+            "project_assignment_method": "llm_tool",
+            "project_assignment_summary": decision.assignment_summary,
+            "project_assignment_reason": decision.assignment_reason,
+            "project_assignment_confidence": decision.confidence_score,
+            "project_alternatives": decision.alternatives,
+            "project_needs_user_selection": decision.needs_user_selection,
+        }
+        if decision.project_key:
+            payload_fields["project_key"] = decision.project_key
+        if decision.project_name:
+            payload_fields["project_name"] = decision.project_name
+        routed.append(replace(candidate, payload_fields=payload_fields))
+    return routed
+
+
+# 9. LangGraph 그래프 구축
 def build_slack_agent_graph():
     workflow = StateGraph(SlackAgentState)
     workflow.add_node("preprocess", preprocess_node)
     workflow.add_node("classify", classify_work_node)
     workflow.add_node("summarize", summarize_node)
     workflow.add_node("extract", extract_candidate_node)
+    workflow.add_node("project_route", project_route_node)
     
     workflow.add_edge(START, "preprocess")
     workflow.add_edge("preprocess", "classify")
     workflow.add_conditional_edges("classify", lambda state: "summarize" if state.is_work_related else END)
     workflow.add_edge("summarize", "extract")
-    workflow.add_edge("extract", END)
+    workflow.add_edge("extract", "project_route")
+    workflow.add_edge("project_route", END)
     return workflow.compile()
 
-# 9. 실행 엔트리포인트
-def process_daily_slack_sync(channel_id: str, messages: list[dict], openai_api_key: str | None = None, gemini_api_key: str | None = None):
+# 10. 실행 엔트리포인트
+def process_daily_slack_sync(
+    channel_id: str,
+    messages: list[dict],
+    openai_api_key: str | None = None,
+    gemini_api_key: str | None = None,
+    projects: list[ProjectOption | dict[str, str]] | None = None,
+    project_router_model: Any | None = None,
+):
     app = build_slack_agent_graph()
+    project_options = [
+        project if isinstance(project, ProjectOption) else ProjectOption.model_validate(project)
+        for project in (projects or [])
+    ]
     initial_state = SlackAgentState(
         channel_id=channel_id, 
         messages=messages,
         openai_api_key=openai_api_key,
-        gemini_api_key=gemini_api_key
+        gemini_api_key=gemini_api_key,
+        projects=project_options,
+        project_router_model=project_router_model,
     )
     
     final_state = app.invoke(initial_state)

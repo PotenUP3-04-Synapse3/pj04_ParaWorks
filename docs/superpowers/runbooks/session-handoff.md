@@ -2,6 +2,70 @@
 
 Updated: 2026-05-14
 
+## 2026-05-15 Slack 프로젝트 Router Tool Agent 인수인계
+
+- 목적:
+  - 사용자가 등록한 프로젝트 목록을 기준으로 Slack Agent가 추출한 `decision_record`, `todo`, `history_event` 후보를 LLM tool-calling 방식으로 프로젝트에 연결한다.
+  - 프로젝트 연결 요약과 근거를 Review Queue에서 확인한 뒤 사용자가 프로젝트를 바꾸거나 승인할 수 있게 한다.
+- 주요 변경 파일:
+  - `agent_slack/project_routing.py`
+  - `agent_slack/agent_slack.py`
+  - `agent_slack/slack_agent_langgraph.md`
+  - `backend/app/agents/slack_agent/sync_service.py`
+  - `backend/app/api/v1/integrations.py`
+  - `frontend/src/app/review/page.tsx`
+  - `frontend/e2e/review-project-routing.spec.ts`
+  - `backend/tests/test_agent_slack_project_routing.py`
+- 현재 LangGraph:
+  - `START -> preprocess -> classify -> summarize -> extract -> project_route -> END`
+  - `classify`에서 업무 신호가 없으면 바로 `END`로 종료한다.
+  - `project_route`는 등록 프로젝트와 추출 후보가 있을 때만 LangChain tool-calling router를 실행한다.
+- 데이터 계약:
+  - `ProjectOption(project_key, name, summary)`
+  - `ProjectRoutingDecision(source_id, item_index, project_key, project_name, confidence_score, assignment_summary, assignment_reason, alternatives, needs_user_selection)`
+  - `ReviewItem.payload` 추가 필드:
+    - `project_assignment_method=llm_tool`
+    - `project_assignment_summary`
+    - `project_assignment_reason`
+    - `project_assignment_confidence`
+    - `project_alternatives`
+    - `project_needs_user_selection`
+- 안전 경계:
+  - 테스트에서 live LLM을 호출하지 않는다. fake model 또는 monkeypatch를 사용한다.
+  - Review 승인 전까지 LLM project routing 결과는 trusted knowledge가 아니다.
+  - Slack LLM routing으로 Agent 후보가 생성된 경우에만 deterministic `project_assignment` 중복 생성을 건너뛴다. provider key가 있더라도 Agent 후보가 0개인 no-op sync에서는 fallback 분류가 막히지 않는다.
+- 검증:
+  - `uv run pytest backend/tests/test_agent_slack_project_routing.py backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` -> `60 passed`
+  - `uv run ruff check ...` -> `All checks passed!`
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- review-project-routing.spec.ts` -> desktop/mobile `2 passed`
+
+## 2026-05-15 Slack 장시간 동기화 실패 오인 인수인계
+
+- 증상:
+  - 사용자가 Slack 동기화 진행 중 `동기화 실패`가 표시된다고 보고했다.
+- 실제 확인:
+  - Playwright로 로그인 후 `/integrations`에서 Slack 동기화를 실행했다.
+  - 최신 job `slack-34e086b550e64dcb94b75072f87577b6`은 `complete`, `last_error=null`이었다.
+  - message는 `fetched=0 created_review_items=5 skipped_events=0 pending_review_items=13`.
+  - 이번 실제 검증으로 pending review가 8개에서 13개로 증가했다.
+- 원인:
+  - 대량 sync job은 약 153초 걸린 기록이 있었다.
+  - 프론트 polling 한도는 135초라, 백엔드가 정상 running 중이어도 프론트가 timeout을 error로 처리했다.
+  - 그 결과 모달 제목이 `Slack 동기화 실패`로 표시될 수 있었다.
+- 수정:
+  - `frontend/src/app/integrations/page.tsx`에 `SYNC_BACKGROUND_NOTICE_DELAY_MS=120_000`과 background-running 안내 문구를 추가했다.
+  - polling timeout 메시지는 실제 실패가 아니라 running/backgrounded 상태로 유지한다.
+  - 모달은 `백그라운드에서 계속 진행 중입니다. 완료되면 작업 스트림의 최근 sync 상태에 반영됩니다.`를 표시한다.
+- 검증:
+  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts --project=chromium-desktop -g "polling timeout"` -> `1 passed`
+  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts` -> desktop/mobile `6 passed`
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+
 ## 2026-05-14 Slack sync ReviewItem 복구 및 검토사항 정렬
 
 - 증상:
@@ -1505,3 +1569,54 @@ uv run ruff check backend/app/connectors/slack.py backend/app/connectors/factory
 - 주의:
   - 실제 화면 본문에는 “RAG 연동 관련 근거보기 unknown 현상 수정”처럼 원본 Slack/요약 텍스트에 포함된 `unknown` 단어가 남아 있을 수 있다. 이것은 메타데이터 fallback 오류가 아니라 검토 항목 내용이다.
   - 현재 로컬 dev 서버가 오래 떠 있으면 백엔드 API 응답에는 예전 `"Unknown"` 기본값이 보일 수 있으나, 코드 기준으로는 `null`로 수정되어 서버 재시작 후 반영된다. 프론트는 기존 `"Unknown"` 응답도 방어적으로 처리한다.
+## 2026-05-15 Slack sync 실패 오인 방지 인수인계
+
+- 최신 수정 범위:
+  - `backend/app/api/v1/integrations.py`
+  - `backend/app/ingestion/sync.py`
+  - `backend/tests/test_mock_sync.py`
+  - `backend/tests/test_integration_runtime_status.py`
+  - `frontend/src/app/integrations/page.tsx`
+  - `frontend/src/lib/api/types.ts`
+  - `frontend/e2e/integration-sync-modal.spec.ts`
+- 배경:
+  - 실제 백엔드 Slack sync job은 `complete`로 끝났고 ReviewItem도 생성되었지만, 긴 POST 요청 응답이 Next proxy에서 `socket hang up`으로 끊겨 UI가 `Internal Server Error`를 표시했다.
+- 반영된 구조:
+  - sync 요청 body에 `run_async`가 추가되었다.
+  - Slack 프론트 호출은 `run_async=true`로 queued job을 즉시 받고 runtime-status polling으로 완료를 확인한다.
+  - 기존 동기식 sync API 동작은 테스트와 호환되도록 유지했다.
+  - `sync_connector_events()`는 선택적으로 전달된 `job_id`를 재사용한다.
+  - `runtime-status.latest_sync`는 `created_at`, `updated_at`을 내려준다.
+  - POST 응답이 500/socket/network 계열로 끊기면 프론트가 방금 시작한 시간 이후의 runtime job을 확인하고, 완료된 job이면 성공 상태로 복구한다.
+- 주의:
+  - FastAPI `BackgroundTasks`는 현재 요청 DB 세션을 넘겨 같은 job id를 이어서 처리한다. 더 강한 운영 구조가 필요하면 Celery/Redis worker로 옮기되, `job_id` 재사용과 runtime-status polling 계약은 유지해야 한다.
+  - 모바일 모달은 `max-height`, `overflow-y-auto`, 단일 열 버튼 배치를 사용한다. 이 구조를 되돌리면 Playwright mobile에서 버튼 클릭이 다른 요소에 가로막힐 수 있다.
+- 검증:
+  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts` -> 4 passed
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `uv run pytest backend/tests/test_mock_sync.py backend/tests/test_integration_runtime_status.py backend/tests/test_stream.py backend/tests/test_audit_logs.py -q` -> 22 passed
+  - `uv run pytest backend/tests/test_connector_ingestion_contract.py backend/tests/test_slack_agent_api.py backend/tests/test_mail_document_agent_api.py -q` -> 25 passed
+
+## 2026-05-15 `project_assignment` 검토사항 표시 인수인계
+
+- 현재 구조:
+  - Slack Agent의 새 LLM 프로젝트 라우팅은 `todo`, `history_event`, `decision_record` 같은 Slack Agent 검토 후보 payload에 `project_assignment_method: "llm_tool"`로 저장된다.
+  - 별도 `project_assignment` item type은 여전히 `backend/app/projects/classifier.py`의 deterministic fallback/기존 항목이다.
+  - 따라서 기존 DB에 남아 있는 `project_assignment` pending 항목은 LLM 사용 항목으로 표시하면 안 된다.
+- 반영한 UI:
+  - `frontend/src/app/review/page.tsx`
+  - `project_assignment` 타입 라벨을 `프로젝트 연결`로 표시한다.
+  - `project_classifier`는 `프로젝트 분류기`로 표시한다.
+  - Prompt는 `규칙 기반 프로젝트 연결`, Cost는 `추가 LLM 비용 없음`으로 표시한다.
+  - `project_name`, `task_summary`, `evidence_reason`, `source_title`, `source_type`을 `프로젝트 연결 후보` 카드에 분리해 보여준다.
+- 테스트:
+  - `frontend/e2e/review-agent-metadata.spec.ts`가 deterministic `project_assignment` 표시 계약을 검증한다.
+  - `frontend/e2e/review-project-routing.spec.ts`가 LLM 프로젝트 라우팅 카드가 계속 표시되는지 검증한다.
+- 최신 검증:
+  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts` -> 2 passed
+  - `npm.cmd run test:visual -- review-project-routing.spec.ts` -> 2 passed
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed

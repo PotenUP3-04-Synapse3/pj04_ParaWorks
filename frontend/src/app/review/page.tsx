@@ -86,6 +86,49 @@ function mailDocsWorkFields(item: ReviewItem) {
   };
 }
 
+function projectRoutingLabel(item: ReviewItem) {
+  return item.payload.project_assignment_method === "llm_tool"
+    ? "LLM 프로젝트 분류"
+    : undefined;
+}
+
+function projectRoutingSummary(item: ReviewItem) {
+  const summary = stringField(item.payload.project_assignment_summary).trim();
+  return summary || undefined;
+}
+
+function projectRoutingReason(item: ReviewItem) {
+  const reason = stringField(item.payload.project_assignment_reason).trim();
+  return reason || undefined;
+}
+
+function projectAssignmentFields(item: ReviewItem) {
+  if (item.item_type !== "project_assignment") return undefined;
+  const projectName = stringField(item.payload.project_name).trim();
+  const taskSummary = stringField(item.payload.task_summary).trim() || itemSummary(item);
+  const evidenceReason = stringField(item.payload.evidence_reason).trim();
+  const sourceTitle = stringField(item.payload.source_title).trim();
+  const sourceType = stringField(item.payload.source_type).trim();
+  if (!projectName && !taskSummary && !evidenceReason && !sourceTitle && !sourceType) return undefined;
+  return {
+    projectName,
+    taskSummary,
+    evidenceReason,
+    sourceTitle,
+    sourceType,
+  };
+}
+
+function agentDisplayName(agentName: string) {
+  const labels: Record<string, string> = {
+    project_classifier: "프로젝트 분류기",
+    slack_agent: "Slack Agent",
+    mail_document_agent: "Mail/Docs Agent",
+    memory_extraction_agent: "Memory Agent",
+  };
+  return labels[agentName] ?? agentName;
+}
+
 function routeLabel(route: string) {
   if (route === "/projects") return "프로젝트에서 보기";
   if (route === "/timeline") return "타임라인에서 보기";
@@ -100,6 +143,7 @@ function itemTypeLabel(itemType: string) {
     timeline_event: "타임라인",
     todo: "할 일",
     message_review: "메시지 검토",
+    project_assignment: "프로젝트 연결",
   };
   return labels[itemType] ?? itemType.replaceAll("_", " ");
 }
@@ -117,7 +161,7 @@ function reviewPromptLabel(item: ReviewItem, agentName: string) {
   const agentRunPrompt = knownStringField(item.agent_run_details?.prompt_version);
   if (agentRunPrompt) return agentRunPrompt;
 
-  if (agentName === "project_classifier") return "규칙 기반 분류";
+  if (agentName === "project_classifier") return "규칙 기반 프로젝트 연결";
   if (!item.agent_run_id) return "규칙 기반 처리";
   return "프롬프트 정보 없음";
 }
@@ -129,7 +173,8 @@ function reviewCostLabel(item: ReviewItem, agentName: string) {
   const agentRunCost = numberField(item.agent_run_details?.estimated_cost_usd);
   if (agentRunCost !== undefined && item.agent_run_id) return formatCost(agentRunCost) ?? "$0.000000";
 
-  if (agentName === "project_classifier" || !item.agent_run_id) return "LLM 미사용";
+  if (agentName === "project_classifier") return "추가 LLM 비용 없음";
+  if (!item.agent_run_id) return "LLM 미사용";
   return "비용 정보 없음";
 }
 
@@ -454,6 +499,7 @@ export default function ReviewPage() {
                     const isEvidenceRequestOpen = evidenceRequestId === item.id;
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
                     const workFields = mailDocsWorkFields(item);
+                    const assignmentFields = projectAssignmentFields(item);
 
                     return (
                       <div key={item.id} className="p-5">
@@ -466,7 +512,7 @@ export default function ReviewPage() {
                               {isAgentItem ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-[#21132b] px-2.5 py-1 text-xs font-semibold text-white">
                                   <Sparkles className="h-3 w-3" aria-hidden="true" />
-                                  {agentName}
+                                  {agentDisplayName(agentName)}
                                 </span>
                               ) : (
                                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -564,6 +610,53 @@ export default function ReviewPage() {
                                     ))}
                                   </select>
                                 </label>
+                                {assignmentFields ? (
+                                  <div className="mt-4 max-w-3xl rounded-lg border border-[var(--line-soft)] bg-white/70 p-4">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ink-muted)]">
+                                      프로젝트 연결 후보
+                                    </p>
+                                    {assignmentFields.projectName ? (
+                                      <p className="mt-2 text-sm font-bold leading-6 text-[var(--ink)]">
+                                        추천 프로젝트: {assignmentFields.projectName}
+                                      </p>
+                                    ) : null}
+                                    {assignmentFields.taskSummary ? (
+                                      <p className="mt-2 text-sm leading-6 text-[var(--ink)]">
+                                        연결 내용: {assignmentFields.taskSummary}
+                                      </p>
+                                    ) : null}
+                                    {assignmentFields.evidenceReason ? (
+                                      <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+                                        분류 근거: {assignmentFields.evidenceReason}
+                                      </p>
+                                    ) : null}
+                                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-[var(--ink-muted)]">
+                                      {assignmentFields.sourceTitle ? (
+                                        <span>원본: {assignmentFields.sourceTitle}</span>
+                                      ) : null}
+                                      {assignmentFields.sourceType ? (
+                                        <span>출처: {assignmentFields.sourceType}</span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ) : null}
+                                {projectRoutingLabel(item) ? (
+                                  <div className="mt-4 max-w-3xl rounded-lg border border-[var(--line-soft)] bg-white/70 p-4">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ink-muted)]">
+                                      {projectRoutingLabel(item)}
+                                    </p>
+                                    {projectRoutingSummary(item) ? (
+                                      <p className="mt-2 text-sm font-bold leading-6 text-[var(--ink)]">
+                                        {projectRoutingSummary(item)}
+                                      </p>
+                                    ) : null}
+                                    {projectRoutingReason(item) ? (
+                                      <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+                                        {projectRoutingReason(item)}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                                 <h4 className="mt-3 text-sm font-bold text-[var(--ink-muted)]">#{item.id} 상세 내용</h4>
                                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ink)]">
                                   {itemSummary(item)}

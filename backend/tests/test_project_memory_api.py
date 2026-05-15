@@ -635,6 +635,58 @@ def test_projects_api_does_not_convert_approved_knowledge_into_connector_evidenc
     assert {item['item_type'] for item in seed_ir['activity_items']} == {'history_event'}
 
 
+def test_approved_slack_llm_project_routing_item_appears_in_project_timeline(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Project(
+            project_key='project-alpha',
+            name='Project Alpha',
+            summary='Redis queue status and sync job reliability work',
+        )
+    )
+    review_item = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': 'Redis 큐 상태 확인',
+            'summary': 'Redis 큐와 동기화 작업 상태를 확인했습니다.',
+            'project_key': 'project-alpha',
+            'project_name': 'Project Alpha',
+            'project_assignment_method': 'llm_tool',
+            'project_assignment_summary': 'Redis 큐 상태와 동기화 안정성 개선 논의입니다.',
+            'project_assignment_reason': 'Redis와 sync job 근거가 Project Alpha와 일치합니다.',
+        },
+        source_links=['https://example.slack.com/archives/C123/p1777600800000100'],
+        source_snippets=['Redis queue 상태를 확인하고 sync job을 복구합니다.'],
+        confidence_score=0.91,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(review_item)
+    db_session.commit()
+    db_session.refresh(review_item)
+
+    approve_response = client.post(
+        f'/api/v1/review/{review_item.id}/approve',
+        headers={'X-Demo-User': 'demo-admin'},
+    )
+    assert approve_response.status_code == 200
+
+    projects_response = client.get('/api/v1/projects', headers={'X-Demo-User': 'demo-admin'})
+
+    assert projects_response.status_code == 200
+    project_payload = next(
+        project
+        for project in projects_response.json()['projects']
+        if project['project_key'] == 'project-alpha'
+    )
+    assert any(
+        timeline_item['title'] == 'Redis 큐 상태 확인'
+        for timeline_item in project_payload['timeline_items']
+    )
+
+
 def test_projects_api_hides_unregistered_approved_project_keys(
     client: TestClient,
     db_session: Session,

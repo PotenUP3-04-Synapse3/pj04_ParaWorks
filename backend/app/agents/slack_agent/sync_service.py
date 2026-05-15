@@ -16,6 +16,7 @@ from backend.app.models import (
     AgentRun,
     Document,
     DocumentVersion,
+    Project,
     ReviewItem,
     Source,
 )
@@ -130,12 +131,14 @@ def trigger_slack_agent_analysis(
 
     for channel_id, messages in messages_by_channel.items():
         try:
+            project_options = _registered_project_options(db)
             # 에이전트 실행
             result = process_daily_slack_sync(
                 channel_id,
                 messages,
                 openai_api_key=settings.openai_api_key,
                 gemini_api_key=settings.gemini_api_key or settings.google_api_key,
+                projects=project_options,
             )
 
             run_cost = result.get('run_cost')
@@ -156,6 +159,14 @@ def trigger_slack_agent_analysis(
                 metadata_={
                     'channel_id': channel_id,
                     'is_work_related': result.get('is_work_related', False),
+                    'project_routing': {
+                        'enabled': bool(project_options),
+                        'method': 'langchain_tools',
+                        'project_count': len(project_options),
+                        'model_name': result.get('project_model_name'),
+                        'input_tokens': result.get('project_prompt_tokens', 0),
+                        'output_tokens': result.get('project_completion_tokens', 0),
+                    },
                 },
             )
             db.add(agent_run)
@@ -188,6 +199,20 @@ def trigger_slack_agent_analysis(
                 project_key, is_new_project = _determine_project_from_tag(
                     topic_tag, candidate.summary
                 )
+                project_fields = {
+                    key: candidate.payload_fields.get(key)
+                    for key in (
+                        'project_key',
+                        'project_name',
+                        'project_assignment_method',
+                        'project_assignment_summary',
+                        'project_assignment_reason',
+                        'project_assignment_confidence',
+                        'project_alternatives',
+                        'project_needs_user_selection',
+                    )
+                    if key in candidate.payload_fields
+                }
 
                 payload = {
                     'title': candidate.title,
@@ -197,7 +222,7 @@ def trigger_slack_agent_analysis(
                     'importance': candidate.payload_fields.get('importance', 'Medium'),
                     'assignee': candidate.payload_fields.get('assignee', '미지정'),
                     'due_date': candidate.payload_fields.get('due_date', '기한없음'),
-                    'project_key': project_key,
+                    'project_key': project_fields.get('project_key', project_key),
                     'is_new_project': is_new_project,
                     'agent_run_id': agent_run.id,
                     'agent_name': 'slack_agent',
@@ -205,6 +230,7 @@ def trigger_slack_agent_analysis(
                     'estimated_cost_usd': agent_run.estimated_cost_usd,
                     'source_ids': source_ids,  # 중복 체크를 위한 고유 ID 저장
                     'source_authors': source_authors,  # 작성자 이름 직접 저장
+                    **project_fields,
                 }
 
                 review_item = ReviewItem(
@@ -226,3 +252,15 @@ def trigger_slack_agent_analysis(
             continue
 
     return total_created
+
+
+def _registered_project_options(db: Session) -> list[dict[str, str]]:
+    projects = db.scalars(select(Project).order_by(Project.created_at.desc(), Project.id.desc())).all()
+    return [
+        {
+            'project_key': project.project_key,
+            'name': project.name,
+            'summary': project.summary,
+        }
+        for project in projects
+    ]

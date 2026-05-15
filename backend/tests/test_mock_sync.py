@@ -157,6 +157,67 @@ def test_slack_sync_keeps_job_running_until_agent_reviews_are_persisted(
     assert 'created_review_items=' in (latest_job.message or '')
 
 
+def test_slack_sync_can_start_as_background_job(client, db_session) -> None:
+    response = client.post('/api/v1/integrations/slack/sync', json={'run_async': True})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['status'] == 'queued'
+    assert payload['created_review_items'] == 0
+    assert payload['job_id'].startswith('slack-')
+
+    job = db_session.scalar(select(SyncJob).where(SyncJob.job_id == payload['job_id']))
+    assert job is not None
+    assert job.connector_type == 'slack'
+
+
+def test_slack_llm_project_routing_skips_deterministic_project_assignments(
+    client,
+    db_session,
+    monkeypatch,
+) -> None:
+    from backend.app.api.v1 import integrations as integrations_api
+
+    db_session.add(
+        Project(
+            project_key='project-alpha',
+            name='Project Alpha',
+            summary='Redis job status and worker queue architecture project',
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        integrations_api,
+        '_run_connector_agent_review',
+        lambda **kwargs: 1,
+    )
+    monkeypatch.setattr(
+        integrations_api,
+        '_connector_uses_slack_llm_project_routing',
+        lambda *, connector_type, settings: True,
+    )
+
+    response = client.post('/api/v1/integrations/slack/sync')
+
+    assert response.status_code == 200
+    assert response.json()['agent_generated_items'] == 1
+    assert response.json()['project_assignment_items'] == 0
+
+
+def test_slack_runtime_status_exposes_latest_sync_timestamps(client) -> None:
+    sync_response = client.post('/api/v1/integrations/slack/sync')
+    assert sync_response.status_code == 200
+
+    status_response = client.get('/api/v1/integrations/slack/runtime-status')
+
+    assert status_response.status_code == 200
+    latest_sync = status_response.json()['latest_sync']
+    assert latest_sync['job_id'] == sync_response.json()['job_id']
+    assert latest_sync['created_at']
+    assert latest_sync['updated_at']
+
+
 def test_production_like_sync_requires_real_connection(monkeypatch, client) -> None:
     from backend.app.core.config import get_settings
 
