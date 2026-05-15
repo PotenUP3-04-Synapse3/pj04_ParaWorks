@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from backend.app.agent_runtime import EvidencePacket, ReviewCandidate
@@ -8,6 +9,28 @@ from backend.app.agent_runtime import EvidencePacket, ReviewCandidate
 PROJECT_OPTIONS_CONTEXT_KEY = 'project_options'
 PROJECT_ROUTER_CONTEXT_KEY = 'project_router'
 PROJECT_ROUTING_CONTEXT_KEY = 'project_routing'
+MAIL_DOCUMENT_WORKFLOW_CONTEXT_KEY = 'mail_document_workflow'
+MAIL_DOCUMENT_WORKFLOW_NODES = [
+    'preprocess',
+    'classify_reviewability',
+    'extract_candidate',
+    'project_route',
+    'build_result',
+]
+
+
+@dataclass(frozen=True)
+class MailDocumentWorkflowState:
+    packet: EvidencePacket
+    model: Any
+    normalize_item_type: Callable[[str], str]
+    safe_payload_fields: Callable[[dict[str, Any] | None], dict[str, Any]]
+    model_response: Any | None = None
+    candidates: list[ReviewCandidate] = field(default_factory=list)
+    project_routing_result: Any | None = None
+    reviewability_decision: str = 'unknown'
+    is_business_related: bool = False
+    node_trace: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -60,6 +83,104 @@ class MailDocumentProjectRouter(Protocol):
         projects: list[Any],
     ) -> MailDocumentProjectRoutingResult | dict[str, Any]:
         raise NotImplementedError
+
+
+def run_mail_document_agent_workflow(
+    *,
+    packet: EvidencePacket,
+    model: Any,
+    normalize_item_type: Callable[[str], str],
+    safe_payload_fields: Callable[[dict[str, Any] | None], dict[str, Any]],
+) -> tuple[Any, list[ReviewCandidate], MailDocumentProjectRoutingResult]:
+    state = MailDocumentWorkflowState(
+        packet=packet,
+        model=model,
+        normalize_item_type=normalize_item_type,
+        safe_payload_fields=safe_payload_fields,
+    )
+    for node in (
+        _preprocess_node,
+        _classify_reviewability_node,
+        _extract_candidate_node,
+        _project_route_node,
+        _build_result_node,
+    ):
+        state = node(state)
+    if state.model_response is None:
+        raise RuntimeError('mail document workflow did not produce a model response')
+    if state.project_routing_result is None:
+        return state.model_response, state.candidates, MailDocumentProjectRoutingResult(decisions=[])
+    return state.model_response, state.candidates, state.project_routing_result
+
+
+def _preprocess_node(state: MailDocumentWorkflowState) -> MailDocumentWorkflowState:
+    return replace(state, node_trace=[*state.node_trace, 'preprocess'])
+
+
+def _classify_reviewability_node(state: MailDocumentWorkflowState) -> MailDocumentWorkflowState:
+    model_response = state.model.extract(state.packet)
+    is_business_related = bool(getattr(model_response, 'is_business_related', False))
+    return replace(
+        state,
+        model_response=model_response,
+        reviewability_decision=_reviewability_decision(model_response),
+        is_business_related=is_business_related,
+        node_trace=[*state.node_trace, 'classify_reviewability'],
+    )
+
+
+def _extract_candidate_node(state: MailDocumentWorkflowState) -> MailDocumentWorkflowState:
+    candidates: list[ReviewCandidate] = []
+    model_response = state.model_response
+    if model_response is not None and state.is_business_related:
+        payload_fields = state.safe_payload_fields(getattr(model_response, 'structured_data', None))
+        project_tag = getattr(model_response, 'project_tag', None)
+        if project_tag:
+            payload_fields['project_tag'] = project_tag
+        candidate = ReviewCandidate(
+            item_type=state.normalize_item_type(str(getattr(model_response, 'item_type', 'history_event'))),
+            title=str(getattr(model_response, 'title', 'Mail/Docs candidate')),
+            summary=str(getattr(model_response, 'summary', 'Mail/Docs evidence summary')),
+            source_links=state.packet.source_links,
+            source_snippets=state.packet.source_snippets,
+            confidence_score=float(getattr(model_response, 'confidence_score', 0.7)),
+            permission_level=state.packet.strictest_permission,
+            uncertainty_reason=getattr(model_response, 'uncertainty_reason', None),
+            payload_fields=payload_fields,
+        )
+        candidate.validate_evidence()
+        candidates.append(candidate)
+    return replace(state, candidates=candidates, node_trace=[*state.node_trace, 'extract_candidate'])
+
+
+def _project_route_node(state: MailDocumentWorkflowState) -> MailDocumentWorkflowState:
+    candidates, routing_result = route_candidates_from_packet(candidates=state.candidates, packet=state.packet)
+    return replace(
+        state,
+        candidates=candidates,
+        project_routing_result=routing_result,
+        node_trace=[*state.node_trace, 'project_route'],
+    )
+
+
+def _build_result_node(state: MailDocumentWorkflowState) -> MailDocumentWorkflowState:
+    node_trace = [*state.node_trace, 'build_result']
+    state.packet.context[MAIL_DOCUMENT_WORKFLOW_CONTEXT_KEY] = {
+        'nodes': node_trace,
+        'reviewability_decision': state.reviewability_decision,
+        'is_business_related': state.is_business_related,
+        'candidate_count': len(state.candidates),
+    }
+    return replace(state, node_trace=node_trace)
+
+
+def _reviewability_decision(model_response: Any) -> str:
+    structured_data = getattr(model_response, 'structured_data', None)
+    if isinstance(structured_data, dict):
+        raw_decision = structured_data.get('reviewability_decision')
+        if isinstance(raw_decision, str) and raw_decision.strip():
+            return raw_decision.strip()
+    return 'reviewable' if bool(getattr(model_response, 'is_business_related', False)) else 'not_reviewable'
 
 
 class DeterministicMailDocumentProjectRouter:

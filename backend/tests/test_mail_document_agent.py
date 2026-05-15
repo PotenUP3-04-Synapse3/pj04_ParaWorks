@@ -62,6 +62,17 @@ class FakeProjectRouter:
         }
 
 
+class SpyProjectRouter:
+    model_name = 'spy-project-router'
+
+    def __init__(self) -> None:
+        self.called = False
+
+    def route(self, *, candidates, projects):
+        self.called = True
+        return {'decisions': [], 'model_name': self.model_name}
+
+
 def test_mail_document_agent_manifest_declares_shared_contracts() -> None:
     assert MAIL_DOCUMENT_AGENT_MANIFEST.name == 'mail_document_agent'
     assert MAIL_DOCUMENT_AGENT_MANIFEST.input_contract == 'EvidencePacket'
@@ -107,6 +118,101 @@ def test_mail_document_agent_creates_evidence_backed_candidate() -> None:
     assert result.cost.token_usage.total_tokens == 1060
     assert result.cost.estimated_cost_usd > 0
     assert result.cache_key
+
+
+def test_mail_document_agent_run_records_node_workflow_trace() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:workflow',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-workflow',
+                source_url='https://gmail.mock/project-alpha/redis-summary',
+                text='Project Alpha Redis 작업 결과를 공유합니다.',
+                author='noah@example.com',
+                timestamp='2026-04-30T10:15:00+00:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=FakeMailDocumentModel()).run(packet)
+
+    assert result.candidates
+    assert packet.context['mail_document_workflow'] == {
+        'nodes': [
+            'preprocess',
+            'classify_reviewability',
+            'extract_candidate',
+            'project_route',
+            'build_result',
+        ],
+        'reviewability_decision': 'reviewable',
+        'is_business_related': True,
+        'candidate_count': 1,
+    }
+
+
+def test_mail_document_agent_workflow_skips_project_route_for_unreviewable_llm_output() -> None:
+    class UnreviewableModel:
+        def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
+            return MailDocumentAgentModelResponse(
+                title='개인 메일',
+                summary='업무 관련 없음',
+                item_type='history_event',
+                confidence_score=0.2,
+                input_tokens=10,
+                output_tokens=5,
+                model_name='fake-mail-llm',
+                is_business_related=False,
+                structured_data={
+                    'reviewability_decision': 'not_reviewable',
+                    'summary_quality': 'non_business',
+                },
+            )
+
+    router = SpyProjectRouter()
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:workflow-unreviewable',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal',
+                source_url='https://gmail.mock/personal',
+                text='Subject: Lunch\n\nNo work talk.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        context={
+            'project_options': [
+                MailDocumentProjectOption(
+                    project_key='project-alpha',
+                    name='Project Alpha',
+                    summary='Redis worker status work',
+                )
+            ],
+            'project_router': router,
+        },
+    )
+
+    result = MailDocumentAgent(model=UnreviewableModel()).run(packet)
+
+    assert result.candidates == []
+    assert router.called is False
+    assert packet.context['mail_document_workflow']['nodes'] == [
+        'preprocess',
+        'classify_reviewability',
+        'extract_candidate',
+        'project_route',
+        'build_result',
+    ]
+    assert packet.context['mail_document_workflow']['reviewability_decision'] == 'not_reviewable'
 
 
 def test_mail_document_agent_run_routes_projects_inside_workflow() -> None:

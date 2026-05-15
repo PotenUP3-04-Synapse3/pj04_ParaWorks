@@ -196,6 +196,14 @@ def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session:
     assert agent_run.total_tokens == 1180
     assert agent_run.permission_level == 'restricted'
     assert agent_run.metadata_['included_source_types'] == ['drive', 'gmail']
+    assert agent_run.metadata_['mail_document_workflow']['nodes'] == [
+        'preprocess',
+        'classify_reviewability',
+        'extract_candidate',
+        'project_route',
+        'build_result',
+    ]
+    assert agent_run.metadata_['mail_document_workflow']['candidate_count'] == 1
     assert agent_run.metadata_['evidence_summary'] == [
         {
             'rank': 1,

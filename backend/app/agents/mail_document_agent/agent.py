@@ -7,12 +7,13 @@ from backend.app.agent_runtime import (
     AgentRunResult,
     EvidenceMessage,
     EvidencePacket,
-    ReviewCandidate,
     TokenUsage,
     build_evidence_cache_key,
     estimate_agent_run_cost,
 )
-from backend.app.agents.mail_document_agent.workflow import route_candidates_from_packet
+from backend.app.agents.mail_document_agent.workflow import (
+    run_mail_document_agent_workflow,
+)
 
 # 메일 및 문서 에이전트의 상수 정의
 MAIL_DOCUMENT_AGENT_NAME = 'mail_document_agent'
@@ -154,32 +155,12 @@ class MailDocumentAgent:
 
     def run(self, packet: EvidencePacket) -> AgentRunResult:
         """증거 패킷을 입력받아 모델을 실행하고 결과를 AgentRunResult로 반환"""
-        model_response = self.model.extract(packet)
-
-        candidates = []
-        if model_response.is_business_related:
-            payload_fields = _safe_payload_fields(model_response.structured_data)
-            if model_response.project_tag:
-                payload_fields['project_tag'] = model_response.project_tag
-
-            # 검토 큐(Review Queue)에 들어갈 후보 생성
-            candidate = ReviewCandidate(
-                item_type=_normalized_item_type(model_response.item_type),
-                title=model_response.title,
-                summary=model_response.summary,
-                source_links=packet.source_links,
-                source_snippets=packet.source_snippets,
-                confidence_score=model_response.confidence_score,
-                permission_level=packet.strictest_permission,
-                uncertainty_reason=model_response.uncertainty_reason,
-                payload_fields=payload_fields,
-            )
-            # 증거 데이터 유효성 검증 (증거 없는 후보 생성 방지)
-            candidate.validate_evidence()
-            candidates.append(candidate)
-
-        candidates, project_routing_result = route_candidates_from_packet(candidates=candidates, packet=packet)
-
+        model_response, candidates, project_routing_result = run_mail_document_agent_workflow(
+            packet=packet,
+            model=self.model,
+            normalize_item_type=_normalized_item_type,
+            safe_payload_fields=_safe_payload_fields,
+        )
         # 비용 및 토큰 사용량 기록
         token_usage = TokenUsage(
             input_tokens=model_response.input_tokens + project_routing_result.input_tokens,

@@ -13,6 +13,7 @@ from backend.app.agent_runtime import (
 )
 from backend.app.agents.mail_document_agent.agent import MailDocumentAgent
 from backend.app.agents.mail_document_agent.workflow import (
+    MAIL_DOCUMENT_WORKFLOW_CONTEXT_KEY,
     PROJECT_OPTIONS_CONTEXT_KEY,
     PROJECT_ROUTER_CONTEXT_KEY,
     PROJECT_ROUTING_CONTEXT_KEY,
@@ -168,6 +169,9 @@ def create_mail_document_agent_review_items(
 
     result = agent.run(packet)
     candidates = result.candidates
+    mail_document_workflow_metadata = packet.context.get(MAIL_DOCUMENT_WORKFLOW_CONTEXT_KEY)
+    if not isinstance(mail_document_workflow_metadata, dict):
+        mail_document_workflow_metadata = {}
     project_routing_metadata = packet.context.get(PROJECT_ROUTING_CONTEXT_KEY)
     if not isinstance(project_routing_metadata, dict):
         project_routing_metadata = {
@@ -206,6 +210,7 @@ def create_mail_document_agent_review_items(
             'parser_status_counts': _parser_status_counts(packet),
             'cache_hit': result.cost.cache_hit,
             'evidence_summary': build_evidence_summary(packet),
+            'mail_document_workflow': mail_document_workflow_metadata,
             'project_routing': project_routing_metadata,
         },
     )
