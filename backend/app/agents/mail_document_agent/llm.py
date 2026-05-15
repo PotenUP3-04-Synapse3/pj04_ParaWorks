@@ -66,8 +66,10 @@ class LangChainMailDocumentAgentModel:
                 'or long body excerpts into the summary. If action is required, use item_type=todo and '
                 'populate structured_data with action_required, task_summary, recommended_next_step, '
                 'assignee, due_date, counterparty, source_subject, business_context, evidence_sentence, '
-                'and summary_quality where available. Determine if the evidence is business-related. If it '
-                'is purely personal or private, set is_business_related=false. Return ONLY JSON with fields: '
+                'summary_quality, and reviewability_decision where available. Determine if the evidence is '
+                'reviewable business evidence. If it is purely personal, private, promotional, a newsletter, '
+                'or a low-signal notification without a concrete company work object, set '
+                'is_business_related=false. Return ONLY JSON with fields: '
                 'title, summary, item_type, confidence_score, is_business_related, project_tag, '
                 'structured_data, and optional uncertainty_reason.',
             ),
@@ -224,10 +226,14 @@ def render_mail_docs_llm_prompt(
                 'Use only the provided evidence.',
                 'The title and summary must be written in Korean.',
                 'Identify whether the evidence is business related.',
+                'Before summarizing, write structured_data.reviewability_decision as "reviewable" or "not_reviewable".',
+                'Only set is_business_related=true when the evidence contains a concrete company work object: a decision, request, deadline, deliverable, meeting, contract, project, customer issue, budget, revenue, policy, or document change that should be reviewed.',
+                'For personal mail, newsletters, promotions, automated alerts with no action, receipts, greetings, or contextless notifications, set is_business_related=false and do not invent a business summary.',
                 'Assign a project_tag if a specific project is mentioned.',
                 'Populate structured_data with concrete fields for the source type.',
                 'For todos, include action_required, task_summary, recommended_next_step, assignee, due_date, counterparty, and business_context when evidence supports them.',
                 'Keep raw email headers and body excerpts only as evidence, not as title or summary.',
+                'Summaries must explain the business meaning in one or two Korean sentences, not merely restate that an email or file exists.',
                 'Preserve uncertainty_reason when evidence is weak or incomplete.',
             ],
             'source_window': packet.source_window,
@@ -423,7 +429,24 @@ def _safe_bool(raw_value: Any, *, default: bool) -> bool:
         normalized = raw_value.strip().lower()
         if normalized in {'true', '1', 'yes', 'y'}:
             return True
-        if normalized in {'false', '0', 'no', 'n'}:
+        if normalized in {
+            'false',
+            '0',
+            'no',
+            'n',
+            'personal',
+            'private',
+            'not_business',
+            'not business',
+            'non-business',
+            'nonbusiness',
+            'not_reviewable',
+            'not reviewable',
+            '비업무',
+            '개인',
+            '개인 메일',
+            '업무 관련 없음',
+        }:
             return False
     if raw_value is None:
         return default

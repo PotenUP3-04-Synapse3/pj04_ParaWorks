@@ -264,6 +264,8 @@ def sync_connector(
         )
     except ConnectorNotConfiguredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except MailDocumentLlmProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except SlackApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -492,7 +494,7 @@ def _run_connector_agent_review(
     if connector_type in GOOGLE_OAUTH_CONNECTOR_TYPES:
         review_items = create_mail_document_agent_review_items_for_changed_sources(
             db=db,
-            agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
+            agent=_build_mail_document_review_agent(settings),
             permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
             source_ids=source_ids,
@@ -878,9 +880,9 @@ def run_slack_llm_agent_review(
 
 @router.post('/mail-docs/agent-review')
 def run_mail_document_agent_review(
-    db: DbSession, user: CurrentUser
+    db: DbSession, settings: AppSettings, user: CurrentUser
 ) -> dict[str, int | str]:
-    agent = MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
+    agent = _build_mail_document_review_agent(settings)
     source_ids = _mail_document_source_ids(db=db, user=user)
     review_items = create_mail_document_agent_review_items_for_changed_sources(
         db=db,
@@ -909,6 +911,21 @@ def run_mail_document_agent_review(
         'status': 'complete',
         'created_review_items': len(review_items),
     }
+
+
+def _build_mail_document_review_agent(settings: Settings) -> MailDocumentAgent:
+    llm_settings = _mail_document_llm_settings(settings)
+    if _should_use_mail_document_llm(llm_settings):
+        return MailDocumentAgent(
+            model=build_langchain_mail_document_agent_model(llm_settings),
+            input_cost_per_1m=llm_settings.input_cost_per_1m,
+            output_cost_per_1m=llm_settings.output_cost_per_1m,
+        )
+    return MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
+
+
+def _should_use_mail_document_llm(settings: MailDocumentLlmSettings) -> bool:
+    return settings.enabled and bool(settings.openai_api_key or settings.gemini_api_key)
 
 
 @router.get('/mail-docs/agent-review/llm/preflight')
