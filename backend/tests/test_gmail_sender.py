@@ -1,3 +1,7 @@
+import base64
+from email import policy
+from email.parser import BytesParser
+
 import httpx
 
 from backend.app.assistant.gmail_sender import (
@@ -26,6 +30,11 @@ class FakeGmailHttpClient:
                 request=httpx.Request('POST', url),
             )
         raise AssertionError(f'unexpected URL: {url}')
+
+
+def _decode_raw_message(raw: str):
+    padded = raw + '=' * (-len(raw) % 4)
+    return BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(padded))
 
 
 def test_gmail_draft_sender_refreshes_token_and_sends_message(db_session, tmp_path) -> None:
@@ -67,6 +76,9 @@ def test_gmail_draft_sender_refreshes_token_and_sends_message(db_session, tmp_pa
         'https://oauth2.googleapis.com/token',
         'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
     ]
+    sent_payload = http_client.posts[-1][1]['json']
+    raw_message = _decode_raw_message(sent_payload['raw'])
+    assert raw_message['From'] == 'sender@example.com'
 
 
 def test_gmail_draft_sender_reports_gmail_api_failures(db_session, tmp_path) -> None:
