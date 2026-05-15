@@ -127,7 +127,7 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     event = events[0]
     assert event.source_type == 'gmail'
     assert event.source_id == 'gmail:msg-1'
-    assert event.source_url == 'https://mail.google.com/mail/u/0/#all/msg-1'
+    assert event.source_url == 'https://mail.google.com/mail/u/0/#all/thread-1'
     assert event.title == '계약 검토 일정'
     assert event.body == '계약 검토 일정\n\nFrom: min@example.com\nDate: Fri, 1 May 2026 10:00:00 +0900\n\n계약 검토 일정은 금요일까지 확정합니다.'
     assert event.author == 'min@example.com'
@@ -147,6 +147,48 @@ def test_google_connector_maps_gmail_messages_to_source_events() -> None:
     assert event.raw_metadata['has_external_participants'] is True
     assert event.raw_metadata['body_source'] == 'payload'
     assert event.raw_metadata['body_truncated'] is False
+
+
+def test_google_connector_decodes_encoded_gmail_sender_names() -> None:
+    class EncodedHeaderGoogleClient(FakeGoogleClient):
+        def gmail_messages(self, *, after_internal_date: str | None = None) -> list[dict]:
+            self.gmail_after_internal_date = after_internal_date
+            return [
+                {
+                    'id': 'msg-encoded-1',
+                    'threadId': 'thread-encoded-1',
+                    'labelIds': ['INBOX'],
+                    'snippet': 'Encoded sender sample.',
+                    'internalDate': '1777600800000',
+                    'payload': {
+                        'mimeType': 'text/plain',
+                        'headers': [
+                            {'name': 'Subject', 'value': 'Encoded sender'},
+                            {'name': 'From', 'value': '=?utf-8?b?6rmA7ZiE7IiY?= <kim@example.com>'},
+                            {'name': 'To', 'value': 'para@example.com'},
+                            {'name': 'Date', 'value': 'Fri, 1 May 2026 10:00:00 +0900'},
+                        ],
+                        'body': {'data': 'RW5jb2RlZCBzZW5kZXIgc2FtcGxlLg'},
+                    },
+                }
+            ]
+
+    connector = GoogleConnector(
+        config=GoogleConnectorConfig(
+            connector_type='gmail',
+            oauth_token='google-oauth-token',
+            account_id='google-user-1',
+            account_name='para@example.com',
+        ),
+        client=EncodedHeaderGoogleClient(),
+    )
+
+    event = connector.fetch_events()[0]
+
+    assert event.author == '김현수 <kim@example.com>'
+    assert event.participants == ['kim@example.com', 'para@example.com']
+    assert 'From: 김현수 <kim@example.com>' in event.body
+    assert event.raw_metadata['from_domain'] == 'example.com'
 
 
 def test_google_connector_maps_gmail_attachments_to_source_events() -> None:
@@ -200,7 +242,7 @@ def test_google_connector_maps_gmail_attachments_to_source_events() -> None:
     ]
     attachment = events[1]
     assert attachment.source_type == 'gmail_attachment'
-    assert attachment.source_url == 'https://mail.google.com/mail/u/0/#all/msg-attach-1'
+    assert attachment.source_url == 'https://mail.google.com/mail/u/0/#all/thread-attach-1'
     assert attachment.title == 'Attachment: proposal.pdf'
     assert attachment.body == (
         'Gmail attachment: proposal.pdf\n'
