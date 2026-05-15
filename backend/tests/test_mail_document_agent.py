@@ -7,6 +7,7 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgentModelResponse,
 )
 from backend.app.agents.mail_document_agent.llm import LangChainMailDocumentAgentModel
+from backend.app.agents.mail_document_agent.service import MailDocumentProjectOption
 
 
 class FakeChatResponse:
@@ -34,6 +35,28 @@ class FakeMailDocumentModel:
             input_tokens=900,
             output_tokens=160,
         )
+
+
+class FakeProjectRouter:
+    def route(self, *, candidates, projects):
+        return {
+            'decisions': [
+                {
+                    'source_id': candidates[0].source_id,
+                    'item_index': 0,
+                    'project_key': projects[0].project_key,
+                    'project_name': projects[0].name,
+                    'confidence_score': 0.91,
+                    'assignment_summary': '메일/문서 후보가 Project Alpha 업무와 연결됩니다.',
+                    'assignment_reason': '증거 URL과 요약이 Project Alpha Redis 작업과 일치합니다.',
+                    'alternatives': [],
+                    'needs_user_selection': False,
+                }
+            ],
+            'input_tokens': 20,
+            'output_tokens': 8,
+            'model_name': 'fake-project-router',
+        }
 
 
 def test_mail_document_agent_manifest_declares_shared_contracts() -> None:
@@ -81,6 +104,53 @@ def test_mail_document_agent_creates_evidence_backed_candidate() -> None:
     assert result.cost.token_usage.total_tokens == 1060
     assert result.cost.estimated_cost_usd > 0
     assert result.cache_key
+
+
+def test_mail_document_agent_run_routes_projects_inside_workflow() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:project-routing',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-project-alpha',
+                source_url='https://gmail.mock/project-alpha/redis-summary',
+                text='Project Alpha Redis 작업 결과를 공유합니다.',
+                author='noah@example.com',
+                timestamp='2026-04-30T10:15:00+00:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        context={
+            'project_options': [
+                MailDocumentProjectOption(
+                    project_key='project-alpha',
+                    name='Project Alpha',
+                    summary='Redis worker status work',
+                )
+            ],
+            'project_router': FakeProjectRouter(),
+        },
+    )
+
+    result = MailDocumentAgent(model=FakeMailDocumentModel()).run(packet)
+
+    candidate = result.candidates[0]
+    assert candidate.payload_fields['project_assignment_method'] == 'llm_tool'
+    assert candidate.payload_fields['project_key'] == 'project-alpha'
+    assert candidate.payload_fields['project_name'] == 'Project Alpha'
+    assert candidate.payload_fields['project_assignment_confidence'] == 0.91
+    assert result.cost.token_usage.input_tokens == 920
+    assert result.cost.token_usage.output_tokens == 168
+    assert packet.context['project_routing'] == {
+        'enabled': True,
+        'method': 'langchain_tools',
+        'project_count': 1,
+        'model_name': 'fake-project-router',
+        'input_tokens': 20,
+        'output_tokens': 8,
+    }
 
 
 def test_mail_document_llm_treats_string_false_as_not_business_related() -> None:

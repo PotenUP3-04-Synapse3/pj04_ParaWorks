@@ -12,6 +12,11 @@ from backend.app.agent_runtime import (
     build_evidence_summary,
 )
 from backend.app.agents.mail_document_agent.agent import MailDocumentAgent
+from backend.app.agents.mail_document_agent.workflow import (
+    PROJECT_OPTIONS_CONTEXT_KEY,
+    PROJECT_ROUTER_CONTEXT_KEY,
+    PROJECT_ROUTING_CONTEXT_KEY,
+)
 from backend.app.models import AgentRun, DocumentChunk, Project, ReviewItem, Source
 
 # 처리 대상 소스 타입 정의
@@ -156,18 +161,23 @@ def create_mail_document_agent_review_items(
         return []
 
     # 2. 에이전트 실행
-    result = agent.run(packet)
     project_options = _load_project_options(db)
-    routing_result = project_route_mail_document_candidates(
-        candidates=result.candidates,
-        packet=packet,
-        projects=project_options,
-        router_model=project_router or DeterministicMailDocumentProjectRouter(),
-    )
-    candidates = _apply_project_routing_to_candidates(
-        candidates=result.candidates,
-        decisions=routing_result.decisions,
-    )
+    packet.context[PROJECT_OPTIONS_CONTEXT_KEY] = project_options
+    if project_router is not None:
+        packet.context[PROJECT_ROUTER_CONTEXT_KEY] = project_router
+
+    result = agent.run(packet)
+    candidates = result.candidates
+    project_routing_metadata = packet.context.get(PROJECT_ROUTING_CONTEXT_KEY)
+    if not isinstance(project_routing_metadata, dict):
+        project_routing_metadata = {
+            'enabled': bool(project_options),
+            'method': 'langchain_tools',
+            'project_count': len(project_options),
+            'model_name': None,
+            'input_tokens': 0,
+            'output_tokens': 0,
+        }
     included_source_types = sorted({
         str(message.metadata.get('source_type'))
         for message in packet.messages
@@ -196,14 +206,7 @@ def create_mail_document_agent_review_items(
             'parser_status_counts': _parser_status_counts(packet),
             'cache_hit': result.cost.cache_hit,
             'evidence_summary': build_evidence_summary(packet),
-            'project_routing': {
-                'enabled': bool(project_options),
-                'method': 'langchain_tools',
-                'project_count': len(project_options),
-                'model_name': routing_result.model_name,
-                'input_tokens': routing_result.input_tokens,
-                'output_tokens': routing_result.output_tokens,
-            },
+            'project_routing': project_routing_metadata,
         },
     )
     db.add(agent_run)

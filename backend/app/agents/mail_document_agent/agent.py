@@ -12,6 +12,7 @@ from backend.app.agent_runtime import (
     build_evidence_cache_key,
     estimate_agent_run_cost,
 )
+from backend.app.agents.mail_document_agent.workflow import route_candidates_from_packet
 
 # 메일 및 문서 에이전트의 상수 정의
 MAIL_DOCUMENT_AGENT_NAME = 'mail_document_agent'
@@ -166,10 +167,12 @@ class MailDocumentAgent:
             candidate.validate_evidence()
             candidates.append(candidate)
 
+        candidates, project_routing_result = route_candidates_from_packet(candidates=candidates, packet=packet)
+
         # 비용 및 토큰 사용량 기록
         token_usage = TokenUsage(
-            input_tokens=model_response.input_tokens,
-            output_tokens=model_response.output_tokens,
+            input_tokens=model_response.input_tokens + project_routing_result.input_tokens,
+            output_tokens=model_response.output_tokens + project_routing_result.output_tokens,
         )
         cost = estimate_agent_run_cost(
             model_name=model_response.model_name or MAIL_DOCUMENT_AGENT_MODEL_NAME,
