@@ -1,6 +1,12 @@
 from sqlalchemy import select
 
-from backend.app.models import DecisionRecord, HistoryEvent, ReviewItem, TimelineEvent, Todo
+from backend.app.models import (
+    DecisionRecord,
+    HistoryEvent,
+    ReviewItem,
+    TimelineEvent,
+    Todo,
+)
 
 
 def seed_review_item(db_session, *, item_type: str, payload: dict) -> ReviewItem:
@@ -71,6 +77,8 @@ def test_approve_todo_promotes_to_knowledge_table(client, db_session) -> None:
             'title': 'Verify evidence inspection before launch',
             'priority': 'high',
             'priority_reason': 'Evidence must be checked before launch readiness review.',
+            'assignee': '김하나',
+            'due_date': '2026-05-18',
         },
     )
 
@@ -81,6 +89,8 @@ def test_approve_todo_promotes_to_knowledge_table(client, db_session) -> None:
     assert todo.title == 'Verify evidence inspection before launch'
     assert todo.priority == 'high'
     assert todo.priority_reason == 'Evidence must be checked before launch readiness review.'
+    assert todo.assignee == '김하나'
+    assert todo.due_date == '2026-05-18'
     assert todo.source_links == ['https://slack.mock/source-1']
     assert todo.source_snippets == ['source snippet']
     assert todo.review_status == 'approved'
@@ -112,6 +122,8 @@ def test_approve_mail_document_todo_returns_promotion_next_routes(client, db_ses
     timeline = db_session.scalars(select(TimelineEvent)).one()
     assert body['promotion_result']['created_record_ids'] == [todo.id]
     assert body['promotion_result']['created_timeline_event_ids'] == [timeline.id]
+    assert todo.assignee == '용희'
+    assert todo.due_date == '2026-05-15'
     assert todo.priority_reason == '파일럿 범위, 성공 지표, 일정 초안을 정리해 회신합니다.'
     assert timeline.title == '[할 일] K테크 1개월 파일럿 제안 검토 및 회신'
     assert timeline.result_summary == '담당자: 용희, 기한: 2026-05-15'
