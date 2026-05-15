@@ -6,7 +6,10 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgent,
     MailDocumentAgentModelResponse,
 )
-from backend.app.agents.mail_document_agent.llm import LangChainMailDocumentAgentModel
+from backend.app.agents.mail_document_agent.llm import (
+    LangChainMailDocumentAgentModel,
+    render_mail_docs_llm_prompt,
+)
 from backend.app.agents.mail_document_agent.service import MailDocumentProjectOption
 
 
@@ -182,6 +185,85 @@ def test_mail_document_llm_treats_string_false_as_not_business_related() -> None
     result = MailDocumentAgent(model=model).run(packet)
 
     assert result.candidates == []
+
+
+def test_mail_document_llm_treats_personal_label_as_not_business_related() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:test',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal-2',
+                source_url='https://gmail.mock/personal-2',
+                text='Subject: Weekend\n\nPersonal plans only.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+    model = LangChainMailDocumentAgentModel(
+        provider='openai',
+        model_name='gpt-5.4-mini',
+        chat_model=FakeChatModel(
+            '{"title":"개인 메일","summary":"업무 관련 없음","item_type":"history_event",'
+            '"confidence_score":0.91,"is_business_related":"personal","structured_data":{}}'
+        ),
+    )
+
+    result = MailDocumentAgent(model=model).run(packet)
+
+    assert result.candidates == []
+
+
+def test_deterministic_mail_document_agent_skips_personal_email() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:personal',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal-lunch',
+                source_url='https://gmail.mock/personal-lunch',
+                text='Subject: Lunch\n\nAre you free for lunch this weekend? No work talk, just catching up.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+
+    assert result.candidates == []
+
+
+def test_mail_document_llm_prompt_requires_reviewable_business_decision() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:prompt-quality',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-newsletter',
+                source_url='https://gmail.mock/newsletter',
+                text='Subject: Weekly digest\n\nHere are general product updates and promotional announcements.',
+                author='newsletter@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    prompt = render_mail_docs_llm_prompt(packet)
+
+    assert 'reviewability_decision' in prompt
+    assert 'set is_business_related=false' in prompt
+    assert 'personal mail, newsletters, promotions' in prompt
 
 
 def test_deterministic_mail_document_agent_marks_metadata_only_evidence_uncertain() -> None:

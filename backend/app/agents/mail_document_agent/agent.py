@@ -73,6 +73,18 @@ class DeterministicMailDocumentAgentModel:
     """LLM 없이 규칙 기반으로 정보를 추출하는 테스트용 결정론적 모델"""
     def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
         combined_text = '\n'.join(message.text for message in packet.messages)
+        input_tokens = max(1, len(combined_text) // 4)
+        if _looks_like_non_business_evidence(combined_text):
+            return MailDocumentAgentModelResponse(
+                title='비업무 메일/문서',
+                summary='검토 큐에 올릴 회사 업무 증거가 확인되지 않았습니다.',
+                item_type='history_event',
+                confidence_score=0.2,
+                input_tokens=input_tokens,
+                output_tokens=32,
+                uncertainty_reason='personal_or_low_signal_evidence',
+                is_business_related=False,
+            )
         title = '메일 및 문서 히스토리 후보'
         summary = 'Gmail 및 Google Drive 증거 데이터가 검토 가능한 회사 메모리 후보로 요약되었습니다.'
         item_type = 'history_event'
@@ -113,7 +125,6 @@ class DeterministicMailDocumentAgentModel:
             summary = _business_context_summary(packet.messages[0])
 
         # 토큰 사용량 및 신뢰도 계산 (모의 계산)
-        input_tokens = max(1, len(combined_text) // 4)
         output_tokens = max(32, len(summary) // 4)
         confidence_score = 0.8
         uncertainty_reason = _parser_uncertainty_reason(packet)
@@ -314,6 +325,48 @@ def _looks_like_work_assignment(text: str) -> bool:
         'please',
     )
     return any(cue in lowered for cue in cues)
+
+
+def _looks_like_non_business_evidence(text: str) -> bool:
+    lowered = text.lower()
+    non_business_cues = (
+        'no work talk',
+        'personal plans',
+        'free for lunch',
+        'lunch this weekend',
+        'just catching up',
+        'newsletter',
+        'weekly digest',
+        'promotional announcements',
+        'unsubscribe',
+        '개인 일정',
+        '점심 약속',
+        '주말 약속',
+        '업무 관련 없음',
+    )
+    if not any(cue in lowered for cue in non_business_cues):
+        return False
+    business_cues = (
+        'project',
+        'contract',
+        'proposal',
+        'budget',
+        'revenue',
+        'redis',
+        'postgresql',
+        'deadline',
+        'due ',
+        '프로젝트',
+        '계약',
+        '제안',
+        '예산',
+        '매출',
+        '기한',
+        '마감',
+        '검토 요청',
+        '승인 요청',
+    )
+    return not any(cue in lowered for cue in business_cues)
 
 
 def _assignment_sentence(text: str) -> str:
