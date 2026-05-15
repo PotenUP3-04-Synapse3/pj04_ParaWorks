@@ -21,7 +21,7 @@ import type { ProjectTimelineItem, ProjectsResponse } from "@/lib/api/types";
 import Image from "next/image";
 import todoIcon from "@/app/timeline/icons/todo.png";
 import slackIcon from "@/app/timeline/icons/slack.svg";
-import gmailIcon from "@/app/timeline/icons/gmail.svg";
+import gmailIcon from "@/app/timeline/icons/gmail.png";
 import driveIcon from "@/app/timeline/icons/drive.svg";
 import calendarIcon from "@/app/timeline/icons/calendar.svg";
 
