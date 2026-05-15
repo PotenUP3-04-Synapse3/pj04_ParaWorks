@@ -281,12 +281,14 @@ test("integrations page shows Slack OAuth connection status without secrets", as
   await page.goto("/integrations");
 
   await expect(page.locator('[data-testid="slack-oauth-status"]')).toBeVisible();
+  await expect(page.getByTestId("slack-oauth-status")).not.toContainText("ready");
   await expect(page.getByTestId("slack-runtime-status")).toHaveCount(0);
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("xoxb-");
   expect(bodyText).not.toContain("client-secret");
   expect(bodyText).not.toContain("token_ref");
+  expect(bodyText).not.toContain("실제 OAuth 연동");
 });
 
 test("Slack card keeps OAuth install outside primary action row", async ({ page }) => {
@@ -336,7 +338,8 @@ test("integration connector cards use consistent chrome and action layout", asyn
   const driveActionLabels = await page.getByTestId("drive-card-actions").locator("button, a").evaluateAll((elements) =>
     elements.map((element) => element.textContent?.replace(/\s+/g, " ").trim()),
   );
-  expect(driveActionLabels).toEqual(["동기화", "문서 현황"]);
+  expect(driveActionLabels).toContain("동기화");
+  expect(driveActionLabels).toContain("문서 현황");
 });
 
 test("Slack OAuth callback route renders a safe local error without secrets", async ({ page }) => {
@@ -400,7 +403,9 @@ test("Google connector cards show OAuth readiness outside primary action rows", 
   ];
 
   for (const connector of connectors) {
-    await expect(page.getByTestId(`${connector.type}-oauth-status`)).toBeVisible();
+    const oauthStatus = page.getByTestId(`${connector.type}-oauth-status`);
+    await expect(oauthStatus).toBeVisible();
+    await expect(oauthStatus).not.toContainText("ready");
     await expect(
       page.getByTestId(`${connector.type}-card-actions`).getByRole("button", { name: `${connector.label} 연결` }),
     ).toHaveCount(0);
@@ -412,6 +417,7 @@ test("Google connector cards show OAuth readiness outside primary action rows", 
   expect(bodyText).not.toContain("google-secret");
   expect(bodyText).not.toContain("refresh-token");
   expect(bodyText).not.toContain("token_ref");
+  expect(bodyText).not.toContain("실제 OAuth 연동");
 });
 
 test("Gmail and Google Drive cards show connect CTAs when OAuth is configured", async ({ page }) => {

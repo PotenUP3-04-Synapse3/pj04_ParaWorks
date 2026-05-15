@@ -868,7 +868,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className="integration-glass-card min-h-[27rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
+                className="integration-glass-card min-h-[30rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">
@@ -923,9 +923,14 @@ export default function IntegrationsPage() {
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`rounded-full bg-[var(--glass-elevated)] px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}>
-                          {connection ? (credentialAvailable ? connection.status : "token missing") : "ready"}
-                        </span>
+                        {connection ? (
+                          <span
+                            data-testid={`${manifest.type}-oauth-state-pill`}
+                            className={`rounded-full bg-[var(--glass-elevated)] px-2 py-0.5 text-xs font-semibold ${oauthTheme.pill}`}
+                          >
+                            {credentialAvailable ? connection.status : "token missing"}
+                          </span>
+                        ) : null}
                         {canStartOAuth ? (
                           <button
                             type="button"
@@ -951,10 +956,10 @@ export default function IntegrationsPage() {
                 ) : null}
 
                 <div className="mt-auto min-h-[4.5rem] pt-4 flex flex-col justify-end gap-2 border-t border-[var(--line-soft)]">
-                  <span className="text-xs text-[var(--ink-muted)]">
-                    {manifest.mode === "mock" ? "현재 mock 데이터 사용" : "실제 OAuth 연동"}
+                  <span className="block min-h-4 text-xs text-[var(--ink-muted)]">
+                    {manifest.mode === "mock" ? "현재 mock 데이터 사용" : null}
                   </span>
-                  <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-9 flex-wrap items-center justify-end gap-2">
+                  <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-[5rem] flex-wrap content-end items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => void startSync(manifest.type)}
