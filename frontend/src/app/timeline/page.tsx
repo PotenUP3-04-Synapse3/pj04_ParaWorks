@@ -21,9 +21,10 @@ import driveIcon from "@/app/timeline/icons/drive.svg";
 import calendarIcon from "@/app/timeline/icons/calendar.svg";
 
 type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
+type FilterableTimelineSource = Exclude<TimelineSource, "Source">;
 type PeriodFilter = "all" | "7d" | "30d";
-type SourceFilter = "all" | TimelineSource;
-type TimelineStatus = "승인" | "검토 중" | "완료";
+type SourceFilter = "all" | FilterableTimelineSource;
+type TimelineStatus = "승인" | "완료";
 type StatusFilter = "all" | TimelineStatus;
 
 type TimelineHistory = {
@@ -427,7 +428,6 @@ function TimelineFilterControls({
         <option value="Gmail">Gmail</option>
         <option value="Drive">Drive</option>
         <option value="Calendar">Calendar</option>
-        <option value="Source">Source</option>
       </select>
       <label className="sr-only" htmlFor="timeline-status-filter">
         상태 필터
@@ -441,7 +441,6 @@ function TimelineFilterControls({
       >
         <option value="all">상태 전체</option>
         <option value="승인">승인</option>
-        <option value="검토 중">검토 중</option>
         <option value="완료">완료</option>
       </select>
       <button
@@ -618,7 +617,7 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
     title: item.title,
     summary: item.summary,
     history: item.summary || "승인된 타임라인 요약이 없습니다.",
-    status: item.completed_at ? "완료" : item.review_status === "approved" ? "승인" : "검토 중",
+    status: item.completed_at ? "완료" : "승인",
     sourceUrl: item.source_links[0] ?? "",
     preview: previewForProjectItem(item, source),
     snippets: item.source_snippets.map((snippet) => ({
@@ -657,8 +656,7 @@ function sourceFromLinks(links: string[]): TimelineSource {
 
 function statusChipClass(status: TimelineStatus) {
   if (status === "승인") return "border-emerald-100 bg-emerald-50 text-emerald-700";
-  if (status === "완료") return "border-blue-100 bg-blue-50 text-blue-700";
-  return "border-amber-100 bg-amber-50 text-amber-700";
+  return "border-blue-100 bg-blue-50 text-blue-700";
 }
 
 function previewForProjectItem(item: ProjectTimelineItem, source: TimelineSource) {
