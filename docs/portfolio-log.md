@@ -4082,3 +4082,14 @@ Cost/security note:
     and recipient-only follow-ups such as `SeungHun Han님한테 보내줘`.
   - Verification: targeted recipient-correction tests passed, wider assistant
     backend tests passed with 53 tests, and ruff passed on touched files.
+- `docs: define gmail drive project routing collaboration`
+  - Added a Korean collaboration guide for moving Gmail and Google Drive review
+    candidates to the same LangChain tool-based project routing contract as the
+    Slack Agent.
+  - The guide separates ownership: shared router contracts in
+    `backend/app/agent_runtime/`, Mail/Document work in
+    `backend/app/agents/mail_document_agent/`, Slack work in `agent_slack/`,
+    and Review/Timeline/Projects UI under an integration branch.
+  - It documents the shared ReviewItem payload fields, Gmail body plus
+    attachment grouping, Drive file-level grouping, AgentRun metadata, backend
+    tests, and Playwright responsibilities.

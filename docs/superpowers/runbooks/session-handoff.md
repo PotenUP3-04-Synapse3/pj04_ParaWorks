@@ -1628,3 +1628,21 @@ uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_dr
 
 Result: targeted recipient-correction tests passed; wider assistant backend
 tests passed with 53 tests; ruff passed.
+
+## 2026-05-15 Gmail/Google Drive 프로젝트 Tool Routing 분업 가이드
+
+- 새 문서:
+  - `docs/superpowers/runbooks/2026-05-15-gmail-drive-project-routing-collaboration-guide.md`
+- 목적:
+  - Gmail/Drive 데이터도 Slack Agent와 같은 LangChain tool 기반 프로젝트 라우팅으로 바꿀 때, Slack 담당자와 Mail/Document 담당자의 작업 영역이 겹치지 않게 한다.
+- 핵심 경계:
+  - 공용 프로젝트 Router 계약은 `backend/app/agent_runtime/project_routing.py`에 둔다.
+  - Mail/Document 담당자는 `backend/app/agents/mail_document_agent/`와 관련 테스트만 수정한다.
+  - Slack 담당자는 `agent_slack/`, `backend/app/agents/slack_agent/`만 수정한다.
+  - Review 승인 정책, 통합 API, 프론트 UI, Playwright 통합 테스트는 통합 담당자가 별도 브랜치에서 맡는다.
+  - Mail/Document 담당자는 `agent_slack/project_routing.py`를 직접 import하지 않는다.
+- Mail/Document 전환 방향:
+  - 기존 `EvidencePacket -> MailDocumentAgent.run() -> ReviewCandidate -> ReviewItem` 흐름은 유지한다.
+  - `MailDocumentAgent.run()` 이후 후보에 project routing을 적용한다.
+  - Gmail 본문+첨부 grouping, Drive 파일 단위 grouping은 유지한다.
+  - ReviewItem payload 필드는 Slack과 동일한 `project_assignment_method='llm_tool'`, `project_key`, `project_name`, `project_assignment_summary`, `project_assignment_reason`, `project_assignment_confidence`, `project_alternatives`, `project_needs_user_selection`을 사용한다.
