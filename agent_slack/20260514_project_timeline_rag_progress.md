@@ -986,3 +986,21 @@
   - `npm.cmd run build` → 통과
   - `npm.cmd run test:visual -- dashboard-workflow.spec.ts timeline-project-date-groups.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `5 passed`
   - `alembic upgrade head` → `b4b6d9f4d3e1` 적용 완료
+
+## 2026-05-15 타임라인 상태 한글화 및 완료 todo 병합
+
+- 요청:
+  - 타임라인 탭의 `상태 전체` 필터 리스트를 한글로 통일한다.
+  - 대시보드 `오늘 해야 할 업무`에서 완료 클릭 시 타임라인에 새 항목을 추가하지 않고, 기존 타임라인 항목의 상태가 `완료`로 보이게 한다.
+- 구현:
+  - 타임라인 상태 필터 옵션을 `승인`, `검토 중`, `완료`로 변경했다.
+  - 타임라인 row의 상태 chip도 `approved/reviewing` 대신 `승인/검토 중/완료`로 표시한다.
+  - `/projects` 메모리 조립 시 완료된 `Todo`를 `timeline_items`에 별도 추가하지 않도록 변경했다.
+  - 대신 `[할 일] {todo.title}` 형태의 기존 `TimelineEvent`와 같은 프로젝트/source link를 가진 완료 `Todo`를 매칭해 `completed_at`, `completed_by`를 기존 타임라인 항목에 병합한다.
+  - 이로써 대시보드 완료 후 타임라인에는 기존 approved 타임라인 row가 `완료` 상태로 보이고, `todo:*` 타임라인 row가 새로 생기지 않는다.
+- 검증:
+  - `uv run ... pytest backend/tests/test_todos_api.py backend/tests/test_project_memory_api.py backend/tests/test_dashboard_api.py -q` → `32 passed`
+  - `uv run ... ruff check backend/app/projects/service.py backend/tests/test_todos_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts dashboard-workflow.spec.ts --project=chromium-desktop` → `3 passed`

@@ -3,32 +3,28 @@
 import {
   CalendarDays,
   ChevronDown,
-  Code2,
   ExternalLink,
   Eye,
-  FileClock,
-  FileText,
   GitBranch,
-  Mail,
-  MessageSquare,
   RotateCcw,
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import Image, { type ImageProps } from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import type { ProjectTimelineItem, ProjectsResponse } from "@/lib/api/types";
-import Image from "next/image";
 import todoIcon from "@/app/timeline/icons/todo.png";
 import slackIcon from "@/app/timeline/icons/slack.svg";
-import gmailIcon from "@/app/timeline/icons/gmail.svg";
+import gmailIcon from "@/app/timeline/icons/gmail.png";
 import driveIcon from "@/app/timeline/icons/drive.svg";
 import calendarIcon from "@/app/timeline/icons/calendar.svg";
 
 type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
 type PeriodFilter = "all" | "7d" | "30d";
 type SourceFilter = "all" | TimelineSource;
-type StatusFilter = "all" | TimelineHistory["status"];
+type TimelineStatus = "승인" | "검토 중" | "완료";
+type StatusFilter = "all" | TimelineStatus;
 
 type TimelineHistory = {
   id: string;
@@ -39,7 +35,7 @@ type TimelineHistory = {
   title: string;
   summary: string;
   history: string;
-  status: "approved" | "reviewing" | "완료";
+  status: TimelineStatus;
   sourceUrl: string;
   preview: string;
   snippets: { author: string; body: string; time: string }[];
@@ -444,8 +440,8 @@ function TimelineFilterControls({
         onChange={(event) => onChangeStatus(event.target.value as StatusFilter)}
       >
         <option value="all">상태 전체</option>
-        <option value="approved">approved</option>
-        <option value="reviewing">reviewing</option>
+        <option value="승인">승인</option>
+        <option value="검토 중">검토 중</option>
         <option value="완료">완료</option>
       </select>
       <button
@@ -587,7 +583,7 @@ function TimelineEventRow({
   );
 }
 
-const sourceIconImages: Record<string, string> = {
+const sourceIconImages: Record<string, ImageProps["src"]> = {
   Slack: slackIcon,
   Gmail: gmailIcon,
   Drive: driveIcon,
@@ -621,8 +617,8 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
     source,
     title: item.title,
     summary: item.summary,
-    history: item.summary || "No approved timeline summary.",
-    status: item.completed_at ? "완료" : item.review_status === "approved" ? "approved" : "reviewing",
+    history: item.summary || "승인된 타임라인 요약이 없습니다.",
+    status: item.completed_at ? "완료" : item.review_status === "approved" ? "승인" : "검토 중",
     sourceUrl: item.source_links[0] ?? "",
     preview: previewForProjectItem(item, source),
     snippets: item.source_snippets.map((snippet) => ({
@@ -659,8 +655,8 @@ function sourceFromLinks(links: string[]): TimelineSource {
   return "Source";
 }
 
-function statusChipClass(status: TimelineHistory["status"]) {
-  if (status === "approved") return "border-emerald-100 bg-emerald-50 text-emerald-700";
+function statusChipClass(status: TimelineStatus) {
+  if (status === "승인") return "border-emerald-100 bg-emerald-50 text-emerald-700";
   if (status === "완료") return "border-blue-100 bg-blue-50 text-blue-700";
   return "border-amber-100 bg-amber-50 text-amber-700";
 }
