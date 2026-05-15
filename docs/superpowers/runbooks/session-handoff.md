@@ -2,6 +2,30 @@
 
 Updated: 2026-05-15
 
+## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 개선
+
+- 변경 배경:
+  - `frontend/src/app/dashboard/page.tsx`에서 `visibleAssignedProjects`가 빈 배열로 하드코딩되어 `내 담당 프로젝트`가 항상 비어 있었다.
+  - `backend/app/api/v1/dashboard.py`의 `today_todos`는 `pending_review` todo ReviewItem을 날짜 필터 없이 내려주고 있었다.
+- 변경:
+  - `backend/app/api/v1/dashboard.py`
+    - 승인된 `ReviewItem(item_type="todo", status="approved")` 중 `payload.due_date`가 오늘(Asia/Seoul 기준)인 항목만 `today_todos`로 반환한다.
+    - `today_todos`에 `priority`를 포함한다.
+    - `assigned_projects`를 추가해 `build_project_memory()` 결과의 프로젝트명, 요약, 근거 수, 활동 수, 검토 대기 수를 반환한다.
+  - `frontend/src/app/dashboard/page.tsx`
+    - 클라이언트 컴포넌트로 전환해 `/api/v1/dashboard`를 로드한다.
+    - 오늘 할 일 카드에 완료 버튼을 추가하고, 클릭 시 현재 대시보드 state에서만 숨긴다.
+    - `내 담당 프로젝트`에 `assigned_projects` 목록을 표시한다.
+- 검증:
+  - `uv run pytest backend/tests/test_dashboard_api.py -q` -> `3 passed`
+  - `uv run ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` -> `All checks passed!`
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` -> `1 passed`
+- 주의:
+  - 현재는 별도 “프로젝트 담당자” 모델이 없어서 `내 담당 프로젝트`는 사용자가 볼 수 있는 등록 프로젝트/프로젝트 메모리를 표시한다.
+  - 완료 버튼은 의도대로 서버 상태를 변경하지 않는다. 새로고침하면 API 기준 오늘 할 일이 다시 표시될 수 있다.
+
 ## 2026-05-15 프로젝트 근거 기본 선택 및 Slack 원문 시각 보강
 
 - 배경:

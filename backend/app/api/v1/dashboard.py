@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -14,6 +16,7 @@ from backend.app.models import (
     SyncJob,
     TimelineEvent,
 )
+from backend.app.projects import build_project_memory
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -44,14 +47,21 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         .limit(3)
     ).all()
 
-    # 오늘의 할 일 (Todo 타입의 검토 대기 항목 포함)
-    todo_items = db.scalars(
+    # 오늘의 할 일은 승인된 todo ReviewItem payload의 due_date를 기준으로 표시한다.
+    today = _today_kst()
+    todo_candidates = db.scalars(
         select(ReviewItem)
         .where(ReviewItem.item_type == 'todo')
-        .where(ReviewItem.status == 'pending_review')
+        .where(ReviewItem.status == 'approved')
         .order_by(ReviewItem.id.desc())
-        .limit(5)
     ).all()
+    todo_items = [
+        item
+        for item in todo_candidates
+        if str((item.payload or {}).get('due_date') or '') == today
+    ][:5]
+
+    assigned_projects = build_project_memory(db)
 
     # 승인된 최근 의사결정 및 타임라인
     recent_decisions = db.scalars(
@@ -97,9 +107,23 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
                 'title': item.payload.get('title', 'Untitled'),
                 'assignee': item.payload.get('assignee', '미지정'),
                 'due_date': item.payload.get('due_date', '기한없음'),
-                'category': item.payload.get('category', 'N/A'),
+                'category': item.payload.get('project_name') or item.payload.get('category') or '프로젝트 미지정',
+                'priority': item.payload.get('priority', 'medium'),
             }
             for item in todo_items
+        ],
+        'assigned_projects': [
+            {
+                'project_key': project.project_key,
+                'name': project.name,
+                'summary': project.summary,
+                'evidence_count': project.evidence_count,
+                'activity_count': len(project.activity_items),
+                'pending_review_count': project.pending_review_count,
+                'latest_timestamp': project.latest_timestamp,
+                'permission_level': project.permission_level,
+            }
+            for project in assigned_projects
         ],
         'recent_decisions': [
             {
@@ -122,3 +146,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
             for t in recent_timeline
         ],
     }
+
+
+def _today_kst() -> str:
+    return datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()

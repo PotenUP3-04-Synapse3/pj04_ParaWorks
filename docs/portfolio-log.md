@@ -6,6 +6,17 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 개선
+
+- 대시보드의 `오늘 해야 할 업무`가 검토 대기 todo 후보가 아니라, 승인된 todo ReviewItem 중 오늘(Asia/Seoul 기준) 마감인 항목만 표시하도록 수정했다.
+- 완료 버튼은 서버의 trusted knowledge를 변경하지 않고, 현재 대시보드 화면에서만 해당 항목을 숨긴다.
+- `내 담당 프로젝트`가 빈 배열로 고정되어 있던 문제를 고쳐, 등록 프로젝트의 근거 수, 활동 수, 검토 대기 수가 대시보드에 표시되도록 연결했다.
+- 검증: 대시보드 backend 테스트 3개 통과, ruff 통과, frontend lint/build 통과, Playwright 대시보드 업무 흐름 1개 통과.
+
+포트폴리오 관점:
+
+- Review에서 승인된 업무가 오늘의 실행 목록으로 연결되고, 프로젝트별 활동 상태가 첫 화면에 드러나도록 하여 “검토된 회사 기억이 실제 업무 홈으로 이어지는” 흐름을 강화했다.
+
 ## 2026-05-15 프로젝트 근거 기본 선택 및 Slack 원문 시각 보강
 
 - 프로젝트/타임라인 탭이 최신 생성 프로젝트를 무조건 기본 선택해, 승인 근거가 있는 프로젝트가 있어도 빈 프로젝트가 먼저 보이던 문제를 수정했다.

@@ -23,6 +23,17 @@ export type DashboardResponse = {
     assignee: string;
     due_date: string;
     category: string;
+    priority?: string;
+  }[];
+  assigned_projects?: {
+    project_key: string;
+    name: string;
+    summary: string;
+    evidence_count: number;
+    activity_count: number;
+    pending_review_count: number;
+    latest_timestamp: string;
+    permission_level: string;
   }[];
   recent_decisions: {
     id: number;

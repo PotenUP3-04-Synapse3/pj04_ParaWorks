@@ -935,3 +935,26 @@
   - `npm.cmd run build` → 통과
   - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts gmail-drive-project-routing-flow.spec.ts --project=chromium-desktop` → `6 passed`
   - 실제 Docker DB에서 `project-paraworks-mvp`는 원본 근거 12건, 타임라인 6건으로 계산되고, 승인 시각과 Slack 원문 시각이 `created_at`/`occurred_at`으로 분리되는 것을 확인했다.
+
+## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 표시 개선
+
+- 요청:
+  - `오늘 해야 할 업무`에 오늘 날짜 기준 todo 리스트를 표시한다.
+  - 완료 버튼 클릭 시 대시보드 화면에서만 해당 todo를 제거한다.
+  - `내 담당 프로젝트`에 프로젝트 리스트가 보이지 않는 증상을 수정한다.
+- 원인:
+  - 대시보드 API가 `pending_review` 상태의 todo ReviewItem만 내려주고 있었고, 날짜 필터가 없었다.
+  - 대시보드 화면의 `visibleAssignedProjects`가 빈 배열로 하드코딩되어 있어 프로젝트 API/DB에 프로젝트가 있어도 표시되지 않았다.
+  - 화면은 서버 컴포넌트라 완료 버튼으로 로컬 상태만 바꾸는 UX를 구현하기 어려운 구조였다.
+- 구현:
+  - `backend/app/api/v1/dashboard.py`에서 승인된 todo ReviewItem 중 `payload.due_date`가 오늘(Asia/Seoul 기준)인 항목만 `today_todos`로 내려주도록 변경했다.
+  - `today_todos`에 `priority`를 포함하고, `category`는 `project_name`을 우선 사용한다.
+  - `assigned_projects`를 대시보드 응답에 추가해 등록 프로젝트의 근거 수, 활동 수, 검토 대기 수를 표시한다.
+  - `frontend/src/app/dashboard/page.tsx`를 클라이언트 컴포넌트로 전환하고, 완료 버튼 클릭 시 로컬 state에서만 해당 todo를 숨기도록 구현했다.
+  - `내 담당 프로젝트` 카드에 프로젝트명, 요약, 근거/활동/검토 대기 수를 표시한다.
+- 검증:
+  - `uv run pytest backend/tests/test_dashboard_api.py -q` → `3 passed`
+  - `uv run ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `1 passed`
