@@ -480,6 +480,7 @@ test("Slack sync polling timeout stays in background-running state instead of fa
 test("Gmail sync uses async job polling so the modal reflects runtime progress", async ({
   page,
 }) => {
+  await page.clock.install();
   let syncQueued = false;
   let syncCompleted = false;
   let postedBody: unknown;
@@ -648,9 +649,12 @@ test("Gmail sync uses async job polling so the modal reflects runtime progress",
   const modal = page.getByTestId("sync-progress-modal");
 
   await expect(modal).toBeVisible();
-  await expect(modal.getByTestId("sync-progress-percent")).toContainText("75%");
   expect(postedBody).toMatchObject({ run_async: true });
+  await expect(modal.getByTestId("sync-progress-percent")).not.toContainText("75%");
+  await page.clock.fastForward(6_000);
+  await expect(modal.getByTestId("sync-progress-percent")).toContainText("75%");
 
   syncCompleted = true;
+  await page.clock.fastForward(1_500);
   await expect(modal.getByTestId("sync-progress-percent")).toContainText("100%");
 });

@@ -55,6 +55,7 @@ type SyncProgressState = {
   status: "running" | "complete" | "error";
   stageIndex: number;
   progressPct: number;
+  targetProgressPct: number;
   backgrounded: boolean;
   jobId?: string;
   lastMessage?: string;
@@ -121,6 +122,15 @@ function stageIndexFromProgress(progressPct?: number) {
     return 1;
   }
   return 2;
+}
+
+function nextDisplayedProgress(currentPct: number, targetPct: number) {
+  const current = Math.max(0, Math.min(100, Math.round(currentPct)));
+  const target = Math.max(0, Math.min(100, Math.round(targetPct)));
+  if (current >= target) {
+    return current;
+  }
+  return Math.min(target, current + 8);
 }
 
 function countFromSyncMessage(message: string | undefined, key: string) {
@@ -396,6 +406,40 @@ export default function IntegrationsPage() {
     return () => window.clearInterval(timer);
   }, [syncProgress?.connectorType, syncProgress?.status]);
 
+  const displayedProgressPct = syncProgress?.progressPct;
+  const targetProgressPct = syncProgress?.targetProgressPct;
+
+  useEffect(() => {
+    if (syncProgress?.status !== "running") {
+      return undefined;
+    }
+    if (displayedProgressPct === undefined || targetProgressPct === undefined) {
+      return undefined;
+    }
+    if (displayedProgressPct >= targetProgressPct) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setSyncProgress((current) => {
+        if (!current || current.status !== "running") {
+          return current;
+        }
+        return {
+          ...current,
+          progressPct: nextDisplayedProgress(current.progressPct, current.targetProgressPct),
+        };
+      });
+    }, 500);
+
+    return () => window.clearInterval(timer);
+  }, [
+    syncProgress?.connectorType,
+    syncProgress?.status,
+    displayedProgressPct,
+    targetProgressPct,
+  ]);
+
 
   async function refreshDashboardSummary() {
     try {
@@ -463,7 +507,7 @@ export default function IntegrationsPage() {
             ? {
                 ...current,
                 stageIndex: stageIndexFromProgress(latest.progress_pct),
-                progressPct: latest.progress_pct,
+                targetProgressPct: latest.progress_pct,
                 jobId: latest.job_id,
                 lastMessage: latest.message,
               }
@@ -496,7 +540,7 @@ export default function IntegrationsPage() {
             ? {
                 ...current,
                 stageIndex: stageIndexFromProgress(latest.progress_pct),
-                progressPct: latest.progress_pct,
+                targetProgressPct: latest.progress_pct,
                 jobId: latest.job_id,
                 lastMessage: latest.message,
               }
@@ -526,6 +570,7 @@ export default function IntegrationsPage() {
             status: "complete",
             stageIndex: SYNC_RUNNING_STAGES.length - 1,
             progressPct: 100,
+            targetProgressPct: 100,
             jobId: result.job_id,
             result,
           }
@@ -567,6 +612,7 @@ export default function IntegrationsPage() {
       status: "running",
       stageIndex: 0,
       progressPct: 0,
+      targetProgressPct: 10,
       backgrounded: false,
     });
     setSyncModalOpen(true);
@@ -596,6 +642,7 @@ export default function IntegrationsPage() {
               ...current,
               jobId: result.job_id,
               progressPct: result.status === "complete" ? 100 : current.progressPct,
+              targetProgressPct: result.status === "complete" ? 100 : Math.max(current.targetProgressPct, 10),
             }
           : current,
       );
@@ -628,6 +675,7 @@ export default function IntegrationsPage() {
               ? {
                   ...current,
                   status: "error",
+                  targetProgressPct: current.progressPct,
                   errorMessage: recoveryMessage,
                 }
               : current,
@@ -643,6 +691,7 @@ export default function IntegrationsPage() {
                 ...current,
                 status: "running",
                 backgrounded: true,
+                targetProgressPct: Math.max(current.targetProgressPct, 10),
                 errorMessage: BACKGROUND_SYNC_CONTINUES_MESSAGE,
               }
             : current,
@@ -655,6 +704,7 @@ export default function IntegrationsPage() {
           ? {
               ...current,
               status: "error",
+              targetProgressPct: current.progressPct,
               errorMessage: message,
             }
           : current,
@@ -696,6 +746,7 @@ export default function IntegrationsPage() {
               ...current,
               status: "error",
               progressPct: 100,
+              targetProgressPct: 100,
               stageIndex: SYNC_RUNNING_STAGES.length - 1,
               lastMessage: latest.message,
               errorMessage: latest.message || "동기화 작업이 실패했습니다.",
@@ -710,7 +761,7 @@ export default function IntegrationsPage() {
         ? {
             ...current,
             status: "running",
-            progressPct: latest.progress_pct,
+            targetProgressPct: latest.progress_pct,
             stageIndex: stageIndexFromProgress(latest.progress_pct),
             jobId: latest.job_id,
             lastMessage: latest.message,
@@ -745,6 +796,7 @@ export default function IntegrationsPage() {
       status: isComplete ? "complete" : isError ? "error" : "running",
       stageIndex: stageIndexFromProgress(latest.progress_pct),
       progressPct: latest.progress_pct,
+      targetProgressPct: latest.progress_pct,
       backgrounded: false,
       jobId: latest.job_id,
       lastMessage: latest.message,
