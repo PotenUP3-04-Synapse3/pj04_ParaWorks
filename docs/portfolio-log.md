@@ -4195,3 +4195,10 @@ Cost/security note:
   - 검증: backend 관련 테스트 36개 통과, ruff 통과, frontend lint/build
     통과, Playwright 대시보드/타임라인/프로젝트 5개 통과, Docker Postgres
     migration 적용 확인.
+- `fix: 타임라인 완료 상태 병합 및 상태 한글화`
+  - 타임라인 상태 필터와 row chip을 `승인`, `검토 중`, `완료`로 한글화했다.
+  - 완료된 todo를 타임라인에 새 항목으로 추가하지 않고, 같은 프로젝트/source link의
+    기존 `[할 일] ...` 타임라인 이벤트에 `completed_at`, `completed_by`를
+    병합해 화면에서 `완료`로 보이게 했다.
+  - 검증: backend 프로젝트/대시보드/todo 테스트 32개 통과, ruff 통과,
+    frontend lint/build 통과, Playwright 대시보드/타임라인 3개 통과.
