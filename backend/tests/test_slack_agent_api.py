@@ -248,6 +248,82 @@ def test_slack_agent_project_routing_metadata_is_persisted(
     }
 
 
+def test_slack_agent_review_item_uses_only_tool_project_routing(
+    monkeypatch,
+    client,
+    db_session,
+) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Redis work'))
+    db_session.commit()
+
+    def override_settings() -> Settings:
+        return Settings(paraworks_demo_mode=False, openai_api_key='openai-key')
+
+    def fake_process_daily_slack_sync(*args, **kwargs):
+        return {
+            'is_work_related': True,
+            'model_name': 'gpt-5-mini',
+            'project_model_name': 'fake-router',
+            'project_prompt_tokens': 10,
+            'project_completion_tokens': 5,
+            'run_cost': AgentRunCost(
+                model_name='gpt-5-mini',
+                token_usage=TokenUsage(input_tokens=100, output_tokens=50),
+                estimated_cost_usd=0.0001,
+                cache_hit=False,
+            ),
+            'candidates': [
+                ReviewCandidate(
+                    title='등록 프로젝트 없음',
+                    summary='topic_tag에는 Project Alpha가 있어도 router가 매칭하지 않았습니다.',
+                    item_type='history_event',
+                    source_links=['https://example.slack.com/archives/C123/p1777600800000100'],
+                    source_snippets=['새 프로젝트 후보입니다.'],
+                    confidence_score=0.8,
+                    permission_level='internal',
+                    payload_fields={
+                        'topic_tag': 'Project Alpha',
+                        'project_assignment_method': 'llm_tool',
+                        'project_assignment_summary': '등록 프로젝트와 확정 매칭되지 않습니다.',
+                        'project_assignment_reason': 'router가 사용자 선택 필요로 판단했습니다.',
+                        'project_assignment_confidence': 0.41,
+                        'project_needs_user_selection': True,
+                    },
+                ),
+            ],
+        }
+
+    client.app.dependency_overrides[get_settings] = override_settings
+    client.app.dependency_overrides[get_demo_user] = lambda: DemoUser(
+        id='demo-admin',
+        email='admin@paraworks.local',
+        role='admin',
+        permission_levels={'public', 'internal', 'restricted'},
+        name='관리자',
+        title='관리자',
+        department='Platform',
+    )
+    monkeypatch.setattr(
+        'backend.app.api.v1.integrations.get_sync_connector',
+        lambda *args, **kwargs: get_mock_connector('slack'),
+    )
+    monkeypatch.setattr(sync_service, 'process_daily_slack_sync', fake_process_daily_slack_sync)
+
+    response = client.post('/api/v1/integrations/slack/sync')
+
+    assert response.status_code == 200
+    item = db_session.scalar(
+        select(ReviewItem)
+        .where(ReviewItem.item_type == 'history_event')
+        .where(ReviewItem.payload['title'].as_string() == '등록 프로젝트 없음')
+        .limit(1)
+    )
+    assert item is not None
+    assert item.payload['project_assignment_method'] == 'llm_tool'
+    assert item.payload['project_needs_user_selection'] is True
+    assert item.payload.get('project_key') in (None, '')
+
+
 def test_slack_llm_preflight_requires_explicit_enablement(client) -> None:
     def override_settings() -> Settings:
         return Settings(agent_llm_enabled=False)

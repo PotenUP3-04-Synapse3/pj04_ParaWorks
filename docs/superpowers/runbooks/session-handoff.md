@@ -20,6 +20,52 @@ Updated: 2026-05-15
   - `npm.cmd run test:visual -- gmail-drive-project-routing-flow.spec.ts` -> desktop/mobile `2 passed`
   - `npm.cmd run test:visual -- review-project-routing.spec.ts` -> desktop/mobile `2 passed`
 
+## 2026-05-15 Slack 프로젝트 Tool Routing 통합 완료
+
+- 기준 계획서:
+  - `docs/superpowers/plans/2026-05-15-unified-slack-project-tool-routing.md`
+- 주요 변경:
+  - `agent_slack/project_routing.py`
+    - router rules에 `등록 프로젝트에 해당한다고 판단한 경우에만 project_key를 채우세요`, `모든 candidate_items에 대해 decisions 항목을 하나씩 반환하세요`를 추가했다.
+  - `backend/app/agents/slack_agent/sync_service.py`
+    - Slack Agent ReviewItem 저장 시 `_determine_project_from_tag()` fallback과 `back_propagate_slack_tags()` 호출을 제거했다.
+    - payload의 `project_key`, `project_name`은 tool routing 결과가 있을 때만 저장한다.
+  - `backend/app/api/v1/integrations.py`
+    - Slack sync에서는 규칙 기반 `project_assignment`를 만들지 않도록 했다.
+  - `backend/app/projects/classifier.py`
+    - deterministic project classifier 대상에서 Slack source를 제외했다. Gmail/Drive/Calendar deterministic backfill은 유지된다.
+  - `backend/app/knowledge/promotion.py`
+    - Slack Agent `llm_tool` 후보는 `project_key`가 없으면 promotion preview와 approve API에서 승인 불가다.
+  - `backend/app/projects/service.py`
+    - project pending count가 project_key를 가진 pending ReviewItem 전체를 반영한다.
+  - `frontend/src/app/review/page.tsx`
+    - 프로젝트 미선택 후보에 `프로젝트 선택 후 승인 가능` 안내와 `새 프로젝트 만들기` 링크를 표시한다.
+  - `frontend/src/app/timeline/page.tsx`
+    - 프로젝트 타임라인을 날짜 단위로 그룹 표시한다.
+  - `frontend/src/app/projects/page.tsx`
+    - metric 영역을 모바일 1열, 넓은 화면 3열로 안정화했다.
+- 신규/수정 테스트:
+  - `backend/tests/test_agent_slack_pipeline_quality.py`
+  - `backend/tests/test_slack_agent_api.py`
+  - `backend/tests/test_mock_sync.py`
+  - `backend/tests/test_project_memory_api.py`
+  - `backend/tests/test_review.py`
+  - `frontend/e2e/review-project-routing-required.spec.ts`
+  - `frontend/e2e/timeline-project-date-groups.spec.ts`
+  - `frontend/e2e/projects-responsive-metrics.spec.ts`
+  - `frontend/e2e/slack-project-routing-flow.spec.ts`
+- 검증:
+  - `python -m pytest backend/tests/test_agent_slack_project_routing.py backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` -> `65 passed`
+  - `python -m ruff check ...` -> `All checks passed!`
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- review-project-routing-required.spec.ts timeline-project-date-groups.spec.ts projects-responsive-metrics.spec.ts slack-project-routing-flow.spec.ts` -> `8 passed`
+- 주의:
+  - 기존 DB에 이미 남은 `project_assignment` 항목은 이번 변경으로 자동 삭제하지 않는다.
+  - 신규 Slack sync부터는 Slack source가 deterministic project classifier로 다시 들어가지 않는다.
+  - Gmail/Drive/Calendar deterministic classifier 경로는 개발자 B/C 분업 전까지 유지된다.
+
 ## 2026-05-15 Slack 프로젝트 Router Tool Agent 인수인계
 
 - 목적:

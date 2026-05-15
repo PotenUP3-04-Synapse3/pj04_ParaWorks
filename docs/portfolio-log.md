@@ -18,6 +18,17 @@ demo story changes.
 Portfolio angle:
 
 - Gmail/Drive 증거가 AI 후보에서 끝나지 않고, 프로젝트 선택과 사람 승인 후 회사 기억, 프로젝트 활동, 타임라인, RAG 색인까지 이어지는 제품 루프를 보여준다.
+## 2026-05-15 Slack 프로젝트 Tool Routing 승인 경계 완성
+
+- Slack 신규 sync에서 규칙 기반 `project_assignment` 생성을 중단하고, Slack Agent의 LangChain tool routing 결과만 프로젝트 지정 근거로 사용하게 했다.
+- `topic_tag` fallback으로 프로젝트가 자동 지정되던 경로를 제거해, LLM router가 프로젝트를 확정하지 못한 후보는 사용자가 직접 프로젝트를 선택해야 승인할 수 있게 했다.
+- Review Queue의 promotion preview와 approve API가 Slack Agent `llm_tool` 후보의 `project_key` 누락을 승인 불가로 반환한다.
+- Review 화면에 `프로젝트 선택 후 승인 가능` 안내를 추가하고, Timeline은 날짜 단위 그룹으로, Projects metric은 모바일 겹침 없이 표시되도록 보강했다.
+- 검증: backend targeted 65 passed, ruff 통과, frontend TypeScript/lint/build 통과, Playwright 4개 시나리오 desktop/mobile 총 8 passed.
+
+포트폴리오 관점:
+
+- Slack 원본 수집, LLM 기반 프로젝트 판단, Human Review 승인 경계, 프로젝트별 타임라인 표시가 하나의 신뢰 가능한 제품 흐름으로 연결되었다.
 
 ## 2026-05-15 Slack 프로젝트 Router Tool Agent 추가
 
@@ -4106,3 +4117,9 @@ Cost/security note:
   - It documents the shared ReviewItem payload fields, Gmail body plus
     attachment grouping, Drive file-level grouping, AgentRun metadata, backend
     tests, and Playwright responsibilities.
+- `fix: 프로젝트/타임라인 원본 링크 노출`
+  - 타임라인 상세 패널의 `Open source` 링크가 새 탭으로 열리도록
+    `target="_blank"`와 `rel="noopener noreferrer"`를 추가했다.
+  - 프로젝트 탭의 `연결된 원본 근거`와 `승인된 프로젝트 활동` 카드에서 원본
+    근거 링크를 바로 열 수 있게 했다.
+  - 검증: frontend lint/build 통과, Playwright 원본 링크 검증 2개 통과.

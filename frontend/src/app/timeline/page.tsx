@@ -9,6 +9,7 @@ type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
 
 type TimelineHistory = {
   id: string;
+  createdAt: string;
   time: string;
   createdAt: string;
   source: TimelineSource;
@@ -202,6 +203,8 @@ export default function TimelinePage() {
             {selectedHistory.sourceUrl ? (
               <a
                 href={selectedHistory.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mt-4 inline-flex items-center gap-2 text-[12px] font-extrabold text-[var(--primary-dark)] underline-offset-4 hover:underline"
               >
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -218,6 +221,7 @@ export default function TimelinePage() {
 function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
   return {
     id: item.id,
+    createdAt: item.created_at,
     time: formatTime(item.created_at),
     createdAt: item.created_at,
     source: sourceFromLinks(item.source_links),
@@ -260,6 +264,11 @@ function formatTime(value: string) {
 
 function formatDate(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "날짜 미정";
-  return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric" }).format(date);
+  if (Number.isNaN(date.getTime())) return "날짜 미상";
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }

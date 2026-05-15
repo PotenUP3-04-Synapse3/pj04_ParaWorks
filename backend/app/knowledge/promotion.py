@@ -15,6 +15,11 @@ def build_promotion_preview(item: ReviewItem) -> dict:
     normalized_payload = _normalized_payload_for_item(item)
     if _is_project_routed_memory_item(item):
         normalized_payload['project_key'] = _string_payload(item, 'project_key')
+    if _requires_project_key(item):
+        normalized_payload = {
+            **normalized_payload,
+            'project_key': _string_payload(item, 'project_key'),
+        }
     required_fields = _required_fields_for_item(item)
     missing_required_fields = [
         field
@@ -203,6 +208,16 @@ def _required_fields_for_item(item: ReviewItem) -> tuple[str, ...]:
 def _is_project_routed_memory_item(item: ReviewItem) -> bool:
     return (
         item.item_type in PROMOTABLE_REVIEW_TYPES
+    fields = list(_required_fields_for_type(item.item_type))
+    if _requires_project_key(item):
+        fields.append('project_key')
+    return tuple(fields)
+
+
+def _requires_project_key(item: ReviewItem) -> bool:
+    return (
+        item.item_type in PROMOTABLE_REVIEW_TYPES
+        and item.payload.get('agent_name') == 'slack_agent'
         and item.payload.get('project_assignment_method') == 'llm_tool'
     )
 

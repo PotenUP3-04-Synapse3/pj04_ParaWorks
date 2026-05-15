@@ -137,7 +137,7 @@ def test_project_classifier_does_not_match_phrase_inside_korean_word(
     assert candidates == []
 
 
-def test_project_classifier_matches_complete_korean_project_phrase(
+def test_project_classifier_excludes_slack_from_deterministic_assignments(
     db_session: Session,
 ) -> None:
     db_session.add(
@@ -162,8 +162,7 @@ def test_project_classifier_matches_complete_korean_project_phrase(
 
     candidates = build_project_assignment_candidates(db_session)
 
-    assert len(candidates) == 1
-    assert candidates[0].project_key == 'project-investment-fundraise'
+    assert candidates == []
 
 
 def test_project_classifier_ignores_generic_connector_terms_and_low_signal_slack_reply(
@@ -213,11 +212,11 @@ def test_projects_reclassify_creates_pending_review_without_tokens(
         db_session,
         [
             _event(
-                source_type='slack',
-                source_id='slack-ktech-deadline',
-                title='Slack message in C0AUJDZUKA8',
+                source_type='drive',
+                source_id='drive-ktech-deadline',
+                title='K테크 파일럿 제안서',
                 body='K테크 파일럿 제안서는 금요일까지 업데이트해 주세요.',
-                source_url='https://slack.mock/archives/C0AUJDZUKA8/p1',
+                source_url='https://drive.mock/ktech/proposal',
             )
         ],
     )
@@ -235,6 +234,69 @@ def test_projects_reclassify_creates_pending_review_without_tokens(
     assert item.status == 'pending_review'
     assert item.payload['project_key'] == 'k-tech-pilot'
     assert item.source_snippets
+
+
+def test_project_define_does_not_backfill_slack_project_assignments(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='slack',
+                source_id='slack-project-alpha',
+                title='Project Alpha Slack message',
+                body='Project Alpha Redis sync 작업을 확인했습니다.',
+                source_url='https://slack.mock/archives/C123/p1',
+            )
+        ],
+    )
+
+    response = client.post(
+        '/api/v1/projects/define',
+        json={'name': 'Project Alpha', 'summary': 'Slack Redis sync'},
+        headers={'X-Demo-User': 'demo-admin'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['created_review_items'] == 0
+    assert db_session.query(ReviewItem).filter_by(item_type='project_assignment').count() == 0
+
+
+def test_slack_tool_routed_approved_items_appear_in_project_activity_and_timeline(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Redis work'))
+    item = ReviewItem(
+        item_type='todo',
+        payload={
+            'title': 'Redis 큐 점검',
+            'priority': 'high',
+            'priority_reason': 'Redis 큐 상태를 확인해야 합니다.',
+            'agent_name': 'slack_agent',
+            'project_assignment_method': 'llm_tool',
+            'project_key': 'project-alpha',
+            'project_name': 'Project Alpha',
+        },
+        source_links=['https://example.slack.com/archives/C123/p1777600800000100'],
+        source_snippets=['Redis 큐 상태 확인 필요'],
+        confidence_score=0.9,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    approve = client.post(f'/api/v1/review/{item.id}/approve')
+    projects = client.get('/api/v1/projects').json()['projects']
+    project = next(project for project in projects if project['project_key'] == 'project-alpha')
+
+    assert approve.status_code == 200
+    assert any(activity['item_type'] == 'todo' for activity in project['activity_items'])
+    assert any(timeline['item_type'] == 'timeline_event' for timeline in project['timeline_items'])
 
 
 def test_created_project_is_visible_without_approved_evidence(
@@ -339,11 +401,11 @@ def test_define_project_creates_pending_assignment_candidates_from_existing_sour
         db_session,
         [
             _event(
-                source_type='slack',
-                source_id='slack-settlement-automation',
+                source_type='drive',
+                source_id='drive-settlement-automation',
                 title='정산 자동화 일정',
                 body='정산 자동화 프로젝트는 이번 주에 거래처 파일 검토 화면부터 진행합니다.',
-                source_url='https://slack.mock/archives/C123/p1',
+                source_url='https://drive.mock/settlement/plan',
             )
         ],
     )
@@ -379,11 +441,11 @@ def test_project_classifier_uses_user_defined_projects(
         db_session,
         [
             _event(
-                source_type='slack',
-                source_id='slack-client-portal',
+                source_type='drive',
+                source_id='drive-client-portal',
                 title='고객 포털 개편 일정',
                 body='고객 포털 개편은 이번 주에 계약 문서 화면부터 진행합니다.',
-                source_url='https://slack.mock/archives/C123/p1',
+                source_url='https://drive.mock/client-portal/plan',
             )
         ],
     )

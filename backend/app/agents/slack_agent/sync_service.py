@@ -187,18 +187,7 @@ def trigger_slack_agent_analysis(
                             source_ids.append(sid)
                             source_authors.append(id_to_author.get(sid, 'Unknown'))
 
-                # Phase 2: 동적 태그 전파 (Back-propagation)
-                from backend.app.agents.slack_agent.service import (
-                    _determine_project_from_tag,
-                    back_propagate_slack_tags,
-                )
-
-                back_propagate_slack_tags(db, candidate)
-
                 topic_tag = candidate.payload_fields.get('topic_tag', 'N/A')
-                project_key, is_new_project = _determine_project_from_tag(
-                    topic_tag, candidate.summary
-                )
                 project_fields = {
                     key: candidate.payload_fields.get(key)
                     for key in (
@@ -222,8 +211,9 @@ def trigger_slack_agent_analysis(
                     'importance': candidate.payload_fields.get('importance', 'Medium'),
                     'assignee': candidate.payload_fields.get('assignee', '미지정'),
                     'due_date': candidate.payload_fields.get('due_date', '기한없음'),
-                    'project_key': project_fields.get('project_key', project_key),
-                    'is_new_project': is_new_project,
+                    'project_key': project_fields.get('project_key'),
+                    'project_name': project_fields.get('project_name'),
+                    'is_new_project': False,
                     'agent_run_id': agent_run.id,
                     'agent_name': 'slack_agent',
                     'prompt_version': agent_run.prompt_version,
