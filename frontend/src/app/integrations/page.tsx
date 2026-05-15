@@ -2,15 +2,11 @@
 
 import {
   ArrowRight,
-  Calendar,
   CheckCircle2,
-  Database,
   ExternalLink,
   FileText,
   KeyRound,
   LockKeyhole,
-  Mail,
-  MessageSquare,
   PlugZap,
   Radio,
   RefreshCw,
@@ -19,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
 import type {
@@ -59,6 +56,7 @@ type SyncProgressState = {
 };
 
 type IntegrationRuntimeStatus = SlackRuntimeStatus | GoogleRuntimeStatus;
+type ConnectorLogo = () => ReactNode;
 
 const DEFAULT_INTEGRATION_MANIFESTS: IntegrationManifest[] = [
   {
@@ -108,30 +106,25 @@ const DEFAULT_INTEGRATION_MANIFESTS: IntegrationManifest[] = [
  */
 const integrationVisuals = {
   slack: {
-    icon: MessageSquare,
-    accent: "bg-[#21132b] text-white",
+    logo: SlackLogo,
     description: "채널 메시지를 수집해 타임라인, 히스토리, 결정 후보를 만듭니다.",
   },
   gmail: {
-    icon: Mail,
-    accent: "bg-blue-50 text-blue-700",
+    logo: GmailLogo,
     description: "메일 흐름을 요약하고 결정, 후속 작업, 히스토리 후보를 추출합니다.",
   },
   drive: {
-    icon: Database,
-    accent: "bg-emerald-50 text-emerald-700",
+    logo: GoogleDriveLogo,
     description: "사내 문서와 버전 정보를 회사 메모리의 근거로 연결합니다.",
   },
   calendar: {
-    icon: Calendar,
-    accent: "bg-amber-50 text-amber-700",
+    logo: GoogleCalendarLogo,
     description: "회의 일정과 시간 맥락을 히스토리 이벤트의 타임라인 근거로 사용합니다.",
   },
 } satisfies Record<
   string,
   {
-    icon: typeof MessageSquare;
-    accent: string;
+    logo: ConnectorLogo;
     description: string;
   }
 >;
@@ -140,8 +133,7 @@ const integrationVisuals = {
  * 정의되지 않은 연동 도구에 대한 기본 시각적 설정
  */
 const fallbackVisual = {
-  icon: PlugZap,
-  accent: "bg-neutral-100 text-neutral-700",
+  logo: FallbackConnectorLogo,
   description: "공통 ingestion contract를 통해 회사 메모리로 연결됩니다.",
 };
 
@@ -848,7 +840,7 @@ export default function IntegrationsPage() {
         <div className="grid gap-4 sm:grid-cols-2 items-start">
           {visibleManifests.map((manifest) => {
             const visual = integrationVisuals[manifest.type as keyof typeof integrationVisuals] ?? fallbackVisual;
-            const Icon = visual.icon;
+            const Logo = visual.logo;
             const pending = pendingType === manifest.type;
             const connection = connections.find((item) => item.connector_type === manifest.type);
             const credentialAvailable = connection?.credential_status === "available";
@@ -880,8 +872,11 @@ export default function IntegrationsPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">
-                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${visual.accent}`}>
-                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    <span
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--line-soft)] bg-white shadow-sm"
+                      data-testid={`${manifest.type}-connector-logo`}
+                    >
+                      <Logo />
                     </span>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1249,6 +1244,65 @@ function SourceOperationRow({
       </div>
     </div>
   );
+}
+
+function SlackLogo() {
+  return (
+    <svg className="h-7 w-7" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="13.2" y="3" width="5.6" height="12.2" rx="2.8" fill="#36C5F0" />
+      <rect x="13.2" y="16.8" width="5.6" height="12.2" rx="2.8" fill="#2EB67D" />
+      <rect x="16.8" y="13.2" width="12.2" height="5.6" rx="2.8" fill="#ECB22E" />
+      <rect x="3" y="13.2" width="12.2" height="5.6" rx="2.8" fill="#E01E5A" />
+      <path d="M9.5 3A2.8 2.8 0 0 1 12.3 5.8v3.7H8.6A2.8 2.8 0 0 1 8.6 3h.9Z" fill="#36C5F0" />
+      <path d="M29 9.5a2.8 2.8 0 0 1-2.8 2.8h-3.7V8.6A2.8 2.8 0 0 1 29 8.6v.9Z" fill="#ECB22E" />
+      <path d="M22.5 29a2.8 2.8 0 0 1-2.8-2.8v-3.7h3.7a2.8 2.8 0 0 1 0 5.6h-.9Z" fill="#2EB67D" />
+      <path d="M3 22.5a2.8 2.8 0 0 1 2.8-2.8h3.7v3.7A2.8 2.8 0 0 1 3 23.4v-.9Z" fill="#E01E5A" />
+    </svg>
+  );
+}
+
+function GmailLogo() {
+  return (
+    <svg className="h-7 w-7" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M5.5 8.5h21v15a2.5 2.5 0 0 1-2.5 2.5H8a2.5 2.5 0 0 1-2.5-2.5v-15Z" fill="#fff" />
+      <path d="M8 8.5 16 15l8-6.5" fill="none" stroke="#EA4335" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M5.5 9.5v14A2.5 2.5 0 0 0 8 26h2V13.1L5.5 9.5Z" fill="#C5221F" />
+      <path d="M26.5 9.5v14A2.5 2.5 0 0 1 24 26h-2V13.1l4.5-3.6Z" fill="#FBBC04" />
+      <path d="M10 26V13.1l6 4.9 6-4.9V26H10Z" fill="#fff" />
+      <path d="M5.5 9.5 16 18l10.5-8.5" fill="none" stroke="#EA4335" strokeWidth="2.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GoogleDriveLogo() {
+  return (
+    <svg className="h-7 w-7" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M12.6 4h6.8l9.4 16.3H22L12.6 4Z" fill="#0F9D58" />
+      <path d="M3.2 20.3 12.6 4l3.4 5.9-6 10.4H3.2Z" fill="#4285F4" />
+      <path d="M9.9 20.3h18.9L25.4 26H6.6l3.3-5.7Z" fill="#F4B400" />
+      <path d="M9.9 20.3 16 9.9l6 10.4H9.9Z" fill="#fff" opacity="0.95" />
+    </svg>
+  );
+}
+
+function GoogleCalendarLogo() {
+  return (
+    <svg className="h-7 w-7" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M7 5h18a2 2 0 0 1 2 2v18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="#fff" />
+      <path d="M7 5h18a2 2 0 0 1 2 2v4H5V7a2 2 0 0 1 2-2Z" fill="#4285F4" />
+      <path d="M5 11h5v16H7a2 2 0 0 1-2-2V11Z" fill="#34A853" />
+      <path d="M22 11h5v14a2 2 0 0 1-2 2h-3V11Z" fill="#FBBC04" />
+      <path d="M5 22h22v3a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3Z" fill="#EA4335" />
+      <rect x="10" y="12" width="12" height="10" rx="1.5" fill="#fff" />
+      <text x="16" y="20" textAnchor="middle" fontSize="8" fontWeight="700" fill="#1A73E8">
+        31
+      </text>
+    </svg>
+  );
+}
+
+function FallbackConnectorLogo() {
+  return <PlugZap className="h-5 w-5 text-[var(--workspace-accent)]" aria-hidden="true" />;
 }
 
 function formatScopes(scopes: string[]) {

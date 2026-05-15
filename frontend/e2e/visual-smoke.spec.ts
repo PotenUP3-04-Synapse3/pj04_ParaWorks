@@ -305,6 +305,11 @@ test("integration connector cards use consistent chrome and action layout", asyn
   const cards = page.locator("article.integration-glass-card");
   await expect(cards).toHaveCount(4);
   await expect(cards.filter({ has: page.getByRole("heading", { name: "Slack" }) })).not.toContainText("우선순위");
+  for (const connectorType of ["calendar", "drive", "gmail", "slack"]) {
+    const logo = page.getByTestId(`${connectorType}-connector-logo`);
+    await expect(logo).toBeVisible();
+    await expect(logo.locator("svg")).toBeVisible();
+  }
 
   const borderColors = await cards.evaluateAll((elements) =>
     elements.map((element) => window.getComputedStyle(element).borderColor),
