@@ -6,22 +6,6 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
-## 2026-05-15 Google Calendar all-calendars project memory path
-
-- Google Calendar sync now covers every accessible calendar instead of only the
-  primary calendar, with per-calendar cursors and collision-safe Calendar source
-  ids.
-- Calendar evidence now flows through the same evidence-first path as
-  Slack/Gmail/Drive: sync, Source evidence, AgentRun, ReviewItem, approval,
-  Projects/Timeline, and approval-gated RAG indexing.
-- Approved Calendar timeline entries now use the actual event start time for
-  project activity and timeline grouping.
-
-Portfolio angle:
-
-- Shows the company-memory platform handling schedules as first-class reviewed
-  evidence across all user calendars, while keeping Calendar inside the
-  Mail/Docs ownership lane and preserving the human review boundary.
 ## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 개선
 
 - 대시보드의 `오늘 해야 할 업무`가 검토 대기 todo 후보가 아니라, 승인된 todo ReviewItem 중 오늘(Asia/Seoul 기준) 이후 마감인 항목을 가까운 마감일 순으로 표시하도록 수정했다.
