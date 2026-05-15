@@ -209,7 +209,7 @@ function ShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-app text-ink">
       {/* 데스크탑 사이드바 */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] border-r border-white/70 bg-white/85 px-5 py-7 shadow-[18px_0_48px_rgba(15,23,42,0.05)] backdrop-blur lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[240px] border-r border-white/70 bg-white/85 px-5 py-7 shadow-[18px_0_48px_rgba(15,23,42,0.05)] backdrop-blur lg:flex lg:flex-col">
         {/* 로고 영역 */}
         <Link href="/dashboard" className="flex items-start gap-3">
           <span className="brand-logo" aria-hidden="true">
@@ -324,7 +324,7 @@ function ShellContent({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="lg:pl-[248px]">
+      <div className="lg:pl-[240px]">
         {/* 상단 헤더 */}
         <header className="sticky top-0 z-20 bg-[#f3f5fa]/90 px-4 py-5 backdrop-blur md:px-8 lg:px-8">
           <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
