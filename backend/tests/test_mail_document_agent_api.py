@@ -1,5 +1,7 @@
 from sqlalchemy import select
 
+from backend.app.agent_runtime import EvidencePacket
+from backend.app.agents.mail_document_agent import MailDocumentAgentModelResponse
 from backend.app.api.v1 import integrations
 from backend.app.connectors.mock import get_mock_connector
 from backend.app.core.config import Settings, get_settings
@@ -14,6 +16,24 @@ from backend.app.models import (
 )
 
 CSRF_HEADERS = {'X-CSRF-Token': 'test-csrf-token'}
+
+
+class FakeMailDocumentLlmModel:
+    def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
+        return MailDocumentAgentModelResponse(
+            title='LLM 업무 검토 후보',
+            summary='LLM이 Gmail 증거를 업무 요청으로 분류했습니다.',
+            item_type='todo',
+            confidence_score=0.93,
+            input_tokens=100,
+            output_tokens=40,
+            model_name='fake-mail-llm',
+            is_business_related=True,
+            structured_data={
+                'reviewability_decision': 'reviewable',
+                'summary_quality': 'actionable',
+            },
+        )
 
 
 def _set_csrf_cookie(client) -> None:
@@ -200,6 +220,35 @@ def test_gmail_sync_runs_agent_only_for_changed_gmail_sources(client, db_session
     assert review_item.payload['agent_name'] == 'mail_document_agent'
     assert all('.mock/project-alpha/redis-summary' in link for link in review_item.source_links)
     assert not any('drive.mock' in link for link in review_item.source_links)
+
+
+def test_gmail_sync_uses_llm_agent_when_provider_key_exists(client, db_session, monkeypatch) -> None:
+    _set_csrf_cookie(client)
+
+    def override_settings() -> Settings:
+        return Settings(
+            _env_file=None,
+            paraworks_demo_mode=True,
+            agent_llm_enabled=True,
+            openai_api_key='test-openai-key',
+        )
+
+    client.app.dependency_overrides[get_settings] = override_settings
+    monkeypatch.setattr(
+        integrations,
+        'build_langchain_mail_document_agent_model',
+        lambda _settings: FakeMailDocumentLlmModel(),
+    )
+
+    response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json()['created_review_items'] == 1
+    review_item = db_session.query(ReviewItem).one()
+    assert review_item.payload['title'] == 'LLM 업무 검토 후보'
+    assert review_item.payload['summary_quality'] == 'actionable'
+    agent_run = db_session.query(AgentRun).one()
+    assert agent_run.model_name == 'fake-mail-llm'
 
 
 def test_drive_sync_creates_review_item_per_changed_drive_source(client, db_session) -> None:
