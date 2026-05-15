@@ -370,6 +370,14 @@ export type ReviewSourceEvidence = {
   parser_status?: string | null;
   section_path?: string | null;
   evidence_reason?: string | null;
+  calendar_id?: string | null;
+  calendar_name?: string | null;
+  calendar_start?: string | null;
+  calendar_end?: string | null;
+  calendar_location?: string | null;
+  calendar_organizer?: string | null;
+  calendar_attendee_summary?: string | null;
+  event_context_key?: string | null;
 };
 
 export type ReviewAgentRunDetails = {

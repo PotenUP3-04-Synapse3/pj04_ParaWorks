@@ -228,16 +228,28 @@ test("shell chrome uses distinct theme tokens across viewport modes", async ({ p
 
 test("integration sync shows connector counts", async ({ page }) => {
   await page.goto("/integrations");
-  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
+  await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
   await page.getByRole("button", { name: "동기화" }).first().click();
 
-  const syncMetrics = page.getByTestId("sync-result-metrics");
-  await expect(syncMetrics.getByText("Fetched", { exact: true })).toBeVisible();
-  await expect(syncMetrics.getByText("Review items", { exact: true })).toBeVisible();
-  await expect(syncMetrics.getByText("Skipped", { exact: true })).toBeVisible();
+  const sourcePanel = page.getByTestId("source-operations-panel");
+  await expect(sourcePanel).toBeVisible();
+  await expect(page.getByTestId("source-operation-slack-header")).toContainText("Slack");
+  await expect(page.getByTestId("source-operation-slack-count")).toBeVisible();
+  await expect(page.getByTestId("source-operation-slack-bar")).toBeVisible();
+  await expect(page.getByTestId("source-operation-other")).toHaveCount(0);
+  await expect(sourcePanel).not.toContainText("기타");
+  await expect
+    .poll(async () => {
+      const header = await page.getByTestId("source-operation-slack-header").boundingBox();
+      const bar = await page.getByTestId("source-operation-slack-bar").boundingBox();
+      if (!header || !bar) return false;
+      return bar.y > header.y + header.height - 1;
+    })
+    .toBe(true);
+  await expect(sourcePanel).not.toContainText("%");
 });
 
-test("Gmail sync shows parser quality counts", async ({ page }) => {
+test("Gmail source status keeps count separate from the progress bar", async ({ page }) => {
   await page.route("**/api/v1/integrations/gmail/sync", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -256,32 +268,89 @@ test("Gmail sync shows parser quality counts", async ({ page }) => {
   });
 
   await page.goto("/integrations");
-  await expect(page.getByTestId("app-shell")).toHaveAttribute("data-hydrated", "true");
+  await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
   await page.getByTestId("gmail-card-actions").getByRole("button").first().click();
 
-  await expect(page.getByTestId("sync-parser-quality")).toContainText("Parser quality");
-  await expect(page.getByTestId("sync-parser-quality")).toContainText("Metadata only");
+  await expect(page.getByTestId("source-operation-gmail-header")).toContainText("Gmail");
+  await expect(page.getByTestId("source-operation-gmail-count")).toBeVisible();
+  await expect(page.getByTestId("source-operation-gmail-bar")).toBeVisible();
+  await expect(page.getByTestId("source-operations-panel")).not.toContainText("%");
 });
 
 test("integrations page shows Slack OAuth connection status without secrets", async ({ page }) => {
   await page.goto("/integrations");
 
   await expect(page.locator('[data-testid="slack-oauth-status"]')).toBeVisible();
-  await expect(page.getByTestId("slack-runtime-status")).toBeVisible();
+  await expect(page.getByTestId("slack-oauth-status")).not.toContainText("ready");
+  await expect(page.getByTestId("slack-runtime-status")).toHaveCount(0);
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("xoxb-");
   expect(bodyText).not.toContain("client-secret");
   expect(bodyText).not.toContain("token_ref");
+  expect(bodyText).not.toContain("실제 OAuth 연동");
 });
 
 test("Slack card keeps OAuth install outside primary action row", async ({ page }) => {
   await page.goto("/integrations");
 
   const slackActions = page.getByTestId("slack-card-actions");
-  await expect(slackActions.getByRole("button", { name: "동기화" })).toBeVisible();
-  await expect(slackActions.getByRole("button", { name: "Slack Agent 실행" })).toBeVisible();
+  await expect(slackActions.getByRole("button", { name: "동기화" })).toHaveCount(0);
+  await expect(slackActions.getByRole("button", { name: "Slack Agent 실행" })).toHaveCount(0);
   await expect(slackActions.getByRole("button", { name: "Slack 연결" })).toHaveCount(0);
+});
+
+test("integration connector cards use consistent chrome and action layout", async ({ page }) => {
+  await page.goto("/integrations");
+  await expect(page.getByRole("heading", { name: "연동과 에이전트 도구" })).toBeVisible();
+
+  const cards = page.locator("article.integration-glass-card");
+  await expect(cards).toHaveCount(4);
+  await expect(cards.filter({ has: page.getByRole("heading", { name: "Slack" }) })).not.toContainText("우선순위");
+  for (const connectorType of ["calendar", "drive", "gmail", "slack"]) {
+    const logo = page.getByTestId(`${connectorType}-connector-logo`);
+    await expect(logo).toBeVisible();
+    const logoSvg = logo.locator("svg");
+    await expect(logoSvg).toBeVisible();
+    await expect(logoSvg).toHaveAttribute("data-logo-source", /official/);
+  }
+
+  const borderColors = await cards.evaluateAll((elements) =>
+    elements.map((element) => window.getComputedStyle(element).borderColor),
+  );
+  expect(new Set(borderColors).size).toBe(1);
+
+  const heights = await cards.evaluateAll((elements) =>
+    elements.map((element) => Math.round(element.getBoundingClientRect().height)),
+  );
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+  expect(Math.max(...heights)).toBeLessThanOrEqual(400);
+
+  const actionHeights = await page.locator('[data-testid$="-card-actions"]').evaluateAll((elements) =>
+    elements.map((element) => Math.round(element.getBoundingClientRect().height)),
+  );
+  expect(Math.max(...actionHeights)).toBeLessThanOrEqual(46);
+
+  const actionDisplays = await page.locator('[data-testid$="-card-actions"]').evaluateAll((elements) =>
+    elements.map((element) => window.getComputedStyle(element).display),
+  );
+  expect(new Set(actionDisplays)).toEqual(new Set(["flex"]));
+
+  const actionGaps = await page.evaluate(() =>
+    ["calendar", "drive", "gmail", "slack"].map((type) => {
+      const oauthStatus = document.querySelector(`[data-testid="${type}-oauth-status"]`);
+      const actions = document.querySelector(`[data-testid="${type}-card-actions"]`);
+      if (!oauthStatus || !actions) return 0;
+      return Math.round(actions.getBoundingClientRect().top - oauthStatus.getBoundingClientRect().bottom);
+    }),
+  );
+  expect(Math.max(...actionGaps)).toBeLessThanOrEqual(28);
+
+  const driveActionLabels = await page.getByTestId("drive-card-actions").locator("button, a").evaluateAll((elements) =>
+    elements.map((element) => element.textContent?.replace(/\s+/g, " ").trim()),
+  );
+  expect(driveActionLabels).toContain("동기화");
+  expect(driveActionLabels).toContain("문서 현황");
 });
 
 test("Slack OAuth callback route renders a safe local error without secrets", async ({ page }) => {
@@ -345,17 +414,21 @@ test("Google connector cards show OAuth readiness outside primary action rows", 
   ];
 
   for (const connector of connectors) {
-    await expect(page.getByTestId(`${connector.type}-oauth-status`)).toBeVisible();
+    const oauthStatus = page.getByTestId(`${connector.type}-oauth-status`);
+    await expect(oauthStatus).toBeVisible();
+    await expect(oauthStatus).not.toContainText("ready");
     await expect(
       page.getByTestId(`${connector.type}-card-actions`).getByRole("button", { name: `${connector.label} 연결` }),
     ).toHaveCount(0);
   }
-  await expect(page.getByTestId("google-runtime-status")).toBeVisible();
+  await expect(page.getByTestId("google-runtime-status")).toHaveCount(0);
+  await expect(page.getByTestId("source-operations-panel")).toBeVisible();
 
   const bodyText = await page.locator("body").innerText();
   expect(bodyText).not.toContain("google-secret");
   expect(bodyText).not.toContain("refresh-token");
   expect(bodyText).not.toContain("token_ref");
+  expect(bodyText).not.toContain("실제 OAuth 연동");
 });
 
 test("Gmail and Google Drive cards show connect CTAs when OAuth is configured", async ({ page }) => {
@@ -381,6 +454,10 @@ test("Gmail and Google Drive cards show connect CTAs when OAuth is configured", 
 
   await expect(page.getByTestId("gmail-oauth-status").getByRole("button", { name: "Gmail 연결" })).toBeVisible();
   await expect(page.getByTestId("drive-oauth-status").getByRole("button", { name: "Google Drive 연결" })).toBeVisible();
+  await expect(page.getByTestId("gmail-card-actions").locator("button")).toHaveCount(0);
+  await expect(page.getByTestId("drive-card-actions").locator("button")).toHaveCount(0);
+  await expect(page.getByTestId("gmail-card-actions").getByRole("button", { name: "동기화" })).toHaveCount(0);
+  await expect(page.getByTestId("drive-card-actions").getByRole("button", { name: "동기화" })).toHaveCount(0);
   await expect(page.getByTestId("gmail-card-actions").getByRole("button", { name: "Gmail 연결" })).toHaveCount(0);
   await expect(page.getByTestId("drive-card-actions").getByRole("button", { name: "Google Drive 연결" })).toHaveCount(0);
 });

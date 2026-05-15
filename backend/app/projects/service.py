@@ -381,7 +381,15 @@ def _occurred_at_from_source_links(
     for link in source_links:
         source = source_by_url.get(link)
         if source:
-            raw_ts = (source.raw_metadata or {}).get('ts')
+            raw_metadata = source.raw_metadata or {}
+            if source.source_type == 'calendar':
+                raw_event_start = raw_metadata.get('event_start') or raw_metadata.get('start')
+                if isinstance(raw_event_start, str) and raw_event_start.strip():
+                    try:
+                        return datetime.fromisoformat(raw_event_start.replace('Z', '+00:00')).astimezone(UTC).isoformat()
+                    except ValueError:
+                        pass
+            raw_ts = raw_metadata.get('ts')
             if isinstance(raw_ts, str):
                 try:
                     return datetime.fromtimestamp(float(raw_ts), tz=UTC).isoformat()

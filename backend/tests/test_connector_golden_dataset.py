@@ -54,7 +54,18 @@ class GoldenGoogleClient:
             return b'PK\x03\x04\x14\x00\x00\x00\x08\x00' # minimal valid-ish or we can just mock the parser result or use empty docx bytes. Actually, the real parser will fail if it is not valid DOCX. Let us mock a small valid docx if needed. Or we can just use empty bytes and let it fail gracefully (it will still be parsed as metadata_only or error). Wait, the test checks parser_status.
         return b''
 
-    def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
+    def calendar_list(self) -> list[dict]:
+        return [{'id': 'primary', 'summary': 'Primary Calendar', 'primary': True, 'accessRole': 'owner'}]
+
+    def calendar_events(
+        self,
+        *,
+        calendar_id: str,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        updated_min: str | None = None,
+    ) -> list[dict]:
+        assert calendar_id == 'primary'
         return [self.payloads['calendar']]
 
 

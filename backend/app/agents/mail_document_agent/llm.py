@@ -15,7 +15,7 @@ DEFAULT_INPUT_COST_PER_1M = 0.15
 DEFAULT_OUTPUT_COST_PER_1M = 0.60
 DEFAULT_MAX_OUTPUT_TOKENS = 512
 DEFAULT_MAX_INPUT_CHARS = 12_000
-DEFAULT_PROMPT_OVERHEAD_CHARS = 1_800
+DEFAULT_PROMPT_OVERHEAD_CHARS = 3_200
 OPENAI_COMPATIBLE_PROVIDERS = {'openai', 'azure_openai'}
 
 
@@ -59,7 +59,7 @@ class LangChainMailDocumentAgentModel:
         messages = [
             (
                 'system',
-                'You extract one reviewable company history candidate, decision, or todo from Gmail, '
+                'You extract one reviewable company history candidate, timeline event, decision, or todo from Gmail, '
                 'Drive, Calendar, or internal document evidence. Think like a Korean business operator: '
                 'the review queue must show what happened, what needs a decision, or what the user should '
                 'do next. The title and summary must be written in Korean. Do not copy raw email headers '
@@ -67,6 +67,10 @@ class LangChainMailDocumentAgentModel:
                 'populate structured_data with action_required, task_summary, recommended_next_step, '
                 'assignee, due_date, counterparty, source_subject, business_context, evidence_sentence, '
                 'summary_quality, and reviewability_decision where available. Determine if the evidence is '
+                'For Calendar evidence, use item_type=timeline_event for confirmed meetings, milestones, '
+                'and schedule confirmations; use item_type=todo for preparation, deadline, or follow-up work; '
+                'copy calendar_id, calendar_name, calendar_start, calendar_end, calendar_location, '
+                'calendar_organizer, calendar_attendee_summary, and event_context_key into structured_data. '
                 'reviewable business evidence. If it is purely personal, private, promotional, a newsletter, '
                 'or a low-signal notification without a concrete company work object, set '
                 'is_business_related=false. Return ONLY JSON with fields: '
@@ -212,6 +216,14 @@ def render_mail_docs_llm_prompt(
                 'permission_level': message.permission_level,
                 'parser_status': message.metadata.get('parser_status'),
                 'section_path': message.metadata.get('section_path'),
+                'calendar_id': message.metadata.get('calendar_id'),
+                'calendar_name': message.metadata.get('calendar_summary'),
+                'calendar_start': message.metadata.get('event_start') or message.metadata.get('start'),
+                'calendar_end': message.metadata.get('event_end') or message.metadata.get('end'),
+                'calendar_location': message.metadata.get('location'),
+                'calendar_organizer': message.metadata.get('organizer_email'),
+                'calendar_attendee_domains': message.metadata.get('attendee_domains'),
+                'event_context_key': message.metadata.get('event_context_key'),
                 'text': text,
             }
         )
@@ -221,7 +233,7 @@ def render_mail_docs_llm_prompt(
     return json.dumps(
         {
             'task': 'Extract structured output and project tags from mail/document evidence for human review.',
-            'allowed_item_types': ['history_event', 'decision_record', 'todo'],
+            'allowed_item_types': ['history_event', 'decision_record', 'timeline_event', 'todo'],
             'requirements': [
                 'Use only the provided evidence.',
                 'The title and summary must be written in Korean.',
@@ -232,6 +244,8 @@ def render_mail_docs_llm_prompt(
                 'Assign a project_tag if a specific project is mentioned.',
                 'Populate structured_data with concrete fields for the source type.',
                 'For todos, include action_required, task_summary, recommended_next_step, assignee, due_date, counterparty, and business_context when evidence supports them.',
+                'For Calendar timeline events, include result_summary plus calendar_id, calendar_name, calendar_start, calendar_end, calendar_location, calendar_organizer, calendar_attendee_summary, and event_context_key.',
+                'For personal or low-signal Calendar events, set is_business_related=false.',
                 'Keep raw email headers and body excerpts only as evidence, not as title or summary.',
                 'Summaries must explain the business meaning in one or two Korean sentences, not merely restate that an email or file exists.',
                 'Preserve uncertainty_reason when evidence is weak or incomplete.',
@@ -412,7 +426,7 @@ def _usage_tokens(response: Any, messages: list[tuple[str, str]], payload: dict[
 
 def _safe_item_type(raw_item_type: Any) -> str:
     item_type = str(raw_item_type or 'history_event')
-    return item_type if item_type in {'history_event', 'decision_record', 'todo'} else 'history_event'
+    return item_type if item_type in {'history_event', 'decision_record', 'timeline_event', 'todo'} else 'history_event'
 
 
 def _safe_confidence(raw_confidence: Any) -> float:

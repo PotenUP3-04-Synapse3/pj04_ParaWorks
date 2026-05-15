@@ -1,6 +1,39 @@
 # Mail/Document/Calendar Agent 진행상황
 
-Updated: 2026-05-12
+Updated: 2026-05-15
+
+## 2026-05-15 Google Calendar all-calendars MVP
+
+- Calendar remains part of Developer B's Mail/Document ownership and is now
+  treated as Mail/Docs/Calendar Agent evidence, not as a separate agent.
+- `GoogleConnector` now reads Google `calendarList` first and syncs every
+  accessible calendar. Initial sync uses a bounded `now-30d` to `now+180d`
+  window per calendar; later sync uses a per-calendar `updatedMin` cursor.
+- Calendar source identity is now `calendar:{calendar_id}:{event_id}`, and sync
+  cursors are partitioned as `calendar:{calendar_id}` so event ids cannot
+  collide across calendars.
+- Calendar source metadata now preserves calendar id/name/primary/access role,
+  event status, organizer, location, start/end, duration, attendee domains,
+  attendee response counts, content signature, and event context key.
+- The Mail/Docs/Calendar deterministic agent now creates `timeline_event`
+  candidates for confirmed meetings, milestones, and schedule confirmations;
+  creates `todo` candidates for preparation, deadline, and follow-up events;
+  and skips personal or low-signal calendar events.
+- Calendar ReviewItem payloads preserve display fields:
+  `calendar_id`, `calendar_name`, `calendar_start`, `calendar_end`,
+  `calendar_location`, `calendar_organizer`, `calendar_attendee_summary`, and
+  `event_context_key`.
+- Project/Timeline occurrence time now prefers Calendar event start time over
+  source ingestion time.
+
+Verification snapshot:
+
+```powershell
+uv run pytest backend/tests/test_google_connector.py backend/tests/test_connector_golden_dataset.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py backend/tests/test_rag_indexing.py -q
+uv run ruff check backend/app/connectors/google.py backend/app/agents/mail_document_agent/agent.py backend/app/agents/mail_document_agent/llm.py backend/app/agents/mail_document_agent/service.py backend/app/agent_runtime/evidence_summary.py backend/app/api/v1/review.py backend/app/projects/service.py
+npm.cmd run lint
+npm.cmd run build
+```
 
 ## 목표
 
