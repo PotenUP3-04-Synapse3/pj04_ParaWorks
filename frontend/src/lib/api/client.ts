@@ -100,7 +100,18 @@ function csrfHeader(): Record<string, string> {
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || `Request failed with ${response.status}`);
+    let message = detail;
+    try {
+      const parsed = JSON.parse(detail) as { detail?: unknown };
+      if (typeof parsed.detail === "string") {
+        message = parsed.detail;
+      } else if (parsed.detail !== undefined) {
+        message = JSON.stringify(parsed.detail);
+      }
+    } catch {
+      // Keep the original response text when the body is not JSON.
+    }
+    throw new Error(message || `Request failed with ${response.status}`);
   }
 
   return response.json() as Promise<T>;

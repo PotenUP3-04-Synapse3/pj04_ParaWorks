@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -6,11 +6,11 @@ from sqlalchemy.orm import Session
 from backend.app.models import (
     DecisionRecord,
     HistoryEvent,
+    Project,
     ReviewItem,
     TimelineEvent,
     Todo,
 )
-from backend.app.projects.classifier import CANONICAL_PROJECTS
 
 PERMISSION_RANK = {'public': 0, 'internal': 1, 'restricted': 2}
 SOURCE_TYPE_RANK = {'gmail': 0, 'gmail_attachment': 1, 'drive': 2, 'calendar': 3, 'slack': 4}
@@ -58,6 +58,7 @@ class ProjectMemory:
     pending_review_count: int
     evidence: list[ProjectEvidence]
     timeline_items: list[ProjectTimelineItem]
+    activity_items: list[ProjectTimelineItem]
 
 
 def build_project_memory(db: Session) -> list[ProjectMemory]:
@@ -66,89 +67,54 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
         .where(ReviewItem.item_type == 'project_assignment', ReviewItem.status == 'approved')
         .order_by(ReviewItem.created_at.desc(), ReviewItem.id.desc())
     ).all()
-    
-    # 1. 리뷰 항목에서 가져오는 새 방식의 ReviewItem들 (Phase 2로 project_key가 payload에 포함된 경우)
     approved_knowledge_items = db.scalars(
         select(ReviewItem)
         .where(ReviewItem.item_type.in_(['decision_record', 'history_event', 'timeline_event', 'todo']), ReviewItem.status == 'approved')
     ).all()
-    
     pending_counts = _pending_assignment_counts(db)
     memory_records = _approved_memory_records(db)
-
-    # 모든 프로젝트 키 수집
-    active_project_keys = set()
-    
-    # 통합된 모든 승인 항목
-    all_approved_items = approved_assignments + approved_knowledge_items
-    
-    for item in all_approved_items:
-        key = item.payload.get('project_key')
-        if key: active_project_keys.add(key)
-    
-    for item in memory_records:
-        if item.project_key:
-            active_project_keys.add(item.project_key)
+    db_projects = db.scalars(select(Project).order_by(Project.created_at.desc(), Project.id.desc())).all()
 
     projects: list[ProjectMemory] = []
-    
-    # Canonical 프로젝트와 동적 프로젝트 매핑용 헬퍼 함수
-    from backend.app.projects.classifier import project_by_key
-
-    for p_key in sorted(active_project_keys):
-        canonical = project_by_key(p_key)
-        
-        # 이름 변환: ad-hoc 이면 '미분류 업무', project- 로 시작하면 태그 이름 복원
-        if canonical:
-            name = canonical.name
-        elif p_key == 'ad-hoc':
-            name = '기타 업무 (Ad-hoc)'
-        elif p_key.startswith('project-'):
-            name = p_key.replace('project-', '').replace('-', ' ').title()
-        else:
-            name = f"프로젝트 {p_key.upper()}"
-            
-        base_summary = canonical.summary if canonical else "AI에 의해 분류된 동적 프로젝트입니다."
-        
+    all_approved_items = approved_assignments + approved_knowledge_items
+    for db_project in db_projects:
+        project_key = db_project.project_key
         project_link_items = [
             item
             for item in all_approved_items
-            if item.payload.get('project_key') == p_key
+            if item.payload.get('project_key') == project_key
         ]
         assignment_evidence_items = [
             item
             for item in approved_assignments
-            if item.payload.get('project_key') == p_key
+            if item.payload.get('project_key') == project_key
         ]
-        
         evidence = _evidence_from_assignments(assignment_evidence_items)
-        timeline_items = _timeline_for_project(p_key, project_link_items, memory_records)
-        
-        # evidence나 timeline_items가 없으면 스킵
-        if not evidence and not timeline_items:
-            continue
-            
+        linked_records = _memory_records_for_project(project_key, project_link_items, memory_records)
+        timeline_items = _timeline_items_from_records(linked_records)
+        activity_items = _dedupe_activity_items(linked_records)
+
         permission_levels = [item.permission_level for item in evidence] + [
-            item.permission_level for item in timeline_items
+            item.permission_level for item in activity_items
         ]
-        latest_candidates = [item.timestamp for item in evidence] + [item.created_at for item in timeline_items]
+        latest_candidates = [item.timestamp for item in evidence] + [item.created_at for item in activity_items]
         source_types = sorted(
             {item.source_type for item in evidence},
             key=lambda source_type: SOURCE_TYPE_RANK.get(source_type, 99),
         )
-        
         projects.append(
             ProjectMemory(
-                project_key=p_key,
-                name=name,
-                summary=_project_summary(base_summary, evidence, timeline_items),
+                project_key=project_key,
+                name=db_project.name,
+                summary=_project_summary(db_project.summary, evidence, activity_items),
                 source_types=source_types,
                 evidence_count=len(evidence),
                 permission_level=_strictest_permission(permission_levels),
                 latest_timestamp=max(latest_candidates) if latest_candidates else '',
-                pending_review_count=pending_counts.get(p_key, 0),
+                pending_review_count=pending_counts.get(project_key, 0),
                 evidence=evidence,
                 timeline_items=timeline_items,
+                activity_items=activity_items,
             )
         )
     return projects
@@ -212,7 +178,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
-            evidence_reason='승인된 결정 기록의 source link가 프로젝트 evidence와 연결됩니다.',
+            evidence_reason='승인된 의사결정 기록이 이 프로젝트와 연결되어 있습니다.',
+            project_key=item.project_key,
         )
         for item in db.scalars(select(DecisionRecord).where(DecisionRecord.review_status == 'approved')).all()
     )
@@ -228,7 +195,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
-            evidence_reason='승인된 히스토리의 source link가 프로젝트 evidence와 연결됩니다.',
+            evidence_reason='승인된 히스토리 기록이 이 프로젝트와 연결되어 있습니다.',
+            project_key=item.project_key,
         )
         for item in db.scalars(select(HistoryEvent).where(HistoryEvent.review_status == 'approved')).all()
     )
@@ -244,7 +212,8 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
-            evidence_reason='승인된 타임라인 항목의 source link가 프로젝트 evidence와 연결됩니다.',
+            evidence_reason='승인된 타임라인 항목이 이 프로젝트와 연결되어 있습니다.',
+            project_key=item.project_key,
         )
         for item in db.scalars(select(TimelineEvent).where(TimelineEvent.review_status == 'approved')).all()
     )
@@ -260,37 +229,15 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
-            evidence_reason='승인된 할 일의 source link가 프로젝트 evidence와 연결됩니다.',
+            evidence_reason='승인된 할 일이 이 프로젝트와 연결되어 있습니다.',
+            project_key=item.project_key,
         )
         for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all()
     )
-    project_keys = _approved_memory_project_keys(db)
-    return [
-        replace(record, project_key=project_keys.get(record.id))
-        if record.project_key is None and project_keys.get(record.id)
-        else record
-        for record in records
-    ]
+    return records
 
 
-def _approved_memory_project_keys(db: Session) -> dict[str, str]:
-    keys: dict[str, str] = {}
-    for item in db.scalars(select(DecisionRecord).where(DecisionRecord.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'decision_record:{item.id}'] = item.project_key
-    for item in db.scalars(select(HistoryEvent).where(HistoryEvent.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'history_event:{item.id}'] = item.project_key
-    for item in db.scalars(select(TimelineEvent).where(TimelineEvent.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'timeline_event:{item.id}'] = item.project_key
-    for item in db.scalars(select(Todo).where(Todo.review_status == 'approved')).all():
-        if item.project_key:
-            keys[f'todo:{item.id}'] = item.project_key
-    return keys
-
-
-def _timeline_for_project(
+def _memory_records_for_project(
     project_key: str,
     assignments: list[ReviewItem],
     memory_records: list[ProjectTimelineItem],
@@ -306,29 +253,64 @@ def _timeline_for_project(
         for assignment in assignments
         if assignment.payload.get('project_key') == project_key and assignment.payload.get('source_id')
     }
-    
+
     items = []
     for item in memory_records:
-        # Phase 3 이후 데이터는 project_key가 명시적으로 존재함
         if item.project_key == project_key:
             items.append(item)
             continue
-            
-        # 레거시 데이터 폴백: source_links나 source_id 기반 매칭
+
+        links_text = ' '.join(item.source_links)
         if project_links.intersection(item.source_links) or any(
-            source_id and source_id in ' '.join(item.source_links) for source_id in project_source_ids
+            source_id and source_id in links_text for source_id in project_source_ids
         ):
             items.append(item)
 
     return sorted(items, key=lambda item: (item.created_at, item.id), reverse=True)
 
 
-def _project_summary(base_summary: str, evidence: list[ProjectEvidence], timeline_items: list[ProjectTimelineItem]) -> str:
-    if not evidence and not timeline_items:
-        return f'{base_summary} 아직 승인된 프로젝트 evidence가 없습니다.'
+def _timeline_items_from_records(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
+    return [item for item in records if item.item_type == 'timeline_event']
+
+
+def _dedupe_activity_items(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
+    non_timeline_signatures = {
+        _activity_signature(item)
+        for item in records
+        if item.item_type != 'timeline_event'
+    }
+    activity_items: list[ProjectTimelineItem] = []
+    seen: set[str] = set()
+    for item in records:
+        signature = _activity_signature(item)
+        if item.item_type == 'timeline_event' and signature in non_timeline_signatures:
+            continue
+        identity = f'{item.item_type}:{signature}'
+        if identity in seen:
+            continue
+        seen.add(identity)
+        activity_items.append(item)
+    return activity_items
+
+
+def _activity_signature(item: ProjectTimelineItem) -> str:
+    first_link = item.source_links[0] if item.source_links else ''
+    first_snippet = item.source_snippets[0] if item.source_snippets else ''
+    return '|'.join(
+        [
+            first_link.strip().lower(),
+            ' '.join(first_snippet.split()).strip().lower(),
+            ' '.join(item.summary.split()).strip().lower(),
+        ]
+    )
+
+
+def _project_summary(base_summary: str, evidence: list[ProjectEvidence], activity_items: list[ProjectTimelineItem]) -> str:
+    if not evidence and not activity_items:
+        return f'{base_summary} 아직 승인된 프로젝트 근거가 없습니다.'
     return (
-        f'{base_summary} 승인된 evidence {len(evidence)}건과 '
-        f'워크플로우 항목 {len(timeline_items)}건이 연결되어 있습니다.'
+        f'{base_summary} 승인된 원본 근거 {len(evidence)}건과 '
+        f'승인된 프로젝트 활동 {len(activity_items)}건이 연결되어 있습니다.'
     )
 
 

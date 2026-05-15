@@ -196,18 +196,28 @@ def render_slack_llm_prompt(
         if remaining_chars <= 0:
             break
 
+    # ?숈쟻 ?꾨줈?앺듃 紐⑸줉 二쇱엯
+    projects_context = packet.context.get('projects', [])
+    project_descriptions = [f"{p['name']} ({p['project_key']}): {p['summary']}" for p in projects_context]
+    if not project_descriptions:
+        project_descriptions = ["吏꾪뻾 以묒씤 怨듭떇 ?꾨줈?앺듃媛 ?꾩쭅 ?놁뒿?덈떎."]
+
     return json.dumps(
         {
             'task': 'Extract Slack-based company history candidates for human review.',
             'allowed_item_types': ['history_event', 'decision_record', 'todo'],
             'category_guide': 'Project, Operations, Administration, Ad-hoc',
             'importance_guide': 'Low, Medium, High',
+            'current_projects': project_descriptions,
             'requirements': [
                 'Use only the provided evidence.',
                 'The title and summary must be written in Korean.',
                 'Keep the summary concise and business-friendly.',
                 'Set confidence_score between 0 and 1.',
                 'Assign category, topic_tag, and importance to each candidate.',
+                'Exclude standalone greetings, reactions, sighs, thanks, and contextless polite requests such as "부탁드립니다" when no work object is present.',
+                'If evidence is ambiguous, state uncertainty_reason instead of inventing a project or decision.',
+                'For topic_tag, CHOOSE EXACTLY ONE from the current_projects list. If none fit, invent a short new topic name, or use "Ad-hoc" if it\'s just general chatter.',
             ],
             'source_window': packet.source_window,
             'evidence': evidence_rows,

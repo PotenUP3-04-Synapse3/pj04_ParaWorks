@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowRight,
   Bot,
   Calendar,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useJobStatus } from "@/hooks/useJobStatus";
@@ -35,6 +37,29 @@ import type {
 } from "@/lib/api/types";
 
 const GOOGLE_CONNECTOR_TYPES = ["gmail", "drive", "calendar"] as const;
+const SYNC_RUNNING_STAGES = [
+  "원본 수집과 AI 분석을 진행 중입니다.",
+  "프로젝트 분류와 검토 후보를 정리하고 있습니다.",
+  "검토 항목을 저장하고 화면에 반영하고 있습니다.",
+] as const;
+const SYNC_STATUS_POLL_INTERVAL_MS = 1500;
+const SYNC_STATUS_MAX_POLLS = 90;
+const LOST_RESPONSE_RECOVERY_POLLS = 60;
+const SYNC_BACKGROUND_NOTICE_DELAY_MS = 120_000;
+const BACKGROUND_SYNC_CONTINUES_MESSAGE =
+  "백그라운드에서 계속 진행 중입니다. 완료되면 작업 스트림의 최근 sync 상태에 반영됩니다.";
+
+type SyncProgressState = {
+  connectorType: string;
+  displayName: string;
+  status: "running" | "complete" | "error";
+  stageIndex: number;
+  backgrounded: boolean;
+  result?: IntegrationSyncResponse;
+  errorMessage?: string;
+};
+
+type IntegrationRuntimeStatus = SlackRuntimeStatus | GoogleRuntimeStatus;
 
 /**
  * 연동 도구별 시각적 요소(아이콘, 색상, 설명 등) 정의
@@ -81,6 +106,99 @@ const fallbackVisual = {
 /**
  * 연동 관리 페이지 컴포넌트
  */
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+function stageIndexFromProgress(progressPct?: number) {
+  if (progressPct === undefined || progressPct < 50) {
+    return 0;
+  }
+  if (progressPct < 90) {
+    return 1;
+  }
+  return 2;
+}
+
+function countFromSyncMessage(message: string | undefined, key: string) {
+  const match = (message ?? "").match(new RegExp(`${key}=(\\d+)`));
+  return match ? Number.parseInt(match[1], 10) : undefined;
+}
+
+function runtimeJobMatches(
+  runtime: IntegrationRuntimeStatus,
+  startedAtMs: number,
+  jobId?: string,
+) {
+  const latest = runtime.latest_sync;
+  if (!latest) {
+    return false;
+  }
+  if (jobId) {
+    return latest.job_id === jobId;
+  }
+
+  const timestamp = latest.updated_at ?? latest.created_at;
+  if (!timestamp) {
+    return false;
+  }
+  const timestampMs = new Date(timestamp).getTime();
+  return Number.isFinite(timestampMs) && timestampMs >= startedAtMs - 5000;
+}
+
+function shouldRecoverLostSyncResponse(message: string) {
+  return /internal server error|socket|network|failed to fetch|request failed with 5/i.test(message);
+}
+
+function isBackgroundSyncContinuation(message: string) {
+  return message.includes("백그라운드에서 계속 진행 중입니다");
+}
+
+function syncResponseFromRuntimeStatus(
+  connectorType: string,
+  runtime: IntegrationRuntimeStatus,
+  fallback?: IntegrationSyncResponse,
+): IntegrationSyncResponse | undefined {
+  const latest = runtime.latest_sync;
+  if (!latest) {
+    return undefined;
+  }
+
+  const message = latest.message ?? "";
+  const slackSummary =
+    runtime.connector_type === "slack" ? runtime.latest_sync_summary : undefined;
+  const pendingReviewCount =
+    runtime.connector_type === "slack"
+      ? (countFromSyncMessage(message, "pending_review_items") ?? runtime.agent_bridge.pending_review_count)
+      : (countFromSyncMessage(message, "pending_review_items") ?? fallback?.pending_review_count ?? 0);
+
+  return {
+    job_id: latest.job_id,
+    connector_type: connectorType,
+    status: latest.status,
+    created_review_items:
+      slackSummary?.created_review_items ??
+      countFromSyncMessage(message, "created_review_items") ??
+      fallback?.created_review_items ??
+      0,
+    pending_review_count: pendingReviewCount,
+    fetched_events:
+      slackSummary?.fetched_events ??
+      countFromSyncMessage(message, "fetched") ??
+      fallback?.fetched_events ??
+      0,
+    skipped_events:
+      slackSummary?.skipped_events ??
+      countFromSyncMessage(message, "skipped_events") ??
+      fallback?.skipped_events ??
+      0,
+    parser_status_counts: fallback?.parser_status_counts ?? {},
+    changed_source_ids: fallback?.changed_source_ids ?? [],
+    agent_generated_items: fallback?.agent_generated_items ?? 0,
+    project_assignment_items: fallback?.project_assignment_items ?? 0,
+  };
+}
+
 export default function IntegrationsPage() {
   const [manifests, setManifests] = useState<IntegrationManifest[]>([]);
   const [activeJobId, setActiveJobId] = useState<string>();
@@ -96,6 +214,8 @@ export default function IntegrationsPage() {
   const [slackOAuth, setSlackOAuth] = useState<OAuthInstallUrlResponse>();
   const [googleOAuthByType, setGoogleOAuthByType] = useState<Record<string, OAuthInstallUrlResponse>>({});
   const [pendingType, setPendingType] = useState<string>();
+  const [syncProgress, setSyncProgress] = useState<SyncProgressState>();
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [llmAgentRunning, setLlmAgentRunning] = useState(false);
   const [mailDocsLlmAgentRunning, setMailDocsLlmAgentRunning] = useState(false);
   const [error, setError] = useState<string>();
@@ -253,6 +373,26 @@ export default function IntegrationsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (syncProgress?.status !== "running") {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setSyncProgress((current) => {
+        if (!current || current.status !== "running") {
+          return current;
+        }
+        return {
+          ...current,
+          stageIndex: Math.min(current.stageIndex + 1, SYNC_RUNNING_STAGES.length - 1),
+        };
+      });
+    }, 7000);
+
+    return () => window.clearInterval(timer);
+  }, [syncProgress?.connectorType, syncProgress?.status]);
+
 
   async function refreshDashboardSummary() {
     try {
@@ -289,6 +429,94 @@ export default function IntegrationsPage() {
 
     await refreshDashboardSummary();
   }
+
+  async function loadRuntimeStatus(type: string): Promise<IntegrationRuntimeStatus | undefined> {
+    if (type === "slack") {
+      const status = await apiGet<SlackRuntimeStatus>("/api/v1/integrations/slack/runtime-status");
+      setSlackRuntime(status);
+      return status;
+    }
+
+    if (GOOGLE_CONNECTOR_TYPES.includes(type as (typeof GOOGLE_CONNECTOR_TYPES)[number])) {
+      const status = await apiGet<GoogleRuntimeStatus>(`/api/v1/integrations/${type}/runtime-status`);
+      setGoogleRuntimeByType((current) => ({ ...current, [type]: status }));
+      return status;
+    }
+
+    return undefined;
+  }
+
+  async function waitForSyncCompletion(
+    type: string,
+    jobId: string,
+    fallback: IntegrationSyncResponse,
+  ): Promise<IntegrationSyncResponse> {
+    for (let attempt = 0; attempt < SYNC_STATUS_MAX_POLLS; attempt += 1) {
+      const runtime = await loadRuntimeStatus(type).catch(() => undefined);
+      if (runtime?.latest_sync && runtimeJobMatches(runtime, Date.now(), jobId)) {
+        const latest = runtime.latest_sync;
+        setSyncProgress((current) =>
+          current?.connectorType === type && current.status === "running"
+            ? { ...current, stageIndex: stageIndexFromProgress(latest.progress_pct) }
+            : current,
+        );
+
+        if (latest.status === "failed") {
+          throw new Error(latest.message || "동기화 작업이 실패했습니다.");
+        }
+        if (latest.status === "complete") {
+          return syncResponseFromRuntimeStatus(type, runtime, fallback) ?? fallback;
+        }
+      }
+      await sleep(SYNC_STATUS_POLL_INTERVAL_MS);
+    }
+
+    throw new Error("동기화 작업이 백그라운드에서 계속 진행 중입니다. 잠시 후 작업 스트림을 확인해 주세요.");
+  }
+
+  async function recoverCompletedSyncAfterLostResponse(
+    type: string,
+    startedAtMs: number,
+  ): Promise<IntegrationSyncResponse | undefined> {
+    for (let attempt = 0; attempt < LOST_RESPONSE_RECOVERY_POLLS; attempt += 1) {
+      const runtime = await loadRuntimeStatus(type).catch(() => undefined);
+      if (runtime?.latest_sync && runtimeJobMatches(runtime, startedAtMs)) {
+        const latest = runtime.latest_sync;
+        setSyncProgress((current) =>
+          current?.connectorType === type && current.status === "running"
+            ? { ...current, stageIndex: stageIndexFromProgress(latest.progress_pct) }
+            : current,
+        );
+
+        if (latest.status === "failed") {
+          throw new Error(latest.message || "동기화 작업이 실패했습니다.");
+        }
+        if (latest.status === "complete") {
+          return syncResponseFromRuntimeStatus(type, runtime);
+        }
+      }
+      await sleep(SYNC_STATUS_POLL_INTERVAL_MS);
+    }
+
+    return undefined;
+  }
+
+  async function markSyncComplete(type: string, result: IntegrationSyncResponse) {
+    setSyncResult(result);
+    setActiveJobId(result.job_id);
+    setSyncProgress((current) =>
+      current?.connectorType === type
+        ? {
+            ...current,
+            status: "complete",
+            stageIndex: SYNC_RUNNING_STAGES.length - 1,
+            result,
+          }
+        : current,
+    );
+    await refreshRuntimeAfterMutation(type);
+  }
+
   const visibleManifests = useMemo(
     () =>
       manifests.length > 0
@@ -312,20 +540,98 @@ export default function IntegrationsPage() {
    * 특정 커넥터의 데이터 동기화(Sync)를 시작합니다.
    */
   async function startSync(type: string) {
+    const displayName = connectorDisplayName(type, manifests);
+    const startedAtMs = Date.now();
     setPendingType(type);
     setError(undefined);
+    setSyncProgress({
+      connectorType: type,
+      displayName,
+      status: "running",
+      stageIndex: 0,
+      backgrounded: false,
+    });
+    setSyncModalOpen(true);
+    const backgroundNoticeTimer = window.setTimeout(() => {
+      setSyncProgress((current) =>
+        current?.connectorType === type && current.status === "running"
+          ? {
+              ...current,
+              backgrounded: true,
+              errorMessage: BACKGROUND_SYNC_CONTINUES_MESSAGE,
+            }
+          : current,
+      );
+    }, SYNC_BACKGROUND_NOTICE_DELAY_MS);
 
     try {
       const result = await apiPost<IntegrationSyncResponse>(
         `/api/v1/integrations/${type}/sync`,
-        type === "slack" ? { selected_channel_ids: selectedSlackChannels } : undefined,
+        type === "slack" ? { selected_channel_ids: selectedSlackChannels, run_async: true } : undefined,
       );
-      setSyncResult(result);
       setActiveJobId(result.job_id);
-      await refreshRuntimeAfterMutation(type);
+      if (result.status === "failed") {
+        throw new Error("동기화 작업이 실패했습니다.");
+      }
+      const completedResult =
+        result.status === "complete"
+          ? result
+          : await waitForSyncCompletion(type, result.job_id, result);
+      await markSyncComplete(type, completedResult);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "동기화에 실패했습니다.");
+      const message = caught instanceof Error ? caught.message : "동기화에 실패했습니다.";
+      if (shouldRecoverLostSyncResponse(message)) {
+        try {
+          const recovered = await recoverCompletedSyncAfterLostResponse(type, startedAtMs);
+          if (recovered) {
+            setError(undefined);
+            await markSyncComplete(type, recovered);
+            return;
+          }
+        } catch (recoveryError) {
+          const recoveryMessage =
+            recoveryError instanceof Error
+              ? recoveryError.message
+              : "동기화 작업 상태 확인에 실패했습니다.";
+          setError(recoveryMessage);
+          setSyncProgress((current) =>
+            current?.connectorType === type
+              ? {
+                  ...current,
+                  status: "error",
+                  errorMessage: recoveryMessage,
+                }
+              : current,
+          );
+          return;
+        }
+      }
+      if (isBackgroundSyncContinuation(message)) {
+        setError(undefined);
+        setSyncProgress((current) =>
+          current?.connectorType === type
+            ? {
+                ...current,
+                status: "running",
+                backgrounded: true,
+                errorMessage: BACKGROUND_SYNC_CONTINUES_MESSAGE,
+              }
+            : current,
+        );
+        return;
+      }
+      setError(message);
+      setSyncProgress((current) =>
+        current?.connectorType === type
+          ? {
+              ...current,
+              status: "error",
+              errorMessage: message,
+            }
+          : current,
+      );
     } finally {
+      window.clearTimeout(backgroundNoticeTimer);
       setPendingType(undefined);
     }
   }
@@ -448,6 +754,17 @@ export default function IntegrationsPage() {
 
   return (
     <div className="reference-dashboard space-y-5">
+      {syncProgress && syncModalOpen ? (
+        <SyncProgressModal
+          progress={syncProgress}
+          onBackground={() => {
+            setSyncProgress((current) => (current ? { ...current, backgrounded: true } : current));
+            setSyncModalOpen(false);
+          }}
+          onClose={() => setSyncModalOpen(false)}
+        />
+      ) : null}
+
       <section className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Tools</p>
@@ -670,7 +987,8 @@ export default function IntegrationsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3" data-testid="sync-result-metrics">
                   <ResultMetric label="Fetched" value={syncResult.fetched_events} />
-                  <ResultMetric label="Review items" value={syncResult.created_review_items} />
+                  <ResultMetric label="새 검토 항목" value={syncResult.created_review_items} />
+                  <ResultMetric label="검토 대기" value={syncResult.pending_review_count} />
                   <ResultMetric label="Skipped" value={syncResult.skipped_events} />
                   <ResultMetric label="Status" value={syncResult.status} />
                 </div>
@@ -702,6 +1020,145 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
+function SyncProgressModal({
+  progress,
+  onBackground,
+  onClose,
+}: {
+  progress: SyncProgressState;
+  onBackground: () => void;
+  onClose: () => void;
+}) {
+  const isRunning = progress.status === "running";
+  const isComplete = progress.status === "complete";
+  const isError = progress.status === "error";
+  const result = progress.result;
+
+  return (
+    <div
+      data-testid="sync-progress-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sync-progress-title"
+      className="fixed inset-0 z-50 grid place-items-center bg-[#120b18]/72 px-4 backdrop-blur-sm"
+    >
+      <div
+        data-testid="sync-progress-modal"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-5 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--glass-strong)] text-[var(--workspace-rail-active)]">
+              {isComplete ? (
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <RefreshCw className={`h-5 w-5 ${isRunning ? "animate-spin" : ""}`} aria-hidden="true" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <h2 id="sync-progress-title" className="text-base font-semibold text-[var(--ink-strong)]">
+                {isComplete
+                  ? "동기화 완료"
+                  : isError
+                    ? `${progress.displayName} 동기화 실패`
+                    : `${progress.displayName} 동기화 중`}
+              </h2>
+              <p data-testid="sync-modal-step" className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
+                {isComplete
+                  ? `${progress.displayName} 데이터를 검토 큐에 반영했습니다.`
+                  : isError
+                    ? (progress.errorMessage ?? "동기화 중 오류가 발생했습니다.")
+                    : progress.backgrounded
+                      ? (progress.errorMessage ?? BACKGROUND_SYNC_CONTINUES_MESSAGE)
+                      : SYNC_RUNNING_STAGES[progress.stageIndex]}
+              </p>
+            </div>
+          </div>
+
+          {!isRunning ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="liquid-control grid h-8 w-8 shrink-0 place-items-center rounded-lg"
+              aria-label="모달 닫기"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-4 grid gap-2 text-sm">
+          <SyncStep label="원본 수집" active={isRunning && progress.stageIndex === 0} done={progress.stageIndex > 0 || isComplete} />
+          <SyncStep label="AI 분석" active={isRunning && progress.stageIndex === 1} done={progress.stageIndex > 1 || isComplete} />
+          <SyncStep label="검토 항목 저장" active={isRunning && progress.stageIndex === 2} done={isComplete} />
+        </div>
+
+        {result ? (
+          <>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <ResultMetric label="새 검토 항목" value={`${result.created_review_items.toLocaleString()}개`} />
+              <ResultMetric label="검토 대기" value={`${result.pending_review_count.toLocaleString()}개`} />
+            </div>
+            <p className="mt-3 text-sm font-medium text-[var(--ink-strong)]">
+              새 검토 항목 {result.created_review_items.toLocaleString()}개, 검토 대기{" "}
+              {result.pending_review_count.toLocaleString()}개입니다.
+            </p>
+          </>
+        ) : null}
+
+        <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={onBackground}
+              className="liquid-control inline-flex h-9 w-full items-center justify-center rounded-lg px-3 text-sm font-semibold sm:w-auto"
+            >
+              백그라운드에서 계속 진행
+            </button>
+          ) : null}
+          {isComplete ? (
+            <a
+              href="/review"
+              className="liquid-primary inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold sm:w-auto"
+            >
+              검토사항으로 이동
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
+          ) : null}
+          {!isRunning ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="liquid-control inline-flex h-9 w-full items-center justify-center rounded-lg px-3 text-sm font-semibold sm:w-auto"
+            >
+              닫기
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SyncStep({ label, active, done }: { label: string; active: boolean; done: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-[var(--glass-strong)] px-3 py-2">
+      <span
+        className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
+          done
+            ? "bg-emerald-100 text-emerald-700"
+            : active
+              ? "bg-[var(--workspace-accent)] text-[#13231f]"
+              : "bg-[var(--glass-elevated)] text-[var(--ink-muted)]"
+        }`}
+      >
+        {done ? "✓" : active ? "…" : ""}
+      </span>
+      <span className="font-medium text-[var(--ink-strong)]">{label}</span>
     </div>
   );
 }
@@ -1120,7 +1577,14 @@ function formatAgentName(agentName: string) {
   return agentName;
 }
 
+function connectorDisplayName(type: string, manifests: IntegrationManifest[]) {
+  return manifests.find((manifest) => manifest.type === type)?.display_name ?? formatConnectorName(type);
+}
+
 function formatConnectorName(connectorType: string) {
+  if (connectorType === "slack") {
+    return "Slack";
+  }
   if (connectorType === "gmail") {
     return "Gmail";
   }

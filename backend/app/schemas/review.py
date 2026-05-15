@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -13,3 +13,8 @@ class ReviewItemUpdate(BaseModel):
 
 class ReviewEvidenceRequest(BaseModel):
     note: str | None = None
+
+
+class ReviewBulkActionRequest(BaseModel):
+    action: Literal['approve', 'reject']
+    item_ids: list[int] | None = None

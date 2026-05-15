@@ -1,7 +1,7 @@
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import hashlib
 from time import sleep as default_sleep
 from typing import Protocol
 
@@ -154,6 +154,7 @@ class SlackConnectorConfig:
 class SlackConnector:
     config: SlackConnectorConfig
     client: SlackApiClient
+    user_client: SlackApiClient | None = None
     source_type: str = 'slack'
 
     @property
@@ -171,7 +172,7 @@ class SlackConnector:
     def fetch_events(self) -> list[SourceEvent]:
         return self.fetch_events_since({})
 
-    def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
+    def _fetch_events_since_bot_membership_filtered(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
         events: list[SourceEvent] = []
 
         # 1. 사용자 목록을 가져와 ID -> 실명 매핑 생성 (작성자 이름 및 본문 멘션 치환용)
@@ -236,6 +237,89 @@ class SlackConnector:
                 reply_index = 0
                 parent_text = str(message.get('text') or '')
                 for reply in self.client.conversation_replies(channel_id, thread_ts, oldest=oldest):
+                    if reply.get('ts') == message.get('ts'):
+                        continue
+                    if reply.get('type') != 'message' or not reply.get('text'):
+                        continue
+                    reply_index += 1
+                    events.append(
+                        self._message_to_source_event(
+                            channel_id,
+                            reply,
+                            parent_ts=thread_ts,
+                            parent_text=parent_text,
+                            reply_index=reply_index,
+                            user_map=user_map,
+                            channel_map=channel_map,
+                        )
+                    )
+        return events
+
+    def fetch_events_since(self, latest_timestamps_by_partition: dict[str, str]) -> list[SourceEvent]:
+        events: list[SourceEvent] = []
+        available_clients = [self.client]
+        if self.user_client is not None:
+            available_clients.append(self.user_client)
+
+        user_map: dict[str, str] = {}
+        for client in available_clients:
+            for member in _safe_users_list(client):
+                uid = member.get('id')
+                if not uid:
+                    continue
+                name = member.get('real_name') or member.get('profile', {}).get('real_name') or member.get('name')
+                if name:
+                    user_map[uid] = name
+
+        channel_map: dict[str, str] = {}
+        accessible_channels: dict[str, SlackApiClient] = {}
+        for client in available_clients:
+            for channel in _safe_conversations_list(client):
+                cid = channel.get('id')
+                cname = channel.get('name')
+                if cid and cname:
+                    channel_map[cid] = cname
+                if cid and (channel.get('is_member') or channel.get('is_im') or channel.get('is_mpim')):
+                    accessible_channels.setdefault(cid, client)
+
+        configured_channel_ids = list(dict.fromkeys(self.config.channel_ids))
+        target_channel_ids = configured_channel_ids if configured_channel_ids else list(accessible_channels)
+
+        for channel_id in target_channel_ids:
+            history_client = _client_for_channel(
+                channel_id=channel_id,
+                bot_client=self.client,
+                user_client=self.user_client,
+                accessible_channels=accessible_channels,
+                configured_channel_ids=configured_channel_ids,
+            )
+            seven_days_ago = (datetime.now(UTC) - timedelta(days=7)).timestamp()
+            oldest_val = latest_timestamps_by_partition.get(channel_id)
+            oldest = str(max(float(oldest_val), seven_days_ago)) if oldest_val else str(seven_days_ago)
+
+            messages = _conversation_history_with_fallback(
+                primary_client=history_client,
+                fallback_client=self.client if history_client is self.user_client else None,
+                channel_id=channel_id,
+                oldest=oldest,
+            )
+            for message in messages:
+                if message.get('type') != 'message' or not message.get('text'):
+                    continue
+                events.append(self._message_to_source_event(channel_id, message, user_map=user_map, channel_map=channel_map))
+                thread_ts = str(message.get('thread_ts') or message.get('ts') or '')
+                if not thread_ts or int(message.get('reply_count') or 0) <= 0:
+                    continue
+                reply_index = 0
+                parent_text = str(message.get('text') or '')
+                replies = _conversation_replies_with_fallback(
+                    primary_client=history_client,
+                    fallback_client=self.client if history_client is self.user_client else None,
+                    channel_id=channel_id,
+                    thread_ts=thread_ts,
+                    oldest=oldest,
+                )
+                for reply in replies:
                     if reply.get('ts') == message.get('ts'):
                         continue
                     if reply.get('type') != 'message' or not reply.get('text'):
@@ -351,9 +435,66 @@ def _thread_context_body(*, message_text: str, parent_text: str | None) -> str:
     return f'Thread parent: {parent_text}\nThread reply: {message_text}'
 
 
+def _safe_users_list(client: SlackApiClient) -> list[dict]:
+    try:
+        return client.users_list()
+    except Exception:
+        return []
+
+
+def _safe_conversations_list(client: SlackApiClient) -> list[dict]:
+    try:
+        return client.conversations_list()
+    except Exception:
+        return []
+
+
+def _client_for_channel(
+    *,
+    channel_id: str,
+    bot_client: SlackApiClient,
+    user_client: SlackApiClient | None,
+    accessible_channels: dict[str, SlackApiClient],
+    configured_channel_ids: list[str],
+) -> SlackApiClient:
+    if user_client is not None and channel_id in configured_channel_ids:
+        return user_client
+    return accessible_channels.get(channel_id, bot_client)
+
+
+def _conversation_history_with_fallback(
+    *,
+    primary_client: SlackApiClient,
+    fallback_client: SlackApiClient | None,
+    channel_id: str,
+    oldest: str | None,
+) -> list[dict]:
+    try:
+        return primary_client.conversation_history(channel_id, oldest=oldest)
+    except SlackApiError:
+        if fallback_client is None:
+            raise
+        return fallback_client.conversation_history(channel_id, oldest=oldest)
+
+
+def _conversation_replies_with_fallback(
+    *,
+    primary_client: SlackApiClient,
+    fallback_client: SlackApiClient | None,
+    channel_id: str,
+    thread_ts: str,
+    oldest: str | None,
+) -> list[dict]:
+    try:
+        return primary_client.conversation_replies(channel_id, thread_ts, oldest=oldest)
+    except SlackApiError:
+        if fallback_client is None:
+            raise
+        return fallback_client.conversation_replies(channel_id, thread_ts, oldest=oldest)
+
+
 def _retry_after_seconds(response: httpx.Response) -> float:
     try:
         return max(float(response.headers.get('Retry-After', '1')), 0.0)
     except ValueError:
         return 1.0
-

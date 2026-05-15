@@ -2,6 +2,146 @@
 
 Updated: 2026-05-14
 
+## 2026-05-15 Slack 프로젝트 Router Tool Agent 인수인계
+
+- 목적:
+  - 사용자가 등록한 프로젝트 목록을 기준으로 Slack Agent가 추출한 `decision_record`, `todo`, `history_event` 후보를 LLM tool-calling 방식으로 프로젝트에 연결한다.
+  - 프로젝트 연결 요약과 근거를 Review Queue에서 확인한 뒤 사용자가 프로젝트를 바꾸거나 승인할 수 있게 한다.
+- 주요 변경 파일:
+  - `agent_slack/project_routing.py`
+  - `agent_slack/agent_slack.py`
+  - `agent_slack/slack_agent_langgraph.md`
+  - `backend/app/agents/slack_agent/sync_service.py`
+  - `backend/app/api/v1/integrations.py`
+  - `frontend/src/app/review/page.tsx`
+  - `frontend/e2e/review-project-routing.spec.ts`
+  - `backend/tests/test_agent_slack_project_routing.py`
+- 현재 LangGraph:
+  - `START -> preprocess -> classify -> summarize -> extract -> project_route -> END`
+  - `classify`에서 업무 신호가 없으면 바로 `END`로 종료한다.
+  - `project_route`는 등록 프로젝트와 추출 후보가 있을 때만 LangChain tool-calling router를 실행한다.
+- 데이터 계약:
+  - `ProjectOption(project_key, name, summary)`
+  - `ProjectRoutingDecision(source_id, item_index, project_key, project_name, confidence_score, assignment_summary, assignment_reason, alternatives, needs_user_selection)`
+  - `ReviewItem.payload` 추가 필드:
+    - `project_assignment_method=llm_tool`
+    - `project_assignment_summary`
+    - `project_assignment_reason`
+    - `project_assignment_confidence`
+    - `project_alternatives`
+    - `project_needs_user_selection`
+- 안전 경계:
+  - 테스트에서 live LLM을 호출하지 않는다. fake model 또는 monkeypatch를 사용한다.
+  - Review 승인 전까지 LLM project routing 결과는 trusted knowledge가 아니다.
+  - Slack LLM routing으로 Agent 후보가 생성된 경우에만 deterministic `project_assignment` 중복 생성을 건너뛴다. provider key가 있더라도 Agent 후보가 0개인 no-op sync에서는 fallback 분류가 막히지 않는다.
+- 검증:
+  - `uv run pytest backend/tests/test_agent_slack_project_routing.py backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_api.py backend/tests/test_mock_sync.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` -> `60 passed`
+  - `uv run ruff check ...` -> `All checks passed!`
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- review-project-routing.spec.ts` -> desktop/mobile `2 passed`
+
+## 2026-05-15 Slack 장시간 동기화 실패 오인 인수인계
+
+- 증상:
+  - 사용자가 Slack 동기화 진행 중 `동기화 실패`가 표시된다고 보고했다.
+- 실제 확인:
+  - Playwright로 로그인 후 `/integrations`에서 Slack 동기화를 실행했다.
+  - 최신 job `slack-34e086b550e64dcb94b75072f87577b6`은 `complete`, `last_error=null`이었다.
+  - message는 `fetched=0 created_review_items=5 skipped_events=0 pending_review_items=13`.
+  - 이번 실제 검증으로 pending review가 8개에서 13개로 증가했다.
+- 원인:
+  - 대량 sync job은 약 153초 걸린 기록이 있었다.
+  - 프론트 polling 한도는 135초라, 백엔드가 정상 running 중이어도 프론트가 timeout을 error로 처리했다.
+  - 그 결과 모달 제목이 `Slack 동기화 실패`로 표시될 수 있었다.
+- 수정:
+  - `frontend/src/app/integrations/page.tsx`에 `SYNC_BACKGROUND_NOTICE_DELAY_MS=120_000`과 background-running 안내 문구를 추가했다.
+  - polling timeout 메시지는 실제 실패가 아니라 running/backgrounded 상태로 유지한다.
+  - 모달은 `백그라운드에서 계속 진행 중입니다. 완료되면 작업 스트림의 최근 sync 상태에 반영됩니다.`를 표시한다.
+- 검증:
+  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts --project=chromium-desktop -g "polling timeout"` -> `1 passed`
+  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts` -> desktop/mobile `6 passed`
+  - `npm.cmd exec tsc -- --noEmit` -> passed
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+
+## 2026-05-14 Slack sync ReviewItem 복구 및 검토사항 정렬
+
+- 증상:
+  - 사용자가 DB에서 `review_items` 데이터를 직접 삭제한 뒤 Slack 동기화를 다시 눌러도 검토사항 화면에 업무 후보가 보이지 않았다.
+  - 실제 API에는 `project_assignment` 후보가 많이 생성되어 첫 화면을 차지했고, Slack Agent가 만든 `decision_record`, `todo`, `history_event` 후보는 뒤로 밀려 사용자가 “검토사항이 없다”고 판단하기 쉬웠다.
+- 원인:
+  - connector sync는 `Source` 중복을 비용 절감 신호로 보고 `changed_source_ids`가 없으면 Slack Agent ReviewItem 생성을 건너뛰었다.
+  - 따라서 `Source`는 남아 있고 `ReviewItem`만 삭제된 복구 상황에서는 기존 Slack 원본을 다시 검토 후보로 승격하지 못했다.
+  - Review 목록 기본 정렬이 최신 id 기준이라 대량의 `project_assignment` 후보가 업무 지식 후보보다 먼저 표시됐다.
+- 수정:
+  - `backend/app/api/v1/integrations.py`에서 중복 sync라도 해당 connector의 Agent ReviewItem이 하나도 없고 기존 `Source`가 있으면 기존 source ids로 Slack/Mail-Document Agent review 생성을 복구하도록 했다.
+  - `backend/app/api/v1/review.py`에서 검토사항 정렬 우선순위를 `decision_record`, `todo`, `history_event`, `timeline_event`, 기타, `project_assignment` 순으로 조정했다.
+  - 서버를 재시작해 최신 코드가 실제 API 프로세스에 반영되도록 했다.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_mock_sync.py::test_duplicate_slack_sync_recreates_agent_reviews_when_review_items_were_deleted backend/tests/test_review.py::test_review_list_prioritizes_knowledge_candidates_before_project_assignments -q
+uv run pytest backend/tests/test_mock_sync.py backend/tests/test_review.py backend/tests/test_project_memory_api.py backend/tests/test_slack_agent_api.py -q
+uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q
+uv run ruff check backend/app/api/v1/integrations.py backend/app/api/v1/review.py backend/app/projects/classifier.py backend/tests/test_mock_sync.py backend/tests/test_review.py backend/tests/test_project_memory_api.py
+```
+
+결과:
+
+- 신규 복구/정렬 회귀 테스트 2 passed.
+- 관련 sync/review/project/slack API 묶음 43 passed.
+- Slack/Review/Project 전체 타깃 회귀 묶음 69 passed.
+- ruff passed.
+- 실행 중인 API에서 `/api/v1/review?status=pending_review&limit=10`가 `total_count=217`을 반환하고 첫 항목들이 `decision_record`, `todo`, `history_event` 순으로 노출되는 것을 확인했다.
+
+## 2026-05-14 사용자 정의 프로젝트 동기화 검토사항 수정
+
+- 증상:
+  - 동기화 버튼을 눌러도 프로젝트 관련 항목이 Review Queue로 들어오지 않았다.
+  - 새로 만든 프로젝트 요약 뒤에 `?꾩쭅 ?뱀씤???꾨줈?앺듃 evidence...`
+    같은 깨진 한글 문자열이 붙었다.
+- 원인:
+  - `/api/v1/projects/define`은 `Project` 행만 저장하고, 이미 동기화된 source를
+    새 프로젝트 기준으로 다시 분류하지 않았다.
+  - `/api/v1/integrations/{connector_type}/sync`는 connector별 review agent는
+    실행했지만, 사용자 정의 프로젝트에 대한 `project_assignment` 후보는 만들지
+    않았다.
+  - `backend/app/projects/service.py`와
+    `backend/app/projects/classifier.py`에 깨진 한글 fallback 문자열이 남아 있었다.
+- 수정:
+  - 프로젝트 생성 시 새 `Project` 행을 flush한 뒤
+    `create_project_assignment_review_items()`를 호출하고
+    `created_review_items`를 응답에 포함했다.
+  - connector sync가 source 저장 뒤 같은 deterministic 프로젝트 분류기를 실행하고,
+    응답/audit metadata에 `project_assignment_items`를 포함하게 했다. 변경 source가
+    없고 skipped 된 기존 source만 있어도 프로젝트 분류는 다시 시도한다.
+  - 프로젝트 요약, 근거 사유, 승인 타임라인 사유, fallback 프로젝트 라벨, source
+    라벨을 읽을 수 있는 한국어로 다시 작성했다.
+  - 한국어 프로젝트 키워드 추출 범위를 `가-힣`로 정리했다.
+- 검증:
+
+```powershell
+uv run pytest backend/tests/test_project_memory_api.py::test_define_project_returns_readable_empty_summary backend/tests/test_project_memory_api.py::test_define_project_creates_pending_assignment_candidates_from_existing_sources -q
+uv run pytest backend/tests/test_mock_sync.py::test_sync_creates_project_assignment_review_items_for_defined_projects -q
+uv run pytest backend/tests/test_mock_sync.py::test_duplicate_sync_still_classifies_existing_sources_for_new_project backend/tests/test_slack_agent_api.py::test_slack_sync_uses_agent_slack_llm_pipeline_when_provider_key_exists -q
+uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_mock_sync.py backend/tests/test_slack_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q
+uv run ruff check backend/app/api/v1/projects.py backend/app/api/v1/integrations.py backend/app/projects/service.py backend/app/projects/classifier.py backend/tests/test_project_memory_api.py backend/tests/test_mock_sync.py
+cd frontend
+npm.cmd exec tsc -- --noEmit
+npm.cmd run build
+```
+
+결과:
+
+- 신규 프로젝트 회귀 테스트: 2 passed;
+- sync 프로젝트 연결 회귀 테스트: 1 passed;
+- 중복 sync + Slack LLM sync 회귀 테스트: 2 passed;
+- 관련 백엔드 테스트 묶음: 37 passed;
+- ruff: passed;
+- 프론트엔드 TypeScript/build: passed.
+
 ## 2026-05-14 Mail/Document Agent Review Quality and Promotion Flow
 
 - Mail/Document live LLM review generation now uses source-grouped windows
@@ -142,7 +282,7 @@ Result:
   old bad answer does not keep contaminating later RAG questions.
 - For a clean local/dev rerun, use `uv run python scripts/reset_connector_data.py`
   for dry-run counts, then `uv run python scripts/reset_connector_data.py
-  --execute --confirm` only in local env. This preserves auth users and
+--execute --confirm` only in local env. This preserves auth users and
   integration connections but clears connector-derived source/review/knowledge,
   vector, AgentRun, and assistant data.
 - After reset, rerun connector sync, call project reclassify, and approve the

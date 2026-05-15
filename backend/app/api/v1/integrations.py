@@ -1,7 +1,9 @@
 import re
+from datetime import UTC, datetime
 from typing import Annotated
+from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -66,6 +68,7 @@ from backend.app.models import (
     Source,
     SyncJob,
 )
+from backend.app.projects.classifier import create_project_assignment_review_items
 from backend.app.services.audit import record_audit_log
 
 router = APIRouter(prefix='/integrations', tags=['integrations'])
@@ -76,6 +79,7 @@ CurrentUser = Annotated[DemoUser, Depends(get_demo_user)]
 
 class IntegrationSyncRequest(BaseModel):
     selected_channel_ids: list[str] | None = None
+    run_async: bool = False
 
 
 class SlackLlmRunRequest(BaseModel):
@@ -106,7 +110,9 @@ def list_integrations(settings: AppSettings) -> list[dict[str, object]]:
 def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
     connections = (
         db.query(IntegrationConnection)
-        .order_by(IntegrationConnection.connector_type, IntegrationConnection.workspace_name)
+        .order_by(
+            IntegrationConnection.connector_type, IntegrationConnection.workspace_name
+        )
         .all()
     )
     return [
@@ -115,7 +121,9 @@ def list_integration_connections(db: DbSession) -> list[dict[str, object]]:
             'workspace_id': connection.workspace_id,
             'workspace_name': connection.workspace_name,
             'status': connection.status,
-            'credential_status': 'available' if LOCAL_TOKEN_VAULT.resolve(connection.token_ref) else 'missing',
+            'credential_status': 'available'
+            if LOCAL_TOKEN_VAULT.resolve(connection.token_ref)
+            else 'missing',
             'masked_bot_token': connection.masked_bot_token,
             'scopes': connection.scopes,
         }
@@ -131,7 +139,9 @@ def get_slack_runtime_status(db: DbSession, settings: AppSettings) -> dict[str, 
         .order_by(IntegrationConnection.id.desc())
     )
     latest_sync = db.scalar(
-        select(SyncJob).where(SyncJob.connector_type == 'slack').order_by(SyncJob.id.desc())
+        select(SyncJob)
+        .where(SyncJob.connector_type == 'slack')
+        .order_by(SyncJob.id.desc())
     )
     credential_status = (
         'available'
@@ -174,7 +184,9 @@ def get_google_runtime_status(
         .order_by(IntegrationConnection.id.desc())
     )
     latest_sync = db.scalar(
-        select(SyncJob).where(SyncJob.connector_type == connector_type).order_by(SyncJob.id.desc())
+        select(SyncJob)
+        .where(SyncJob.connector_type == connector_type)
+        .order_by(SyncJob.id.desc())
     )
     credential_status = (
         'available'
@@ -199,6 +211,7 @@ def get_google_runtime_status(
 @router.post('/{connector_type}/sync')
 def sync_connector(
     connector_type: str,
+    background_tasks: BackgroundTasks,
     db: DbSession,
     settings: AppSettings,
     user: CurrentUser,
@@ -209,42 +222,132 @@ def sync_connector(
 
     selected_channel_ids = (
         _clean_channel_ids(request.selected_channel_ids)
-        if request is not None and request.selected_channel_ids is not None and connector_type == 'slack'
+        if request is not None
+        and request.selected_channel_ids is not None
+        and connector_type == 'slack'
         else None
     )
-    agent_review_items = 0
-    try:
-        connector = get_sync_connector(
-            connector_type,
-            settings,
-            db=db,
-            slack_channel_ids_override=selected_channel_ids,
-        )
-        result = sync_connector_events(db=db, connector=connector)
-        changed_source_ids = getattr(result, 'changed_source_ids', [])
 
-        # 동기화 성공 시 지식 추출 에이전트 오케스트레이션 트리거
-        if result.status == 'complete' and changed_source_ids:
+    if request is not None and request.run_async:
+        job = _create_queued_sync_job(db=db, connector_type=connector_type)
+        pending_review_count = _pending_review_count(db)
+        background_tasks.add_task(
+            _run_connector_sync_background,
+            db=db,
+            settings=settings,
+            user=user,
+            job_id=job.job_id,
+            connector_type=connector_type,
+            selected_channel_ids=selected_channel_ids,
+        )
+        return {
+            'job_id': job.job_id,
+            'connector_type': connector_type,
+            'status': job.status,
+            'created_review_items': 0,
+            'fetched_events': 0,
+            'skipped_events': 0,
+            'parser_status_counts': {},
+            'changed_source_ids': [],
+            'agent_generated_items': 0,
+            'project_assignment_items': 0,
+            'pending_review_count': pending_review_count,
+        }
+
+    try:
+        return _perform_connector_sync(
+            db=db,
+            user=user,
+            settings=settings,
+            connector_type=connector_type,
+            selected_channel_ids=selected_channel_ids,
+        )
+    except ConnectorNotConfiguredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SlackApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+def _perform_connector_sync(
+    *,
+    db: Session,
+    user: DemoUser,
+    settings: Settings,
+    connector_type: str,
+    selected_channel_ids: list[str] | None,
+    job_id: str | None = None,
+) -> dict[str, object]:
+    agent_review_items = 0
+    project_assignment_items = 0
+    connector = get_sync_connector(
+        connector_type,
+        settings,
+        db=db,
+        slack_channel_ids_override=selected_channel_ids,
+    )
+    result = sync_connector_events(db=db, connector=connector, job_id=job_id)
+    changed_source_ids = getattr(result, 'changed_source_ids', [])
+    if result.status == 'complete':
+        _mark_sync_job_agent_review_running(
+            db=db,
+            job_id=result.job_id,
+            fetched_events=result.fetched_events,
+            skipped_events=result.skipped_events,
+        )
+    if result.status == 'complete' and not changed_source_ids:
+        recovery_source_ids = _connector_source_ids_for_review(
+            db=db,
+            connector_type=connector_type,
+            user=user,
+        )
+        if recovery_source_ids and not _has_connector_agent_review_items(
+            db=db,
+            connector_type=connector_type,
+        ):
             agent_review_items = _run_connector_agent_review(
                 db=db,
                 user=user,
                 settings=settings,
                 connector_type=connector_type,
-                changed_source_ids=changed_source_ids,
+                source_ids=recovery_source_ids,
             )
-    except ConnectorNotConfiguredError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except SlackApiError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        if not _skip_project_assignment_after_agent_review(
+            connector_type=connector_type,
+            settings=settings,
+            agent_review_items=agent_review_items,
+        ):
+            project_assignment_items = len(create_project_assignment_review_items(db))
+
+    if result.status == 'complete' and changed_source_ids:
+        agent_review_items = _run_connector_agent_review(
+            db=db,
+            user=user,
+            settings=settings,
+            connector_type=connector_type,
+            source_ids=changed_source_ids,
+        )
+        if not _skip_project_assignment_after_agent_review(
+            connector_type=connector_type,
+            settings=settings,
+            agent_review_items=agent_review_items,
+        ):
+            project_assignment_items = len(create_project_assignment_review_items(db))
     parser_status_counts = getattr(result, 'parser_status_counts', {})
 
-    total_review_items = result.created_review_items + agent_review_items
+    total_review_items = (
+        result.created_review_items + agent_review_items + project_assignment_items
+    )
+    db.flush()
+    pending_review_count = _pending_review_count(db)
     sync_job = db.scalar(select(SyncJob).where(SyncJob.job_id == result.job_id))
     if sync_job is not None:
+        sync_job.status = result.status
+        sync_job.progress_pct = 100
         sync_job.message = (
             f'fetched={result.fetched_events} '
             f'created_review_items={total_review_items} '
-            f'skipped_events={result.skipped_events}'
+            f'skipped_events={result.skipped_events} '
+            f'pending_review_items={pending_review_count}'
         )
 
     record_audit_log(
@@ -261,7 +364,9 @@ def sync_connector(
             'parser_status_counts': parser_status_counts,
             'selected_channel_ids': selected_channel_ids,
             'agent_generated_items': agent_review_items,
+            'project_assignment_items': project_assignment_items,
             'changed_source_ids': changed_source_ids,
+            'pending_review_count': pending_review_count,
         },
     )
     db.commit()
@@ -275,7 +380,82 @@ def sync_connector(
         'skipped_events': result.skipped_events,
         'parser_status_counts': parser_status_counts,
         'changed_source_ids': changed_source_ids,
+        'agent_generated_items': agent_review_items,
+        'project_assignment_items': project_assignment_items,
+        'pending_review_count': pending_review_count,
     }
+
+
+def _create_queued_sync_job(*, db: Session, connector_type: str) -> SyncJob:
+    job = SyncJob(
+        job_id=f'{connector_type}-{uuid4().hex}',
+        connector_type=connector_type,
+        status='queued',
+        message='queued',
+        progress_pct=0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def _run_connector_sync_background(
+    *,
+    db: Session,
+    settings: Settings,
+    user: DemoUser,
+    job_id: str,
+    connector_type: str,
+    selected_channel_ids: list[str] | None,
+) -> None:
+    try:
+        _perform_connector_sync(
+            db=db,
+            user=user,
+            settings=settings,
+            connector_type=connector_type,
+            selected_channel_ids=selected_channel_ids,
+            job_id=job_id,
+        )
+    except Exception as exc:
+        _mark_sync_job_failed(db=db, job_id=job_id, message=f'failed: {exc}')
+        record_audit_log(
+            db=db,
+            actor=user,
+            action='integration.sync',
+            target_type='connector',
+            target_id=connector_type,
+            status='failed',
+            metadata={
+                'job_id': job_id,
+                'error': str(exc),
+                'selected_channel_ids': selected_channel_ids,
+            },
+        )
+        db.commit()
+
+
+def _connector_uses_slack_llm_project_routing(
+    *,
+    connector_type: str,
+    settings: Settings,
+) -> bool:
+    return connector_type == 'slack' and not settings.paraworks_demo_mode and bool(
+        settings.openai_api_key or settings.gemini_api_key or settings.google_api_key
+    )
+
+
+def _skip_project_assignment_after_agent_review(
+    *,
+    connector_type: str,
+    settings: Settings,
+    agent_review_items: int,
+) -> bool:
+    return agent_review_items > 0 and _connector_uses_slack_llm_project_routing(
+        connector_type=connector_type,
+        settings=settings,
+    )
 
 
 def _run_connector_agent_review(
@@ -284,16 +464,17 @@ def _run_connector_agent_review(
     user: DemoUser,
     settings: Settings,
     connector_type: str,
-    changed_source_ids: list[str],
+    source_ids: list[str],
 ) -> int:
     if connector_type == 'slack':
-        if (
-            not settings.paraworks_demo_mode
-            and (settings.openai_api_key or settings.gemini_api_key or settings.google_api_key)
+        if not settings.paraworks_demo_mode and (
+            settings.openai_api_key
+            or settings.gemini_api_key
+            or settings.google_api_key
         ):
             return trigger_slack_agent_analysis(
                 db=db,
-                source_ids=changed_source_ids,
+                source_ids=source_ids,
                 settings=settings,
             )
 
@@ -302,7 +483,7 @@ def _run_connector_agent_review(
             agent=SlackAgent(model=DeterministicSlackAgentModel()),
             permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
-            source_ids=changed_source_ids,
+            source_ids=source_ids,
         )
         return len(review_items)
 
@@ -312,11 +493,55 @@ def _run_connector_agent_review(
             agent=MailDocumentAgent(model=DeterministicMailDocumentAgentModel()),
             permission_context=_permission_context(user),
             source_window=f'sync:{connector_type}:changed',
-            source_ids=changed_source_ids,
+            source_ids=source_ids,
         )
         return len(review_items)
 
     return 0
+
+
+def _has_connector_agent_review_items(
+    *,
+    db: Session,
+    connector_type: str,
+) -> bool:
+    agent_names = {
+        'slack': {'slack_agent'},
+        'gmail': {'mail_document_agent'},
+        'google_drive': {'mail_document_agent'},
+        'google_calendar': {'mail_document_agent'},
+        'drive': {'mail_document_agent'},
+        'calendar': {'mail_document_agent'},
+    }.get(connector_type, set())
+    if not agent_names:
+        return True
+    return (
+        db.scalar(
+            select(ReviewItem.id)
+            .where(ReviewItem.payload['agent_name'].as_string().in_(agent_names))
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _connector_source_ids_for_review(
+    *,
+    db: Session,
+    connector_type: str,
+    user: DemoUser,
+) -> list[str]:
+    if connector_type == 'slack':
+        return list(
+            db.scalars(
+                select(Source.source_id)
+                .where(Source.source_type == 'slack')
+                .order_by(Source.id)
+            ).all()
+        )
+    if connector_type in GOOGLE_OAUTH_CONNECTOR_TYPES:
+        return _mail_document_source_ids(db=db, user=user)
+    return []
 
 
 @router.get('/slack/oauth/install-url')
@@ -325,7 +550,9 @@ def get_slack_oauth_install_url(
     redirect_uri: str | None = None,
 ) -> dict[str, object]:
     try:
-        install = build_slack_oauth_install_url(settings=settings, redirect_uri=redirect_uri)
+        install = build_slack_oauth_install_url(
+            settings=settings, redirect_uri=redirect_uri
+        )
     except SlackOAuthConfigurationError:
         return {
             'connector_type': 'slack',
@@ -448,7 +675,11 @@ def complete_google_oauth_install_from_state(
     redirect_uri: str | None = None,
 ) -> dict[str, object]:
     try:
-        connector_type = GoogleOAuthStateSigner(settings.google_oauth_state_secret).validate(state).connector_type
+        connector_type = (
+            GoogleOAuthStateSigner(settings.google_oauth_state_secret)
+            .validate(state)
+            .connector_type
+        )
         connection = complete_google_oauth_callback(
             db=db,
             settings=settings,
@@ -528,7 +759,7 @@ def disconnect_connector(
 
     # Remove token from vault
     LOCAL_TOKEN_VAULT.remove_token(connection.token_ref)
-    
+
     # Remove from database
     db.delete(connection)
     db.commit()
@@ -601,7 +832,9 @@ def run_slack_llm_agent_review(
     if preflight['action'] != 'run':
         raise HTTPException(status_code=400, detail=preflight)
     if not request.confirm_paid_run:
-        raise HTTPException(status_code=400, detail='Paid LLM run requires confirm_paid_run=true')
+        raise HTTPException(
+            status_code=400, detail='Paid LLM run requires confirm_paid_run=true'
+        )
 
     try:
         agent = SlackAgent(
@@ -642,7 +875,9 @@ def run_slack_llm_agent_review(
 
 
 @router.post('/mail-docs/agent-review')
-def run_mail_document_agent_review(db: DbSession, user: CurrentUser) -> dict[str, int | str]:
+def run_mail_document_agent_review(
+    db: DbSession, user: CurrentUser
+) -> dict[str, int | str]:
     agent = MailDocumentAgent(model=DeterministicMailDocumentAgentModel())
     source_ids = _mail_document_source_ids(db=db, user=user)
     review_items = create_mail_document_agent_review_items_for_changed_sources(
@@ -750,7 +985,9 @@ def run_mail_document_llm_agent_review(
 
 
 @router.get('/memory-extraction/agent-review/llm/preflight')
-def get_memory_extraction_agent_preflight(db: DbSession, user: CurrentUser) -> dict[str, object]:
+def get_memory_extraction_agent_preflight(
+    db: DbSession, user: CurrentUser
+) -> dict[str, object]:
     return build_memory_extraction_agent_preflight(
         db=db,
         permission_context=_permission_context(user),
@@ -759,11 +996,36 @@ def get_memory_extraction_agent_preflight(db: DbSession, user: CurrentUser) -> d
 
 
 def _configured_channel_ids(raw_channel_ids: str) -> list[str]:
-    return [channel_id.strip() for channel_id in raw_channel_ids.split(',') if channel_id.strip()]
+    return [
+        channel_id.strip()
+        for channel_id in raw_channel_ids.split(',')
+        if channel_id.strip()
+    ]
 
 
 def _slack_llm_settings(settings: Settings) -> SlackLlmSettings:
     return SlackLlmSettings(
+        enabled=settings.agent_llm_enabled,
+        provider_order=tuple(
+            _configured_channel_ids(settings.agent_llm_provider_order)
+        ),
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key or settings.google_api_key,
+        openai_model=settings.agent_llm_openai_model,
+        gemini_model=settings.agent_llm_gemini_model,
+        input_cost_per_1m=settings.agent_llm_input_cost_per_1m_tokens,
+        output_cost_per_1m=settings.agent_llm_output_cost_per_1m_tokens,
+        max_estimated_cost_usd=settings.agent_llm_max_estimated_cost_usd,
+        max_input_chars=settings.agent_llm_max_input_chars,
+        max_evidence_messages=settings.agent_llm_max_evidence_messages,
+        max_output_tokens=settings.agent_llm_max_output_tokens,
+        temperature=settings.agent_llm_temperature,
+        timeout_seconds=settings.agent_llm_timeout_seconds,
+    )
+
+
+def _mail_document_llm_settings(settings: Settings) -> MailDocumentLlmSettings:
+    return MailDocumentLlmSettings(
         enabled=settings.agent_llm_enabled,
         provider_order=tuple(_configured_channel_ids(settings.agent_llm_provider_order)),
         openai_api_key=settings.openai_api_key,
@@ -905,7 +1167,51 @@ def _sync_job_response(job: SyncJob | None) -> dict[str, object] | None:
         'status': job.status,
         'message': redact_secret_text(job.message),
         'progress_pct': job.progress_pct,
+        'created_at': job.created_at.isoformat() if job.created_at else None,
+        'updated_at': job.updated_at.isoformat() if job.updated_at else None,
     }
+
+
+def _mark_sync_job_agent_review_running(
+    *,
+    db: Session,
+    job_id: str,
+    fetched_events: int,
+    skipped_events: int,
+) -> None:
+    sync_job = db.scalar(select(SyncJob).where(SyncJob.job_id == job_id))
+    if sync_job is None:
+        return
+    sync_job.status = 'running'
+    sync_job.progress_pct = 75
+    sync_job.message = (
+        f'fetched={fetched_events} '
+        'agent_review=running '
+        f'skipped_events={skipped_events}'
+    )
+    db.commit()
+
+
+def _mark_sync_job_failed(*, db: Session, job_id: str, message: str) -> None:
+    sync_job = db.scalar(select(SyncJob).where(SyncJob.job_id == job_id))
+    if sync_job is None:
+        return
+    sync_job.status = 'failed'
+    sync_job.progress_pct = 100
+    sync_job.message = redact_secret_text(message)
+    sync_job.updated_at = datetime.now(UTC)
+    db.flush()
+
+
+def _pending_review_count(db: Session) -> int:
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(ReviewItem)
+            .where(ReviewItem.status == 'pending_review')
+        )
+        or 0
+    )
 
 
 def _sync_job_summary(job: SyncJob | None) -> dict[str, int] | None:
@@ -923,7 +1229,11 @@ def _sync_error_response(job: SyncJob | None) -> dict[str, str] | None:
     if job is None or job.status != 'failed':
         return None
     message = redact_secret_text(job.message)
-    code = message.rsplit(':', maxsplit=1)[-1].strip() if ':' in message else 'unknown_error'
+    code = (
+        message.rsplit(':', maxsplit=1)[-1].strip()
+        if ':' in message
+        else 'unknown_error'
+    )
     return {
         'code': code,
         'message': message,
@@ -932,13 +1242,17 @@ def _sync_error_response(job: SyncJob | None) -> dict[str, str] | None:
 
 
 def _slack_agent_bridge(db: Session) -> dict[str, int | bool]:
-    slack_source_count = db.scalar(select(func.count()).select_from(Source).where(Source.source_type == 'slack')) or 0
-    pending_review_count = (
-        db.scalar(select(func.count()).select_from(ReviewItem).where(ReviewItem.status == 'pending_review')) or 0
+    slack_source_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(Source)
+            .where(Source.source_type == 'slack')
+        )
+        or 0
     )
     return {
         'slack_source_count': slack_source_count,
-        'pending_review_count': pending_review_count,
+        'pending_review_count': _pending_review_count(db),
         'ready_for_agent_test': slack_source_count > 0,
     }
 
@@ -952,7 +1266,7 @@ def _slack_error_action_hint(code: str) -> str:
     if code in {'not_in_channel', 'channel_not_found'}:
         return 'Slack 앱을 선택한 채널에 추가한 뒤 다시 동기화하세요.'
     if code == 'missing_scope':
-        return 'Slack OAuth scope를 확인하고 앱을 다시 설치하세요.'
+        return 'Slack OAuth 권한 범위를 확인한 뒤 앱을 다시 설치하세요.'
     if code == 'rate_limited':
-        return 'Slack API rate limit이 풀린 뒤 다시 시도하세요.'
+        return 'Slack API 제한이 풀린 뒤 다시 시도하세요.'
     return 'Slack 연결, 채널 권한, 토큰 상태를 확인한 뒤 다시 동기화하세요.'

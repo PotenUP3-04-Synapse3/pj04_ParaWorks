@@ -6,6 +6,48 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-15 Slack 프로젝트 Router Tool Agent 추가
+
+- 기존 `agent_slack` LangGraph 흐름에 `project_route` 노드를 추가했다.
+- Slack Agent는 업무 후보를 추출한 뒤 LangChain tool-calling 기반 프로젝트 router를 실행해, 등록 프로젝트 중 연결 후보를 고르고 프로젝트 활동 요약과 근거를 생성한다.
+- Router는 `list_registered_projects`, `score_project_candidates` tool을 사용하며, 결과는 승인 전 trusted knowledge가 아니라 `ReviewItem.payload`에 `project_assignment_method=llm_tool`, 요약, 근거, 확신도, 대체 후보로 보존된다.
+- Slack LLM project routing으로 후보가 생성된 sync에서는 기존 deterministic `project_assignment` 중복 생성을 건너뛰되, Agent 후보가 새로 생성되지 않은 no-op sync에서는 fallback 분류를 막지 않도록 조건을 좁혔다.
+- Review 화면은 LLM 프로젝트 분류 요약과 연결 근거를 표시하고, 사용자가 등록 프로젝트 select에서 프로젝트를 바꾼 뒤 승인할 수 있는 흐름을 유지한다.
+- 현재 Slack Agent LangGraph 문서를 `agent_slack/slack_agent_langgraph.md`에 추가했다.
+- 검증: 관련 백엔드 회귀 테스트 60개 통과, ruff 통과, 프론트엔드 TypeScript/lint/build 통과, Playwright review project routing desktop/mobile 2개 통과.
+
+포트폴리오 관점:
+
+- Slack 원본 대화가 “업무 후보 추출”에서 끝나지 않고, 등록 프로젝트 맥락에 맞게 요약/근거와 함께 human-in-the-loop 검토로 넘어가는 흐름을 보여준다.
+- 규칙 기반 매칭의 오탐을 줄이면서도 LLM 제안을 사용자가 검토하고 수정할 수 있어, 프로젝트별 활동 타임라인의 신뢰도를 높인다.
+
+## 2026-05-15 Slack 장시간 동기화 실패 오인 수정
+
+- 실제 Playwright로 `/integrations` Slack 동기화를 눌러 네트워크 응답과 runtime-status를 확인했다.
+- 확인 결과 최신 job은 `complete`, `last_error=null`이었고, 과거 대량 sync는 약 153초가 걸려 프론트 polling 한도 135초를 넘길 수 있었다.
+- 프론트가 이 timeout을 실제 backend failure와 같은 `동기화 실패` 모달로 표시하던 문제를 수정했다.
+- 120초 이상 진행 중이거나 polling 한도를 넘긴 정상 running job은 `백그라운드에서 계속 진행 중입니다` 안내로 표시하고, 실패 상태로 오인하지 않게 했다.
+- 검증: Playwright 동기화 모달 회귀 desktop/mobile 6개 통과, TypeScript/lint/build 통과.
+
+## 2026-05-14 사용자 정의 프로젝트 동기화 검토사항 수정
+
+- 사용자가 프로젝트를 생성하면 기존 Slack/Gmail/Drive/Calendar source를 즉시
+  해당 프로젝트 기준으로 분류하고, 근거가 매칭될 때 `project_assignment`
+  ReviewItem을 `pending_review` 상태로 생성하도록 수정했다.
+- connector sync 이후에도 같은 프로젝트 분류기를 실행해 새로 동기화된 source와
+  이미 동기화되어 skipped 처리된 기존 source가 별도 재분류 호출 없이 프로젝트
+  연결 검토사항으로 들어오도록 했다.
+- 프로젝트 요약, 근거 사유, 승인 타임라인 사유, source 라벨에 남아 있던 깨진
+  한글 fallback 문구를 읽을 수 있는 한국어 문장으로 교체했다.
+- 검증: 프로젝트/동기화/검토 관련 백엔드 테스트 37개 통과, ruff 통과,
+  프론트엔드 TypeScript 검사와 프로덕션 빌드 통과.
+
+포트폴리오 관점:
+
+- 사용자 생성 프로젝트, connector 근거, Agent 제안, 수동 승인이 Review Queue에서
+  만나는 흐름을 구현해 프로젝트 탭이 실제 human-in-the-loop 라우팅 화면으로
+  작동하도록 만들었다.
+
 ## 2026-05-14 Approved Project Timeline and RAG Visibility Fix
 
 - Fixed the approved Review Queue to Project/Timeline display path so promoted
@@ -4018,7 +4060,7 @@ Cost/security note:
     tests passed with 47 tests, and ruff passed on touched files.
 - `fix: preserve referenced assistant content in email drafts`
   - Added an explicit referenced-content email draft path so `이 내용으로
-    보내줘` and draft correction complaints use the latest sendable assistant
+보내줘` and draft correction complaints use the latest sendable assistant
     answer or pending draft state before falling through to normal RAG chat.
   - Added a guardrail that appends the selected source content when the draft
     composer produces a generic body that omits the actual referenced answer.
@@ -4026,7 +4068,7 @@ Cost/security note:
     backend tests passed with 49 tests, and ruff passed on touched files.
 - `fix: generate assistant content before email drafting`
   - Added a generate-then-email path for requests like `ParaWorks 회사 소개서
-    작성해서 용희님한테 메일 보내줘`, extracting the requested artifact question,
+작성해서 용희님한테 메일 보내줘`, extracting the requested artifact question,
     running RAG first, then using that generated answer as the draft body source.
   - This keeps combined artifact creation plus email requests out of the
     generic clarification loop that asks the user to provide the content.

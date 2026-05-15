@@ -1,17 +1,28 @@
-import os
-import json
-import re
+import hashlib
 import logging
-from typing import List, Optional, Any
+import os
+import re
+from dataclasses import replace
 from datetime import datetime
+from typing import Any
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.graph import StateGraph, START, END
-
-from backend.app.agent_runtime.contracts import ReviewCandidate, TokenUsage, AgentRunCost
-from backend.app.connectors.slack import SlackWebApiClient
+from agent_slack.project_routing import (
+    LangChainProjectRouterModel,
+    ProjectOption,
+    ProjectRoutingDecision,
+    route_projects_for_candidates,
+)
+from backend.app.agent_runtime.contracts import (
+    AgentRunCost,
+    ReviewCandidate,
+    TokenUsage,
+)
+from backend.app.agents.slack_agent.quality import classify_slack_work_signal
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -53,36 +64,41 @@ class CandidateItem(BaseModel):
     )
     
     # 대시보드 할 일 관리를 위한 추가 정보
-    assignee: Optional[str] = Field(description="할 일(todo)인 경우 담당자 이름 (없으면 null)")
-    due_date: Optional[str] = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
+    assignee: str | None = Field(description="할 일(todo)인 경우 담당자 이름 (없으면 null)")
+    due_date: str | None = Field(description="마감 기한이 언급된 경우 (예: '2026-05-15', 없으면 null)")
     
-    source_ts_list: List[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
-    source_snippets: List[str] = Field(description="증거가 되는 원문 일부. 핵심 발언이나 문장을 1~2개 이상 배열에 문자열로 담으세요.")
+    source_ts_list: list[str] = Field(description="이 지식의 증거가 되는 원본 메시지의 TS 값 목록 (예: '1715000.001')")
+    source_snippets: list[str] = Field(description="증거가 되는 원문 일부. 핵심 발언이나 문장을 1~2개 이상 배열에 문자열로 담으세요.")
 
 class CandidateList(BaseModel):
-    candidate_items: List[CandidateItem] = Field(description="추출된 지식 후보들의 목록")
+    candidate_items: list[CandidateItem] = Field(description="추출된 지식 후보들의 목록")
 
 # 3. 워크플로우 상태 정의
 class SlackAgentState(BaseModel):
     channel_id: str = ""
-    messages: List[dict] = Field(default_factory=list)
+    messages: list[dict] = Field(default_factory=list)
     processed_text: str = ""
     is_work_related: bool = False
-    summary: Optional[str] = None
-    candidates: List[ReviewCandidate] = Field(default_factory=list)
+    summary: str | None = None
+    candidates: list[ReviewCandidate] = Field(default_factory=list)
+    projects: list[ProjectOption] = Field(default_factory=list)
+    project_router_model: Any | None = None
+    project_prompt_tokens: int = 0
+    project_completion_tokens: int = 0
+    project_model_name: str | None = None
     model_name: str = "gpt-4o-mini"
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
-    error: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    gemini_api_key: Optional[str] = None
+    error: str | None = None
+    openai_api_key: str | None = None
+    gemini_api_key: str | None = None
 
 def calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
     return (prompt_tokens / 1_000_000 * COST_PER_1M_INPUT) + (completion_tokens / 1_000_000 * COST_PER_1M_OUTPUT)
 
 # 4. 노드 구현: 전처리 & 증거 매핑 (PII Masking & Evidence Mapping Middleware)
 def preprocess_node(state: SlackAgentState):
-    logger.info(f"[Middleware: PII Masking & Evidence] 채널({state.channel_id}) 전처리 시작.")
+    logger.info(f"[Middleware: PII Masking & Evidence] Starting preprocessing for channel({state.channel_id}).")
     
     combined_text = ""
     for msg in sorted(state.messages, key=lambda x: float(x.get("ts", 0))):
@@ -99,7 +115,7 @@ def preprocess_node(state: SlackAgentState):
 
     # Cost Guard Middleware: 길이 초과 시 Truncation 적용
     if len(combined_text) > MAX_INPUT_CHARS:
-        logger.warning(f"[Middleware: Cost Guard] 텍스트 길이({len(combined_text)}자)가 제한({MAX_INPUT_CHARS}자)을 초과하여 자릅니다.")
+        logger.warning(f"[Middleware: Cost Guard] Text length({len(combined_text)} chars) exceeds limit({MAX_INPUT_CHARS} chars). Truncating.")
         combined_text = combined_text[:MAX_INPUT_CHARS] + "\n...[COST_GUARD_TRUNCATED]..."
 
     masked_text = mask_pii(combined_text)
@@ -107,13 +123,26 @@ def preprocess_node(state: SlackAgentState):
 
 # 5. 노드 구현: 업무 필터링 (Tool: Work Filter / Middleware: Context Compression)
 def classify_work_node(state: SlackAgentState):
-    logger.info("[Tool: Work Filter] 저비용 모델로 업무 관련 메시지 선별 중...")
+    logger.info("[Tool: Work Filter] Screening work-related messages using a low-cost model...")
+    work_signal_messages = [
+        msg for msg in state.messages if classify_slack_work_signal(str(msg.get("text", ""))).is_reviewable
+    ]
+    if not work_signal_messages:
+        logger.info("[Tool: Work Filter] No deterministic work signal found. Skipping LLM work filter.")
+        return {
+            "is_work_related": False,
+            "processed_text": "",
+            "total_prompt_tokens": state.total_prompt_tokens,
+            "total_completion_tokens": state.total_completion_tokens,
+        }
+
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=state.openai_api_key)
     
-    # 메시지 리스트에서 인덱스와 본문만 추출하여 프롬프트 구성
+    # deterministic 필터를 통과한 메시지와 최소 맥락만 저비용 LLM에 전달한다.
     simple_list = ""
-    for i, msg in enumerate(state.messages):
-        simple_list += f"[{i}] {msg.get('text', '')[:50]}\n"
+    for i, msg in enumerate(work_signal_messages):
+        user_display = msg.get("user_name") or msg.get("user", "Unknown")
+        simple_list += f"[{i}] {user_display}: {msg.get('text', '')[:200]}\n"
         
     prompt = (
         "다음 슬랙 대화 목록 중 기업 지식으로 남길 가치가 있는 업무 관련 메시지의 번호(index)만 콤마로 구분해서 답하세요. "
@@ -134,8 +163,10 @@ def classify_work_node(state: SlackAgentState):
     pt = usage.get('prompt_tokens', 0) if usage else 0
     ct = usage.get('completion_tokens', 0) if usage else 0
     # 정적 분석기를 위한 명시적 타입 확정
-    if not isinstance(pt, int): pt = 0
-    if not isinstance(ct, int): ct = 0
+    if not isinstance(pt, int):
+        pt = 0
+    if not isinstance(ct, int):
+        ct = 0
     
     if "NONE" in res_text:
         return {
@@ -147,7 +178,7 @@ def classify_work_node(state: SlackAgentState):
     # 필터링된 인덱스 추출 및 문맥 재구성 (Context Compression)
     try:
         indices = [int(idx.strip()) for idx in res_text.split(',') if idx.strip().isdigit()]
-        compressed_messages = [state.messages[i] for i in indices if i < len(state.messages)]
+        compressed_messages = [work_signal_messages[i] for i in indices if i < len(work_signal_messages)]
         
         # 압축된 텍스트 생성
         compressed_text = ""
@@ -161,7 +192,7 @@ def classify_work_node(state: SlackAgentState):
             
             compressed_text += f"[{readable_time}] {user_display}: {text} [TS: {ts_val}]\n"
             
-        logger.info(f"[Middleware: Context Compression] 원본 {len(state.messages)}건 -> 필터링 {len(compressed_messages)}건으로 압축 완료.")
+        logger.info(f"[Middleware: Context Compression] Compressed {len(state.messages)} original messages -> {len(compressed_messages)} filtered messages.")
         
         return {
             "is_work_related": True,
@@ -170,7 +201,7 @@ def classify_work_node(state: SlackAgentState):
             "total_completion_tokens": state.total_completion_tokens + ct
         }
     except Exception as e:
-        logger.warning(f"필터링 파싱 실패, 전체 내용으로 진행: {e}")
+        logger.warning(f"Filtering parsing failed, proceeding with full content: {e}")
         return {
             "is_work_related": True,
             "total_prompt_tokens": state.total_prompt_tokens + pt,
@@ -180,12 +211,12 @@ def classify_work_node(state: SlackAgentState):
 # 6. 노드 구현: 요약 및 모델 스위칭 (Summarizer Tool + Model Switching Middleware)
 def summarize_node(state: SlackAgentState):
     # 이미 필터링을 거쳤으므로 텍스트가 짧아져서 4o-mini로도 충분할 가능성이 높아짐
-    model = "gpt-4o-mini"
+    model = "gpt-5-mini"
     if len(state.processed_text) > 2000: # 필터링 후에도 길다면 고성능 모델 사용
-        model = "gpt-4o"
-        logger.info(f"[Middleware: Model Switching] 압축 후에도 내용이 방대하여 고성능 모델({model})을 사용합니다.")
+        model = "gpt-5-mini"
+        logger.info(f"[Middleware: Model Switching] Content remains large after compression; using high-performance model ({model}).")
 
-    logger.info(f"[Tool: Summarizer] 필터링된 핵심 맥락 요약 중... (사용 모델: {model})")
+    logger.info(f"[Tool: Summarizer] Summarizing filtered key context... (Model: {model})")
     llm = ChatOpenAI(model=model, temperature=0, api_key=state.openai_api_key)
     
     # 이름 보존을 위한 강력한 지침 추가
@@ -208,15 +239,17 @@ def summarize_node(state: SlackAgentState):
     usage = response.usage_metadata
     pt = usage.get('prompt_tokens', 0) if usage else 0
     ct = usage.get('completion_tokens', 0) if usage else 0
-    if not isinstance(pt, int): pt = 0
-    if not isinstance(ct, int): ct = 0
+    if not isinstance(pt, int):
+        pt = 0
+    if not isinstance(ct, int):
+        ct = 0
     
     return {"summary": summary_text, "model_name": model, "total_prompt_tokens": state.total_prompt_tokens + pt, "total_completion_tokens": state.total_completion_tokens + ct}
 
 # 7. 노드 구현: 다중 지식 추출 및 폴백 (Agent + Fallback Middleware)
 def extract_candidate_node(state: SlackAgentState):
     current_model = state.model_name
-    logger.info(f"[Agent: Knowledge Extractor] 다중 지식 후보 추출 시작. (모델: {current_model})")
+    logger.info(f"[Agent: Knowledge Extractor] Starting multiple knowledge candidate extraction. (Model: {current_model})")
     try:
         llm = ChatOpenAI(model=current_model, temperature=0, api_key=state.openai_api_key)
         structured_llm = llm.with_structured_output(CandidateList)
@@ -247,7 +280,7 @@ def extract_candidate_node(state: SlackAgentState):
         parsed_result = structured_llm.invoke(prompt)
         
         if not parsed_result or not hasattr(parsed_result, 'candidate_items'):
-            logger.warning("[Agent] 추출된 결과가 없거나 형식이 올바르지 않습니다.")
+            logger.warning("[Agent] No results extracted or invalid format.")
             return {"candidates": [], "total_prompt_tokens": state.total_prompt_tokens + 100, "total_completion_tokens": state.total_completion_tokens + 100}
 
         # 기본 토큰 근사치 가산 (with_structured_output 한계 보완)
@@ -256,8 +289,8 @@ def extract_candidate_node(state: SlackAgentState):
         
         final_candidates = []
         # 중앙 설정 시스템에서 워크스페이스 URL 로드
-        from backend.app.core.config import get_settings
         from backend.app.connectors.slack import build_slack_permalink
+        from backend.app.core.config import get_settings
         settings = get_settings()
         base_url = settings.slack_workspace_url.rstrip('/')
         
@@ -297,7 +330,7 @@ def extract_candidate_node(state: SlackAgentState):
         return {"candidates": final_candidates, "total_prompt_tokens": state.total_prompt_tokens + approx_pt, "total_completion_tokens": state.total_completion_tokens + approx_ct}
         
     except Exception as e:
-        logger.error(f"[Middleware: Fallback] 기본 모델 실패. Gemini 모델로 폴백합니다. Error: {e}")
+        logger.error(f"[Middleware: Fallback] Primary model failed. Falling back to Gemini model. Error: {e}")
         gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro", temperature=0, google_api_key=state.gemini_api_key)
         
         response = gemini_llm.invoke(f"다음 텍스트에서 주요 결정 사항과 할 일을 추출해 JSON 리스트 형식으로만 답해줘. 사용자 이름은 전체 형식을 유지해줘: {state.summary}")
@@ -323,29 +356,153 @@ def extract_candidate_node(state: SlackAgentState):
             "total_completion_tokens": state.total_completion_tokens + 100
         }
 
-# 8. LangGraph 그래프 구축
+# 8. 노드 구현: 등록 프로젝트 분류 (LangChain Tool Agent)
+def project_route_node(state: SlackAgentState):
+    if not state.projects or not state.candidates:
+        return {
+            "candidates": state.candidates,
+            "project_prompt_tokens": state.project_prompt_tokens,
+            "project_completion_tokens": state.project_completion_tokens,
+        }
+
+    router_model = state.project_router_model or _build_project_router_model(state)
+    routing_result = route_projects_for_candidates(
+        model=router_model,
+        projects=state.projects,
+        candidates=[
+            _routing_candidate_payload(
+                item_index=index,
+                candidate=candidate,
+                channel_id=state.channel_id,
+            )
+            for index, candidate in enumerate(state.candidates)
+        ],
+    )
+    routed_candidates = _apply_project_routing_decisions(
+        candidates=state.candidates,
+        decisions=routing_result.decisions,
+    )
+    return {
+        "candidates": routed_candidates,
+        "project_prompt_tokens": state.project_prompt_tokens + routing_result.input_tokens,
+        "project_completion_tokens": state.project_completion_tokens + routing_result.output_tokens,
+        "project_model_name": routing_result.model_name,
+        "total_prompt_tokens": state.total_prompt_tokens + routing_result.input_tokens,
+        "total_completion_tokens": state.total_completion_tokens + routing_result.output_tokens,
+    }
+
+
+def _build_project_router_model(state: SlackAgentState) -> LangChainProjectRouterModel:
+    chat_model = ChatOpenAI(
+        model=state.model_name,
+        temperature=0,
+        api_key=state.openai_api_key,
+    )
+    return LangChainProjectRouterModel(
+        chat_model=chat_model,
+        projects=state.projects,
+        model_name=state.model_name,
+    )
+
+
+def _routing_candidate_payload(
+    *,
+    item_index: int,
+    candidate: ReviewCandidate,
+    channel_id: str,
+) -> dict[str, Any]:
+    return {
+        "item_index": item_index,
+        "source_id": _candidate_source_id(candidate, channel_id),
+        "title": candidate.title,
+        "summary": candidate.summary,
+        "item_type": candidate.item_type,
+        "source_links": candidate.source_links,
+        "source_snippets": candidate.source_snippets,
+        "confidence_score": candidate.confidence_score,
+    }
+
+
+def _candidate_source_id(candidate: ReviewCandidate, channel_id: str) -> str:
+    for url in candidate.source_links:
+        if "/p" not in url:
+            continue
+        raw_ts = url.split("/p")[-1].split("?")[0]
+        if len(raw_ts) >= 16:
+            return f"{channel_id}:{raw_ts[:10]}.{raw_ts[10:]}"
+    digest = hashlib.sha1(
+        f"{candidate.title}\n{candidate.summary}".encode()
+    ).hexdigest()[:12]
+    return f"{channel_id}:candidate-{digest}"
+
+
+def _apply_project_routing_decisions(
+    *,
+    candidates: list[ReviewCandidate],
+    decisions: list[ProjectRoutingDecision],
+) -> list[ReviewCandidate]:
+    decision_by_index = {decision.item_index: decision for decision in decisions}
+    routed: list[ReviewCandidate] = []
+    for index, candidate in enumerate(candidates):
+        decision = decision_by_index.get(index)
+        if decision is None:
+            routed.append(candidate)
+            continue
+        payload_fields = {
+            **candidate.payload_fields,
+            "project_assignment_method": "llm_tool",
+            "project_assignment_summary": decision.assignment_summary,
+            "project_assignment_reason": decision.assignment_reason,
+            "project_assignment_confidence": decision.confidence_score,
+            "project_alternatives": decision.alternatives,
+            "project_needs_user_selection": decision.needs_user_selection,
+        }
+        if decision.project_key:
+            payload_fields["project_key"] = decision.project_key
+        if decision.project_name:
+            payload_fields["project_name"] = decision.project_name
+        routed.append(replace(candidate, payload_fields=payload_fields))
+    return routed
+
+
+# 9. LangGraph 그래프 구축
 def build_slack_agent_graph():
     workflow = StateGraph(SlackAgentState)
     workflow.add_node("preprocess", preprocess_node)
     workflow.add_node("classify", classify_work_node)
     workflow.add_node("summarize", summarize_node)
     workflow.add_node("extract", extract_candidate_node)
+    workflow.add_node("project_route", project_route_node)
     
     workflow.add_edge(START, "preprocess")
     workflow.add_edge("preprocess", "classify")
     workflow.add_conditional_edges("classify", lambda state: "summarize" if state.is_work_related else END)
     workflow.add_edge("summarize", "extract")
-    workflow.add_edge("extract", END)
+    workflow.add_edge("extract", "project_route")
+    workflow.add_edge("project_route", END)
     return workflow.compile()
 
-# 9. 실행 엔트리포인트
-def process_daily_slack_sync(channel_id: str, messages: List[dict], openai_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
+# 10. 실행 엔트리포인트
+def process_daily_slack_sync(
+    channel_id: str,
+    messages: list[dict],
+    openai_api_key: str | None = None,
+    gemini_api_key: str | None = None,
+    projects: list[ProjectOption | dict[str, str]] | None = None,
+    project_router_model: Any | None = None,
+):
     app = build_slack_agent_graph()
+    project_options = [
+        project if isinstance(project, ProjectOption) else ProjectOption.model_validate(project)
+        for project in (projects or [])
+    ]
     initial_state = SlackAgentState(
         channel_id=channel_id, 
         messages=messages,
         openai_api_key=openai_api_key,
-        gemini_api_key=gemini_api_key
+        gemini_api_key=gemini_api_key,
+        projects=project_options,
+        project_router_model=project_router_model,
     )
     
     final_state = app.invoke(initial_state)
@@ -363,7 +520,7 @@ def process_daily_slack_sync(channel_id: str, messages: List[dict], openai_api_k
         cache_hit=False # 배치는 현재 캐시 미적용
     )
     
-    logger.info(f"[MW: Token Tracker] 비용 정산 완료: ${cost_usd:.5f} (총 토큰: {agent_run_cost.token_usage.total_tokens})")
+    logger.info(f"[MW: Token Tracker] Cost settlement completed: ${cost_usd:.5f} (Total tokens: {agent_run_cost.token_usage.total_tokens})")
     
     # 결과 반환 시 비용 객체 추가
     final_state["run_cost"] = agent_run_cost

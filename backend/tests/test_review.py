@@ -6,6 +6,7 @@ from backend.app.models import (
     Document,
     DocumentChunk,
     DocumentVersion,
+    Project,
     ReviewItem,
     Source,
     TimelineEvent,
@@ -97,6 +98,104 @@ def test_patch_review_item_updates_payload(client) -> None:
     assert body['status'] == 'pending_review'
 
 
+def test_patch_review_item_requires_registered_project_key(client, db_session) -> None:
+    db_session.add(
+        Project(
+            project_key='project-client-portal',
+            name='고객 포털 개편',
+            summary='고객 포털 개편 프로젝트',
+        )
+    )
+    item = ReviewItem(
+        item_type='history_event',
+        payload={'title': 'Project candidate', 'summary': 'Needs a project.'},
+        source_links=['https://slack.mock/team/123'],
+        source_snippets=['고객 포털 화면 검토가 필요합니다.'],
+        confidence_score=0.8,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    missing = client.patch(f"/api/v1/review/{item.id}", json={'payload': {'project_key': 'project-missing'}})
+    valid = client.patch(f"/api/v1/review/{item.id}", json={'payload': {'project_key': 'project-client-portal'}})
+
+    assert missing.status_code == 400
+    assert missing.json()['detail'] == 'Project key is not registered'
+    assert valid.status_code == 200
+    assert valid.json()['payload']['project_key'] == 'project-client-portal'
+    assert valid.json()['payload']['project_name'] == '고객 포털 개편'
+
+
+def test_review_list_supports_limit_offset_metadata(client, db_session) -> None:
+    for index in range(3):
+        db_session.add(
+            ReviewItem(
+                item_type='history_event',
+                payload={'title': f'Paged item {index}', 'summary': 'Pagination target.'},
+                source_links=[f'https://slack.mock/team/{index}'],
+                source_snippets=[f'Snippet {index}'],
+                confidence_score=0.7,
+                permission_level='internal',
+                status='pending_review',
+            )
+        )
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review&limit=1&offset=1')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['total_count'] == 3
+    assert body['limit'] == 1
+    assert body['offset'] == 1
+    assert body['has_more'] is True
+    assert len(body['items']) == 1
+
+
+def test_review_list_prioritizes_knowledge_candidates_before_project_assignments(
+    client,
+    db_session,
+) -> None:
+    knowledge_item = ReviewItem(
+        item_type='decision_record',
+        payload={
+            'title': 'Slack decision candidate',
+            'decision_summary': 'Slack Agent extracted this decision.',
+        },
+        source_links=['https://slack.mock/archives/C123/p1'],
+        source_snippets=['Redis queue policy was decided.'],
+        confidence_score=0.91,
+        permission_level='internal',
+        status='pending_review',
+    )
+    project_assignment = ReviewItem(
+        item_type='project_assignment',
+        payload={
+            'title': 'Project source assignment',
+            'summary': 'Project classifier linked this source.',
+            'agent_name': 'project_classifier',
+        },
+        source_links=['https://slack.mock/archives/C123/p2'],
+        source_snippets=['Project evidence snippet.'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add_all([knowledge_item, project_assignment])
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review&limit=2')
+
+    assert response.status_code == 200
+    assert [item['item_type'] for item in response.json()['items']] == [
+        'decision_record',
+        'project_assignment',
+    ]
+
+
 def test_request_more_evidence_changes_status(client) -> None:
     client.post('/api/v1/integrations/slack/sync')
     item = client.get('/api/v1/review?status=pending_review').json()['items'][0]
@@ -105,6 +204,68 @@ def test_request_more_evidence_changes_status(client) -> None:
 
     assert response.status_code == 200
     assert response.json()['status'] == 'needs_more_evidence'
+
+
+def test_bulk_reject_pending_review_items(client, db_session) -> None:
+    items = [
+        ReviewItem(
+            item_type='history_event',
+            payload={'title': f'Reject {index}', 'summary': 'Reject in bulk.'},
+            source_links=[f'https://slack.mock/reject/{index}'],
+            source_snippets=[f'Reject snippet {index}'],
+            confidence_score=0.7,
+            permission_level='internal',
+            status='pending_review',
+        )
+        for index in range(3)
+    ]
+    db_session.add_all(items)
+    db_session.commit()
+    item_ids = [item.id for item in items]
+
+    response = client.post('/api/v1/review/bulk', json={'action': 'reject', 'item_ids': item_ids})
+
+    assert response.status_code == 200
+    assert response.json()['rejected_count'] == 3
+    assert response.json()['failed_items'] == []
+    statuses = db_session.scalars(select(ReviewItem.status).where(ReviewItem.id.in_(item_ids))).all()
+    assert statuses == ['rejected', 'rejected', 'rejected']
+
+
+def test_bulk_approve_reports_items_that_cannot_be_promoted(client, db_session) -> None:
+    valid = ReviewItem(
+        item_type='todo',
+        payload={
+            'title': '고객사 공유본 준비',
+            'priority': 'high',
+            'priority_reason': '금요일까지 고객사 공유본 준비가 필요합니다.',
+        },
+        source_links=['https://drive.mock/project-alpha/plan'],
+        source_snippets=['고객사 공유본을 준비해주세요.'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='pending_review',
+    )
+    invalid = ReviewItem(
+        item_type='decision_record',
+        payload={'title': 'Use Redis'},
+        source_links=['https://slack.mock/team/456'],
+        source_snippets=['Redis decision needs a summary.'],
+        confidence_score=0.9,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add_all([valid, invalid])
+    db_session.commit()
+
+    response = client.post('/api/v1/review/bulk', json={'action': 'approve', 'item_ids': [valid.id, invalid.id]})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['approved_count'] == 1
+    assert body['failed_items'] == [{'id': invalid.id, 'detail': 'Review item is missing required fields'}]
+    assert db_session.get(ReviewItem, valid.id).status == 'approved'
+    assert db_session.get(ReviewItem, invalid.id).status == 'pending_review'
 
 
 def test_request_more_evidence_preserves_reviewer_note(client, db_session) -> None:

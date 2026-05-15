@@ -36,6 +36,11 @@ def get_configured_connector(connector_type: str, settings: Settings) -> Connect
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
+            user_client=(
+                SlackWebApiClient(bot_token=settings.slack_user_token)
+                if settings.slack_user_token
+                else None
+            ),
         )
 
     if not settings.paraworks_demo_mode:
@@ -90,6 +95,11 @@ def get_sync_connector(
                 workspace_url=settings.slack_workspace_url,
             ),
             client=SlackWebApiClient(bot_token=settings.slack_bot_token),
+            user_client=(
+                SlackWebApiClient(bot_token=settings.slack_user_token)
+                if settings.slack_user_token
+                else None
+            ),
         )
 
     if connector_type in GOOGLE_CONNECTOR_TYPES:
@@ -148,6 +158,11 @@ def _get_installed_slack_connector(
             'slack connector credential is missing. Reconnect Slack before syncing.'
         )
 
+    user_token = _resolve_installed_slack_user_token(
+        connection=connection,
+        token_vault=token_vault,
+    )
+
     return SlackConnector(
         config=SlackConnectorConfig(
             bot_token=bot_token,
@@ -159,7 +174,23 @@ def _get_installed_slack_connector(
             workspace_url=connection.workspace_url or settings.slack_workspace_url,
         ),
         client=SlackWebApiClient(bot_token=bot_token),
+        user_client=SlackWebApiClient(bot_token=user_token) if user_token else None,
     )
+
+
+def _resolve_installed_slack_user_token(
+    *,
+    connection: IntegrationConnection,
+    token_vault: LocalTokenVault,
+) -> str | None:
+    if not connection.raw_metadata.get('has_user_token'):
+        return None
+    user_token_ref = (
+        connection.token_ref.rsplit(':', 1)[0] + ':user'
+        if connection.token_ref.endswith(':bot')
+        else f'local:slack:{connection.workspace_id}:user'
+    )
+    return token_vault.resolve(user_token_ref)
 
 
 def _get_installed_google_connector(

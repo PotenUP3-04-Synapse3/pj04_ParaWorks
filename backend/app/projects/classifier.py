@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models import DocumentChunk, ReviewItem, Source
+from backend.app.agents.slack_agent.quality import classify_slack_work_signal
+from backend.app.models import DocumentChunk, Project, ReviewItem, Source
 
 
 @dataclass(frozen=True)
@@ -16,20 +17,7 @@ class CanonicalProject:
     aliases: tuple[str, ...]
 
 
-CANONICAL_PROJECTS = (
-    CanonicalProject(
-        project_key='k-tech-pilot',
-        name='K테크 파일럿',
-        summary='K테크 솔루션즈 엔터프라이즈 파일럿 계약, 온보딩, 검증 일정을 추적합니다.',
-        aliases=('k테크', 'k-tech', 'ktech', '파일럿', '02_파일럿_프로젝트', '엔터프라이즈 파일럿'),
-    ),
-    CanonicalProject(
-        project_key='seed-ir',
-        name='시드 투자 IR',
-        summary='시드 투자 IR, 투자자 커뮤니케이션, 재무/피치덱 준비 흐름을 추적합니다.',
-        aliases=('ir', '투자', 'series seed', 'seed', '03_ir_투자', '피치덱', 'vc', '밸류에이션'),
-    ),
-)
+CANONICAL_PROJECTS: tuple[CanonicalProject, ...] = ()
 
 NON_PROJECT_MARKERS = (
     '00_회사규정',
@@ -37,12 +25,36 @@ NON_PROJECT_MARKERS = (
     '회사규정',
     '사내 규정',
     '복리후생',
-    '온보딩 가이드',
+    '홍보 가이드',
     '보안_정책',
     '정보 보안 정책',
 )
 
 PROJECT_SOURCE_TYPES = ('gmail', 'gmail_attachment', 'drive', 'calendar', 'slack')
+
+_GENERIC_PROJECT_ALIAS_TERMS = {
+    'data',
+    'drive',
+    'file',
+    'files',
+    'gmail',
+    'google',
+    'google drive',
+    'slack',
+    'source',
+    'sources',
+    'summarizes',
+    'timeline',
+}
+
+_AMBIGUOUS_SINGLE_TERMS = {
+    '유치',
+    '투자',
+    '회의',
+    '일정',
+    '자료',
+}
+_TOKEN_CLASS = '0-9A-Za-z가-힣'
 
 
 @dataclass(frozen=True)
@@ -61,16 +73,20 @@ class ProjectAssignmentCandidate:
     timestamp: str
 
 
-def classify_source_project(source: Source, chunks: list[DocumentChunk]) -> ProjectAssignmentCandidate | None:
+def classify_source_project(
+    source: Source,
+    chunks: list[DocumentChunk],
+    projects: list[Project] | None = None,
+) -> ProjectAssignmentCandidate | None:
     haystack = _source_haystack(source, chunks)
     lowered = haystack.lower()
     if any(marker.lower() in lowered for marker in NON_PROJECT_MARKERS):
         return None
 
-    matched_project: CanonicalProject | None = None
+    matched_project: Project | None = None
     matched_alias = ''
-    for project in CANONICAL_PROJECTS:
-        for alias in project.aliases:
+    for project in projects or []:
+        for alias in _project_aliases(project):
             if _contains_alias(lowered, alias):
                 matched_project = project
                 matched_alias = alias
@@ -79,6 +95,8 @@ def classify_source_project(source: Source, chunks: list[DocumentChunk]) -> Proj
             break
 
     if matched_project is None:
+        return None
+    if source.source_type == 'slack' and not _has_reviewable_slack_signal(source, chunks):
         return None
 
     snippet = _best_snippet(source, chunks)
@@ -99,6 +117,10 @@ def classify_source_project(source: Source, chunks: list[DocumentChunk]) -> Proj
 
 
 def build_project_assignment_candidates(db: Session) -> list[ProjectAssignmentCandidate]:
+    projects = db.scalars(select(Project).order_by(Project.created_at.desc(), Project.id.desc())).all()
+    if not projects:
+        return []
+
     sources = db.scalars(
         select(Source)
         .where(Source.source_type.in_(PROJECT_SOURCE_TYPES))
@@ -110,12 +132,11 @@ def build_project_assignment_candidates(db: Session) -> list[ProjectAssignmentCa
         ).all()
         for source in sources
     }
-    candidates = [
+    return [
         candidate
         for source in sources
-        if (candidate := classify_source_project(source, chunks_by_source.get(source.id, []))) is not None
+        if (candidate := classify_source_project(source, chunks_by_source.get(source.id, []), projects)) is not None
     ]
-    return candidates
 
 
 def create_project_assignment_review_items(db: Session) -> list[ReviewItem]:
@@ -159,11 +180,59 @@ def project_by_key(project_key: str) -> CanonicalProject | None:
     return next((project for project in CANONICAL_PROJECTS if project.project_key == project_key), None)
 
 
+def _project_aliases(project: Project) -> tuple[str, ...]:
+    raw_aliases = [project.name, project.project_key.replace('project-', '').replace('-', ' ')]
+    raw_aliases.extend(_meaningful_terms(project.name))
+    raw_aliases.extend(_meaningful_terms(project.summary))
+    seen: set[str] = set()
+    aliases: list[str] = []
+    for alias in raw_aliases:
+        normalized = ' '.join(alias.split()).strip()
+        if len(normalized) < 2:
+            continue
+        key = normalized.lower()
+        if normalized in _AMBIGUOUS_SINGLE_TERMS or key in _GENERIC_PROJECT_ALIAS_TERMS:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        aliases.append(normalized)
+    return tuple(aliases)
+
+
+def _meaningful_terms(text: str) -> list[str]:
+    terms = re.findall(r'[0-9A-Za-z가-힣]{2,}', text)
+    stopwords = {
+        '프로젝트',
+        '업무',
+        '진행',
+        '상태',
+        '고객',
+        '문서',
+        '계약',
+        '이번',
+        '관련',
+        '확인',
+        '개편',
+        '활동',
+        '관리',
+    }
+    return [
+        term
+        for term in terms
+        if term.lower() not in stopwords
+        and term.lower() not in _GENERIC_PROJECT_ALIAS_TERMS
+        and term not in _AMBIGUOUS_SINGLE_TERMS
+    ]
+
+
 def _contains_alias(lowered_haystack: str, alias: str) -> bool:
-    lowered_alias = alias.lower()
-    if lowered_alias in {'ir', 'vc'}:
-        return re.search(rf'(?<![0-9a-z]){re.escape(lowered_alias)}(?![0-9a-z])', lowered_haystack) is not None
-    return lowered_alias in lowered_haystack
+    normalized_haystack = ' '.join(lowered_haystack.split())
+    normalized_alias = ' '.join(alias.lower().split())
+    if normalized_alias in {'ir', 'vc'}:
+        return re.search(rf'(?<![0-9a-z]){re.escape(normalized_alias)}(?![0-9a-z])', normalized_haystack) is not None
+    alias_pattern = re.escape(normalized_alias).replace(r'\ ', r'\s+')
+    return re.search(rf'(?<![{_TOKEN_CLASS}]){alias_pattern}(?![{_TOKEN_CLASS}])', normalized_haystack) is not None
 
 
 def _assignment_identity(payload: dict) -> str:
@@ -186,6 +255,24 @@ def _best_snippet(source: Source, chunks: list[DocumentChunk]) -> str:
         if snippet:
             return snippet[:500]
     return source.title
+
+
+def _has_reviewable_slack_signal(source: Source, chunks: list[DocumentChunk]) -> bool:
+    signal_texts = [_slack_message_signal_text(chunk.source_snippet or chunk.text) for chunk in chunks]
+    signal_texts = [text for text in signal_texts if text]
+    if not signal_texts and source.title:
+        signal_texts.append(source.title)
+    return any(classify_slack_work_signal(text).is_reviewable for text in signal_texts)
+
+
+def _slack_message_signal_text(text: str) -> str:
+    cleaned = (text or '').strip()
+    if not cleaned:
+        return ''
+    marker = 'Thread reply:'
+    if marker in cleaned:
+        return cleaned.rsplit(marker, maxsplit=1)[-1].strip()
+    return cleaned
 
 
 def _task_summary(source: Source, snippet: str) -> str:

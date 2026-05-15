@@ -23,15 +23,31 @@ class ConnectorSyncResult:
     parser_status_counts: dict[str, int] = field(default_factory=dict)
 
 
-def sync_connector_events(db: Session, connector: Connector) -> ConnectorSyncResult:
-    job = SyncJob(
-        job_id=f'{connector.source_type}-{uuid4().hex}',
-        connector_type=connector.source_type,
-        status='running',
-        message='sync running',
-        progress_pct=10,
+def sync_connector_events(
+    db: Session,
+    connector: Connector,
+    job_id: str | None = None,
+) -> ConnectorSyncResult:
+    job = (
+        db.scalar(select(SyncJob).where(SyncJob.job_id == job_id))
+        if job_id is not None
+        else None
     )
-    db.add(job)
+    if job is None:
+        job = SyncJob(
+            job_id=job_id or f'{connector.source_type}-{uuid4().hex}',
+            connector_type=connector.source_type,
+            status='running',
+            message='sync running',
+            progress_pct=10,
+        )
+        db.add(job)
+    else:
+        job.connector_type = connector.source_type
+        job.status = 'running'
+        job.message = 'sync running'
+        job.progress_pct = 10
+        job.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(job)
 
