@@ -58,7 +58,7 @@ export default function ProjectsPage() {
       if (preferredKey && nextProjects.some((project) => project.project_key === preferredKey)) {
         setSelectedKey(preferredKey);
       } else {
-        setSelectedKey(nextProjects[0]?.project_key || "");
+        setSelectedKey(preferredProjectKey(nextProjects));
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "프로젝트 목록을 불러오지 못했습니다.");
@@ -346,4 +346,11 @@ function SourceEvidenceLink({ href, label }: { href: string; label: string }) {
       원본 근거
     </a>
   );
+}
+
+function preferredProjectKey(projects: ProjectMemory[]) {
+  const projectWithApprovedEvidence = projects.find(
+    (project) => project.evidence.length > 0 || project.activity_items.length > 0 || project.timeline_items.length > 0,
+  );
+  return projectWithApprovedEvidence?.project_key || projects[0]?.project_key || "";
 }

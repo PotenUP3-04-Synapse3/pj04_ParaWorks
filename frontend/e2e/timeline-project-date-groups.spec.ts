@@ -50,7 +50,8 @@ test("Timeline groups approved project items by date", async ({ page }) => {
                 confidence_score: 0.9,
                 permission_level: "internal",
                 review_status: "approved",
-                created_at: "2026-05-15T01:00:00Z",
+                created_at: "2026-05-15T09:00:00Z",
+                occurred_at: "2026-05-14T01:00:00+09:00",
                 evidence_reason: "승인된 항목",
                 project_key: "project-alpha",
               },
@@ -64,7 +65,8 @@ test("Timeline groups approved project items by date", async ({ page }) => {
                 confidence_score: 0.9,
                 permission_level: "internal",
                 review_status: "approved",
-                created_at: "2026-05-15T06:00:00Z",
+                created_at: "2026-05-15T10:00:00Z",
+                occurred_at: "2026-05-14T06:00:00+09:00",
                 evidence_reason: "승인된 항목",
                 project_key: "project-alpha",
               },
@@ -78,7 +80,8 @@ test("Timeline groups approved project items by date", async ({ page }) => {
                 confidence_score: 0.9,
                 permission_level: "internal",
                 review_status: "approved",
-                created_at: "2026-05-14T06:00:00Z",
+                created_at: "2026-05-15T11:00:00Z",
+                occurred_at: "2026-05-13T06:00:00+09:00",
                 evidence_reason: "승인된 항목",
                 project_key: "project-alpha",
               },
@@ -92,15 +95,130 @@ test("Timeline groups approved project items by date", async ({ page }) => {
 
   await page.goto("/timeline");
 
-  await expect(page.getByText("2026년 5월 15일")).toBeVisible();
-  await expect(page.getByText("2026년 5월 14일")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /5월 14일/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /5월 13일/ })).toBeVisible();
+  await expect(page.getByText("2026년 5월 15일")).toBeHidden();
   await expect(page.getByText("오전 점검")).toBeVisible();
   await expect(page.getByText("오후 배포")).toBeVisible();
-  await expect(page.getByText("전날 회의")).toBeVisible();
+  await expect(page.getByText("전날 회의")).toBeHidden();
+  await expect(page.getByText("Redis 점검")).toBeHidden();
+  await expect(page.getByText("History: Redis 점검")).toBeHidden();
+  await expect(page.getByText(/01:00/)).toBeVisible();
+  await expect(page.getByText("Slack").first()).toBeVisible();
 
+  await page.getByRole("button", { name: "2026년 5월 14일" }).click();
+  await expect(page.getByText("오전 점검")).toBeHidden();
+  await expect(page.getByText("오후 배포")).toBeHidden();
+  await expect(page.getByRole("heading", { name: /5월 14일/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /5월 13일/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "2026년 5월 14일" }).click();
+  await expect(page.getByText("오전 점검")).toBeVisible();
+  await expect(page.getByText("Redis 점검")).toBeHidden();
+  await expect(page.getByText(/01:00/)).toBeVisible();
+
+  await page.getByRole("button", { name: "2026년 5월 13일" }).click();
+  await expect(page.getByText("오전 점검")).toBeHidden();
+  await expect(page.getByText("전날 회의")).toBeVisible();
+  await expect(page.getByText("회의 완료")).toBeHidden();
+
+  await page.getByRole("button", { name: "2026년 5월 14일" }).click();
   await page.getByRole("button", { name: "Open 오전 점검" }).click();
+  await expect(page.getByText("Redis 점검")).toBeVisible();
   const sourceLink = page.getByRole("link", { name: "Open source" });
   await expect(sourceLink).toHaveAttribute("href", "https://slack.example/1");
   await expect(sourceLink).toHaveAttribute("target", "_blank");
   await expect(sourceLink).toHaveAttribute("rel", /noopener/);
+
+  await page.context().route("https://slack.example/1", async (route) => {
+    await route.fulfill({ contentType: "text/html", body: "<title>Slack source</title>" });
+  });
+  const popupPromise = page.waitForEvent("popup");
+  await sourceLink.click();
+  const popup = await popupPromise;
+  expect(popup.url()).toBe("https://slack.example/1");
+  await popup.close();
+});
+
+test("Timeline opens on the first project that has approved timeline items", async ({ page }) => {
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal"],
+          name: "Admin",
+          title: "Admin",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { unread_count: 0, notifications: [] } });
+  });
+  await page.route("**/api/v1/projects", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        project_count: 2,
+        hidden_project_count: 0,
+        hidden_evidence_count: 0,
+        projects: [
+          {
+            project_key: "project-empty",
+            name: "빈 프로젝트",
+            summary: "아직 승인 타임라인이 없습니다.",
+            source_types: [],
+            evidence_count: 0,
+            permission_level: "internal",
+            latest_timestamp: "",
+            pending_review_count: 0,
+            evidence: [],
+            activity_items: [],
+            timeline_items: [],
+          },
+          {
+            project_key: "project-alpha",
+            name: "Project Alpha",
+            summary: "승인 타임라인이 있는 프로젝트입니다.",
+            source_types: ["slack"],
+            evidence_count: 0,
+            permission_level: "internal",
+            latest_timestamp: "2026-05-15T09:00:00Z",
+            pending_review_count: 0,
+            evidence: [],
+            activity_items: [],
+            timeline_items: [
+              {
+                id: "timeline_event:1",
+                item_type: "timeline_event",
+                title: "오전 점검",
+                summary: "Redis 점검",
+                source_links: ["https://slack.example/1"],
+                source_snippets: ["점검"],
+                confidence_score: 0.9,
+                permission_level: "internal",
+                review_status: "approved",
+                created_at: "2026-05-15T09:00:00Z",
+                occurred_at: "2026-05-14T01:00:00+09:00",
+                evidence_reason: "승인된 항목",
+                project_key: "project-alpha",
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+
+  await page.goto("/timeline");
+
+  await expect(page.getByRole("button", { name: "Project Alpha" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("오전 점검")).toBeVisible();
+  await expect(page.getByText("승인된 프로젝트 타임라인 항목이 아직 없습니다.")).toBeHidden();
 });

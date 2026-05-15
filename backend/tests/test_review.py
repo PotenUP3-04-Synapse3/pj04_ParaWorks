@@ -152,15 +152,18 @@ def test_slack_agent_review_item_requires_project_before_approval(client, db_ses
 
     preview = client.get(f'/api/v1/review/{item.id}/promotion-preview')
     blocked = client.post(f'/api/v1/review/{item.id}/approve')
-    patched = client.patch(f'/api/v1/review/{item.id}', json={'payload': {'project_key': 'project-alpha'}})
+    response = client.patch(f"/api/v1/review/{item.id}", json={'payload': {'project_key': 'project-alpha'}})
     approved = client.post(f'/api/v1/review/{item.id}/approve')
 
     assert preview.status_code == 200
     assert preview.json()['can_approve'] is False
     assert 'project_key' in preview.json()['missing_required_fields']
     assert blocked.status_code == 400
-    assert patched.status_code == 200
-    assert patched.json()['payload']['project_name'] == 'Project Alpha'
+    assert response.status_code == 200
+    body = response.json()
+    assert body['payload']['project_key'] == 'project-alpha'
+    assert body['payload']['project_name'] == 'Project Alpha'
+    assert body['payload']['project_needs_user_selection'] is False
     assert approved.status_code == 200
     assert approved.json()['promotion_result']['project_key'] == 'project-alpha'
 
@@ -458,6 +461,40 @@ def test_approve_review_item_rejects_missing_required_fields(client, db_session)
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Review item is missing required fields'
+
+
+def test_approve_mail_document_llm_tool_item_requires_project_selection(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='todo',
+        payload={
+            'title': 'Reply to customer with Drive plan',
+            'priority': 'high',
+            'priority_reason': 'The customer asked for the reviewed plan.',
+            'agent_name': 'mail_document_agent',
+            'project_assignment_method': 'llm_tool',
+            'project_assignment_summary': 'No registered project was selected automatically.',
+            'project_assignment_reason': 'The Gmail and Drive evidence did not clearly match a project.',
+            'project_needs_user_selection': True,
+            'source_ids': ['gmail:message-1', 'drive:file-1'],
+        },
+        source_links=['https://mail.google.com/mail/u/0/#inbox/message-1', 'https://drive.mock/file-1'],
+        source_snippets=['Customer asked for the reviewed plan.', 'The Drive plan needs confirmation.'],
+        confidence_score=0.82,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    preview = client.get(f'/api/v1/review/{item.id}/promotion-preview')
+    approve = client.post(f'/api/v1/review/{item.id}/approve')
+
+    assert preview.status_code == 200
+    assert preview.json()['can_approve'] is False
+    assert preview.json()['missing_required_fields'] == ['project_key']
+    assert approve.status_code == 400
+    assert approve.json()['detail'] == '프로젝트를 선택해야 승인할 수 있습니다.'
 
 
 def test_approve_todo_promotes_clean_korean_timeline_without_mojibake(client, db_session) -> None:

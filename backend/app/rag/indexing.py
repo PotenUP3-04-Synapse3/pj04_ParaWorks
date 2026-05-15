@@ -319,6 +319,7 @@ def _decision_documents(db: Session) -> list[VectorDocument]:
             source_snippets=decision.source_snippets,
             permission_level=decision.permission_level,
             timestamp=decision.created_at.isoformat(),
+            project_key=decision.project_key,
         )
         for decision in decisions
     ]
@@ -341,6 +342,7 @@ def _history_documents(db: Session) -> list[VectorDocument]:
             source_snippets=event.source_snippets,
             permission_level=event.permission_level,
             timestamp=event.created_at.isoformat(),
+            project_key=event.project_key,
         )
         for event in events
     ]
@@ -362,6 +364,7 @@ def _timeline_documents(db: Session) -> list[VectorDocument]:
             source_snippets=event.source_snippets,
             permission_level=event.permission_level,
             timestamp=event.created_at.isoformat(),
+            project_key=event.project_key,
         )
         for event in events
     ]
@@ -384,6 +387,7 @@ def _todo_documents(db: Session) -> list[VectorDocument]:
             source_snippets=todo.source_snippets,
             permission_level=todo.permission_level,
             timestamp=todo.created_at.isoformat(),
+            project_key=todo.project_key,
         )
         for todo in todos
     ]
@@ -399,6 +403,7 @@ def _knowledge_document(
     source_snippets: list[str],
     permission_level: str,
     timestamp: str,
+    project_key: str | None = None,
 ) -> VectorDocument:
     # 지식 항목 인덱싱 시에도 메타데이터 최대한 보강
     return VectorDocument(
@@ -413,6 +418,7 @@ def _knowledge_document(
             'title': title,
             'author': 'ParaWorks AI (Verified)',
             'timestamp': timestamp,
+            'project_key': project_key,
         },
     )
 

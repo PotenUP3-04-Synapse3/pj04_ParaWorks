@@ -6,6 +6,30 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-15 프로젝트 근거 기본 선택 및 Slack 원문 시각 보강
+
+- 프로젝트/타임라인 탭이 최신 생성 프로젝트를 무조건 기본 선택해, 승인 근거가 있는 프로젝트가 있어도 빈 프로젝트가 먼저 보이던 문제를 수정했다.
+- 프로젝트 탭은 승인된 원본 근거, 활동, 타임라인이 있는 첫 프로젝트를 기본 선택하고, 타임라인 탭은 승인된 타임라인 항목이 있는 첫 프로젝트를 기본 선택한다.
+- Slack source URL이 Source에 매칭되더라도 `raw_metadata.ts`가 비어 있으면 `Source.created_at`보다 Slack permalink의 `p...` timestamp를 먼저 사용한다.
+- 실제 Docker DB에서 `project-paraworks-mvp`가 원본 근거 12건과 타임라인 6건을 계산하고, 승인 시각(`created_at`)과 원문 시각(`occurred_at`)이 분리되는 것을 확인했다.
+- 검증: 프로젝트 메모리/Review backend 47개 통과, ruff 통과, frontend lint/build 통과, 핵심 Playwright 6개 통과.
+
+포트폴리오 관점:
+
+- 사용자가 만든 빈 프로젝트와 승인 데이터가 쌓인 프로젝트가 함께 있어도, 데모 첫 화면에서 실제 가치가 있는 프로젝트 근거와 활동이 바로 보이도록 개선했다.
+
+## 2026-05-15 Gmail/Drive 프로젝트 라우팅 승인 연결
+
+- `backend/app/agent_runtime/project_routing.py`에 Gmail, Drive, Slack이 함께 쓸 수 있는 공용 프로젝트 라우팅 계약을 추가했다.
+- Mail/Document Agent가 만든 `llm_tool` 기반 ReviewItem은 프로젝트가 확정되지 않았거나 사용자 선택이 필요한 상태이면 승인할 수 없도록 Review 승인 정책을 강화했다.
+- Review 화면에서 프로젝트 미선택 Gmail/Drive 후보는 "프로젝트 선택 후 승인 가능" 안내와 함께 승인 버튼이 비활성화되고, 등록 프로젝트를 선택하면 같은 ReviewItem을 승인할 수 있다.
+- 승인된 Gmail/Drive 후보는 기존 Review Queue 신뢰 경계를 거쳐 Timeline/Projects에 프로젝트별 활동으로 표시되고, 승인된 source chunk와 approved knowledge는 RAG indexing 대상에 포함된다.
+- approved knowledge의 벡터 문서 메타데이터에 `project_key`를 보존해 프로젝트 기반 검색/분석으로 이어질 수 있게 했다.
+- 검증: 공용 라우팅/Review/Project/RAG 백엔드 테스트 74개 통과, ruff 통과, 프론트 lint/build 통과, Gmail/Drive Review -> Timeline -> Projects Playwright desktop/mobile 2개 통과, 기존 Review project routing Playwright desktop/mobile 2개 통과.
+
+Portfolio angle:
+
+- Gmail/Drive 증거가 AI 후보에서 끝나지 않고, 프로젝트 선택과 사람 승인 후 회사 기억, 프로젝트 활동, 타임라인, RAG 색인까지 이어지는 제품 루프를 보여준다.
 ## 2026-05-15 Slack 프로젝트 Tool Routing 승인 경계 완성
 
 - Slack 신규 sync에서 규칙 기반 `project_assignment` 생성을 중단하고, Slack Agent의 LangChain tool routing 결과만 프로젝트 지정 근거로 사용하게 했다.
@@ -4111,3 +4135,21 @@ Cost/security note:
   - 프로젝트 탭의 `연결된 원본 근거`와 `승인된 프로젝트 활동` 카드에서 원본
     근거 링크를 바로 열 수 있게 했다.
   - 검증: frontend lint/build 통과, Playwright 원본 링크 검증 2개 통과.
+- `fix: 타임라인 source time과 프로젝트 근거 UX 개선`
+  - 타임라인을 승인 시각이 아닌 실제 Slack 대화 시각 기준 `occurred_at`으로
+    정렬하고, 날짜 단위 compact/detail 토글을 추가했다.
+  - 타임라인 리스트는 기본적으로 title만 보이게 하여 스캔 속도를 높였다.
+  - 프로젝트 탭이 승인된 활동의 source evidence를 `연결된 원본 근거`로
+    표시하도록 바꿨다.
+  - 검증: backend 프로젝트/승인 테스트 44개 통과, ruff 통과, frontend
+    lint/build 통과, Playwright 타임라인/프로젝트/Slack 흐름 3개 통과.
+- `fix: 타임라인 날짜 accordion UX 조정`
+  - 타임라인 날짜 헤더를 직접 클릭하는 accordion으로 바꿔 모든 날짜를 항상
+    보이게 하고, 선택한 날짜의 타임라인만 펼쳐지게 했다.
+  - 펼쳐진 타임라인 카드에는 title과 source 시간, source type, 승인 상태,
+    summary를 함께 표시한다.
+  - 검증: frontend lint/build 통과, Playwright 타임라인/Slack 흐름 2개 통과.
+- `fix: 타임라인 목록 summary 노출 제거`
+  - 타임라인 목록 카드에서 `result_summary` 노출을 제거하고, 상세 내용은
+    Slack history 버튼을 눌렀을 때 오른쪽 상세 패널에서만 보이게 했다.
+  - 검증: frontend lint/build 통과, Playwright 타임라인/Slack 흐름 2개 통과.
