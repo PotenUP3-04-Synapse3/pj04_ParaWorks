@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("Dashboard shows today's approved todos and hides completed task only on the page", async ({ page }) => {
+test("Dashboard completes approved todo through the API and hides it", async ({ page }) => {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  let completedTodoId: number | undefined;
 
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
@@ -38,6 +39,7 @@ test("Dashboard shows today's approved todos and hides completed task only on th
             due_date: today,
             category: "Project Alpha",
             priority: "high",
+            completed_at: null,
           },
         ],
         assigned_projects: [
@@ -57,6 +59,19 @@ test("Dashboard shows today's approved todos and hides completed task only on th
       },
     });
   });
+  await page.route("**/api/v1/todos/101/complete", async (route) => {
+    completedTodoId = 101;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        id: 101,
+        title: "오늘 고객사 공유본 보내기",
+        status: "completed",
+        completed_at: `${today}T09:30:00+09:00`,
+        completed_by: "demo-admin",
+      },
+    });
+  });
   await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
 
   await page.goto("/dashboard");
@@ -67,6 +82,7 @@ test("Dashboard shows today's approved todos and hides completed task only on th
 
   await page.getByRole("button", { name: "완료 오늘 고객사 공유본 보내기" }).click();
 
+  expect(completedTodoId).toBe(101);
   await expect(page.getByText("오늘 고객사 공유본 보내기")).toBeHidden();
   await expect(page.getByText("오늘 처리할 승인된 할 일이 없습니다.")).toBeVisible();
 });

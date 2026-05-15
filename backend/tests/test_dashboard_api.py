@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from backend.app.models import DecisionRecord, Project, ReviewItem, TimelineEvent
+from backend.app.models import DecisionRecord, Project, TimelineEvent, Todo
 
 
 def test_dashboard_recent_timeline_uses_existing_model_fields(client, db_session) -> None:
@@ -41,50 +41,79 @@ def test_dashboard_recent_timeline_uses_existing_model_fields(client, db_session
     }
 
 
-def test_dashboard_today_todos_uses_approved_todo_review_items_due_today(client, db_session) -> None:
+def test_dashboard_today_todos_uses_approved_open_todos_due_from_today(client, db_session) -> None:
     today = datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()
-    due_today = ReviewItem(
-        item_type='todo',
-        payload={
-            'title': '오늘 고객사 공유본 보내기',
-            'assignee': '김하나',
-            'due_date': today,
-            'priority': 'high',
-            'project_name': 'Project Alpha',
-        },
+    upcoming = '2099-01-01'
+    project = Project(
+        project_key='project-alpha',
+        name='Project Alpha',
+        summary='고객사 공유본 프로젝트입니다.',
+    )
+    due_today = Todo(
+        project_key='project-alpha',
+        title='오늘 고객사 공유본 보내기',
+        assignee='김하나',
+        due_date=today,
+        priority='high',
+        priority_reason='오늘까지 공유본 발송이 필요합니다.',
         source_links=['https://slack.mock/today'],
         source_snippets=['오늘 공유본을 보내주세요.'],
         confidence_score=0.88,
         permission_level='internal',
-        status='approved',
+        review_status='approved',
     )
-    pending_today = ReviewItem(
-        item_type='todo',
-        payload={
-            'title': '아직 검토 중인 오늘 업무',
-            'assignee': '김하나',
-            'due_date': today,
-        },
+    due_upcoming = Todo(
+        project_key=None,
+        title='다가오는 고객사 회신 준비',
+        assignee='김하나',
+        due_date=upcoming,
+        priority='medium',
+        priority_reason='고객사 회신 준비가 필요합니다.',
+        source_links=['https://slack.mock/upcoming'],
+        source_snippets=['다가오는 회신을 준비해주세요.'],
+        confidence_score=0.82,
+        permission_level='internal',
+        review_status='approved',
+    )
+    pending_today = Todo(
+        title='아직 검토 중인 오늘 업무',
+        assignee='김하나',
+        due_date=today,
+        priority='medium',
+        priority_reason='검토 전입니다.',
         source_links=['https://slack.mock/pending'],
         source_snippets=['검토 전입니다.'],
         confidence_score=0.8,
         permission_level='internal',
-        status='pending_review',
+        review_status='pending_review',
     )
-    future = ReviewItem(
-        item_type='todo',
-        payload={
-            'title': '내일 처리할 업무',
-            'assignee': '김하나',
-            'due_date': '2099-01-01',
-        },
-        source_links=['https://slack.mock/future'],
-        source_snippets=['미래 업무입니다.'],
+    completed = Todo(
+        title='이미 완료한 오늘 업무',
+        assignee='김하나',
+        due_date=today,
+        completed_at=datetime.now(UTC),
+        completed_by='demo-admin',
+        priority='medium',
+        priority_reason='완료된 업무입니다.',
+        source_links=['https://slack.mock/completed'],
+        source_snippets=['완료된 업무입니다.'],
         confidence_score=0.8,
         permission_level='internal',
-        status='approved',
+        review_status='approved',
     )
-    db_session.add_all([due_today, pending_today, future])
+    past = Todo(
+        title='이미 지난 업무',
+        assignee='김하나',
+        due_date='2000-01-01',
+        priority='medium',
+        priority_reason='지난 업무입니다.',
+        source_links=['https://slack.mock/past'],
+        source_snippets=['지난 업무입니다.'],
+        confidence_score=0.8,
+        permission_level='internal',
+        review_status='approved',
+    )
+    db_session.add_all([project, due_today, due_upcoming, pending_today, completed, past])
     db_session.commit()
 
     response = client.get('/api/v1/dashboard')
@@ -98,7 +127,17 @@ def test_dashboard_today_todos_uses_approved_todo_review_items_due_today(client,
             'due_date': today,
             'category': 'Project Alpha',
             'priority': 'high',
-        }
+            'completed_at': None,
+        },
+        {
+            'id': due_upcoming.id,
+            'title': '다가오는 고객사 회신 준비',
+            'assignee': '김하나',
+            'due_date': upcoming,
+            'category': '프로젝트 미지정',
+            'priority': 'medium',
+            'completed_at': None,
+        },
     ]
 
 

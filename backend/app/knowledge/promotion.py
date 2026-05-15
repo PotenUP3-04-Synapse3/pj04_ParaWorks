@@ -112,6 +112,8 @@ def promote_review_item(db: Session, item: ReviewItem) -> dict:
     if item.item_type == 'todo':
         todo = Todo(
             title=normalized['title'],
+            assignee=_string_payload(item, 'assignee') or None,
+            due_date=_string_payload(item, 'due_date') or None,
             priority=normalized['priority'],
             priority_reason=normalized['priority_reason'],
             **base_fields,

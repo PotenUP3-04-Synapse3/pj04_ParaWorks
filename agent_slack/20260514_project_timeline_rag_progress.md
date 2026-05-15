@@ -947,7 +947,7 @@
   - 대시보드 화면의 `visibleAssignedProjects`가 빈 배열로 하드코딩되어 있어 프로젝트 API/DB에 프로젝트가 있어도 표시되지 않았다.
   - 화면은 서버 컴포넌트라 완료 버튼으로 로컬 상태만 바꾸는 UX를 구현하기 어려운 구조였다.
 - 구현:
-  - `backend/app/api/v1/dashboard.py`에서 승인된 todo ReviewItem 중 `payload.due_date`가 오늘(Asia/Seoul 기준)인 항목만 `today_todos`로 내려주도록 변경했다.
+  - `backend/app/api/v1/dashboard.py`에서 승인된 todo ReviewItem 중 `payload.due_date`가 오늘(Asia/Seoul 기준) 이후인 항목을 가까운 마감일 순으로 `today_todos`에 내려주도록 변경했다.
   - `today_todos`에 `priority`를 포함하고, `category`는 `project_name`을 우선 사용한다.
   - `assigned_projects`를 대시보드 응답에 추가해 등록 프로젝트의 근거 수, 활동 수, 검토 대기 수를 표시한다.
   - `frontend/src/app/dashboard/page.tsx`를 클라이언트 컴포넌트로 전환하고, 완료 버튼 클릭 시 로컬 state에서만 해당 todo를 숨기도록 구현했다.
@@ -958,3 +958,31 @@
   - `npm.cmd run lint` → 통과
   - `npm.cmd run build` → 통과
   - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `1 passed`
+  - 실제 Docker DB 기준 `2026-05-18`, `2026-05-22` 마감 승인 todo 2건이 반환되는 것을 확인했다. 실행 중인 backend 서버에는 재시작 후 반영된다.
+
+## 2026-05-15 대시보드 할 일 완료 상태 영구 저장 개선
+
+- 요청:
+  - 대시보드에서 완료를 누른 할 일이 화면을 벗어나 돌아오면 다시 표시되는 문제를 수정한다.
+  - 완료 상태를 타임라인/프로젝트에서도 확인할 수 있게 한다.
+- 판단:
+  - 로컬 state만 숨기는 방식은 새로고침, 탭 이동, 다른 기기에서 유지되지 않는다.
+  - 승인된 할 일은 이미 trusted knowledge인 `Todo` 테이블로 승격되므로, `Todo`를 source of truth로 두고 완료 상태를 저장하는 방식이 가장 안전하다.
+- 구현:
+  - `todos` 테이블에 `assignee`, `due_date`, `completed_at`, `completed_by` 컬럼을 추가했다.
+  - 기존 승인 todo의 `assignee`, `due_date`는 approved `ReviewItem.payload`에서 backfill하도록 migration을 추가했다.
+  - Review 승인 시 `Todo.assignee`, `Todo.due_date`를 함께 저장한다.
+  - 신규 `POST /api/v1/todos/{todo_id}/complete` API를 추가해 완료 시각과 완료자를 DB에 저장한다.
+  - 대시보드 `today_todos`는 더 이상 approved `ReviewItem`을 직접 읽지 않고, 승인된 미완료 `Todo` 중 오늘 이후 마감 항목을 표시한다.
+  - 대시보드 완료 버튼은 완료 API를 호출한 뒤 목록에서 제거한다.
+  - 프로젝트 API의 activity/timeline item에 `completed_at`, `completed_by`를 포함하고, 완료된 todo는 타임라인에도 `완료` 상태로 표시한다.
+  - 프로젝트 탭의 승인된 활동 카드에는 완료된 todo에 `완료` 배지를 표시한다.
+  - 완료 API는 사용자가 접근할 수 없는 permission level의 todo를 403으로 거부한다.
+  - 로컬 Docker Postgres에 migration을 적용했고, 실제 DB의 기존 todo 2건에 담당자와 마감일이 backfill된 것을 확인했다.
+- 검증:
+  - `uv run ... pytest backend/tests/test_project_memory_api.py backend/tests/test_dashboard_api.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_todos_api.py -q` → `36 passed`
+  - `uv run ... ruff check ...` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts timeline-project-date-groups.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `5 passed`
+  - `alembic upgrade head` → `b4b6d9f4d3e1` 적용 완료

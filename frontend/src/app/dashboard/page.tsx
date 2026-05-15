@@ -4,7 +4,7 @@ import { ArrowRight, CheckCircle2, Clock3, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/api/client";
+import { apiGet, apiPost } from "@/lib/api/client";
 import type { DashboardResponse } from "@/lib/api/types";
 
 type TodayTask = {
@@ -29,6 +29,7 @@ type ReviewListItem = readonly [id: number, title: string, source: string, due: 
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<number>>(() => new Set());
+  const [completingTaskIds, setCompletingTaskIds] = useState<Set<number>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
 
@@ -100,8 +101,28 @@ export default function DashboardPage() {
       item.confidence_score > 0.8 ? "높음" : "보통",
     ]) ?? [];
 
-  function completeTask(taskId: number) {
-    setCompletedTaskIds((current) => new Set(current).add(taskId));
+  async function completeTask(taskId: number) {
+    setCompletingTaskIds((current) => new Set(current).add(taskId));
+    try {
+      await apiPost(`/api/v1/todos/${taskId}/complete`);
+      setCompletedTaskIds((current) => new Set(current).add(taskId));
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              today_todos: current.today_todos.filter((todo) => todo.id !== taskId),
+            }
+          : current,
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "할 일을 완료 처리하지 못했습니다.");
+    } finally {
+      setCompletingTaskIds((current) => {
+        const next = new Set(current);
+        next.delete(taskId);
+        return next;
+      });
+    }
   }
 
   return (
@@ -163,10 +184,11 @@ export default function DashboardPage() {
                         type="button"
                         aria-label={`완료 ${task.title}`}
                         onClick={() => completeTask(task.id)}
+                        disabled={completingTaskIds.has(task.id)}
                         className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-[12px] font-extrabold text-ink hover:bg-surface-soft"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
-                        완료
+                        {completingTaskIds.has(task.id) ? "처리 중" : "완료"}
                       </button>
                     </div>
                   </article>

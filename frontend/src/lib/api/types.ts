@@ -24,6 +24,7 @@ export type DashboardResponse = {
     due_date: string;
     category: string;
     priority?: string;
+    completed_at?: string | null;
   }[];
   assigned_projects?: {
     project_key: string;
@@ -603,6 +604,8 @@ export type ProjectTimelineItem = {
   occurred_at?: string;
   evidence_reason: string;
   project_key?: string | null;
+  completed_at?: string | null;
+  completed_by?: string | null;
 };
 
 export type ProjectMemory = {

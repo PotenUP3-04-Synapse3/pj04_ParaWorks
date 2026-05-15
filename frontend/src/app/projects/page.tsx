@@ -285,6 +285,11 @@ export default function ProjectsPage() {
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
                             {itemTypeLabel(item.item_type)}
                           </span>
+                          {item.completed_at ? (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+                              완료
+                            </span>
+                          ) : null}
                         </div>
                         <h3 className="mt-2 text-sm font-extrabold text-ink">{item.title}</h3>
                         <p className="mt-2 text-sm leading-6 text-muted">{item.summary}</p>

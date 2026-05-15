@@ -18,6 +18,7 @@ from backend.app.api.v1 import (
     review,
     search,
     stream,
+    todos,
 )
 from backend.app.core.session_auth import check_csrf
 
@@ -39,3 +40,4 @@ api_router.include_router(rag.router)
 api_router.include_router(review.router)
 api_router.include_router(search.router)
 api_router.include_router(stream.router)
+api_router.include_router(todos.router)

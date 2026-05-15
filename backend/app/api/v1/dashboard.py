@@ -11,10 +11,12 @@ from backend.app.core.demo_filters import filter_review_items
 from backend.app.db.session import get_db
 from backend.app.models import (
     DecisionRecord,
+    Project,
     ReviewItem,
     Source,
     SyncJob,
     TimelineEvent,
+    Todo,
 )
 from backend.app.projects import build_project_memory
 
@@ -38,8 +40,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         ).all()
         pending_review_count = len(filter_review_items(pending_review_items))
     recent_jobs = db.scalars(select(SyncJob).order_by(SyncJob.created_at.desc()).limit(5)).all()
-    
-    # 최근 검토 대기 항목 3개
+
     pending_items = db.scalars(
         select(ReviewItem)
         .where(ReviewItem.status == 'pending_review')
@@ -47,23 +48,21 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         .limit(3)
     ).all()
 
-    # 오늘의 할 일은 승인된 todo ReviewItem payload의 due_date를 기준으로 표시한다.
     today = _today_kst()
     todo_candidates = db.scalars(
-        select(ReviewItem)
-        .where(ReviewItem.item_type == 'todo')
-        .where(ReviewItem.status == 'approved')
-        .order_by(ReviewItem.id.desc())
+        select(Todo)
+        .where(Todo.review_status == 'approved')
+        .where(Todo.completed_at.is_(None))
+        .order_by(Todo.id.desc())
     ).all()
-    todo_items = [
-        item
-        for item in todo_candidates
-        if str((item.payload or {}).get('due_date') or '') == today
-    ][:5]
+    todo_items = sorted(
+        [item for item in todo_candidates if _is_due_from_today(item.due_date or '', today)],
+        key=lambda item: (item.due_date or '', item.id),
+    )[:5]
+    project_names = _project_names_by_key(db)
 
     assigned_projects = build_project_memory(db)
 
-    # 승인된 최근 의사결정 및 타임라인
     recent_decisions = db.scalars(
         select(DecisionRecord)
         .where(DecisionRecord.review_status == 'approved')
@@ -104,11 +103,12 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         'today_todos': [
             {
                 'id': item.id,
-                'title': item.payload.get('title', 'Untitled'),
-                'assignee': item.payload.get('assignee', '미지정'),
-                'due_date': item.payload.get('due_date', '기한없음'),
-                'category': item.payload.get('project_name') or item.payload.get('category') or '프로젝트 미지정',
-                'priority': item.payload.get('priority', 'medium'),
+                'title': item.title,
+                'assignee': item.assignee or '미정',
+                'due_date': item.due_date or '기한 없음',
+                'category': project_names.get(item.project_key or '', '프로젝트 미지정'),
+                'priority': item.priority or 'medium',
+                'completed_at': item.completed_at.isoformat() if item.completed_at else None,
             }
             for item in todo_items
         ],
@@ -150,3 +150,14 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
 
 def _today_kst() -> str:
     return datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()
+
+
+def _project_names_by_key(db: Session) -> dict[str, str]:
+    projects = db.scalars(select(Project)).all()
+    return {project.project_key: project.name for project in projects}
+
+
+def _is_due_from_today(due_date: str, today: str) -> bool:
+    if len(due_date) != 10:
+        return False
+    return due_date >= today
