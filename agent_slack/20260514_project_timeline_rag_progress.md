@@ -762,3 +762,50 @@
 - 테스트 계획:
   - backend TDD: router unmatched 계약, sync service fallback 제거, Slack deterministic `project_assignment` 생성 중단, 승인 전 project_key 필수화, 프로젝트 메모리 연결 검증.
   - Playwright: Review 프로젝트 선택 필수, Timeline 날짜 그룹, Project metric 모바일 레이아웃, `/integrations -> /review -> /timeline -> /projects` 통합 흐름.
+
+## 2026-05-15 Gmail/Google Drive 프로젝트 Tool Routing 분업 가이드 작성
+
+- 요청:
+  - Gmail과 Google Drive 데이터도 Slack Agent 방식처럼 LangChain tool 기반 LLM 프로젝트 판단으로 전환해야 한다.
+  - Gmail/Drive 담당자가 Slack 담당자와 최대한 작업 영역을 겹치지 않고 분업할 수 있도록 가이드 문서를 작성한다.
+- 문서 위치:
+  - `docs/superpowers/runbooks/2026-05-15-gmail-drive-project-routing-collaboration-guide.md`
+- 핵심 분업 원칙:
+  - Gmail/Drive 담당자는 `backend/app/agents/mail_document_agent/`와 관련 테스트만 수정한다.
+  - Slack 담당자는 `agent_slack/`, `backend/app/agents/slack_agent/`만 수정한다.
+  - 프로젝트 Router 공용 계약은 `backend/app/agent_runtime/project_routing.py`로 분리한다.
+  - Review 승인 정책, 통합 API, 프론트 UI, Playwright 통합 테스트는 별도 통합 담당자가 맡는다.
+  - Mail/Document 담당자는 `agent_slack/project_routing.py`를 직접 import하지 않는다.
+- Mail/Document 쪽 전환 방향:
+  - 기존 `EvidencePacket -> MailDocumentAgent.run() -> ReviewCandidate -> ReviewItem` 흐름은 유지한다.
+  - `MailDocumentAgent.run()` 이후 `project_route_mail_document_candidates()` 단계를 추가한다.
+  - Gmail 본문+첨부 group, Drive 파일 단위 grouping은 유지한다.
+  - ReviewItem payload에는 Slack과 동일한 `project_assignment_method`, `project_key`, `project_name`, `project_assignment_summary`, `project_assignment_reason`, `project_needs_user_selection` 필드를 저장한다.
+- 테스트 방향:
+  - backend는 fake router/fake connector로 Gmail group, Drive file, unmatched project, evidence/permission preservation을 검증한다.
+  - Playwright는 통합 담당자가 Review/Timeline/Projects 화면 mock payload로 검증한다.
+
+## 2026-05-15 Gmail/Google Drive B/C 개별 작업 문서 작성
+
+- 요청:
+  - 개발자 A는 Slack Agent를 계속 담당한다.
+  - Gmail/Google Drive 고도화만 개발자 B와 C가 나누어 진행할 수 있도록 각각의 작업 문서를 작성한다.
+  - 불필요한 역할을 추가하지 않고, 서로의 작업 영역을 최대한 건드리지 않는 방식으로 정리한다.
+- 작성한 문서:
+  - `docs/superpowers/runbooks/2026-05-15-developer-b-gmail-drive-agent-work.md`
+  - `docs/superpowers/runbooks/2026-05-15-developer-c-gmail-drive-integration-work.md`
+- 개발자 B 범위:
+  - Gmail/Drive connector source 품질
+  - Mail/Document Agent 추출 품질
+  - Gmail 본문+첨부 grouping, Drive 파일 단위 grouping 유지
+  - Mail/Document Agent ReviewItem payload에 LLM tool 프로젝트 라우팅 결과 저장
+  - fake connector/fake model 기반 backend 테스트
+- 개발자 C 범위:
+  - 공용 프로젝트 라우팅 계약
+  - Review 승인 정책과 프로젝트 선택 UX
+  - 승인된 Gmail/Drive 항목의 Timeline/Projects 반영
+  - 승인 기반 RAG indexing 연결
+  - Playwright 기반 Review -> Timeline -> Projects 통합 확인
+- 작업 경계:
+  - B는 Slack Agent, Review UI, promotion, RAG, 프로젝트 서비스 영역을 직접 수정하지 않는다.
+  - C는 Gmail/Drive connector와 Mail/Document Agent 내부 추출 로직을 직접 수정하지 않는다.
