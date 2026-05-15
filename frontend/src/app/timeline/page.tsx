@@ -18,6 +18,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import type { ProjectTimelineItem, ProjectsResponse } from "@/lib/api/types";
+import Image from "next/image";
+import todoIcon from "@/app/timeline/icons/todo.png";
+import slackIcon from "@/app/timeline/icons/slack.svg";
+import gmailIcon from "@/app/timeline/icons/gmail.svg";
+import driveIcon from "@/app/timeline/icons/drive.svg";
+import calendarIcon from "@/app/timeline/icons/calendar.svg";
 
 type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
 type PeriodFilter = "all" | "7d" | "30d";
@@ -581,17 +587,28 @@ function TimelineEventRow({
   );
 }
 
+const sourceIconImages: Record<string, string> = {
+  Slack: slackIcon,
+  Gmail: gmailIcon,
+  Drive: driveIcon,
+  Calendar: calendarIcon,
+};
+
 function TimelineSourceIcon({ item }: { item: TimelineHistory }) {
-  const className = "h-4 w-4";
-  if (item.itemType === "todo") return <FileText className={className} aria-hidden="true" />;
-  if (item.title.toLowerCase().includes("backend/") || item.title.toLowerCase().includes("api/")) {
-    return <Code2 className={className} aria-hidden="true" />;
-  }
-  if (item.source === "Slack") return <MessageSquare className={className} aria-hidden="true" />;
-  if (item.source === "Gmail") return <Mail className={className} aria-hidden="true" />;
-  if (item.source === "Calendar") return <CalendarDays className={className} aria-hidden="true" />;
-  return <FileClock className={className} aria-hidden="true" />;
+  const src = sourceIconImages[item.source] ?? todoIcon;
+
+  return (
+    <Image
+      src={src}
+      alt=""
+      width={18}
+      height={18}
+      className="h-4.5 w-4.5 object-contain"
+      aria-hidden="true"
+    />
+  );
 }
+
 
 function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
   const occurredAt = item.occurred_at || item.created_at;
