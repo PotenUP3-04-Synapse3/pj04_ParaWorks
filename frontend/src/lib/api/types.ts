@@ -589,6 +589,7 @@ export type ProjectTimelineItem = {
   permission_level: string;
   review_status: string;
   created_at: string;
+  occurred_at?: string;
   evidence_reason: string;
   project_key?: string | null;
 };

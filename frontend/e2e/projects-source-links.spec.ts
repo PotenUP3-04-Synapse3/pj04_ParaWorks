@@ -39,16 +39,16 @@ test("Projects page exposes original source links for evidence and approved acti
             pending_review_count: 0,
             evidence: [
               {
-                id: "project-alpha:slack-source-1",
-                source_id: "slack-source-1",
+                id: "project-alpha:https://slack.example/activity/1",
+                source_id: "https://slack.example/activity/1",
                 source_type: "slack",
-                title: "Redis 장애 대응",
-                source_url: "https://slack.example/source/1",
-                source_snippet: "Redis 장애 대응 논의",
+                title: "Redis 장애 대응 완료",
+                source_url: "https://slack.example/activity/1",
+                source_snippet: "장애 대응 완료",
                 permission_level: "internal",
                 timestamp: "2026-05-15T02:00:00Z",
-                task_summary: "Redis 장애 대응",
-                evidence_reason: "승인된 프로젝트 근거입니다.",
+                task_summary: "장애 대응이 완료되었습니다.",
+                evidence_reason: "승인된 히스토리 기록입니다.",
               },
             ],
             activity_items: [
@@ -63,6 +63,7 @@ test("Projects page exposes original source links for evidence and approved acti
                 permission_level: "internal",
                 review_status: "approved",
                 created_at: "2026-05-15T02:00:00Z",
+                occurred_at: "2026-05-15T02:00:00Z",
                 evidence_reason: "승인된 히스토리 기록입니다.",
                 project_key: "project-alpha",
               },
@@ -77,12 +78,12 @@ test("Projects page exposes original source links for evidence and approved acti
 
   await page.goto("/projects");
 
-  const evidenceLink = page.getByRole("link", { name: "원본 근거 열기 Redis 장애 대응", exact: true });
-  await expect(evidenceLink).toHaveAttribute("href", "https://slack.example/source/1");
+  const evidenceLink = page.getByRole("link", { name: "원본 근거 열기 Redis 장애 대응 완료", exact: true }).first();
+  await expect(evidenceLink).toHaveAttribute("href", "https://slack.example/activity/1");
   await expect(evidenceLink).toHaveAttribute("target", "_blank");
   await expect(evidenceLink).toHaveAttribute("rel", /noopener/);
 
-  const activityLink = page.getByRole("link", { name: "원본 근거 열기 Redis 장애 대응 완료" });
+  const activityLink = page.getByRole("link", { name: "원본 근거 열기 Redis 장애 대응 완료", exact: true }).nth(1);
   await expect(activityLink).toHaveAttribute("href", "https://slack.example/activity/1");
   await expect(activityLink).toHaveAttribute("target", "_blank");
   await expect(activityLink).toHaveAttribute("rel", /noopener/);

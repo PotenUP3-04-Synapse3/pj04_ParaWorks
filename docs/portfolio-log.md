@@ -4111,3 +4111,21 @@ Cost/security note:
   - 프로젝트 탭의 `연결된 원본 근거`와 `승인된 프로젝트 활동` 카드에서 원본
     근거 링크를 바로 열 수 있게 했다.
   - 검증: frontend lint/build 통과, Playwright 원본 링크 검증 2개 통과.
+- `fix: 타임라인 source time과 프로젝트 근거 UX 개선`
+  - 타임라인을 승인 시각이 아닌 실제 Slack 대화 시각 기준 `occurred_at`으로
+    정렬하고, 날짜 단위 compact/detail 토글을 추가했다.
+  - 타임라인 리스트는 기본적으로 title만 보이게 하여 스캔 속도를 높였다.
+  - 프로젝트 탭이 승인된 활동의 source evidence를 `연결된 원본 근거`로
+    표시하도록 바꿨다.
+  - 검증: backend 프로젝트/승인 테스트 44개 통과, ruff 통과, frontend
+    lint/build 통과, Playwright 타임라인/프로젝트/Slack 흐름 3개 통과.
+- `fix: 타임라인 날짜 accordion UX 조정`
+  - 타임라인 날짜 헤더를 직접 클릭하는 accordion으로 바꿔 모든 날짜를 항상
+    보이게 하고, 선택한 날짜의 타임라인만 펼쳐지게 했다.
+  - 펼쳐진 타임라인 카드에는 title과 source 시간, source type, 승인 상태,
+    summary를 함께 표시한다.
+  - 검증: frontend lint/build 통과, Playwright 타임라인/Slack 흐름 2개 통과.
+- `fix: 타임라인 목록 summary 노출 제거`
+  - 타임라인 목록 카드에서 `result_summary` 노출을 제거하고, 상세 내용은
+    Slack history 버튼을 눌렀을 때 오른쪽 상세 패널에서만 보이게 했다.
+  - 검증: frontend lint/build 통과, Playwright 타임라인/Slack 흐름 2개 통과.

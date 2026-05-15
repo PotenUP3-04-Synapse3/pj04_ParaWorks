@@ -324,7 +324,7 @@ test("Slack project routing flows from sync to review approval and project timel
   await page.getByRole("button", { name: "승인", exact: true }).click();
 
   await page.goto("/timeline");
-  await expect(page.getByText("2026년 5월 15일")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /5월 15일/ })).toBeVisible();
   await expect(page.getByText("새 캠페인 킥오프")).toBeVisible();
 
   await page.goto("/projects");

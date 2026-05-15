@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ from backend.app.models import (
     HistoryEvent,
     Project,
     ReviewItem,
+    Source,
     TimelineEvent,
     Todo,
 )
@@ -42,6 +44,7 @@ class ProjectTimelineItem:
     permission_level: str
     review_status: str
     created_at: str
+    occurred_at: str
     evidence_reason: str
     project_key: str | None = None
 
@@ -89,15 +92,16 @@ def build_project_memory(db: Session) -> list[ProjectMemory]:
             for item in approved_assignments
             if item.payload.get('project_key') == project_key
         ]
-        evidence = _evidence_from_assignments(assignment_evidence_items)
+        assignment_evidence = _evidence_from_assignments(assignment_evidence_items)
         linked_records = _memory_records_for_project(project_key, project_link_items, memory_records)
         timeline_items = _timeline_items_from_records(linked_records)
         activity_items = _dedupe_activity_items(linked_records)
+        evidence = _dedupe_project_evidence([*assignment_evidence, *_evidence_from_activity_items(activity_items)])
 
         permission_levels = [item.permission_level for item in evidence] + [
             item.permission_level for item in activity_items
         ]
-        latest_candidates = [item.timestamp for item in evidence] + [item.created_at for item in activity_items]
+        latest_candidates = [item.timestamp for item in evidence] + [item.occurred_at for item in activity_items]
         source_types = sorted(
             {item.source_type for item in evidence},
             key=lambda source_type: SOURCE_TYPE_RANK.get(source_type, 99),
@@ -166,6 +170,7 @@ def _evidence_from_assignments(assignments: list[ReviewItem]) -> list[ProjectEvi
 
 def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
     records: list[ProjectTimelineItem] = []
+    source_by_url = _source_lookup_by_url(db)
     records.extend(
         ProjectTimelineItem(
             id=f'decision_record:{item.id}',
@@ -178,6 +183,7 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
+            occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 의사결정 기록이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
         )
@@ -195,6 +201,7 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
+            occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 히스토리 기록이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
         )
@@ -212,6 +219,7 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
+            occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 타임라인 항목이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
         )
@@ -229,6 +237,7 @@ def _approved_memory_records(db: Session) -> list[ProjectTimelineItem]:
             permission_level=item.permission_level,
             review_status=item.review_status,
             created_at=item.created_at.isoformat(),
+            occurred_at=_occurred_at_from_source_links(item.source_links, source_by_url, item.created_at),
             evidence_reason='승인된 할 일이 이 프로젝트와 연결되어 있습니다.',
             project_key=item.project_key,
         )
@@ -266,7 +275,7 @@ def _memory_records_for_project(
         ):
             items.append(item)
 
-    return sorted(items, key=lambda item: (item.created_at, item.id), reverse=True)
+    return sorted(items, key=lambda item: (item.occurred_at, item.id), reverse=True)
 
 
 def _timeline_items_from_records(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
@@ -293,6 +302,46 @@ def _dedupe_activity_items(records: list[ProjectTimelineItem]) -> list[ProjectTi
     return activity_items
 
 
+def _evidence_from_activity_items(items: list[ProjectTimelineItem]) -> list[ProjectEvidence]:
+    evidence: list[ProjectEvidence] = []
+    seen: set[str] = set()
+    for item in items:
+        for index, link in enumerate(item.source_links):
+            if not link.strip():
+                continue
+            identity = f'{item.project_key}:{link}'
+            if identity in seen:
+                continue
+            seen.add(identity)
+            evidence.append(
+                ProjectEvidence(
+                    id=identity,
+                    source_id=link,
+                    source_type=_source_type_from_link(link),
+                    title=item.title,
+                    source_url=link,
+                    source_snippet=item.source_snippets[index] if index < len(item.source_snippets) else '',
+                    permission_level=item.permission_level,
+                    timestamp=item.occurred_at,
+                    task_summary=item.summary,
+                    evidence_reason=item.evidence_reason,
+                )
+            )
+    return sorted(evidence, key=lambda item: (item.timestamp, item.id), reverse=True)
+
+
+def _dedupe_project_evidence(items: list[ProjectEvidence]) -> list[ProjectEvidence]:
+    deduped: list[ProjectEvidence] = []
+    seen: set[str] = set()
+    for item in items:
+        identity = f'{item.source_url}:{item.source_snippet}'
+        if identity in seen:
+            continue
+        seen.add(identity)
+        deduped.append(item)
+    return sorted(deduped, key=lambda item: (item.timestamp, item.id), reverse=True)
+
+
 def _activity_signature(item: ProjectTimelineItem) -> str:
     first_link = item.source_links[0] if item.source_links else ''
     first_snippet = item.source_snippets[0] if item.source_snippets else ''
@@ -303,6 +352,58 @@ def _activity_signature(item: ProjectTimelineItem) -> str:
             ' '.join(item.summary.split()).strip().lower(),
         ]
     )
+
+
+def _source_lookup_by_url(db: Session) -> dict[str, Source]:
+    sources = db.scalars(select(Source)).all()
+    return {source.source_url: source for source in sources if source.source_url}
+
+
+def _occurred_at_from_source_links(
+    source_links: list[str],
+    source_by_url: dict[str, Source],
+    fallback: datetime,
+) -> str:
+    for link in source_links:
+        source = source_by_url.get(link)
+        if source:
+            raw_ts = (source.raw_metadata or {}).get('ts')
+            if isinstance(raw_ts, str):
+                try:
+                    return datetime.fromtimestamp(float(raw_ts), tz=UTC).isoformat()
+                except ValueError:
+                    pass
+            return source.created_at.isoformat()
+
+        parsed_ts = _slack_ts_from_permalink(link)
+        if parsed_ts is not None:
+            return datetime.fromtimestamp(parsed_ts, tz=UTC).isoformat()
+
+    return fallback.isoformat()
+
+
+def _slack_ts_from_permalink(link: str) -> float | None:
+    if '/p' not in link:
+        return None
+    raw = link.rsplit('/p', 1)[-1].split('?', 1)[0]
+    if len(raw) < 11 or not raw.isdigit():
+        return None
+    seconds = raw[:10]
+    micros = raw[10:].ljust(6, '0')[:6]
+    return float(f'{seconds}.{micros}')
+
+
+def _source_type_from_link(link: str) -> str:
+    lowered = link.lower()
+    if 'slack' in lowered:
+        return 'slack'
+    if 'mail.google' in lowered or 'gmail' in lowered:
+        return 'gmail'
+    if 'drive.google' in lowered or 'docs.google' in lowered:
+        return 'drive'
+    if 'calendar.google' in lowered or 'calendar' in lowered:
+        return 'calendar'
+    return 'source'
 
 
 def _project_summary(base_summary: str, evidence: list[ProjectEvidence], activity_items: list[ProjectTimelineItem]) -> str:

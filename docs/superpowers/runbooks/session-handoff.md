@@ -1692,3 +1692,24 @@ tests passed with 53 tests; ruff passed.
   - `MailDocumentAgent.run()` 이후 후보에 project routing을 적용한다.
   - Gmail 본문+첨부 grouping, Drive 파일 단위 grouping은 유지한다.
   - ReviewItem payload 필드는 Slack과 동일한 `project_assignment_method='llm_tool'`, `project_key`, `project_name`, `project_assignment_summary`, `project_assignment_reason`, `project_assignment_confidence`, `project_alternatives`, `project_needs_user_selection`을 사용한다.
+
+## 2026-05-15 타임라인 실제 source 시각 및 프로젝트 근거 UX
+
+- 계획서:
+  - `docs/superpowers/plans/2026-05-15-timeline-project-evidence-ux.md`
+- 변경 요약:
+  - `backend/app/projects/service.py`의 `ProjectTimelineItem`에 `occurred_at`을 추가했다.
+  - 프로젝트 타임라인 날짜/시간은 Slack permalink 또는 `Source.raw_metadata.ts`에서 계산한 실제 source 발생 시각을 우선 사용한다.
+  - source timestamp가 없으면 기존 knowledge row `created_at`을 fallback으로 사용한다.
+  - 프로젝트 탭 `연결된 원본 근거`는 더 이상 approved `project_assignment`에만 의존하지 않는다. 승인된 `decision_record`, `history_event`, `timeline_event`, `todo`의 source link/snippet에서도 `ProjectEvidence`를 만든다.
+  - 타임라인 화면은 기본 title-only 리스트로 바뀌었고, 날짜 그룹은 최신 날짜만 기본 표시한다.
+  - `날짜 전체 보기`, 날짜별 `자세히 보기/간단히 보기`로 compact/detail 전환이 가능하다.
+- 주의:
+  - 기존 테스트 중 “approved knowledge를 connector evidence로 바꾸지 않는다”는 기대는 사용자 요구와 충돌해 새 정책으로 수정했다.
+  - Gmail/Drive도 같은 프로젝트 API를 쓰므로 approved activity에 source link/snippet이 있으면 프로젝트 근거에 표시된다.
+- 검증:
+  - `uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q` → `44 passed`
+  - `uv run ruff check backend/app/projects/service.py backend/tests/test_project_memory_api.py` → 통과
+  - `npm run lint` → 통과
+  - `npm run build` → 통과
+  - `npm run test:visual -- timeline-project-date-groups.spec.ts projects-source-links.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop` → `3 passed`
