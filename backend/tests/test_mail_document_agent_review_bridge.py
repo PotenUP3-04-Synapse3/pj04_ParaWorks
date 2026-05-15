@@ -14,6 +14,7 @@ from backend.app.models import (
     Document,
     DocumentChunk,
     DocumentVersion,
+    Project,
     ReviewItem,
     Source,
 )
@@ -74,6 +75,45 @@ class StructuredOverrideMailDocumentModel:
         )
 
 
+class FakeProjectRouter:
+    def __init__(self, *, project_key: str | None, project_name: str | None, needs_user_selection: bool) -> None:
+        self.project_key = project_key
+        self.project_name = project_name
+        self.needs_user_selection = needs_user_selection
+        self.seen_candidates = []
+        self.seen_projects = []
+
+    def route(self, *, candidates, projects):
+        self.seen_candidates = candidates
+        self.seen_projects = projects
+        return {
+            'decisions': [
+                {
+                    'item_index': 0,
+                    'source_id': candidates[0].source_id,
+                    'project_key': self.project_key,
+                    'project_name': self.project_name,
+                    'confidence_score': 0.88 if self.project_key else 0.39,
+                    'assignment_summary': (
+                        'Gmail 본문과 첨부가 Project Alpha 업무와 연결됩니다.'
+                        if self.project_key
+                        else '등록 프로젝트와 확정 매칭되지 않습니다.'
+                    ),
+                    'assignment_reason': (
+                        '메일 제목, 첨부 파일명, 본문 근거가 프로젝트 설명과 일치합니다.'
+                        if self.project_key
+                        else '문서 근거와 등록 프로젝트 설명이 충분히 일치하지 않습니다.'
+                    ),
+                    'alternatives': ['project-beta'] if self.project_key else ['project-alpha'],
+                    'needs_user_selection': self.needs_user_selection,
+                }
+            ],
+            'input_tokens': 17,
+            'output_tokens': 11,
+            'model_name': 'fake-project-router',
+        }
+
+
 def seed_chunk(
     db: Session,
     source_type: str,
@@ -118,6 +158,17 @@ def seed_chunk(
     db.commit()
 
 
+def seed_project(db: Session, project_key: str = 'project-alpha', name: str = 'Project Alpha') -> None:
+    db.add(
+        Project(
+            project_key=project_key,
+            name=name,
+            summary='Redis-backed worker status and Project Alpha source evidence review.',
+        )
+    )
+    db.commit()
+
+
 def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session: Session) -> None:
     seed_chunk(db_session, 'gmail', 'gmail-agent-test', 'internal')
     seed_chunk(db_session, 'drive', 'drive-agent-test', 'restricted')
@@ -145,6 +196,14 @@ def test_mail_document_agent_bridge_filters_sources_and_persists_run(db_session:
     assert agent_run.total_tokens == 1180
     assert agent_run.permission_level == 'restricted'
     assert agent_run.metadata_['included_source_types'] == ['drive', 'gmail']
+    assert agent_run.metadata_['mail_document_workflow']['nodes'] == [
+        'preprocess',
+        'classify_reviewability',
+        'extract_candidate',
+        'project_route',
+        'build_result',
+    ]
+    assert agent_run.metadata_['mail_document_workflow']['candidate_count'] == 1
     assert agent_run.metadata_['evidence_summary'] == [
         {
             'rank': 1,
@@ -362,6 +421,109 @@ def test_mail_document_changed_source_review_items_preserve_group_local_source_i
     payloads = [item.payload for item in sorted(created, key=lambda item: item.id)]
     assert payloads[0]['source_ids'] == ['gmail:message-1', 'gmail_attachment:message-1:att-1']
     assert payloads[1]['source_ids'] == ['drive:file-1']
+
+
+def test_mail_document_agent_routes_gmail_group_with_project_tool(
+    db_session: Session,
+) -> None:
+    seed_project(db_session)
+    seed_chunk(
+        db_session,
+        'gmail',
+        'gmail:message-1',
+        'internal',
+        text='Subject: Project Alpha Redis summary\n\nRedis worker 상태 업데이트 검토를 요청합니다.',
+        source_snippet='Project Alpha Redis summary',
+    )
+    seed_chunk(
+        db_session,
+        'gmail_attachment',
+        'gmail_attachment:message-1:att-1',
+        'internal',
+        metadata={'parent_source_id': 'gmail:message-1'},
+        text='Attachment: project-alpha-budget.pdf',
+        source_snippet='project-alpha-budget.pdf 첨부',
+    )
+    router = FakeProjectRouter(
+        project_key='project-alpha',
+        project_name='Project Alpha',
+        needs_user_selection=False,
+    )
+    agent = MailDocumentAgent(model=FlexibleMailDocumentModel())
+
+    created = create_mail_document_agent_review_items_for_changed_sources(
+        db=db_session,
+        agent=agent,
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        source_window='mail-docs:gmail-project',
+        source_ids=['gmail:message-1', 'gmail_attachment:message-1:att-1'],
+        project_router=router,
+    )
+
+    assert len(created) == 1
+    assert router.seen_projects[0].project_key == 'project-alpha'
+    assert router.seen_candidates[0].source_id == 'gmail:message-1|gmail_attachment:message-1:att-1'
+    assert router.seen_candidates[0].source_links == [
+        'https://gmail.mock/gmail:message-1',
+        'https://gmail_attachment.mock/gmail_attachment:message-1:att-1',
+    ]
+    payload = created[0].payload
+    assert payload['source_ids'] == ['gmail:message-1', 'gmail_attachment:message-1:att-1']
+    assert payload['project_assignment_method'] == 'llm_tool'
+    assert payload['project_key'] == 'project-alpha'
+    assert payload['project_name'] == 'Project Alpha'
+    assert payload['project_assignment_confidence'] == 0.88
+    assert payload['project_needs_user_selection'] is False
+    assert payload['project_alternatives'] == ['project-beta']
+    agent_run = db_session.scalars(select(AgentRun)).one()
+    assert agent_run.metadata_['project_routing'] == {
+        'enabled': True,
+        'method': 'langchain_tools',
+        'project_count': 1,
+        'model_name': 'fake-project-router',
+        'input_tokens': 17,
+        'output_tokens': 11,
+    }
+
+
+def test_mail_document_agent_marks_unmatched_drive_project_for_user_selection(
+    db_session: Session,
+) -> None:
+    seed_project(db_session)
+    seed_chunk(
+        db_session,
+        'drive',
+        'drive:file-unknown',
+        'restricted',
+        text='Restricted pricing memo that does not mention any registered project.',
+        source_snippet='Restricted pricing memo',
+    )
+    router = FakeProjectRouter(project_key=None, project_name=None, needs_user_selection=True)
+    agent = MailDocumentAgent(model=FlexibleMailDocumentModel())
+
+    created = create_mail_document_agent_review_items_for_changed_sources(
+        db=db_session,
+        agent=agent,
+        permission_context=PermissionContext(
+            user_id='demo-admin',
+            role='admin',
+            allowed_permission_levels=('public', 'internal', 'restricted'),
+        ),
+        source_window='mail-docs:drive-unmatched',
+        source_ids=['drive:file-unknown'],
+        project_router=router,
+    )
+
+    assert len(created) == 1
+    payload = created[0].payload
+    assert payload['source_ids'] == ['drive:file-unknown']
+    assert payload['source_types'] == ['drive']
+    assert payload['project_assignment_method'] == 'llm_tool'
+    assert 'project_key' not in payload
+    assert 'project_name' not in payload
+    assert payload['project_needs_user_selection'] is True
+    assert payload['project_assignment_confidence'] == 0.39
+    assert payload['project_alternatives'] == ['project-alpha']
 
 
 def test_mail_document_review_payload_filters_reserved_structured_fields(

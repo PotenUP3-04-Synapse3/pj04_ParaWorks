@@ -1,16 +1,54 @@
 from sqlalchemy import select
 
+from backend.app.agent_runtime import EvidencePacket
+from backend.app.agents.mail_document_agent import MailDocumentAgentModelResponse
 from backend.app.api.v1 import integrations
 from backend.app.connectors.mock import get_mock_connector
 from backend.app.core.config import Settings, get_settings
 from backend.app.ingestion.sync import sync_connector_events
-from backend.app.models import AgentRun, DocumentChunk, DocumentParserRun, ReviewItem, Source
+from backend.app.models import (
+    AgentRun,
+    DocumentChunk,
+    DocumentParserRun,
+    Project,
+    ReviewItem,
+    Source,
+)
 
 CSRF_HEADERS = {'X-CSRF-Token': 'test-csrf-token'}
 
 
+class FakeMailDocumentLlmModel:
+    def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
+        return MailDocumentAgentModelResponse(
+            title='LLM 업무 검토 후보',
+            summary='LLM이 Gmail 증거를 업무 요청으로 분류했습니다.',
+            item_type='todo',
+            confidence_score=0.93,
+            input_tokens=100,
+            output_tokens=40,
+            model_name='fake-mail-llm',
+            is_business_related=True,
+            structured_data={
+                'reviewability_decision': 'reviewable',
+                'summary_quality': 'actionable',
+            },
+        )
+
+
 def _set_csrf_cookie(client) -> None:
     client.cookies.set('paraworks_csrf', 'test-csrf-token')
+
+
+def _seed_project(db_session, *, project_key: str = 'project-alpha', name: str = 'Project Alpha') -> None:
+    db_session.add(
+        Project(
+            project_key=project_key,
+            name=name,
+            summary='Redis-backed worker status and Project Alpha architecture review.',
+        )
+    )
+    db_session.commit()
 
 
 def test_mail_document_agent_review_endpoint_creates_agent_review_item(client, db_session) -> None:
@@ -184,6 +222,35 @@ def test_gmail_sync_runs_agent_only_for_changed_gmail_sources(client, db_session
     assert not any('drive.mock' in link for link in review_item.source_links)
 
 
+def test_gmail_sync_uses_llm_agent_when_provider_key_exists(client, db_session, monkeypatch) -> None:
+    _set_csrf_cookie(client)
+
+    def override_settings() -> Settings:
+        return Settings(
+            _env_file=None,
+            paraworks_demo_mode=True,
+            agent_llm_enabled=True,
+            openai_api_key='test-openai-key',
+        )
+
+    client.app.dependency_overrides[get_settings] = override_settings
+    monkeypatch.setattr(
+        integrations,
+        'build_langchain_mail_document_agent_model',
+        lambda _settings: FakeMailDocumentLlmModel(),
+    )
+
+    response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json()['created_review_items'] == 1
+    review_item = db_session.query(ReviewItem).one()
+    assert review_item.payload['title'] == 'LLM 업무 검토 후보'
+    assert review_item.payload['summary_quality'] == 'actionable'
+    agent_run = db_session.query(AgentRun).one()
+    assert agent_run.model_name == 'fake-mail-llm'
+
+
 def test_drive_sync_creates_review_item_per_changed_drive_source(client, db_session) -> None:
     _set_csrf_cookie(client)
 
@@ -199,6 +266,47 @@ def test_drive_sync_creates_review_item_per_changed_drive_source(client, db_sess
     assert all(len(item.source_links) == 1 for item in review_items)
     assert all('drive.mock' in item.source_links[0] for item in review_items)
     assert not any('gmail.mock' in link for item in review_items for link in item.source_links)
+
+
+def test_gmail_sync_preserves_grouping_with_project_routing_payload(client, db_session) -> None:
+    _set_csrf_cookie(client)
+    _seed_project(db_session)
+
+    response = client.post('/api/v1/integrations/gmail/sync', headers=CSRF_HEADERS)
+
+    assert response.status_code == 200
+    review_item = next(
+        item
+        for item in db_session.query(ReviewItem).all()
+        if item.payload.get('agent_name') == 'mail_document_agent'
+    )
+    assert review_item.payload['source_ids'] == [
+        'gmail-project-alpha-redis-summary',
+        'gmail_attachment:gmail-project-alpha-redis-summary:att-budget-pdf',
+    ]
+    assert review_item.payload['project_assignment_method'] == 'llm_tool'
+    assert review_item.payload['project_key'] == 'project-alpha'
+    assert review_item.payload['project_name'] == 'Project Alpha'
+    assert review_item.payload['project_needs_user_selection'] is False
+    agent_run = db_session.query(AgentRun).one()
+    assert agent_run.metadata_['project_routing']['enabled'] is True
+    assert agent_run.metadata_['project_routing']['project_count'] == 1
+    assert agent_run.metadata_['project_routing']['method'] == 'langchain_tools'
+
+
+def test_drive_sync_marks_unmatched_project_routing_for_user_selection(client, db_session) -> None:
+    _set_csrf_cookie(client)
+    _seed_project(db_session, project_key='customer-onboarding', name='Customer Onboarding')
+
+    response = client.post('/api/v1/integrations/drive/sync', headers=CSRF_HEADERS)
+
+    assert response.status_code == 200
+    review_items = db_session.query(ReviewItem).order_by(ReviewItem.id).all()
+    unmatched_item = next(item for item in review_items if item.payload['source_ids'] == ['drive-permission-leakage-case'])
+    assert unmatched_item.payload['source_types'] == ['drive']
+    assert unmatched_item.payload['project_assignment_method'] == 'llm_tool'
+    assert 'project_key' not in unmatched_item.payload
+    assert unmatched_item.payload['project_needs_user_selection'] is True
 
 
 def test_duplicate_gmail_sync_does_not_rerun_agent_for_unchanged_sources(client, db_session) -> None:

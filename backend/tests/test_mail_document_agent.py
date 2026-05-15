@@ -6,7 +6,11 @@ from backend.app.agents.mail_document_agent import (
     MailDocumentAgent,
     MailDocumentAgentModelResponse,
 )
-from backend.app.agents.mail_document_agent.llm import LangChainMailDocumentAgentModel
+from backend.app.agents.mail_document_agent.llm import (
+    LangChainMailDocumentAgentModel,
+    render_mail_docs_llm_prompt,
+)
+from backend.app.agents.mail_document_agent.service import MailDocumentProjectOption
 
 
 class FakeChatResponse:
@@ -34,6 +38,39 @@ class FakeMailDocumentModel:
             input_tokens=900,
             output_tokens=160,
         )
+
+
+class FakeProjectRouter:
+    def route(self, *, candidates, projects):
+        return {
+            'decisions': [
+                {
+                    'source_id': candidates[0].source_id,
+                    'item_index': 0,
+                    'project_key': projects[0].project_key,
+                    'project_name': projects[0].name,
+                    'confidence_score': 0.91,
+                    'assignment_summary': '메일/문서 후보가 Project Alpha 업무와 연결됩니다.',
+                    'assignment_reason': '증거 URL과 요약이 Project Alpha Redis 작업과 일치합니다.',
+                    'alternatives': [],
+                    'needs_user_selection': False,
+                }
+            ],
+            'input_tokens': 20,
+            'output_tokens': 8,
+            'model_name': 'fake-project-router',
+        }
+
+
+class SpyProjectRouter:
+    model_name = 'spy-project-router'
+
+    def __init__(self) -> None:
+        self.called = False
+
+    def route(self, *, candidates, projects):
+        self.called = True
+        return {'decisions': [], 'model_name': self.model_name}
 
 
 def test_mail_document_agent_manifest_declares_shared_contracts() -> None:
@@ -83,6 +120,148 @@ def test_mail_document_agent_creates_evidence_backed_candidate() -> None:
     assert result.cache_key
 
 
+def test_mail_document_agent_run_records_node_workflow_trace() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:workflow',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-workflow',
+                source_url='https://gmail.mock/project-alpha/redis-summary',
+                text='Project Alpha Redis 작업 결과를 공유합니다.',
+                author='noah@example.com',
+                timestamp='2026-04-30T10:15:00+00:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=FakeMailDocumentModel()).run(packet)
+
+    assert result.candidates
+    assert packet.context['mail_document_workflow'] == {
+        'nodes': [
+            'preprocess',
+            'classify_reviewability',
+            'extract_candidate',
+            'project_route',
+            'build_result',
+        ],
+        'reviewability_decision': 'reviewable',
+        'is_business_related': True,
+        'candidate_count': 1,
+    }
+
+
+def test_mail_document_agent_workflow_skips_project_route_for_unreviewable_llm_output() -> None:
+    class UnreviewableModel:
+        def extract(self, packet: EvidencePacket) -> MailDocumentAgentModelResponse:
+            return MailDocumentAgentModelResponse(
+                title='개인 메일',
+                summary='업무 관련 없음',
+                item_type='history_event',
+                confidence_score=0.2,
+                input_tokens=10,
+                output_tokens=5,
+                model_name='fake-mail-llm',
+                is_business_related=False,
+                structured_data={
+                    'reviewability_decision': 'not_reviewable',
+                    'summary_quality': 'non_business',
+                },
+            )
+
+    router = SpyProjectRouter()
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:workflow-unreviewable',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal',
+                source_url='https://gmail.mock/personal',
+                text='Subject: Lunch\n\nNo work talk.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        context={
+            'project_options': [
+                MailDocumentProjectOption(
+                    project_key='project-alpha',
+                    name='Project Alpha',
+                    summary='Redis worker status work',
+                )
+            ],
+            'project_router': router,
+        },
+    )
+
+    result = MailDocumentAgent(model=UnreviewableModel()).run(packet)
+
+    assert result.candidates == []
+    assert router.called is False
+    assert packet.context['mail_document_workflow']['nodes'] == [
+        'preprocess',
+        'classify_reviewability',
+        'extract_candidate',
+        'project_route',
+        'build_result',
+    ]
+    assert packet.context['mail_document_workflow']['reviewability_decision'] == 'not_reviewable'
+
+
+def test_mail_document_agent_run_routes_projects_inside_workflow() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:project-routing',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-project-alpha',
+                source_url='https://gmail.mock/project-alpha/redis-summary',
+                text='Project Alpha Redis 작업 결과를 공유합니다.',
+                author='noah@example.com',
+                timestamp='2026-04-30T10:15:00+00:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+        context={
+            'project_options': [
+                MailDocumentProjectOption(
+                    project_key='project-alpha',
+                    name='Project Alpha',
+                    summary='Redis worker status work',
+                )
+            ],
+            'project_router': FakeProjectRouter(),
+        },
+    )
+
+    result = MailDocumentAgent(model=FakeMailDocumentModel()).run(packet)
+
+    candidate = result.candidates[0]
+    assert candidate.payload_fields['project_assignment_method'] == 'llm_tool'
+    assert candidate.payload_fields['project_key'] == 'project-alpha'
+    assert candidate.payload_fields['project_name'] == 'Project Alpha'
+    assert candidate.payload_fields['project_assignment_confidence'] == 0.91
+    assert result.cost.token_usage.input_tokens == 920
+    assert result.cost.token_usage.output_tokens == 168
+    assert packet.context['project_routing'] == {
+        'enabled': True,
+        'method': 'langchain_tools',
+        'project_count': 1,
+        'model_name': 'fake-project-router',
+        'input_tokens': 20,
+        'output_tokens': 8,
+    }
+
+
 def test_mail_document_llm_treats_string_false_as_not_business_related() -> None:
     packet = EvidencePacket(
         source_type='mail_document',
@@ -112,6 +291,85 @@ def test_mail_document_llm_treats_string_false_as_not_business_related() -> None
     result = MailDocumentAgent(model=model).run(packet)
 
     assert result.candidates == []
+
+
+def test_mail_document_llm_treats_personal_label_as_not_business_related() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:test',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal-2',
+                source_url='https://gmail.mock/personal-2',
+                text='Subject: Weekend\n\nPersonal plans only.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+    model = LangChainMailDocumentAgentModel(
+        provider='openai',
+        model_name='gpt-5.4-mini',
+        chat_model=FakeChatModel(
+            '{"title":"개인 메일","summary":"업무 관련 없음","item_type":"history_event",'
+            '"confidence_score":0.91,"is_business_related":"personal","structured_data":{}}'
+        ),
+    )
+
+    result = MailDocumentAgent(model=model).run(packet)
+
+    assert result.candidates == []
+
+
+def test_deterministic_mail_document_agent_skips_personal_email() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:personal',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-personal-lunch',
+                source_url='https://gmail.mock/personal-lunch',
+                text='Subject: Lunch\n\nAre you free for lunch this weekend? No work talk, just catching up.',
+                author='friend@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    result = MailDocumentAgent(model=DeterministicMailDocumentAgentModel()).run(packet)
+
+    assert result.candidates == []
+
+
+def test_mail_document_llm_prompt_requires_reviewable_business_decision() -> None:
+    packet = EvidencePacket(
+        source_type='mail_document',
+        source_window='mail-docs:prompt-quality',
+        messages=[
+            EvidenceMessage(
+                source_id='gmail-newsletter',
+                source_url='https://gmail.mock/newsletter',
+                text='Subject: Weekly digest\n\nHere are general product updates and promotional announcements.',
+                author='newsletter@example.com',
+                timestamp='2026-05-13T09:00:00+09:00',
+                permission_level='internal',
+                metadata={'source_type': 'gmail'},
+            )
+        ],
+        permission_context=PermissionContext(user_id='demo-admin', role='admin'),
+    )
+
+    prompt = render_mail_docs_llm_prompt(packet)
+
+    assert 'reviewability_decision' in prompt
+    assert 'set is_business_related=false' in prompt
+    assert 'personal mail, newsletters, promotions' in prompt
 
 
 def test_deterministic_mail_document_agent_marks_metadata_only_evidence_uncertain() -> None:
