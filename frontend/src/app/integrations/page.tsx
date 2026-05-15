@@ -873,7 +873,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className="integration-glass-card min-h-[26.5rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
+                className="integration-glass-card min-h-[24.5rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">

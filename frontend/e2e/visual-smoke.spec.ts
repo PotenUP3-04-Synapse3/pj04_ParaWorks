@@ -324,6 +324,7 @@ test("integration connector cards use consistent chrome and action layout", asyn
     elements.map((element) => Math.round(element.getBoundingClientRect().height)),
   );
   expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+  expect(Math.max(...heights)).toBeLessThanOrEqual(400);
 
   const actionHeights = await page.locator('[data-testid$="-card-actions"]').evaluateAll((elements) =>
     elements.map((element) => Math.round(element.getBoundingClientRect().height)),
