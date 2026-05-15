@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, FolderKanban, Plus, RefreshCw, Search } from "lucide-react";
+import { CheckCircle2, ExternalLink, FolderKanban, Plus, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { apiGet, apiPost } from "@/lib/api/client";
@@ -242,7 +242,7 @@ export default function ProjectsPage() {
                     <h2 className="mt-1 text-2xl font-extrabold text-ink">{selectedProject.name}</h2>
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{selectedProject.summary}</p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid w-full grid-cols-1 gap-2 text-center sm:w-auto sm:grid-cols-3">
                     <Metric label="근거" value={selectedProject.evidence_count} />
                     <Metric label="활동" value={selectedProject.activity_items.length} />
                     <Metric label="검토 대기" value={selectedProject.pending_review_count} />
@@ -265,6 +265,7 @@ export default function ProjectsPage() {
                         </div>
                         <p className="mt-2 text-sm leading-6 text-muted">{item.task_summary}</p>
                         <p className="mt-2 text-xs font-semibold text-[var(--primary-dark)]">{item.evidence_reason}</p>
+                        <SourceEvidenceLink href={item.source_url} label={`원본 근거 열기 ${item.title}`} />
                       </article>
                     ))
                   )}
@@ -287,6 +288,7 @@ export default function ProjectsPage() {
                         </div>
                         <h3 className="mt-2 text-sm font-extrabold text-ink">{item.title}</h3>
                         <p className="mt-2 text-sm leading-6 text-muted">{item.summary}</p>
+                        <SourceEvidenceLink href={firstSourceLink(item.source_links)} label={`원본 근거 열기 ${item.title}`} />
                       </article>
                     ))
                   )}
@@ -302,7 +304,7 @@ export default function ProjectsPage() {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-[80px] rounded-lg border border-line bg-white px-3 py-2">
+    <div data-testid="project-metric" className="min-w-0 rounded-lg border border-line bg-white px-3 py-2">
       <p className="text-[11px] font-bold text-muted">{label}</p>
       <p className="mt-1 text-lg font-extrabold text-ink">{value.toLocaleString()}</p>
     </div>
@@ -321,4 +323,27 @@ function ProjectPanel({ title, description, children }: { title: string; descrip
 
 function EmptyState({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-line p-4 text-sm leading-6 text-muted">{text}</p>;
+}
+
+function firstSourceLink(links: string[]) {
+  return links.find((link) => link.trim().length > 0) ?? "";
+}
+
+function SourceEvidenceLink({ href, label }: { href: string; label: string }) {
+  if (!href.trim()) {
+    return null;
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      className="mt-3 inline-flex items-center gap-1.5 text-xs font-extrabold text-[var(--primary-dark)] underline-offset-4 hover:underline"
+    >
+      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+      원본 근거
+    </a>
+  );
 }

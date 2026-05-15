@@ -13,10 +13,16 @@ PROMOTABLE_REVIEW_TYPES = {'decision_record', 'history_event', 'timeline_event',
 
 def build_promotion_preview(item: ReviewItem) -> dict:
     normalized_payload = _normalized_payload_for_item(item)
+    if _requires_project_key(item):
+        normalized_payload = {
+            **normalized_payload,
+            'project_key': _string_payload(item, 'project_key'),
+        }
+    required_fields = _required_fields_for_item(item)
     missing_required_fields = [
         field
         for field, value in normalized_payload.items()
-        if field in _required_fields_for_type(item.item_type) and not str(value).strip()
+        if field in required_fields and not str(value).strip()
     ]
 
     return {
@@ -184,6 +190,21 @@ def _required_fields_for_type(item_type: str) -> tuple[str, ...]:
     if item_type == 'project_assignment':
         return ('title', 'project_key', 'project_name', 'source_id', 'evidence_reason')
     return ()
+
+
+def _required_fields_for_item(item: ReviewItem) -> tuple[str, ...]:
+    fields = list(_required_fields_for_type(item.item_type))
+    if _requires_project_key(item):
+        fields.append('project_key')
+    return tuple(fields)
+
+
+def _requires_project_key(item: ReviewItem) -> bool:
+    return (
+        item.item_type in PROMOTABLE_REVIEW_TYPES
+        and item.payload.get('agent_name') == 'slack_agent'
+        and item.payload.get('project_assignment_method') == 'llm_tool'
+    )
 
 
 def _string_payload(item: ReviewItem, key: str) -> str:

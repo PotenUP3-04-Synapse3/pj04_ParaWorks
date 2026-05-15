@@ -89,8 +89,10 @@ def route_projects_for_candidates(
         'rules': [
             '반드시 list_registered_projects tool로 프로젝트 목록을 확인하세요.',
             '프로젝트가 애매하면 score_project_candidates tool 결과를 참고하세요.',
+            '등록 프로젝트에 해당한다고 판단한 경우에만 project_key를 채우세요.',
             '근거가 부족하면 project_key를 null로 두고 needs_user_selection=true로 두세요.',
             '새 프로젝트를 만들지 마세요. 등록된 프로젝트 중에서만 선택하세요.',
+            '모든 candidate_items에 대해 decisions 항목을 하나씩 반환하세요.',
         ],
         'projects_count': len(projects),
         'candidate_items': candidates,

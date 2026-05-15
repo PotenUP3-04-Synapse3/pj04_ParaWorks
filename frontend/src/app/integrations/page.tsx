@@ -54,7 +54,10 @@ type SyncProgressState = {
   displayName: string;
   status: "running" | "complete" | "error";
   stageIndex: number;
+  progressPct: number;
   backgrounded: boolean;
+  jobId?: string;
+  lastMessage?: string;
   result?: IntegrationSyncResponse;
   errorMessage?: string;
 };
@@ -457,7 +460,13 @@ export default function IntegrationsPage() {
         const latest = runtime.latest_sync;
         setSyncProgress((current) =>
           current?.connectorType === type && current.status === "running"
-            ? { ...current, stageIndex: stageIndexFromProgress(latest.progress_pct) }
+            ? {
+                ...current,
+                stageIndex: stageIndexFromProgress(latest.progress_pct),
+                progressPct: latest.progress_pct,
+                jobId: latest.job_id,
+                lastMessage: latest.message,
+              }
             : current,
         );
 
@@ -484,7 +493,13 @@ export default function IntegrationsPage() {
         const latest = runtime.latest_sync;
         setSyncProgress((current) =>
           current?.connectorType === type && current.status === "running"
-            ? { ...current, stageIndex: stageIndexFromProgress(latest.progress_pct) }
+            ? {
+                ...current,
+                stageIndex: stageIndexFromProgress(latest.progress_pct),
+                progressPct: latest.progress_pct,
+                jobId: latest.job_id,
+                lastMessage: latest.message,
+              }
             : current,
         );
 
@@ -510,6 +525,8 @@ export default function IntegrationsPage() {
             ...current,
             status: "complete",
             stageIndex: SYNC_RUNNING_STAGES.length - 1,
+            progressPct: 100,
+            jobId: result.job_id,
             result,
           }
         : current,
@@ -549,6 +566,7 @@ export default function IntegrationsPage() {
       displayName,
       status: "running",
       stageIndex: 0,
+      progressPct: 0,
       backgrounded: false,
     });
     setSyncModalOpen(true);
@@ -570,6 +588,15 @@ export default function IntegrationsPage() {
         type === "slack" ? { selected_channel_ids: selectedSlackChannels, run_async: true } : undefined,
       );
       setActiveJobId(result.job_id);
+      setSyncProgress((current) =>
+        current?.connectorType === type
+          ? {
+              ...current,
+              jobId: result.job_id,
+              progressPct: result.status === "complete" ? 100 : current.progressPct,
+            }
+          : current,
+      );
       if (result.status === "failed") {
         throw new Error("동기화 작업이 실패했습니다.");
       }
@@ -646,6 +673,83 @@ export default function IntegrationsPage() {
       }
       return [...current, channelId];
     });
+  }
+
+  async function refreshBackgroundSyncProgress(type: string) {
+    const runtime = await loadRuntimeStatus(type).catch(() => undefined);
+    const latest = runtime?.latest_sync;
+    if (!runtime || !latest) return;
+    if (syncProgress?.jobId && latest.job_id !== syncProgress.jobId) return;
+
+    if (latest.status === "complete") {
+      const result = syncResponseFromRuntimeStatus(type, runtime, syncProgress?.result);
+      if (result) await markSyncComplete(type, result);
+      return;
+    }
+
+    if (latest.status === "failed") {
+      setSyncProgress((current) =>
+        current?.connectorType === type
+          ? {
+              ...current,
+              status: "error",
+              progressPct: 100,
+              stageIndex: SYNC_RUNNING_STAGES.length - 1,
+              lastMessage: latest.message,
+              errorMessage: latest.message || "동기화 작업이 실패했습니다.",
+            }
+          : current,
+      );
+      return;
+    }
+
+    setSyncProgress((current) =>
+      current?.connectorType === type
+        ? {
+            ...current,
+            status: "running",
+            progressPct: latest.progress_pct,
+            stageIndex: stageIndexFromProgress(latest.progress_pct),
+            jobId: latest.job_id,
+            lastMessage: latest.message,
+          }
+        : current,
+    );
+  }
+
+  useEffect(() => {
+    if (!syncProgress || syncProgress.status !== "running" || !syncProgress.backgrounded) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshBackgroundSyncProgress(syncProgress.connectorType);
+    }, SYNC_STATUS_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncProgress?.connectorType, syncProgress?.status, syncProgress?.backgrounded]);
+
+  function openRuntimeSyncProgress(type: string, runtime: IntegrationRuntimeStatus) {
+    const latest = runtime.latest_sync;
+    if (!latest) return;
+    const displayName = connectorDisplayName(type, manifests);
+    const isComplete = latest.status === "complete";
+    const isError = latest.status === "failed";
+    setActiveJobId(latest.job_id);
+    setSyncProgress({
+      connectorType: type,
+      displayName,
+      status: isComplete ? "complete" : isError ? "error" : "running",
+      stageIndex: stageIndexFromProgress(latest.progress_pct),
+      progressPct: latest.progress_pct,
+      backgrounded: false,
+      jobId: latest.job_id,
+      lastMessage: latest.message,
+      errorMessage: isError ? latest.message : undefined,
+      result: isComplete ? syncResponseFromRuntimeStatus(type, runtime) : undefined,
+    });
+    setSyncModalOpen(true);
   }
 
   /**
@@ -950,6 +1054,18 @@ export default function IntegrationsPage() {
           <div className="space-y-3 p-4">
             <SourceOperationsPanel summary={dashboardSummary} />
 
+            {syncProgress && !syncModalOpen ? (
+              <SyncProgressSummaryCard progress={syncProgress} onOpen={() => setSyncModalOpen(true)} />
+            ) : null}
+
+            {!syncProgress && slackRuntime?.latest_sync && ["queued", "running"].includes(slackRuntime.latest_sync.status) ? (
+              <RuntimeSyncProgressSummaryCard
+                displayName="Slack"
+                latest={slackRuntime.latest_sync}
+                onOpen={() => openRuntimeSyncProgress("slack", slackRuntime)}
+              />
+            ) : null}
+
             {slackRuntime ? (
               <SlackRuntimeStatusPanel
                 status={slackRuntime}
@@ -1020,6 +1136,101 @@ function ResultMetric({ label, value }: { label: string; value: number | string 
     <div className="glass-row rounded-lg p-3">
       <p className="text-xs text-[var(--ink-muted)]">{label}</p>
       <p className="mt-1 font-semibold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
+function SyncProgressSummaryCard({
+  progress,
+  onOpen,
+}: {
+  progress: SyncProgressState;
+  onOpen: () => void;
+}) {
+  const currentStage = SYNC_RUNNING_STAGES[progress.stageIndex] ?? SYNC_RUNNING_STAGES[0];
+  const isComplete = progress.status === "complete";
+  const isError = progress.status === "error";
+  const toneClass = isComplete
+    ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+    : isError
+      ? "border-red-200 bg-red-50 text-red-950"
+      : "border-amber-200 bg-amber-50 text-amber-950";
+  const subTextClass = isComplete ? "text-emerald-900" : isError ? "text-red-900" : "text-amber-900";
+  const title = isComplete
+    ? `${progress.displayName} 동기화 완료`
+    : isError
+      ? `${progress.displayName} 동기화 실패`
+      : `${progress.displayName} 동기화 진행 중`;
+  return (
+    <div
+      data-testid="background-sync-progress"
+      className={`rounded-lg border p-3 text-sm ${toneClass}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">{title}</p>
+          <p className={`mt-1 text-xs leading-5 ${subTextClass}`}>{currentStage}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex h-8 items-center justify-center rounded-lg border border-current bg-white px-3 text-xs font-bold hover:bg-white/70"
+        >
+          {progress.status === "running" ? "진행 창 열기" : "결과 보기"}
+        </button>
+      </div>
+      <ProgressBar progressPct={progress.progressPct} />
+      {progress.lastMessage ? <p className={`mt-2 break-all text-xs ${subTextClass}`}>{progress.lastMessage}</p> : null}
+    </div>
+  );
+}
+
+function RuntimeSyncProgressSummaryCard({
+  displayName,
+  latest,
+  onOpen,
+}: {
+  displayName: string;
+  latest: NonNullable<SlackRuntimeStatus["latest_sync"]>;
+  onOpen: () => void;
+}) {
+  return (
+    <div
+      data-testid="runtime-sync-progress"
+      className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">{displayName} 동기화 진행 중</p>
+          <p className="mt-1 text-xs leading-5 text-blue-900">
+            {SYNC_RUNNING_STAGES[stageIndexFromProgress(latest.progress_pct)]}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex h-8 items-center justify-center rounded-lg border border-blue-300 bg-white px-3 text-xs font-bold text-blue-950 hover:bg-blue-100"
+        >
+          진행 창 열기
+        </button>
+      </div>
+      <ProgressBar progressPct={latest.progress_pct} />
+      {latest.message ? <p className="mt-2 break-all text-xs text-blue-900">{latest.message}</p> : null}
+    </div>
+  );
+}
+
+function ProgressBar({ progressPct }: { progressPct: number }) {
+  const clamped = Math.max(0, Math.min(100, Math.round(progressPct)));
+  return (
+    <div className="mt-3" data-testid="sync-progress-percent">
+      <div className="flex items-center justify-between text-xs font-bold">
+        <span>진행률</span>
+        <span>{clamped}%</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/70">
+        <div className="h-full rounded-full bg-[var(--workspace-accent)]" style={{ width: `${clamped}%` }} />
+      </div>
     </div>
   );
 }
@@ -1096,6 +1307,11 @@ function SyncProgressModal({
           <SyncStep label="AI 분석" active={isRunning && progress.stageIndex === 1} done={progress.stageIndex > 1 || isComplete} />
           <SyncStep label="검토 항목 저장" active={isRunning && progress.stageIndex === 2} done={isComplete} />
         </div>
+
+        <ProgressBar progressPct={progress.progressPct} />
+        {progress.lastMessage ? (
+          <p className="mt-2 break-all text-xs leading-5 text-[var(--ink-muted)]">{progress.lastMessage}</p>
+        ) : null}
 
         {result ? (
           <>

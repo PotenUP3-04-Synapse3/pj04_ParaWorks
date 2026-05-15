@@ -102,6 +102,13 @@ function projectRoutingReason(item: ReviewItem) {
   return reason || undefined;
 }
 
+function needsProjectSelection(item: ReviewItem, preview?: ReviewPromotionPreview) {
+  return (
+    item.payload.project_assignment_method === "llm_tool" &&
+    (!stringField(item.payload.project_key) || preview?.missing_required_fields?.includes("project_key"))
+  );
+}
+
 function projectAssignmentFields(item: ReviewItem) {
   if (item.item_type !== "project_assignment") return undefined;
   const projectName = stringField(item.payload.project_name).trim();
@@ -297,6 +304,11 @@ export default function ReviewPage() {
     setError(undefined);
     try {
       await apiPatch<ReviewItem>(`/api/v1/review/${item.id}`, update);
+      setPreviews((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
       await loadItems();
       notifyReviewQueueUpdated();
     } catch (caught) {
@@ -500,6 +512,7 @@ export default function ReviewPage() {
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
                     const workFields = mailDocsWorkFields(item);
                     const assignmentFields = projectAssignmentFields(item);
+                    const requiresProjectSelection = needsProjectSelection(item, preview);
 
                     return (
                       <div key={item.id} className="p-5">
@@ -610,6 +623,14 @@ export default function ReviewPage() {
                                     ))}
                                   </select>
                                 </label>
+                                {requiresProjectSelection ? (
+                                  <div className="mt-2 max-w-sm rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+                                    프로젝트 선택 후 승인 가능
+                                    <Link href="/projects" className="ml-2 underline underline-offset-4">
+                                      새 프로젝트 만들기
+                                    </Link>
+                                  </div>
+                                ) : null}
                                 {assignmentFields ? (
                                   <div className="mt-4 max-w-3xl rounded-lg border border-[var(--line-soft)] bg-white/70 p-4">
                                     <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ink-muted)]">
