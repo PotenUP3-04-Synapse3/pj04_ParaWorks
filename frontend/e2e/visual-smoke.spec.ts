@@ -236,6 +236,8 @@ test("integration sync shows connector counts", async ({ page }) => {
   await expect(page.getByTestId("source-operation-slack-header")).toContainText("Slack");
   await expect(page.getByTestId("source-operation-slack-count")).toBeVisible();
   await expect(page.getByTestId("source-operation-slack-bar")).toBeVisible();
+  await expect(page.getByTestId("source-operation-other")).toHaveCount(0);
+  await expect(sourcePanel).not.toContainText("기타");
   await expect
     .poll(async () => {
       const header = await page.getByTestId("source-operation-slack-header").boundingBox();

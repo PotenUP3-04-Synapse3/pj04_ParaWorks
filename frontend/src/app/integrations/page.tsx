@@ -1206,8 +1206,7 @@ function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
     (counts.slack ?? 0) +
     (counts.gmail ?? 0) +
     (counts.drive ?? 0) +
-    (counts.calendar ?? 0) +
-    (counts.other ?? 0);
+    (counts.calendar ?? 0);
 
   return (
     <div
@@ -1228,7 +1227,6 @@ function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
         <SourceOperationRow id="gmail" label="Gmail" value={counts.gmail ?? 0} total={total} tone="blue" />
         <SourceOperationRow id="drive" label="Google Drive" value={counts.drive ?? 0} total={total} tone="green" />
         <SourceOperationRow id="calendar" label="Google Calendar" value={counts.calendar ?? 0} total={total} tone="orange" />
-        <SourceOperationRow id="other" label="기타" value={counts.other ?? 0} total={total} tone="gray" />
       </div>
     </div>
   );
