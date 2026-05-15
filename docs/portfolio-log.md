@@ -17,6 +17,23 @@ demo story changes.
 
 - Review에서 승인된 업무가 오늘의 실행 목록으로 연결되고, 프로젝트별 활동 상태가 첫 화면에 드러나도록 하여 “검토된 회사 기억이 실제 업무 홈으로 이어지는” 흐름을 강화했다.
 
+## 2026-05-15 Google Calendar all-calendars project memory path
+
+- Google Calendar sync now covers every accessible calendar instead of only the
+  primary calendar, with per-calendar cursors and collision-safe Calendar source
+  ids.
+- Calendar evidence now flows through the same evidence-first path as
+  Slack/Gmail/Drive: sync, Source evidence, AgentRun, ReviewItem, approval,
+  Projects/Timeline, and approval-gated RAG indexing.
+- Approved Calendar timeline entries now use the actual event start time for
+  project activity and timeline grouping.
+
+Portfolio angle:
+
+- Shows the company-memory platform handling schedules as first-class reviewed
+  evidence across all user calendars, while keeping Calendar inside the
+  Mail/Docs ownership lane and preserving the human review boundary.
+
 ## 2026-05-15 프로젝트 근거 기본 선택 및 Slack 원문 시각 보강
 
 - 프로젝트/타임라인 탭이 최신 생성 프로젝트를 무조건 기본 선택해, 승인 근거가 있는 프로젝트가 있어도 빈 프로젝트가 먼저 보이던 문제를 수정했다.

@@ -125,6 +125,46 @@ export function SourceEvidenceDrawer({
                         {row.section_path ? <p className="mt-1 font-semibold">위치: {row.section_path}</p> : null}
                       </div>
                     ) : null}
+                    {row.source_type === "calendar" ? (
+                      <dl className="mt-3 grid gap-2 rounded-md border border-[var(--line-soft)] bg-[var(--glass-strong)] px-3 py-2 text-xs text-[var(--ink-muted)] sm:grid-cols-2">
+                        {row.calendar_name ? (
+                          <div>
+                            <dt className="font-bold">Calendar</dt>
+                            <dd>{row.calendar_name}</dd>
+                          </div>
+                        ) : null}
+                        {row.calendar_start ? (
+                          <div>
+                            <dt className="font-bold">Start</dt>
+                            <dd>{row.calendar_start}</dd>
+                          </div>
+                        ) : null}
+                        {row.calendar_end ? (
+                          <div>
+                            <dt className="font-bold">End</dt>
+                            <dd>{row.calendar_end}</dd>
+                          </div>
+                        ) : null}
+                        {row.calendar_organizer ? (
+                          <div>
+                            <dt className="font-bold">Organizer</dt>
+                            <dd>{row.calendar_organizer}</dd>
+                          </div>
+                        ) : null}
+                        {row.calendar_location ? (
+                          <div>
+                            <dt className="font-bold">Location</dt>
+                            <dd>{row.calendar_location}</dd>
+                          </div>
+                        ) : null}
+                        {row.calendar_attendee_summary ? (
+                          <div>
+                            <dt className="font-bold">Attendees</dt>
+                            <dd>{row.calendar_attendee_summary}</dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-tight">
                       {row.source_id ? <span className="truncate">Source ID: {row.source_id}</span> : null}
                       {row.timestamp ? <span>Time: {row.timestamp}</span> : null}

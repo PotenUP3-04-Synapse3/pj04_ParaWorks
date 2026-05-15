@@ -15,7 +15,19 @@ def build_evidence_summary(packet: EvidencePacket) -> list[dict[str, object]]:
             'importance_score': _int_or_default(message.metadata.get('importance_score'), 0),
             'snippet': message.source_snippet,
         }
-        for key in ('parser_status', 'section_path', 'evidence_reason'):
+        for key in (
+            'parser_status',
+            'section_path',
+            'evidence_reason',
+            'calendar_id',
+            'calendar_summary',
+            'event_start',
+            'event_end',
+            'location',
+            'organizer_email',
+            'attendee_domains',
+            'event_context_key',
+        ):
             value = message.metadata.get(key)
             if value:
                 row[key] = value

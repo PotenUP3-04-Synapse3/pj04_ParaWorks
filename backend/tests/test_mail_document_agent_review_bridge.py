@@ -574,9 +574,16 @@ def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Ses
         'calendar-project-alpha-review',
         'internal',
         metadata={
+            'calendar_id': 'team@example.com',
+            'calendar_summary': 'Team Calendar',
+            'calendar_primary': False,
+            'calendar_access_role': 'reader',
+            'content_signature': 'calendar:team@example.com:event-1:2026-05-01T10:00:00Z',
             'event_context_key': 'event-1:2026-05-01T10:00:00Z',
             'event_status': 'confirmed',
             'organizer_email': 'lead@example.com',
+            'event_start': '2026-05-02T09:00:00+09:00',
+            'event_end': '2026-05-02T10:00:00+09:00',
             'duration_minutes': 60,
         },
     )
@@ -598,6 +605,11 @@ def test_mail_document_evidence_packet_includes_calendar_sources(db_session: Ses
     assert message.metadata['event_context_key'] == 'event-1:2026-05-01T10:00:00Z'
     assert message.metadata['event_status'] == 'confirmed'
     assert message.metadata['organizer_email'] == 'lead@example.com'
+    assert message.metadata['calendar_id'] == 'team@example.com'
+    assert message.metadata['calendar_summary'] == 'Team Calendar'
+    assert message.metadata['calendar_access_role'] == 'reader'
+    assert message.metadata['content_signature'] == 'calendar:team@example.com:event-1:2026-05-01T10:00:00Z'
+    assert message.metadata['event_start'] == '2026-05-02T09:00:00+09:00'
 
 
 def test_mail_document_evidence_packet_preserves_chunk_snippet_and_calendar_due_metadata(db_session: Session) -> None:

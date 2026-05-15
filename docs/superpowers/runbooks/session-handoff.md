@@ -2,6 +2,34 @@
 
 Updated: 2026-05-15
 
+## 2026-05-15 Google Calendar all-calendars MVP
+
+- Scope:
+  - Calendar stayed under Developer B's Mail/Document ownership and is now
+    treated as Mail/Docs/Calendar evidence. No separate Calendar Agent or new
+    endpoint was added.
+- Backend changes:
+  - `backend/app/connectors/google.py` now calls Google `calendarList` and then
+    fetches events for each accessible calendar.
+  - Initial Calendar collection uses `now-30d` to `now+180d`; delta collection
+    uses per-calendar `updatedMin` from `sync_partition=calendar:{calendar_id}`.
+  - Calendar source ids are `calendar:{calendar_id}:{event_id}`.
+  - Calendar metadata is preserved through Source/DocumentChunk, Mail/Docs
+    evidence packets, AgentRun evidence summary, ReviewItem payload/source
+    evidence, and Projects/Timeline occurrence time.
+  - Mail/Docs deterministic extraction now emits `timeline_event` for confirmed
+    meetings/milestones, `todo` for preparation/deadline/follow-up, and skips
+    low-signal personal calendar events.
+  - `backend/app/projects/service.py` now prefers `event_start`/`start` from a
+    Calendar source when computing `occurred_at`.
+- Frontend changes:
+  - Review source evidence can display Calendar name/start/end/location/
+    organizer/attendee summary.
+- Verification to rerun if continuing:
+  - `uv run pytest backend/tests/test_google_connector.py backend/tests/test_connector_golden_dataset.py backend/tests/test_mail_document_agent.py backend/tests/test_mail_document_agent_review_bridge.py backend/tests/test_mail_document_agent_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py backend/tests/test_rag_indexing.py -q`
+  - `uv run ruff check backend/app/connectors/google.py backend/app/agents/mail_document_agent/agent.py backend/app/agents/mail_document_agent/llm.py backend/app/agents/mail_document_agent/service.py backend/app/agent_runtime/evidence_summary.py backend/app/api/v1/review.py backend/app/projects/service.py`
+  - `npm.cmd run lint`
+  - `npm.cmd run build`
 ## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 개선
 
 - 변경 배경:

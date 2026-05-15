@@ -6,8 +6,9 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from urllib.parse import quote
 
 import httpx
 
@@ -29,6 +30,8 @@ GOOGLE_DRIVE_SHEETS_MIME_TYPE = 'application/vnd.google-apps.spreadsheet'
 GOOGLE_DRIVE_SHEETS_EXPORT_MIME_TYPE = 'text/csv'
 GOOGLE_DRIVE_SLIDES_MIME_TYPE = 'application/vnd.google-apps.presentation'
 GOOGLE_DRIVE_SLIDES_EXPORT_MIME_TYPE = 'text/plain'
+GOOGLE_CALENDAR_INITIAL_PAST_DAYS = 30
+GOOGLE_CALENDAR_INITIAL_FUTURE_DAYS = 180
 
 GOOGLE_CONNECTOR_SCOPES: dict[str, tuple[str, ...]] = {
     'gmail': (
@@ -57,7 +60,17 @@ class GoogleApiClient(Protocol):
     def drive_file_content_download(self, *, file_id: str) -> bytes:
         raise NotImplementedError
 
-    def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
+    def calendar_list(self) -> list[dict]:
+        raise NotImplementedError
+
+    def calendar_events(
+        self,
+        *,
+        calendar_id: str,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        updated_min: str | None = None,
+    ) -> list[dict]:
         raise NotImplementedError
 
 
@@ -151,16 +164,39 @@ class GoogleWebApiClient:
             params={'alt': 'media'},
         )
 
-    def calendar_events(self, *, updated_min: str | None = None) -> list[dict]:
+    def calendar_list(self) -> list[dict]:
+        params: GoogleQueryParams = {
+            'maxResults': str(self.page_limit),
+            'fields': 'nextPageToken,items(id,summary,primary,accessRole,selected,hidden)',
+        }
+        return self._get_paged_items(
+            f'{self.calendar_base_url}/calendar/v3/users/me/calendarList',
+            item_key='items',
+            params=params,
+        )
+
+    def calendar_events(
+        self,
+        *,
+        calendar_id: str,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        updated_min: str | None = None,
+    ) -> list[dict]:
         params: GoogleQueryParams = {
             'maxResults': str(self.page_limit),
             'singleEvents': 'true',
             'orderBy': 'updated',
         }
+        if time_min:
+            params['timeMin'] = time_min
+        if time_max:
+            params['timeMax'] = time_max
         if updated_min:
             params['updatedMin'] = updated_min
+        escaped_calendar_id = quote(calendar_id, safe='')
         return self._get_paged_items(
-            f'{self.calendar_base_url}/calendar/v3/calendars/primary/events',
+            f'{self.calendar_base_url}/calendar/v3/calendars/{escaped_calendar_id}/events',
             item_key='items',
             params=params,
         )
@@ -271,7 +307,7 @@ class GoogleConnector:
         if self.config.connector_type == 'drive':
             return [self._drive_file_to_source_event(file) for file in self.client.drive_files()]
         if self.config.connector_type == 'calendar':
-            return [self._calendar_event_to_source_event(event) for event in self.client.calendar_events()]
+            return self._calendar_source_events(latest_cursors_by_partition=None)
         raise GoogleApiError(f'Unsupported Google connector: {self.config.connector_type}')
 
     def fetch_events_since(self, latest_cursors_by_partition: dict[str, str]) -> list[SourceEvent]:
@@ -288,11 +324,32 @@ class GoogleConnector:
                 for file in self.client.drive_files(modified_after=latest_cursors_by_partition.get('drive'))
             ]
         if self.config.connector_type == 'calendar':
-            return [
-                self._calendar_event_to_source_event(event)
-                for event in self.client.calendar_events(updated_min=latest_cursors_by_partition.get('calendar'))
-            ]
+            return self._calendar_source_events(latest_cursors_by_partition=latest_cursors_by_partition)
         return self.fetch_events()
+
+    def _calendar_source_events(self, *, latest_cursors_by_partition: dict[str, str] | None) -> list[SourceEvent]:
+        events: list[SourceEvent] = []
+        calendars = self.client.calendar_list()
+        time_min, time_max = _calendar_initial_window()
+        for calendar in calendars:
+            calendar_id = str(calendar.get('id') or '').strip()
+            if not calendar_id:
+                continue
+            partition = f'calendar:{calendar_id}'
+            updated_min = latest_cursors_by_partition.get(partition) if latest_cursors_by_partition else None
+            if updated_min:
+                fetched = self.client.calendar_events(calendar_id=calendar_id, updated_min=updated_min)
+            else:
+                fetched = self.client.calendar_events(
+                    calendar_id=calendar_id,
+                    time_min=time_min,
+                    time_max=time_max,
+                )
+            events.extend(
+                self._calendar_event_to_source_event(event, calendar=calendar)
+                for event in fetched
+            )
+        return events
 
     def _gmail_message_to_source_events(self, message: dict) -> list[SourceEvent]:
         message_event = self._gmail_message_to_source_event(message)
@@ -475,8 +532,10 @@ class GoogleConnector:
             },
         )
 
-    def _calendar_event_to_source_event(self, event: dict) -> SourceEvent:
+    def _calendar_event_to_source_event(self, event: dict, *, calendar: dict) -> SourceEvent:
         event_id = str(event['id'])
+        calendar_id = str(calendar.get('id') or 'primary')
+        source_id = f'calendar:{calendar_id}:{event_id}'
         title = str(event.get('summary') or f'Calendar event {event_id}')
         author = str((event.get('creator') or {}).get('email') or self.config.account_name)
         updated = str(event.get('updated') or '')
@@ -510,7 +569,7 @@ class GoogleConnector:
         ]
         return SourceEvent(
             source_type='calendar',
-            source_id=f'calendar:{event_id}',
+            source_id=source_id,
             source_url=str(event.get('htmlLink') or 'https://calendar.google.com'),
             title=title,
             body='\n'.join(line for line in body_lines if line or line == '').strip(),
@@ -520,13 +579,20 @@ class GoogleConnector:
             permission_level='internal',
             raw_metadata={
                 'event_id': event_id,
+                'calendar_id': calendar_id,
+                'calendar_summary': str(calendar.get('summary') or calendar_id),
+                'calendar_primary': bool(calendar.get('primary')),
+                'calendar_access_role': str(calendar.get('accessRole') or ''),
                 'location': location,
                 'start': start,
                 'end': end,
+                'event_start': start,
+                'event_end': end,
                 'attendee_count': len(participants),
+                'content_signature': f'{source_id}:{updated or start or end}',
                 **calendar_metadata,
                 'account_id': self.config.account_id,
-                'sync_partition': 'calendar',
+                'sync_partition': f'calendar:{calendar_id}',
                 'sync_cursor': updated,
                 'required_scopes': list(GOOGLE_CONNECTOR_SCOPES['calendar']),
             },
@@ -581,6 +647,18 @@ def _display_name(connector_type: str) -> str:
     if connector_type == 'calendar':
         return 'Google Calendar'
     return connector_type
+
+
+def _calendar_initial_window() -> tuple[str, str]:
+    now = datetime.now(UTC)
+    return (
+        _rfc3339_utc(now - timedelta(days=GOOGLE_CALENDAR_INITIAL_PAST_DAYS)),
+        _rfc3339_utc(now + timedelta(days=GOOGLE_CALENDAR_INITIAL_FUTURE_DAYS)),
+    )
+
+
+def _rfc3339_utc(value: datetime) -> str:
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
 
 def _header_value(message: dict, name: str) -> str | None:
