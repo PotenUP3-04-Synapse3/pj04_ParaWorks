@@ -6,6 +6,33 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-15 Google Calendar updatedMin fallback
+
+- Fixed Google Calendar sync recovery when Google rejects an old per-calendar
+  `updatedMin` cursor with `The requested minimum modification time lies too far
+  in the past`.
+- The connector now refetches only the affected calendar through the existing
+  initial window instead of failing the whole Calendar sync, preserving
+  evidence-first ingestion and duplicate-skip cost controls.
+- Verification: Calendar connector regression test was observed failing before
+  the fix, then `test_google_connector.py` passed with 30 tests; connector
+  ingestion plus Google connector tests passed with 41 tests; ruff passed on the
+  touched connector/test files.
+
+## 2026-05-15 Dashboard Calendar today events visibility
+
+- Connected synced Google Calendar `Source` rows to the Dashboard `today_events`
+  API response so today's events appear in the existing "today schedule" panel
+  without waiting for Review Queue promotion.
+- Kept the trust boundary intact: raw Calendar events are shown only as schedule
+  visibility, while Calendar-derived todos still appear in today's work list
+  only after approval into trusted `Todo` rows.
+- Updated the dashboard UI and API type contract so the top schedule metric and
+  right-side schedule panel use real Calendar event data.
+- Verification: dashboard backend tests passed with 4 tests, ruff passed for
+  touched backend files, dashboard Playwright passed, frontend lint completed
+  with existing timeline warnings only, and frontend production build passed.
+
 ## 2026-05-15 대시보드 오늘 할 일 및 담당 프로젝트 개선
 
 - 대시보드의 `오늘 해야 할 업무`가 검토 대기 todo 후보가 아니라, 승인된 todo ReviewItem 중 오늘(Asia/Seoul 기준) 이후 마감인 항목을 가까운 마감일 순으로 표시하도록 수정했다.

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -59,6 +59,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         [item for item in todo_candidates if _is_due_from_today(item.due_date or '', today)],
         key=lambda item: (item.due_date or '', item.id),
     )[:5]
+    today_events = _today_calendar_events(db)
     project_names = _project_names_by_key(db)
 
     assigned_projects = build_project_memory(db)
@@ -112,6 +113,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
             }
             for item in todo_items
         ],
+        'today_events': today_events,
         'assigned_projects': [
             {
                 'project_key': project.project_key,
@@ -150,6 +152,74 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
 
 def _today_kst() -> str:
     return datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()
+
+
+def _today_calendar_events(db: Session) -> list[dict]:
+    kst = ZoneInfo('Asia/Seoul')
+    today = datetime.now(kst).date()
+    day_start = datetime.combine(today, datetime.min.time(), tzinfo=kst)
+    day_end = day_start + timedelta(days=1)
+    calendar_sources = db.scalars(
+        select(Source).where(Source.source_type == 'calendar')
+    ).all()
+    events: list[tuple[datetime, dict]] = []
+    for source in calendar_sources:
+        metadata = source.raw_metadata or {}
+        starts_at = _parse_calendar_datetime(metadata.get('event_start') or metadata.get('start'))
+        if starts_at is None:
+            continue
+        starts_at_kst = starts_at.astimezone(kst)
+        if not (day_start <= starts_at_kst < day_end):
+            continue
+        events.append(
+            (
+                starts_at_kst,
+                {
+                    'id': source.id,
+                    'title': source.title,
+                    'start': _metadata_string(metadata, 'event_start') or _metadata_string(metadata, 'start'),
+                    'end': _metadata_string(metadata, 'event_end') or _metadata_string(metadata, 'end'),
+                    'location': _metadata_string(metadata, 'location'),
+                    'organizer': _metadata_string(metadata, 'organizer_email'),
+                    'attendee_summary': _calendar_attendee_summary(metadata),
+                    'source_url': source.source_url or '',
+                    'permission_level': source.permission_level,
+                },
+            )
+        )
+    return [event for _, event in sorted(events, key=lambda item: (item[0], item[1]['id']))[:5]]
+
+
+def _parse_calendar_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=ZoneInfo('Asia/Seoul'))
+    return parsed
+
+
+def _metadata_string(metadata: dict, key: str) -> str:
+    value = metadata.get(key)
+    return value if isinstance(value, str) else ''
+
+
+def _calendar_attendee_summary(metadata: dict) -> str:
+    explicit = _metadata_string(metadata, 'calendar_attendee_summary')
+    if explicit:
+        return explicit
+    counts = metadata.get('attendee_response_statuses') or metadata.get('attendee_response_counts')
+    if not isinstance(counts, dict):
+        return ''
+    parts = [
+        f'{status} {count}'
+        for status, count in sorted(counts.items())
+        if isinstance(status, str) and isinstance(count, int)
+    ]
+    return ', '.join(parts)
 
 
 def _project_names_by_key(db: Session) -> dict[str, str]:
