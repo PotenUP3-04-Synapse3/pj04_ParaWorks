@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-EMAIL_ACTION_PROMPT_VERSION = 'assistant-email-agent:v2'
+EMAIL_ACTION_PROMPT_VERSION = 'assistant-email-draft-composer:v1'
 
 
 @dataclass(frozen=True)

@@ -10,11 +10,11 @@ from backend.app.agents.rag_orchestrator_agent.agent import (
     RagOrchestratorAgent,
 )
 from backend.app.agents.rag_orchestrator_agent.llm import (
-    DEFAULT_RAG_OPENAI_MODEL,
     RagLlmProviderError,
     RagLlmSettings,
     build_langchain_rag_orchestrator_model,
 )
+from backend.app.assistant.tool_logging import AssistantToolLogger
 from backend.app.core.config import Settings
 from backend.app.core.demo_auth import DemoUser
 from backend.app.models import (
@@ -51,9 +51,13 @@ def answer_question_with_rag(
     agent: RagOrchestratorAgent | None = None,
     settings: Settings | None = None,
     vector_store: VectorStore | None = None,
+    tool_logger: AssistantToolLogger | None = None,
 ) -> RagAnswer:
     selected_agent = agent or build_default_rag_orchestrator_agent(settings)
     if vector_store is None:
+        retrieval_backend = 'keyword'
+        if tool_logger is not None:
+            tool_logger.log('rag_retrieval', 'start backend=keyword')
         matching_candidates = retrieve_matching_evidence_candidates(db=db, question=question)
         visible_candidates = [
             candidate
@@ -62,20 +66,37 @@ def answer_question_with_rag(
         ]
         hidden_match_count = len(matching_candidates) - len(visible_candidates)
     else:
+        retrieval_backend = 'pgvector'
+        if tool_logger is not None:
+            tool_logger.log('rag_retrieval', 'start backend=pgvector')
         vector_result = vector_store.search(query=question, user=user)
         visible_candidates = candidates_from_vector_matches(vector_result.matches)
         hidden_match_count = vector_result.hidden_match_count
+    if tool_logger is not None:
+        tool_logger.log(
+            'rag_retrieval',
+            f'result backend={retrieval_backend} source_count={len(visible_candidates)} hidden_count={hidden_match_count}',
+        )
     packet = build_rag_evidence_packet(
         candidates=visible_candidates,
         question=question,
         permission_context=PermissionContext(user_id=user.id, role=user.role),
     )
 
-    answer = selected_agent.answer(
-        question=question,
-        packet=packet,
-        hidden_match_count=hidden_match_count,
-    )
+    if tool_logger is not None:
+        tool_logger.log('rag_answer', f'start model={_rag_agent_model_label(selected_agent)} source_count={len(packet.messages)}')
+    try:
+        answer = selected_agent.answer(
+            question=question,
+            packet=packet,
+            hidden_match_count=hidden_match_count,
+        )
+    except Exception as exc:
+        if tool_logger is not None:
+            tool_logger.log('rag_answer', f'error error_class={exc.__class__.__name__}')
+        raise
+    if tool_logger is not None:
+        tool_logger.log('rag_answer', f'result model={answer.cost.model_name} source_count={len(answer.source_links)}')
     agent_run = AgentRun(
         agent_name=answer.agent_name,
         prompt_version=answer.prompt_version,
@@ -112,7 +133,7 @@ def build_default_rag_orchestrator_agent(settings: Settings | None) -> RagOrches
         provider_order=tuple(settings.agent_llm_provider_order.split(',')),
         openai_api_key=settings.openai_api_key,
         gemini_api_key=settings.gemini_api_key or settings.google_api_key,
-        openai_primary_model=DEFAULT_RAG_OPENAI_MODEL,
+        openai_primary_model=settings.agent_llm_openai_primary_model,
         openai_fallback_model=settings.agent_llm_openai_model,
         gemini_model=settings.agent_llm_gemini_model,
         max_input_chars=settings.agent_llm_max_input_chars,
@@ -129,6 +150,14 @@ def build_default_rag_orchestrator_agent(settings: Settings | None) -> RagOrches
     except RagLlmProviderError:
         # 진심모드라도 키가 없거나 provider 구성이 깨졌다면 로컬 실행을 멈추지 않는다.
         return RagOrchestratorAgent(model=DeterministicRagOrchestratorModel())
+
+
+def _rag_agent_model_label(agent: RagOrchestratorAgent) -> str:
+    model = getattr(agent, 'model', None)
+    providers = getattr(model, 'providers', None)
+    if providers:
+        return ','.join(str(getattr(provider, 'model_name', 'unknown')) for provider in providers)
+    return str(getattr(model, 'model_name', model.__class__.__name__ if model is not None else 'unknown'))
 
 
 def retrieve_matching_evidence_candidates(*, db: Session, question: str) -> list[RagEvidenceCandidate]:

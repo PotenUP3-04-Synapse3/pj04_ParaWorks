@@ -1377,246 +1377,254 @@ uv run pytest backend/tests/test_slack_agent_review_bridge.py backend/tests/test
 
 Result: `1 passed`, `8 passed`, ruff passed, `23 passed`.
 
-## 2026-05-14 사용자 정의 프로젝트 목록 및 분류 흐름 수정
+## 2026-05-14 AI Assistant Model and Tool Logging
 
-- 사용자가 프로젝트 탭에서 직접 만든 프로젝트가 보이지 않고, 하드코딩 프로젝트는 제거해야 한다고 보고했다.
-- 현재 워크트리에는 Gemini가 추가한 `Project` 모델, `projects` 테이블 마이그레이션,
-  `/api/v1/projects/define`, `/api/v1/projects/defined`가 이미 있었다.
-- 수정 방향:
-  - 하드코딩 프로젝트 목록은 제품 흐름에서 제거한다.
-  - DB에 저장된 사용자 정의 프로젝트는 evidence/timeline이 없어도 `/api/v1/projects`에 표시한다.
-  - Slack/Gmail/Drive/Calendar source 분류는 사용자가 만든 프로젝트의 이름과 설명을 기준으로 수행한다.
-  - Review 화면에서는 `/api/v1/projects/defined` 목록으로 프로젝트를 고를 수 있으므로, LLM/Agent가 제안한 프로젝트를 사용자가 직접 변경한 뒤 승인할 수 있다.
-- 주요 변경:
-  - `backend/app/api/v1/projects.py`: `/defined`가 DB 프로젝트만 반환하도록 수정.
-  - `backend/app/projects/service.py`: 빈 DB 프로젝트 표시, 승인 항목의 `project_name` fallback 유지.
-  - `backend/app/projects/classifier.py`: `Project.name`/`Project.summary` 기반 분류로 변경.
-  - `backend/tests/test_project_memory_api.py`: 프로젝트 생성 후 빈 프로젝트 표시, 하드코딩 프로젝트 제거, 사용자 정의 프로젝트 기준 분류 테스트 추가.
-- 검증:
-
-```powershell
-uv run pytest backend/tests/test_project_memory_api.py -q
-uv run pytest backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py -q
-uv run ruff check backend/app/api/v1/projects.py backend/app/projects/service.py backend/app/projects/classifier.py backend/app/models/knowledge.py backend/tests/test_project_memory_api.py
-cd frontend
-npm.cmd exec tsc -- --noEmit
-npm.cmd run build
-```
-
-Result: `12 passed`, `26 passed`, ruff passed, frontend typecheck/build passed.
-
-## 2026-05-14 Review/Project/Timeline 품질 개선
-
-- 사용자가 제시한 8개 개선 사항을 기준으로 Review, Project, Timeline 흐름을 정리했다.
-- Slack 품질 게이트:
-  - `backend/app/agents/slack_agent/quality.py`를 추가했다.
-  - `후...`, `부탁드립니다.`, 단독 인사/반응/감사 문구는 업무 대상/행동/기한 신호가 없으면 Review 후보에서 제외된다.
-  - backend Slack ranked evidence 선정과 `agent_slack.classify_work_node()` 모두 deterministic 게이트를 먼저 사용한다.
-  - 영어 demo seed를 위해 `redis`, `queue`, `review queue`, `evidence`, `confirm`, `verify` 같은 업무 신호도 포함했다.
-- 프로젝트 분류:
-  - `backend/app/projects/classifier.py`는 한글 token boundary 기반 alias matching을 사용한다.
-  - `투자 유치`는 `투자 유치 전략 회의`에는 매칭되지만 `투자 유치원 등교 일정`에는 매칭되지 않는다.
-- 프로젝트/타임라인 API:
-  - `/api/v1/projects`는 이제 `Project` 테이블에 등록된 프로젝트만 반환한다.
-  - 승인 지식은 표시용으로 `timeline_items`와 `activity_items`를 분리한다.
-  - `history_event` 승인으로 생성된 mirror `TimelineEvent`는 활동 목록에서 중복 표시하지 않는다. 원본 승인 지식과 RAG 대상 데이터는 삭제하지 않는다.
-- Review API/UI:
-  - `GET /api/v1/review`에 `limit`, `offset`, `total_count`, `has_more` metadata를 추가했다.
-  - `POST /api/v1/review/bulk`가 현재 항목들의 일괄 approve/reject를 처리한다.
-  - `PATCH /api/v1/review/{id}`에서 `project_key`를 바꿀 때 등록된 프로젝트인지 검증하고 `project_name`을 서버에서 보정한다.
-  - Review 화면은 초기 50개만 로드하고 promotion preview는 그룹 expand 시 lazy load한다.
-  - Review 화면 상단에 “모두 승인”, “모두 반려”를 추가했고, 카드에는 등록 프로젝트 select를 바로 노출했다.
-- 프론트:
-  - `ProjectMemory` 타입에 `activity_items`를 추가했다.
-  - 프로젝트 탭의 “승인된 활동 타임라인”은 “승인된 프로젝트 활동”으로 바꾸고 설명/빈 상태를 추가했다.
-  - 타임라인 탭은 등록된 프로젝트 응답과 `timeline_items`만 사용한다.
-- 검증:
+- AI Assistant RAG answer generation now uses `AGENT_LLM_OPENAI_PRIMARY_MODEL`
+  as the primary OpenAI model. The default primary model is `gpt-5.4`, while
+  `AGENT_LLM_OPENAI_MODEL` remains the OpenAI fallback and defaults to
+  `gpt-5.4-mini`.
+- Assistant tool logs now follow the Slack Agent pattern and use the Python
+  `AssistantTool` logger instead of opening a path from `.env`; local/docker
+  runs still expose the lines through the backend stderr log redirection.
+- Assistant message creation now logs email action routing, RAG retrieval, and
+  RAG answer generation in English with the format
+  `[Tool: tool_name] ...description...`.
+- The log intentionally sanitizes non-ASCII characters before writing so Korean
+  user input or model output does not become mojibake inside the tool trace.
+- Verification:
 
 ```powershell
-uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q
-uv run ruff check agent_slack/agent_slack.py backend/app/agents/slack_agent backend/app/projects backend/app/api/v1/review.py backend/app/schemas/review.py backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_project_memory_api.py backend/tests/test_review.py
-cd frontend
-npm.cmd exec tsc -- --noEmit
-npm.cmd run build
+uv run pytest backend/tests/test_rag_orchestrator_service.py::test_rag_service_uses_configured_stronger_primary_model backend/tests/test_assistant_api.py::test_assistant_tool_middleware_logs_email_and_rag_tools_in_english -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/tool_logging.py backend/app/core/config.py backend/app/agents/rag_orchestrator_agent/service.py backend/app/agents/rag_orchestrator_agent/llm.py backend/tests/test_assistant_api.py backend/tests/test_rag_orchestrator_service.py
 ```
 
-Result: `66 passed`, ruff passed, frontend typecheck/build passed.
+Result: targeted RED tests failed before implementation, then passed after the
+change; wider assistant/RAG tests passed with 40 tests; ruff passed.
 
-Known note:
-- Review 200개 렌더링은 이번에 pagination과 lazy preview로 1차 개선했다. DOM virtualization은 아직 추가하지 않았다. 사용자가 여전히 느리다고 느끼면 별도 작업으로 분리한다.
-## 2026-05-14 `굿굿` 저신호 Slack reply 프로젝트 후보 오탐 수정
+## 2026-05-14 Email Intent Gate and Draft Composer Split
 
-- 증상: 검토사항 상세 내용에 `굿굿` 같은 반응만 있는 Slack thread reply가 `project_assignment` 업무 후보처럼 표시됐다.
-- 원인:
-  - 이 항목은 Slack Agent 후보가 아니라 `project_classifier`가 만든 프로젝트 연결 후보였다.
-  - 사용자 프로젝트 설명의 `slack`, `gmail`, `google drive`, `data`, `timeline` 같은 일반 매체 단어가 alias로 등록되어 Slack source 대부분이 프로젝트에 매칭될 수 있었다.
-  - `Thread parent: ... Thread reply: 굿굿` source에서 parent context가 함께 snippet으로 저장되어 저신호 reply도 프로젝트 evidence처럼 보였다.
-- 수정:
-  - `backend/app/projects/classifier.py`에서 일반 connector/매체 단어를 프로젝트 alias에서 제외했다.
-  - Slack source는 실제 메시지가 `classify_slack_work_signal()`을 통과할 때만 프로젝트 연결 후보가 된다.
-  - `Thread parent: ... Thread reply: ...` 형태는 reply 본문 기준으로 업무 신호를 판단한다.
-- 검증:
-  - `uv run pytest backend/tests/test_project_memory_api.py -q` -> `18 passed`
-  - `uv run pytest backend/tests/test_mock_sync.py backend/tests/test_slack_agent_quality.py -q` -> `7 passed`
-  - `uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q` -> `67 passed`
-  - `uv run ruff check backend/app/projects/classifier.py backend/tests/test_project_memory_api.py` -> passed
-- 주의:
-  - 새 동기화/재분류에서는 같은 오탐이 새로 생성되지 않는다.
-  - 이미 생성된 pending `project_assignment` 항목은 DB에 남아 있다. 현재 DB 기준 pending `project_assignment` 160개 중 새 정책으로도 유지될 항목은 5개, 예전 넓은 alias 매칭으로 생성된 항목은 155개다.
-  - 기존 오염 항목은 UI에서 반려하거나 별도 정리 작업으로 처리해야 한다.
-
-## 2026-05-15 Slack sync 0건 원인 분리 및 user token connector 보강
-
-- 증상:
-  - 서버 재시작 후 Slack 동기화 버튼을 눌러도 검토사항에 새 항목이 생기지 않는다고 보고됨.
-- Playwright 확인:
-  - `admin@paraworks.com` 로그인 후 `/integrations`에서 Slack 동기화를 눌렀다.
-  - sync 응답은 `fetched_events=0`, `created_review_items=0`, `changed_source_ids=[]`.
-  - 같은 세션에서 `/review`는 `review_total_count=14`였고, Slack Agent 후보가 보였으며 빈 상태는 표시되지 않았다.
-- 원인 분리:
-  - DB cursor 없이 live Slack connector를 직접 실행하면 최근 7일 이벤트 210개가 반환됐다. 따라서 Slack API 접근 자체는 정상이다.
-  - 현재 로컬 DB에는 이미 Slack source 210개가 있고, incremental sync는 source별 최신 timestamp 이후의 변경분만 가져오므로 일반 sync가 0건으로 끝나는 것은 현재 DB 상태에서는 정상이다.
-  - 다만 기존 `SlackConnector`는 설정된 channel id도 `conversations.list`의 bot membership 결과에 없으면 history 호출 전 조용히 제외했다.
-  - OAuth/direct-connect가 저장한 user token도 sync connector에 연결되지 않아 DM/user-token 접근 흐름이 실제 sync에 반영되지 않았다.
-- 수정:
-  - `backend/app/connectors/slack.py`에 optional `user_client`를 추가했다.
-  - 설정된 Slack channel id는 membership 목록이 비어도 history 조회를 시도한다.
-  - user token이 있으면 설정 채널 조회에 user client를 우선 사용하고, Slack API 오류 시 bot client로 fallback한다.
-  - `backend/app/connectors/factory.py`에서 installed Slack connection의 `local:slack:{workspace}:user` token을 찾아 connector에 연결한다.
-- 검증:
+- The AI Assistant email path is now split into single-purpose sub-agents:
+  `email_intent_gate` only decides whether the latest user message is an email
+  action, and `email_draft_composer` only writes the approval-only draft or a
+  clarification question after intent is accepted.
+- The old combined email prompt that also classified general replies and RAG was
+  removed from the active path. Non-email messages fall through to the normal
+  RAG answer path.
+- `EmailIntentDecision.requires_rag_result` allows a flow such as "find this in
+  company memory and email it": assistant orchestration runs RAG first, renders
+  the RAG answer/source context, then passes that context to the draft composer.
+- Tool logs now show the split route with `[Tool: email_intent_gate]`,
+  `[Tool: rag_retrieval]`, `[Tool: rag_answer]`, and
+  `[Tool: email_draft_composer]`.
+- Verification:
 
 ```powershell
-uv run pytest backend/tests/test_slack_connector.py::test_slack_connector_fetches_configured_channel_even_when_membership_list_is_empty backend/tests/test_slack_connector.py::test_slack_connector_prefers_user_client_for_configured_channel_when_available backend/tests/test_connector_factory.py::test_sync_connector_uses_installed_slack_user_token_when_available -q
-uv run pytest backend/tests/test_slack_connector.py backend/tests/test_connector_factory.py backend/tests/test_mock_sync.py backend/tests/test_slack_agent_api.py -q
-uv run pytest backend/tests/test_agent_slack_pipeline_quality.py backend/tests/test_slack_agent_quality.py backend/tests/test_slack_agent.py backend/tests/test_slack_agent_review_bridge.py backend/tests/test_slack_agent_api.py backend/tests/test_slack_connector.py backend/tests/test_connector_factory.py backend/tests/test_project_memory_api.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_mock_sync.py -q
-uv run ruff check backend/app/connectors/slack.py backend/app/connectors/factory.py backend/tests/test_slack_connector.py backend/tests/test_connector_factory.py
+uv run pytest backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py::test_assistant_tool_middleware_logs_email_and_rag_tools_in_english backend/tests/test_assistant_api.py::test_assistant_can_draft_email_from_rag_answer -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_agent.py backend/app/assistant/email_actions.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
 ```
 
-결과:
+Result: targeted RED tests failed before implementation, then passed after the
+change; wider assistant/RAG tests passed with 43 tests; ruff passed.
 
-- 신규 회귀 테스트 3 passed.
-- Slack connector/factory/mock sync/API 묶음 35 passed.
-- Slack/Review/Project 타깃 회귀 묶음 94 passed.
-- ruff passed.
-- 서버 재시작 후 Playwright 실제 흐름 검증 passed, `review_total_count=14`.
+## 2026-05-14 Email Continuation Context and Docker Startup Order
 
-## 2026-05-15 Slack sync ReviewItem 공백 오해 방지
+- Fixed the AI Assistant email draft path where recipient-only follow-ups such
+  as `kjw4work@gmail.com` caused the draft composer to ask for content again.
+- `render_email_action_context()` now preserves complete JSON message rows
+  instead of slicing the serialized JSON mid-string. This keeps recent user and
+  assistant messages readable for the low-cost email sub-agents.
+- Added `render_recent_assistant_context_for_email()` so the draft composer
+  receives recent assistant answers as explicit body-source context for phrases
+  like "이 내용으로" or "최근 결정된 사항만 요약해서 보내줘".
+- `scripts/paraworks-docker.ps1` now waits for backend `/health` before starting
+  the frontend, avoiding transient frontend `ECONNREFUSED 127.0.0.1:8000`
+  startup noise.
+- Verification:
 
-- 최신 확인:
-  - 로컬 DB 기준 Slack source 210개, pending ReviewItem 11개.
-  - 최신 no-op incremental sync는 새 Slack 이벤트가 없으므로 `created_review_items=0`이 정상이다.
-- 원인:
-  - `sync_connector_events()`가 원본 ingestion만 끝난 시점에 SyncJob을 `complete`로 표시했고, Slack Agent LLM/프로젝트 ReviewItem 생성은 그 뒤에 실행됐다.
-  - 긴 LLM 분석 중에는 `sources`만 보이고 `review_items`가 아직 비어 보일 수 있었다.
-- 반영된 수정:
-  - `/api/v1/integrations/{connector_type}/sync`가 ingestion 직후 Agent Review 생성 단계에 들어가면 SyncJob을 `running`, `progress_pct=75`, `agent_review=running`으로 되돌린다.
-  - ReviewItem 생성이 끝난 뒤 최종 `complete`, `progress_pct=100`으로 업데이트한다.
-  - sync 응답과 audit metadata에 `pending_review_count`를 포함한다.
-  - frontend 통합 화면 sync 결과에 `새 검토 항목`과 `검토 대기`를 분리 표시한다.
-- 검증:
-  - 신규 테스트 `test_slack_sync_keeps_job_running_until_agent_reviews_are_persisted` 추가.
-  - 관련 백엔드 테스트 `24 passed`, ruff passed, frontend typecheck/build passed.
-  - Playwright 실제 브라우저 검증에서 Slack sync 응답 `pending_review_count=11`과 Review API 총량 `11` 일치.
-- 다음 작업자 참고:
-  - 사용자가 “Slack sync 했는데 검토사항에 새 항목이 없다”고 말하면 먼저 `created_review_items`와 `pending_review_count`를 구분해 확인한다.
-  - source가 이미 들어온 상태의 incremental sync는 새 이벤트가 없으면 새 ReviewItem을 만들지 않는다. 이때 pending queue 총량이 남아 있으면 정상 경로다.
+```powershell
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_rag_orchestrator_service.py backend/tests/test_rag_orchestrator_agent.py backend/tests/test_paraworks_docker_script.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_agent.py backend/app/assistant/email_actions.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_paraworks_docker_script.py
+```
 
-## 2026-05-15 동기화 진행 모달 UX
+Result: 47 tests passed; ruff passed; PowerShell parser check for
+`scripts/paraworks-docker.ps1` passed.
 
-- 반영된 수정:
-  - `frontend/src/app/integrations/page.tsx`에 `SyncProgressModal`을 추가했다.
-  - sync 버튼 클릭 직후 모달을 띄우고 화면 뒤 작업을 차단한다.
-  - 모달은 `원본 수집과 AI 분석`, `프로젝트 분류`, `검토 항목 저장` 단계를 표시한다.
-  - 사용자는 `백그라운드에서 계속 진행`으로 모달만 내릴 수 있으며, sync 요청 자체는 계속 진행된다.
-  - 완료 상태에서는 `새 검토 항목`, `검토 대기`, `검토사항으로 이동`, `닫기`를 제공한다.
-- 검증:
-  - `frontend/e2e/integration-sync-modal.spec.ts` 추가.
-  - Playwright desktop/mobile `2 passed`.
-  - 실제 로컬 서버 Playwright 검증 결과:
-    - 모달 표시 확인.
-    - sync 응답 `pending_review_count=11`.
-    - Review API `total_count=11`.
-    - Slack source count `210`.
-    - 최신 sync message `fetched=0 created_review_items=0 skipped_events=0 pending_review_items=11`.
-    - `굿굿`, `후...`, `부탁드립니다` 저신호 문구가 pending ReviewItem 목록에 직접 포함되지 않음.
-  - `npm.cmd exec tsc -- --noEmit`, `npm.cmd run lint`, `npm.cmd run build` passed.
-  - 관련 backend 회귀 테스트 `24 passed`, Slack/Review/Project/Timeline 회귀 묶음 `48 passed`.
-- 다음 작업자 참고:
-  - sync API는 응답 전까지 job id를 프론트가 알 수 없으므로, 모달의 단계는 클라이언트 진행 안내이며 완료 수치는 API 응답의 실제 count를 사용한다.
-  - 더 세밀한 실시간 단계 표시가 필요하면 sync 시작 즉시 job id를 반환하고 background worker/SSE로 Agent 단계 이벤트를 내보내는 별도 구조 변경이 필요하다.
+## 2026-05-14 Docker Startup Guardrails
 
-## 2026-05-15 검토사항 unknown 표시 수정 인수인계
+- Hardened `scripts/paraworks-docker.ps1` so native command failures from
+  Docker, Alembic, and schema checks stop the script immediately instead of
+  continuing to a misleading final `Ready` state.
+- Added a Postgres readiness wait between `docker compose up -d` and the
+  pgvector schema check. This removes the transient first-run connection error
+  where Postgres had started as a container but was not yet accepting database
+  connections.
+- Made the `project_key` Alembic migration idempotent against the current-schema
+  baseline migration. Fresh databases created by `0001_create_current_schema`
+  already include these columns, so the follow-up migration now skips columns
+  and indexes that are already present.
+- Suppressed the expected SQLAlchemy reflection warning for pgvector's
+  `vector` type inside the schema checker while preserving the explicit
+  PostgreSQL type/dimension validation.
+- Verification:
 
-- 현재 상태:
-  - Review 화면에서 `project_classifier` / `project_assignment` 항목의 Prompt/Cost가 `unknown`으로 보이던 문제를 수정했다.
-  - deterministic 프로젝트 분류 항목은 AgentRun이 없으므로 이제 Prompt는 `규칙 기반 분류`, Cost는 `LLM 미사용`으로 표시된다.
-  - 백엔드 Review API도 AgentRun 없는 항목의 `agent_run_details.model_name`, `prompt_version`, `estimated_cost_usd` 기본값을 `"Unknown"` 문자열이 아니라 `null`로 내려준다.
-- 변경 파일:
-  - `frontend/src/app/review/page.tsx`
-  - `frontend/src/lib/api/types.ts`
-  - `backend/app/api/v1/review.py`
-  - `frontend/e2e/review-agent-metadata.spec.ts`
-  - `agent_slack/20260514_project_timeline_rag_progress.md`
-  - `docs/portfolio-log.md`
-- 검증:
-  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts` -> `2 passed`
-  - `npm.cmd exec tsc -- --noEmit` -> passed
-  - `npm.cmd run lint` -> passed
-  - `npm.cmd run build` -> passed
-  - `uv run ruff check backend/app/api/v1/review.py` -> passed
-  - `uv run pytest backend/tests/test_review.py -q` -> `15 passed`
-  - 실제 로컬 Playwright 확인에서 `/review` Prompt/Cost 메타데이터 22개 중 `unknown` 0개를 확인했다.
-- 주의:
-  - 실제 화면 본문에는 “RAG 연동 관련 근거보기 unknown 현상 수정”처럼 원본 Slack/요약 텍스트에 포함된 `unknown` 단어가 남아 있을 수 있다. 이것은 메타데이터 fallback 오류가 아니라 검토 항목 내용이다.
-  - 현재 로컬 dev 서버가 오래 떠 있으면 백엔드 API 응답에는 예전 `"Unknown"` 기본값이 보일 수 있으나, 코드 기준으로는 `null`로 수정되어 서버 재시작 후 반영된다. 프론트는 기존 `"Unknown"` 응답도 방어적으로 처리한다.
-## 2026-05-15 Slack sync 실패 오인 방지 인수인계
+```powershell
+uv run pytest backend/tests/test_paraworks_docker_script.py backend/tests/test_db_schema_operations.py backend/tests/test_pgvector_dev_runbook.py -q
+uv run ruff check scripts/check_db_schema.py backend/migrations/versions/5f8d874023d7_add_project_key_to_knowledge_models.py backend/tests/test_paraworks_docker_script.py backend/tests/test_db_schema_operations.py
+.\scripts\paraworks-docker.ps1
+Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:8000/health -TimeoutSec 5
+Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:3000/login -TimeoutSec 10
+```
 
-- 최신 수정 범위:
-  - `backend/app/api/v1/integrations.py`
-  - `backend/app/ingestion/sync.py`
-  - `backend/tests/test_mock_sync.py`
-  - `backend/tests/test_integration_runtime_status.py`
-  - `frontend/src/app/integrations/page.tsx`
-  - `frontend/src/lib/api/types.ts`
-  - `frontend/e2e/integration-sync-modal.spec.ts`
-- 배경:
-  - 실제 백엔드 Slack sync job은 `complete`로 끝났고 ReviewItem도 생성되었지만, 긴 POST 요청 응답이 Next proxy에서 `socket hang up`으로 끊겨 UI가 `Internal Server Error`를 표시했다.
-- 반영된 구조:
-  - sync 요청 body에 `run_async`가 추가되었다.
-  - Slack 프론트 호출은 `run_async=true`로 queued job을 즉시 받고 runtime-status polling으로 완료를 확인한다.
-  - 기존 동기식 sync API 동작은 테스트와 호환되도록 유지했다.
-  - `sync_connector_events()`는 선택적으로 전달된 `job_id`를 재사용한다.
-  - `runtime-status.latest_sync`는 `created_at`, `updated_at`을 내려준다.
-  - POST 응답이 500/socket/network 계열로 끊기면 프론트가 방금 시작한 시간 이후의 runtime job을 확인하고, 완료된 job이면 성공 상태로 복구한다.
-- 주의:
-  - FastAPI `BackgroundTasks`는 현재 요청 DB 세션을 넘겨 같은 job id를 이어서 처리한다. 더 강한 운영 구조가 필요하면 Celery/Redis worker로 옮기되, `job_id` 재사용과 runtime-status polling 계약은 유지해야 한다.
-  - 모바일 모달은 `max-height`, `overflow-y-auto`, 단일 열 버튼 배치를 사용한다. 이 구조를 되돌리면 Playwright mobile에서 버튼 클릭이 다른 요소에 가로막힐 수 있다.
-- 검증:
-  - `npm.cmd run test:visual -- integration-sync-modal.spec.ts` -> 4 passed
-  - `npm.cmd exec tsc -- --noEmit` -> passed
-  - `npm.cmd run lint` -> passed
-  - `npm.cmd run build` -> passed
-  - `uv run pytest backend/tests/test_mock_sync.py backend/tests/test_integration_runtime_status.py backend/tests/test_stream.py backend/tests/test_audit_logs.py -q` -> 22 passed
-  - `uv run pytest backend/tests/test_connector_ingestion_contract.py backend/tests/test_slack_agent_api.py backend/tests/test_mail_document_agent_api.py -q` -> 25 passed
+Result: 14 targeted tests passed; ruff passed; PowerShell parser check passed;
+Docker services, backend health, and frontend login smoke passed.
 
-## 2026-05-15 `project_assignment` 검토사항 표시 인수인계
+## 2026-05-14 Assistant Recipient Resolver
 
-- 현재 구조:
-  - Slack Agent의 새 LLM 프로젝트 라우팅은 `todo`, `history_event`, `decision_record` 같은 Slack Agent 검토 후보 payload에 `project_assignment_method: "llm_tool"`로 저장된다.
-  - 별도 `project_assignment` item type은 여전히 `backend/app/projects/classifier.py`의 deterministic fallback/기존 항목이다.
-  - 따라서 기존 DB에 남아 있는 `project_assignment` pending 항목은 LLM 사용 항목으로 표시하면 안 된다.
-- 반영한 UI:
-  - `frontend/src/app/review/page.tsx`
-  - `project_assignment` 타입 라벨을 `프로젝트 연결`로 표시한다.
-  - `project_classifier`는 `프로젝트 분류기`로 표시한다.
-  - Prompt는 `규칙 기반 프로젝트 연결`, Cost는 `추가 LLM 비용 없음`으로 표시한다.
-  - `project_name`, `task_summary`, `evidence_reason`, `source_title`, `source_type`을 `프로젝트 연결 후보` 카드에 분리해 보여준다.
-- 테스트:
-  - `frontend/e2e/review-agent-metadata.spec.ts`가 deterministic `project_assignment` 표시 계약을 검증한다.
-  - `frontend/e2e/review-project-routing.spec.ts`가 LLM 프로젝트 라우팅 카드가 계속 표시되는지 검증한다.
-- 최신 검증:
-  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts` -> 2 passed
-  - `npm.cmd run test:visual -- review-project-routing.spec.ts` -> 2 passed
-  - `npm.cmd exec tsc -- --noEmit` -> passed
-  - `npm.cmd run lint` -> passed
-  - `npm.cmd run build` -> passed
+- Added the design note
+  `docs/superpowers/specs/2026-05-14-assistant-recipient-resolver-design.md`
+  for the AI Assistant email recipient resolution layer.
+- Added `backend/app/assistant/recipient_resolver.py`, a deterministic,
+  cost-free resolver that collects contact candidates from recent assistant
+  context, `AuthUser`, `demo_auth.USERS`, and Google `Source` metadata
+  (`gmail`, `gmail_attachment`, `drive`, `calendar`).
+- The email orchestration now runs `[Tool: recipient_resolver]` after
+  `email_intent_gate` and before `email_draft_composer`, passing
+  `resolved_recipients` into the draft prompt.
+- This supports flows such as "김용희님한테 오늘 회의 3시에 있다고 메일 보내줘" when the
+  recent conversation or synced contact metadata contains
+  `김용희 (yonghee199702@gmail.com)`.
+- Duplicate names are surfaced as `ambiguous`; department/group messages such
+  as `Product팀 전체` resolve to all matching known users.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_recipient_resolver.py backend/tests/test_assistant_api.py::test_assistant_passes_resolved_recipient_to_email_draft_composer -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py -q
+uv run ruff check backend/app/assistant/recipient_resolver.py backend/app/assistant/email_agent.py backend/app/api/v1/assistant.py backend/tests/test_assistant_recipient_resolver.py backend/tests/test_assistant_api.py
+```
+
+Result: targeted resolver/API tests passed; 37 assistant tests passed; ruff
+passed.
+
+## 2026-05-14 Email Draft Composer Model Upgrade
+
+- Split the email sub-agent model settings by responsibility:
+  `ASSISTANT_EMAIL_AGENT_MODEL` remains the low-cost intent gate model and
+  defaults to `gpt-4.1-nano`.
+- Added `ASSISTANT_EMAIL_DRAFT_AGENT_MODEL`, defaulting to `gpt-5.4-mini`, so
+  the draft composer can produce better Korean business email drafts without
+  making every email-intent classification more expensive.
+- `build_email_draft_composer()` now instantiates `ChatOpenAI` with
+  `settings.assistant_email_draft_agent_model`; `build_email_intent_gate()`
+  still uses `settings.assistant_email_agent_model`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_email_agent.py::test_email_draft_composer_defaults_to_stronger_model_than_intent_gate backend/tests/test_assistant_email_agent.py::test_email_draft_composer_builder_uses_dedicated_draft_model -q
+uv run pytest backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py -q
+uv run ruff check backend/app/core/config.py backend/app/assistant/email_agent.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_api.py
+```
+
+Result: targeted model tests passed; 39 assistant tests passed; ruff passed.
+
+## 2026-05-14 Assistant Contact Lookup Routing
+
+- Split direct contact lookup away from the email intent/draft path with
+  `backend/app/assistant/contact_lookup.py`.
+- Requests such as `김종우님 이메일 알려줘.` now resolve known contacts directly
+  through the deterministic `recipient_resolver` and return the address instead
+  of asking the user to provide it.
+- Follow-up replies such as `너가 알려줘야지.` reuse the latest contact lookup
+  request from the conversation context, so the assistant does not accidentally
+  enter the email draft or RAG path.
+- Added Korean aliases for key `demo_auth.USERS` contacts and lowered demo
+  contact confidence so active `AuthUser` records still win when real DB users
+  are present.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_recipient_resolver.py::test_recipient_resolver_uses_demo_user_korean_alias backend/tests/test_assistant_api.py::test_assistant_contact_lookup_returns_known_email_without_email_draft backend/tests/test_assistant_api.py::test_assistant_contact_lookup_followup_uses_recent_lookup_request -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/assistant/contact_lookup.py backend/app/assistant/recipient_resolver.py backend/app/api/v1/assistant.py backend/app/core/demo_auth.py backend/tests/test_assistant_api.py backend/tests/test_assistant_recipient_resolver.py
+```
+
+Result: targeted contact lookup tests passed; wider assistant backend tests
+passed with 47 tests; ruff passed.
+
+## 2026-05-14 Assistant Referenced Email Drafts
+
+- Added `backend/app/assistant/email_draft_context.py` so the assistant can
+  treat recent AI answers and pending email drafts as explicit email body
+  sources.
+- Requests such as `이 내용을 용희님한테 메일로 보내줘.` now route before the
+  low-cost `email_intent_gate`, select the latest sendable assistant answer,
+  resolve recipients, and pass that selected source to `email_draft_composer`.
+- Draft revision complaints such as `내용이 하나도 안 들어가 있잖아.` now reuse
+  the pending draft's recipient/subject plus the earlier assistant answer,
+  creating a new approval-required draft instead of falling into RAG chat.
+- Added a source-content guardrail: if the draft composer compresses `이 내용`
+  into a generic note and omits the actual selected body, the selected source is
+  appended to the draft before storing the pending approval metadata.
+- Isolated `test_email_draft_composer_defaults_to_stronger_model_than_intent_gate`
+  from local `.env` overrides with `Settings(_env_file=None)`.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_referenced_answer_email_keeps_selected_content backend/tests/test_assistant_api.py::test_assistant_revises_pending_draft_when_user_says_body_is_missing -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/app/assistant/email_agent.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted referenced-email tests passed; wider assistant backend tests
+passed with 49 tests; ruff passed.
+
+## 2026-05-14 Assistant Generate-Then-Email Drafts
+
+- Extended `backend/app/assistant/email_draft_context.py` with a generated
+  source request detector for messages such as
+  `ParaWorks 회사 소개서 작성해서 용희님한테 메일 보내줘.`.
+- This route now runs before `email_intent_gate`: it extracts the generation
+  question (`ParaWorks 회사 소개서 작성해줘`), retrieves/generates the answer through
+  the RAG orchestrator, resolves the recipient, and then passes the generated
+  answer to `email_draft_composer`.
+- The existing source-content guardrail also applies here, so if the draft
+  composer returns a generic body, the generated RAG answer is appended before
+  the pending approval draft is stored.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_generates_requested_content_before_email_draft -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py
+```
+
+Result: targeted generate-then-email test passed; wider assistant backend tests
+passed with 50 tests; ruff passed.
+
+## 2026-05-14 Assistant Recipient Correction Safety
+
+- Fixed recipient resolution so known contacts are only returned when an alias,
+  email local-part, display name, or title actually matches the latest message.
+  This prevents unrelated demo users from appearing as ambiguous candidates for
+  unknown names such as `한승혁`.
+- Added a pre-RAG recipient gate for generate-then-email requests. If the
+  recipient is not resolved, the assistant asks for the exact recipient instead
+  of spending RAG/LLM draft cost or reusing a previous pending draft recipient.
+- Added a pending draft recipient-update path. Messages such as
+  `SeungHun Han님한테 보내줘.` reuse the pending draft body/source while replacing
+  only the recipient.
+- Added an explicit correction response for `메일 주소가 잘못됐어.` so it asks for
+  the corrected recipient rather than falling into contact lookup or RAG.
+- Added `SeungHun Han` / `한승헌` aliases to the demo admin contact.
+- Verification:
+
+```powershell
+uv run pytest backend/tests/test_assistant_api.py::test_assistant_generate_email_unknown_recipient_does_not_reuse_pending_draft backend/tests/test_assistant_api.py::test_assistant_recipient_only_revision_preserves_pending_draft_body backend/tests/test_assistant_api.py::test_assistant_wrong_email_address_asks_for_correct_recipient backend/tests/test_assistant_recipient_resolver.py -q
+uv run pytest backend/tests/test_assistant_api.py backend/tests/test_assistant_email_agent.py backend/tests/test_assistant_service.py backend/tests/test_assistant_models.py backend/tests/test_assistant_recipient_resolver.py -q
+uv run ruff check backend/app/api/v1/assistant.py backend/app/assistant/email_draft_context.py backend/app/assistant/recipient_resolver.py backend/app/core/demo_auth.py backend/tests/test_assistant_api.py backend/tests/test_assistant_recipient_resolver.py
+```
+
+Result: targeted recipient-correction tests passed; wider assistant backend
+tests passed with 53 tests; ruff passed.

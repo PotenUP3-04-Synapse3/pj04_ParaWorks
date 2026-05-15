@@ -1,0 +1,366 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from backend.app.assistant.email_actions import EmailDraft
+
+GENERATE_TERMS = (
+    '작성',
+    '정리',
+    '요약',
+    '만들',
+    '써',
+    '준비',
+    'write',
+    'summarize',
+    'draft',
+)
+GENERATE_CONNECTORS = ('해서', '하고', '하여', '한 뒤', '후에', '후')
+REFERENCE_TERMS = (
+    '이 내용',
+    '위 내용',
+    '위의 내용',
+    '그 내용',
+    '이걸',
+    '그걸',
+    '방금',
+    '앞의',
+    '최근 답변',
+    'this content',
+    'above',
+)
+SEND_TERMS = ('메일', '이메일', '보내', '전송', '발송', 'send', 'email')
+REVISION_TERMS = (
+    '내용',
+    '본문',
+    '메일 주소',
+    '이메일 주소',
+    '수신자',
+    '받는 사람',
+    '안 들어',
+    '안들어',
+    '빠졌',
+    '빠져',
+    '없잖',
+    '하나도',
+    '누락',
+    '수정',
+    '잘못',
+    '틀렸',
+    '다시',
+)
+RECIPIENT_UPDATE_TERMS = (
+    '한테 보내',
+    '에게 보내',
+    '님한테 보내',
+    '님에게 보내',
+    '로 보내',
+    'to ',
+)
+RECIPIENT_PROBLEM_TERMS = ('메일 주소', '이메일 주소', '수신자', '받는 사람', '주소')
+WRONG_TERMS = ('잘못', '틀렸', '아니', '오류')
+EXCLUDED_ASSISTANT_ACTIONS = {
+    'contact_lookup',
+    'email_clarification',
+}
+
+
+@dataclass(frozen=True)
+class PendingEmailDraft:
+    to: list[str]
+    subject: str
+    body: str
+    message_id: int | None = None
+
+    @property
+    def resolved_recipients(self) -> list[dict[str, object]]:
+        return [
+            {
+                'email': recipient,
+                'display_name': recipient,
+                'title': '',
+                'department': '',
+                'source_type': 'pending_email_draft',
+                'confidence_score': 1.0,
+            }
+            for recipient in self.to
+        ]
+
+
+@dataclass(frozen=True)
+class EmailSourceContext:
+    should_route: bool
+    kind: str = ''
+    content: str = ''
+    source_message_id: int | None = None
+    pending_draft: PendingEmailDraft | None = None
+    reason: str = ''
+
+    @property
+    def metadata(self) -> dict[str, object]:
+        return {
+            'kind': self.kind,
+            'source_message_id': self.source_message_id,
+            'pending_draft_message_id': (
+                self.pending_draft.message_id if self.pending_draft else None
+            ),
+            'reason': self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class GeneratedEmailSourceRequest:
+    should_route: bool
+    question: str = ''
+    reason: str = ''
+
+
+def build_generated_email_source_request(*, latest_message: str) -> GeneratedEmailSourceRequest:
+    if not _is_generate_and_send_request(latest_message):
+        return GeneratedEmailSourceRequest(should_route=False)
+    question = _generated_source_question(latest_message)
+    if not question:
+        return GeneratedEmailSourceRequest(should_route=False)
+    return GeneratedEmailSourceRequest(
+        should_route=True,
+        question=question,
+        reason='generate_source_before_email',
+    )
+
+
+def build_email_source_context(*, messages: list[Any], latest_message: str) -> EmailSourceContext:
+    pending_draft = find_latest_pending_email_draft(messages)
+    is_reference_request = _is_reference_email_request(latest_message)
+    is_revision_request = pending_draft is not None and _is_draft_revision_request(latest_message)
+    is_recipient_update = pending_draft is not None and _is_pending_draft_recipient_update_request(latest_message)
+    if not is_reference_request and not is_revision_request and not is_recipient_update:
+        return EmailSourceContext(should_route=False)
+
+    artifact = find_latest_sendable_artifact(messages)
+    if artifact is None:
+        if pending_draft is None:
+            return EmailSourceContext(should_route=False)
+        return EmailSourceContext(
+            should_route=True,
+            kind='pending_email_draft',
+            content=pending_draft.body,
+            pending_draft=pending_draft,
+            reason=_pending_draft_reason(
+                is_revision_request=is_revision_request,
+                is_recipient_update=is_recipient_update,
+            ),
+        )
+
+    return EmailSourceContext(
+        should_route=True,
+        kind='assistant_answer',
+        content=artifact['content'],
+        source_message_id=artifact['message_id'],
+        pending_draft=pending_draft,
+        reason=_artifact_reason(
+            is_revision_request=is_revision_request,
+            is_recipient_update=is_recipient_update,
+        ),
+    )
+
+
+def is_pending_draft_recipient_problem(*, messages: list[Any], latest_message: str) -> bool:
+    if find_latest_pending_email_draft(messages) is None:
+        return False
+    normalized = latest_message.lower()
+    has_recipient_term = any(term.lower() in normalized for term in RECIPIENT_PROBLEM_TERMS)
+    has_wrong_term = any(term.lower() in normalized for term in WRONG_TERMS)
+    return has_recipient_term and has_wrong_term
+
+
+def find_latest_pending_email_draft(messages: list[Any]) -> PendingEmailDraft | None:
+    for message in reversed(messages):
+        metadata = dict(getattr(message, 'metadata_', None) or {})
+        draft = metadata.get('email_draft')
+        if metadata.get('action_type') != 'email_draft':
+            continue
+        if metadata.get('status') != 'pending_approval':
+            continue
+        if not isinstance(draft, dict):
+            continue
+        to = [str(item).strip() for item in draft.get('to', []) if str(item).strip()]
+        subject = str(draft.get('subject') or '').strip()
+        body = str(draft.get('body') or '').strip()
+        if not to or not subject or not body:
+            continue
+        return PendingEmailDraft(
+            to=to,
+            subject=subject,
+            body=body,
+            message_id=getattr(message, 'id', None),
+        )
+    return None
+
+
+def find_latest_sendable_artifact(messages: list[Any]) -> dict[str, object] | None:
+    for message in reversed(messages):
+        if getattr(message, 'role', '') != 'assistant':
+            continue
+        metadata = dict(getattr(message, 'metadata_', None) or {})
+        if metadata.get('status') == 'failed':
+            continue
+        if metadata.get('action_type') in EXCLUDED_ASSISTANT_ACTIONS:
+            continue
+        if metadata.get('action_type') == 'email_draft':
+            continue
+        content = str(getattr(message, 'content', '')).strip()
+        if not content:
+            continue
+        return {
+            'message_id': getattr(message, 'id', None),
+            'content': content,
+        }
+    return None
+
+
+def render_email_source_context(source_context: EmailSourceContext, *, max_chars: int) -> str:
+    if not source_context.content:
+        return ''
+    lines = [
+        'Selected email body source:',
+        f'kind: {source_context.kind}',
+        f'reason: {source_context.reason}',
+        '',
+        source_context.content,
+    ]
+    rendered = '\n'.join(lines)
+    return rendered[-max_chars:]
+
+
+def merge_resolved_recipients(
+    resolved_recipients: list[dict[str, object]],
+    source_context: EmailSourceContext,
+) -> list[dict[str, object]]:
+    if resolved_recipients:
+        return resolved_recipients
+    if source_context.reason in {'pending_draft_recipient_update', 'draft_recipient_update'}:
+        return []
+    if source_context.pending_draft is None:
+        return []
+    return source_context.pending_draft.resolved_recipients
+
+
+def ensure_draft_contains_source(draft: EmailDraft, source_context: EmailSourceContext) -> EmailDraft:
+    source = source_context.content.strip()
+    if not source or _source_is_already_included(draft.body, source):
+        return draft
+
+    # 모델이 "이 내용"을 일반 공유 문장으로 축약하면 실제 본문이 빠지므로 선택된 산출물을 본문에 보강한다.
+    body = draft.body.strip()
+    body = f'{body}\n\n{source}' if body else source
+    return EmailDraft(to=draft.to, subject=draft.subject, body=body)
+
+
+def fallback_draft_from_source(
+    *,
+    source_context: EmailSourceContext,
+    resolved_recipients: list[dict[str, object]],
+) -> EmailDraft | None:
+    recipients = [str(item.get('email') or '').strip() for item in resolved_recipients]
+    recipients = [recipient for recipient in recipients if recipient]
+    if not recipients or not source_context.content.strip():
+        return None
+    subject = source_context.pending_draft.subject if source_context.pending_draft else _fallback_subject(source_context.content)
+    return EmailDraft(
+        to=recipients,
+        subject=subject,
+        body=source_context.content.strip(),
+    )
+
+
+def _is_reference_email_request(message: str) -> bool:
+    normalized = message.lower()
+    has_reference = any(term.lower() in normalized for term in REFERENCE_TERMS)
+    has_send = any(term.lower() in normalized for term in SEND_TERMS)
+    return has_reference and has_send
+
+
+def _is_generate_and_send_request(message: str) -> bool:
+    normalized = message.lower()
+    has_generate = any(term.lower() in normalized for term in GENERATE_TERMS)
+    has_send = any(term.lower() in normalized for term in SEND_TERMS)
+    has_connector = any(term.lower() in normalized for term in GENERATE_CONNECTORS)
+    return has_generate and has_send and has_connector
+
+
+def _generated_source_question(message: str) -> str:
+    normalized = message.strip()
+    cutoff = len(normalized)
+    for connector in GENERATE_CONNECTORS:
+        index = normalized.find(connector)
+        if index == -1:
+            continue
+        tail = normalized[index + len(connector):]
+        if any(term.lower() in tail.lower() for term in SEND_TERMS):
+            cutoff = min(cutoff, index)
+    question = normalized[:cutoff].strip(' .。!?\n\t')
+    return _complete_generation_question(question)
+
+
+def _complete_generation_question(question: str) -> str:
+    if not question:
+        return ''
+    if question.endswith(('해줘', '해주세요', '줘', '세요', '?')):
+        return question
+    if question.endswith(('작성', '정리', '요약', '준비')):
+        return f'{question}해줘'
+    if question.endswith('만들'):
+        return f'{question}어줘'
+    if question.endswith('써'):
+        return f'{question}줘'
+    return f'{question} 해줘'
+
+
+def _is_draft_revision_request(message: str) -> bool:
+    normalized = message.lower()
+    return any(term.lower() in normalized for term in REVISION_TERMS)
+
+
+def _is_pending_draft_recipient_update_request(message: str) -> bool:
+    normalized = message.lower()
+    return any(term.lower() in normalized for term in RECIPIENT_UPDATE_TERMS)
+
+
+def _pending_draft_reason(*, is_revision_request: bool, is_recipient_update: bool) -> str:
+    if is_recipient_update:
+        return 'pending_draft_recipient_update'
+    if is_revision_request:
+        return 'pending_draft_revision'
+    return 'pending_draft_reference'
+
+
+def _artifact_reason(*, is_revision_request: bool, is_recipient_update: bool) -> str:
+    if is_recipient_update:
+        return 'draft_recipient_update'
+    if is_revision_request:
+        return 'draft_revision'
+    return 'referenced_assistant_answer'
+
+
+def _source_is_already_included(body: str, source: str) -> bool:
+    normalized_body = _normalize_text(body)
+    source_markers = [
+        _normalize_text(line)
+        for line in source.splitlines()
+        if len(_normalize_text(line)) >= 12
+    ][:5]
+    if not source_markers:
+        return False
+    return any(marker in normalized_body for marker in source_markers)
+
+
+def _normalize_text(value: str) -> str:
+    return ''.join(str(value or '').lower().split())
+
+
+def _fallback_subject(source: str) -> str:
+    first_line = next((line.strip() for line in source.splitlines() if line.strip()), '')
+    if not first_line:
+        return '공유드립니다'
+    return f'{first_line[:40]} 공유드립니다'
