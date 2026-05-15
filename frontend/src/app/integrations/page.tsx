@@ -868,7 +868,7 @@ export default function IntegrationsPage() {
             return (
               <article
                 key={manifest.type}
-                className="integration-glass-card min-h-[30rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
+                className="integration-glass-card min-h-[26.5rem] rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex flex-col"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">
@@ -959,12 +959,12 @@ export default function IntegrationsPage() {
                   <span className="block min-h-4 text-xs text-[var(--ink-muted)]">
                     {manifest.mode === "mock" ? "현재 mock 데이터 사용" : null}
                   </span>
-                  <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-[5rem] flex-wrap content-end items-center justify-end gap-2">
+                  <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-9 flex-wrap content-end items-center justify-end gap-1.5">
                     <button
                       type="button"
                       onClick={() => void startSync(manifest.type)}
                       disabled={Boolean(pendingType)}
-                      className="liquid-primary inline-flex h-9 min-w-[5.75rem] items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+                      className="liquid-primary inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
                     >
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                       {pending ? "동기화 중" : "동기화"}
@@ -973,7 +973,7 @@ export default function IntegrationsPage() {
                       <button
                         type="button"
                         onClick={() => void disconnect(manifest.type)}
-                        className="liquid-control inline-flex h-9 min-w-[4.75rem] items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
+                        className="liquid-control inline-flex h-9 min-w-[4.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                         해제
@@ -982,7 +982,7 @@ export default function IntegrationsPage() {
                     {manifest.type === "drive" ? (
                       <a
                         href="/documents"
-                        className="liquid-control inline-flex h-9 min-w-[6rem] items-center justify-center gap-1.5 rounded-[20px] px-3 text-sm font-semibold text-[var(--ink-strong)]"
+                        className="liquid-control inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold text-[var(--ink-strong)]"
                       >
                         <FileText className="h-4 w-4" aria-hidden="true" />
                         문서 현황
