@@ -452,6 +452,8 @@ def _skip_project_assignment_after_agent_review(
     settings: Settings,
     agent_review_items: int,
 ) -> bool:
+    if connector_type == 'slack':
+        return True
     return agent_review_items > 0 and _connector_uses_slack_llm_project_routing(
         connector_type=connector_type,
         settings=settings,

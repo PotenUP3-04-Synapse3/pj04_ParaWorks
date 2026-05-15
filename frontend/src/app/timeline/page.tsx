@@ -9,6 +9,7 @@ type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
 
 type TimelineHistory = {
   id: string;
+  createdAt: string;
   time: string;
   source: TimelineSource;
   title: string;
@@ -127,31 +128,36 @@ export default function TimelinePage() {
             <p className="mt-1 text-[13px] text-muted">항목을 열어 어떤 source 문장이 근거인지 확인합니다.</p>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {selectedProject.histories.length > 0 ? selectedProject.histories.map((item) => (
-              <article key={item.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <time className="text-[12px] font-extrabold text-muted">{item.time}</time>
-                    <span className="badge blue">{item.source}</span>
-                    <span className="badge green">{item.status}</span>
-                  </div>
-                  <button
-                    type="button"
-                    aria-pressed={selectedHistoryId === item.id}
-                    className={`icon-button small ${selectedHistoryId === item.id ? "active" : ""}`}
-                    aria-label={`Open ${item.title}`}
-                    onClick={() => setSelectedHistoryId((current) => (current === item.id ? undefined : item.id))}
-                  >
-                    <FileClock className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
-                <h3 className="mt-3 text-[15px] font-extrabold text-ink">{item.title}</h3>
-                <p className="mt-1 text-[13px] leading-6 text-muted">{item.summary}</p>
-                <div className="mt-3 rounded-md bg-surface-soft px-3 py-2 text-[12px] font-bold leading-5 text-muted">
-                  History: {item.history}
-                </div>
-              </article>
+          <div className="mt-4 space-y-5">
+            {selectedProject.histories.length > 0 ? groupHistoriesByDate(selectedProject.histories).map((group) => (
+              <section key={group.dateLabel} className="space-y-3">
+                <h3 className="text-[13px] font-extrabold text-muted">{group.dateLabel}</h3>
+                {group.items.map((item) => (
+                  <article key={item.id} className="rounded-lg border border-line bg-[var(--glass-elevated)] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <time className="text-[12px] font-extrabold text-muted">{item.time}</time>
+                        <span className="badge blue">{item.source}</span>
+                        <span className="badge green">{item.status}</span>
+                      </div>
+                      <button
+                        type="button"
+                        aria-pressed={selectedHistoryId === item.id}
+                        className={`icon-button small ${selectedHistoryId === item.id ? "active" : ""}`}
+                        aria-label={`Open ${item.title}`}
+                        onClick={() => setSelectedHistoryId((current) => (current === item.id ? undefined : item.id))}
+                      >
+                        <FileClock className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                    <h3 className="mt-3 text-[15px] font-extrabold text-ink">{item.title}</h3>
+                    <p className="mt-1 text-[13px] leading-6 text-muted">{item.summary}</p>
+                    <div className="mt-3 rounded-md bg-surface-soft px-3 py-2 text-[12px] font-bold leading-5 text-muted">
+                      History: {item.history}
+                    </div>
+                  </article>
+                ))}
+              </section>
             )) : (
               <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] text-muted">
                 이 프로젝트에 승인된 타임라인 항목이 아직 없습니다. Review에서 이 프로젝트를 선택하고 타임라인 후보를 승인하면 여기에 표시됩니다.
@@ -195,6 +201,8 @@ export default function TimelinePage() {
             {selectedHistory.sourceUrl ? (
               <a
                 href={selectedHistory.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mt-4 inline-flex items-center gap-2 text-[12px] font-extrabold text-[var(--primary-dark)] underline-offset-4 hover:underline"
               >
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -211,6 +219,7 @@ export default function TimelinePage() {
 function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
   return {
     id: item.id,
+    createdAt: item.created_at,
     time: formatTime(item.created_at),
     source: sourceFromLinks(item.source_links),
     title: item.title,
@@ -226,6 +235,15 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
   };
 }
 
+function groupHistoriesByDate(histories: TimelineHistory[]) {
+  const groups = new Map<string, TimelineHistory[]>();
+  for (const history of histories) {
+    const label = formatDate(history.createdAt);
+    groups.set(label, [...(groups.get(label) ?? []), history]);
+  }
+  return Array.from(groups.entries()).map(([dateLabel, items]) => ({ dateLabel, items }));
+}
+
 function sourceFromLinks(links: string[]): TimelineSource {
   const joined = links.join(" ").toLowerCase();
   if (joined.includes("slack")) return "Slack";
@@ -239,4 +257,15 @@ function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--:--";
   return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "날짜 미상";
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }

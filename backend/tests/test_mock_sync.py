@@ -13,7 +13,7 @@ def test_mock_slack_sync_creates_pending_review_items(client) -> None:
     assert review_response.json()['items']
 
 
-def test_sync_creates_project_assignment_review_items_for_defined_projects(client, db_session) -> None:
+def test_slack_sync_does_not_create_project_assignment_review_items(client, db_session) -> None:
     db_session.add(
         Project(
             project_key='project-alpha',
@@ -27,17 +27,11 @@ def test_sync_creates_project_assignment_review_items_for_defined_projects(clien
 
     assert response.status_code == 200
     assert response.json()['created_review_items'] >= 1
-    assignment = db_session.scalar(
-        select(ReviewItem).where(
-            ReviewItem.item_type == 'project_assignment',
-            ReviewItem.payload['project_key'].as_string() == 'project-alpha',
-        )
-    )
-    assert assignment is not None
-    assert assignment.status == 'pending_review'
+    assert response.json()['project_assignment_items'] == 0
+    assert db_session.query(ReviewItem).filter_by(item_type='project_assignment').count() == 0
 
 
-def test_duplicate_sync_still_classifies_existing_sources_for_new_project(client, db_session) -> None:
+def test_duplicate_slack_sync_does_not_backfill_project_assignment_for_new_project(client, db_session) -> None:
     first_sync = client.post('/api/v1/integrations/slack/sync')
     assert first_sync.status_code == 200
 
@@ -54,15 +48,8 @@ def test_duplicate_sync_still_classifies_existing_sources_for_new_project(client
 
     assert second_sync.status_code == 200
     assert second_sync.json()['skipped_events'] > 0
-    assert second_sync.json()['project_assignment_items'] >= 1
-    assignment = db_session.scalar(
-        select(ReviewItem).where(
-            ReviewItem.item_type == 'project_assignment',
-            ReviewItem.payload['project_key'].as_string() == 'project-alpha',
-        )
-    )
-    assert assignment is not None
-    assert assignment.status == 'pending_review'
+    assert second_sync.json()['project_assignment_items'] == 0
+    assert db_session.query(ReviewItem).filter_by(item_type='project_assignment').count() == 0
 
 
 def test_duplicate_slack_sync_recreates_agent_reviews_when_review_items_were_deleted(

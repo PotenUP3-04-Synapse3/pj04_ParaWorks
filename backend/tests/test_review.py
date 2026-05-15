@@ -129,6 +129,42 @@ def test_patch_review_item_requires_registered_project_key(client, db_session) -
     assert valid.json()['payload']['project_name'] == '고객 포털 개편'
 
 
+def test_slack_agent_review_item_requires_project_before_approval(client, db_session) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Redis work'))
+    item = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': '등록 프로젝트 확인 필요',
+            'summary': 'Slack Agent가 업무 후보로 판단했지만 프로젝트 선택이 필요합니다.',
+            'agent_name': 'slack_agent',
+            'project_assignment_method': 'llm_tool',
+            'project_needs_user_selection': True,
+        },
+        source_links=['https://example.slack.com/archives/C123/p1777600800000100'],
+        source_snippets=['새 프로젝트로 보이는 업무 논의입니다.'],
+        confidence_score=0.82,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    preview = client.get(f'/api/v1/review/{item.id}/promotion-preview')
+    blocked = client.post(f'/api/v1/review/{item.id}/approve')
+    patched = client.patch(f'/api/v1/review/{item.id}', json={'payload': {'project_key': 'project-alpha'}})
+    approved = client.post(f'/api/v1/review/{item.id}/approve')
+
+    assert preview.status_code == 200
+    assert preview.json()['can_approve'] is False
+    assert 'project_key' in preview.json()['missing_required_fields']
+    assert blocked.status_code == 400
+    assert patched.status_code == 200
+    assert patched.json()['payload']['project_name'] == 'Project Alpha'
+    assert approved.status_code == 200
+    assert approved.json()['promotion_result']['project_key'] == 'project-alpha'
+
+
 def test_review_list_supports_limit_offset_metadata(client, db_session) -> None:
     for index in range(3):
         db_session.add(
