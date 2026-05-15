@@ -847,6 +847,11 @@ export default function IntegrationsPage() {
             const oauthInstall = manifest.type === "slack" ? slackOAuth : googleOAuthByType[manifest.type];
             const canStartOAuth = Boolean(oauthInstall?.configured && (!connection || !credentialAvailable));
             const showOAuthStatus = manifest.auth_type === "oauth";
+            const showSyncAction = !showOAuthStatus || Boolean(connection);
+            const showDisconnectAction = Boolean(connection);
+            const showDocumentsAction = manifest.type === "drive";
+            const showMockModeNote = manifest.mode === "mock";
+            const showCardFooter = showMockModeNote || showSyncAction || showDisconnectAction || showDocumentsAction;
             const oauthTheme =
               manifest.type === "slack"
                 ? {
@@ -955,21 +960,22 @@ export default function IntegrationsPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-auto min-h-[4.5rem] pt-4 flex flex-col justify-end gap-2 border-t border-[var(--line-soft)]">
-                  <span className="block min-h-4 text-xs text-[var(--ink-muted)]">
-                    {manifest.mode === "mock" ? "현재 mock 데이터 사용" : null}
-                  </span>
-                  <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-9 flex-wrap content-end items-center justify-end gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => void startSync(manifest.type)}
-                      disabled={Boolean(pendingType)}
-                      className="liquid-primary inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
-                    >
-                      <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                      {pending ? "동기화 중" : "동기화"}
-                    </button>
-                    {connection ? (
+                {showCardFooter ? (
+                  <div className="mt-3 flex flex-col gap-2 border-t border-[var(--line-soft)] pt-3">
+                    {showMockModeNote ? <span className="text-xs text-[var(--ink-muted)]">현재 mock 데이터 사용</span> : null}
+                    <div data-testid={`${manifest.type}-card-actions`} className="flex min-h-9 flex-wrap content-end items-center justify-end gap-1.5">
+                      {showSyncAction ? (
+                        <button
+                          type="button"
+                          onClick={() => void startSync(manifest.type)}
+                          disabled={Boolean(pendingType)}
+                          className="liquid-primary inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55"
+                        >
+                          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                          {pending ? "동기화 중" : "동기화"}
+                        </button>
+                      ) : null}
+                      {showDisconnectAction ? (
                       <button
                         type="button"
                         onClick={() => void disconnect(manifest.type)}
@@ -979,7 +985,7 @@ export default function IntegrationsPage() {
                         해제
                       </button>
                     ) : null}
-                    {manifest.type === "drive" ? (
+                    {showDocumentsAction ? (
                       <a
                         href="/documents"
                         className="liquid-control inline-flex h-9 min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[20px] px-2.5 text-sm font-semibold text-[var(--ink-strong)]"
@@ -988,8 +994,9 @@ export default function IntegrationsPage() {
                         문서 현황
                       </a>
                     ) : null}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </article>
             );
           })}

@@ -295,7 +295,7 @@ test("Slack card keeps OAuth install outside primary action row", async ({ page 
   await page.goto("/integrations");
 
   const slackActions = page.getByTestId("slack-card-actions");
-  await expect(slackActions.getByRole("button", { name: "동기화" })).toBeVisible();
+  await expect(slackActions.getByRole("button", { name: "동기화" })).toHaveCount(0);
   await expect(slackActions.getByRole("button", { name: "Slack Agent 실행" })).toHaveCount(0);
   await expect(slackActions.getByRole("button", { name: "Slack 연결" })).toHaveCount(0);
 });
@@ -334,6 +334,16 @@ test("integration connector cards use consistent chrome and action layout", asyn
     elements.map((element) => window.getComputedStyle(element).display),
   );
   expect(new Set(actionDisplays)).toEqual(new Set(["flex"]));
+
+  const actionGaps = await page.evaluate(() =>
+    ["calendar", "drive", "gmail", "slack"].map((type) => {
+      const oauthStatus = document.querySelector(`[data-testid="${type}-oauth-status"]`);
+      const actions = document.querySelector(`[data-testid="${type}-card-actions"]`);
+      if (!oauthStatus || !actions) return 0;
+      return Math.round(actions.getBoundingClientRect().top - oauthStatus.getBoundingClientRect().bottom);
+    }),
+  );
+  expect(Math.max(...actionGaps)).toBeLessThanOrEqual(28);
 
   const driveActionLabels = await page.getByTestId("drive-card-actions").locator("button, a").evaluateAll((elements) =>
     elements.map((element) => element.textContent?.replace(/\s+/g, " ").trim()),
@@ -443,6 +453,10 @@ test("Gmail and Google Drive cards show connect CTAs when OAuth is configured", 
 
   await expect(page.getByTestId("gmail-oauth-status").getByRole("button", { name: "Gmail 연결" })).toBeVisible();
   await expect(page.getByTestId("drive-oauth-status").getByRole("button", { name: "Google Drive 연결" })).toBeVisible();
+  await expect(page.getByTestId("gmail-card-actions").locator("button")).toHaveCount(0);
+  await expect(page.getByTestId("drive-card-actions").locator("button")).toHaveCount(0);
+  await expect(page.getByTestId("gmail-card-actions").getByRole("button", { name: "동기화" })).toHaveCount(0);
+  await expect(page.getByTestId("drive-card-actions").getByRole("button", { name: "동기화" })).toHaveCount(0);
   await expect(page.getByTestId("gmail-card-actions").getByRole("button", { name: "Gmail 연결" })).toHaveCount(0);
   await expect(page.getByTestId("drive-card-actions").getByRole("button", { name: "Google Drive 연결" })).toHaveCount(0);
 });
