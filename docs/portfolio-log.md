@@ -1,10 +1,23 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-14
+Last updated: 2026-05-15
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-15 Gmail/Drive 프로젝트 라우팅 승인 연결
+
+- `backend/app/agent_runtime/project_routing.py`에 Gmail, Drive, Slack이 함께 쓸 수 있는 공용 프로젝트 라우팅 계약을 추가했다.
+- Mail/Document Agent가 만든 `llm_tool` 기반 ReviewItem은 프로젝트가 확정되지 않았거나 사용자 선택이 필요한 상태이면 승인할 수 없도록 Review 승인 정책을 강화했다.
+- Review 화면에서 프로젝트 미선택 Gmail/Drive 후보는 "프로젝트 선택 후 승인 가능" 안내와 함께 승인 버튼이 비활성화되고, 등록 프로젝트를 선택하면 같은 ReviewItem을 승인할 수 있다.
+- 승인된 Gmail/Drive 후보는 기존 Review Queue 신뢰 경계를 거쳐 Timeline/Projects에 프로젝트별 활동으로 표시되고, 승인된 source chunk와 approved knowledge는 RAG indexing 대상에 포함된다.
+- approved knowledge의 벡터 문서 메타데이터에 `project_key`를 보존해 프로젝트 기반 검색/분석으로 이어질 수 있게 했다.
+- 검증: 공용 라우팅/Review/Project/RAG 백엔드 테스트 74개 통과, ruff 통과, 프론트 lint/build 통과, Gmail/Drive Review -> Timeline -> Projects Playwright desktop/mobile 2개 통과, 기존 Review project routing Playwright desktop/mobile 2개 통과.
+
+Portfolio angle:
+
+- Gmail/Drive 증거가 AI 후보에서 끝나지 않고, 프로젝트 선택과 사람 승인 후 회사 기억, 프로젝트 활동, 타임라인, RAG 색인까지 이어지는 제품 루프를 보여준다.
 
 ## 2026-05-15 Slack 프로젝트 Router Tool Agent 추가
 

@@ -129,6 +129,38 @@ def test_patch_review_item_requires_registered_project_key(client, db_session) -
     assert valid.json()['payload']['project_name'] == '고객 포털 개편'
 
 
+def test_patch_review_item_project_selection_marks_llm_tool_item_approvable(client, db_session) -> None:
+    db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Alpha work'))
+    item = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': 'Drive policy update',
+            'summary': 'A Drive document needs reviewer project selection.',
+            'agent_name': 'mail_document_agent',
+            'project_assignment_method': 'llm_tool',
+            'project_assignment_summary': 'No registered project was selected.',
+            'project_assignment_reason': 'The Drive evidence was ambiguous.',
+            'project_needs_user_selection': True,
+        },
+        source_links=['https://drive.mock/file-1'],
+        source_snippets=['Drive evidence requiring reviewer selection.'],
+        confidence_score=0.73,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    response = client.patch(f"/api/v1/review/{item.id}", json={'payload': {'project_key': 'project-alpha'}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['payload']['project_key'] == 'project-alpha'
+    assert body['payload']['project_name'] == 'Project Alpha'
+    assert body['payload']['project_needs_user_selection'] is False
+
+
 def test_review_list_supports_limit_offset_metadata(client, db_session) -> None:
     for index in range(3):
         db_session.add(
@@ -422,6 +454,40 @@ def test_approve_review_item_rejects_missing_required_fields(client, db_session)
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Review item is missing required fields'
+
+
+def test_approve_mail_document_llm_tool_item_requires_project_selection(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='todo',
+        payload={
+            'title': 'Reply to customer with Drive plan',
+            'priority': 'high',
+            'priority_reason': 'The customer asked for the reviewed plan.',
+            'agent_name': 'mail_document_agent',
+            'project_assignment_method': 'llm_tool',
+            'project_assignment_summary': 'No registered project was selected automatically.',
+            'project_assignment_reason': 'The Gmail and Drive evidence did not clearly match a project.',
+            'project_needs_user_selection': True,
+            'source_ids': ['gmail:message-1', 'drive:file-1'],
+        },
+        source_links=['https://mail.google.com/mail/u/0/#inbox/message-1', 'https://drive.mock/file-1'],
+        source_snippets=['Customer asked for the reviewed plan.', 'The Drive plan needs confirmation.'],
+        confidence_score=0.82,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    preview = client.get(f'/api/v1/review/{item.id}/promotion-preview')
+    approve = client.post(f'/api/v1/review/{item.id}/approve')
+
+    assert preview.status_code == 200
+    assert preview.json()['can_approve'] is False
+    assert preview.json()['missing_required_fields'] == ['project_key']
+    assert approve.status_code == 400
+    assert approve.json()['detail'] == '프로젝트를 선택해야 승인할 수 있습니다.'
 
 
 def test_approve_todo_promotes_clean_korean_timeline_without_mojibake(client, db_session) -> None:

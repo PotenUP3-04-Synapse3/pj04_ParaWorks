@@ -9,6 +9,7 @@ from backend.app.models import (
     Document,
     DocumentChunk,
     DocumentVersion,
+    HistoryEvent,
     ReviewItem,
     Source,
     SyncJob,
@@ -450,6 +451,28 @@ def test_build_rag_index_documents_includes_approved_timeline_events(
 
     assert [document.document_id for document in documents] == [f'timeline_event:{timeline.id}']
     assert documents[0].metadata['source_type'] == 'timeline_event'
+
+
+def test_build_rag_index_documents_preserves_project_key_on_approved_knowledge(
+    db_session: Session,
+) -> None:
+    history = HistoryEvent(
+        project_key='project-alpha',
+        title='Gmail follow-up moved to review',
+        reason='The customer follow-up from Gmail was approved for Project Alpha.',
+        source_links=['https://mail.google.com/mail/u/0/#inbox/message-1'],
+        source_snippets=['Customer follow-up should be reviewed under Project Alpha.'],
+        confidence_score=0.89,
+        permission_level='internal',
+        review_status='approved',
+    )
+    db_session.add(history)
+    db_session.commit()
+
+    documents = build_rag_index_documents(db_session)
+
+    assert [document.document_id for document in documents] == [f'history_event:{history.id}']
+    assert documents[0].metadata['project_key'] == 'project-alpha'
 
 
 def test_build_rag_index_documents_includes_document_parser_metadata(db_session: Session) -> None:

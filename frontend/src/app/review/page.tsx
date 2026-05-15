@@ -47,6 +47,15 @@ function numberField(value: unknown) {
   return typeof value === "number" ? value : undefined;
 }
 
+function needsProjectSelection(item: ReviewItem, preview?: ReviewPromotionPreview) {
+  return (
+    item.payload.project_assignment_method === "llm_tool" &&
+    (!stringField(item.payload.project_key) ||
+      item.payload.project_needs_user_selection === true ||
+      preview?.missing_required_fields?.includes("project_key"))
+  );
+}
+
 
 function itemTitle(item: ReviewItem | ReviewGroup) {
   if ('payload' in item) {
@@ -291,12 +300,18 @@ export default function ReviewPage() {
     const update: ReviewItemUpdate = {
       payload: {
         project_key: projectKey,
+        project_needs_user_selection: false,
       },
     };
     setPendingAction(`${item.id}:project`);
     setError(undefined);
     try {
       await apiPatch<ReviewItem>(`/api/v1/review/${item.id}`, update);
+      setPreviews((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
       await loadItems();
       notifyReviewQueueUpdated();
     } catch (caught) {
@@ -494,7 +509,8 @@ export default function ReviewPage() {
                     const promptVersion = isAgentItem ? reviewPromptLabel(item, agentName) : "";
                     const cost = isAgentItem ? reviewCostLabel(item, agentName) : "";
                     const preview = previews[item.id];
-                    const canApprove = preview?.can_approve ?? true;
+                    const projectSelectionRequired = needsProjectSelection(item, preview);
+                    const canApprove = (preview?.can_approve ?? true) && !projectSelectionRequired;
                     const evidenceRows = item.source_evidence ?? [];
                     const isEvidenceRequestOpen = evidenceRequestId === item.id;
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
@@ -597,6 +613,7 @@ export default function ReviewPage() {
                                 <label className="mt-4 block max-w-sm text-sm font-semibold text-[var(--ink)]">
                                   프로젝트 지정
                                   <select
+                                    aria-label="프로젝트 지정"
                                     value={stringField(item.payload.project_key)}
                                     onChange={(event) => void updateItemProject(item, event.target.value)}
                                     disabled={Boolean(pendingAction)}
@@ -610,6 +627,20 @@ export default function ReviewPage() {
                                     ))}
                                   </select>
                                 </label>
+                                {projectSelectionRequired ? (
+                                  <div
+                                    data-testid="project-selection-required"
+                                    className="mt-3 max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900"
+                                  >
+                                    <p>프로젝트 선택 후 승인할 수 있습니다.</p>
+                                    <p className="mt-1 font-medium">
+                                      등록된 프로젝트와 자동 매칭되지 않아 검토자 확인이 필요합니다.
+                                      <Link href="/projects" className="ml-2 underline underline-offset-4">
+                                        새 프로젝트 만들기
+                                      </Link>
+                                    </p>
+                                  </div>
+                                ) : null}
                                 {assignmentFields ? (
                                   <div className="mt-4 max-w-3xl rounded-lg border border-[var(--line-soft)] bg-white/70 p-4">
                                     <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ink-muted)]">
@@ -740,6 +771,7 @@ export default function ReviewPage() {
                             <>
                               <button
                                 type="button"
+                                aria-label="승인"
                                 onClick={() => void runStatusAction(item, "approve")}
                                 disabled={Boolean(pendingAction) || !canApprove}
                                 className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"

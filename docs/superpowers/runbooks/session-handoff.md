@@ -1,6 +1,24 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-14
+Updated: 2026-05-15
+
+## 2026-05-15 Gmail/Drive 프로젝트 라우팅 승인 연결
+
+- 역할 경계:
+  - 개발자 C는 Gmail/Drive 고도화 중 공용 프로젝트 라우팅 계약, Review 승인 정책, Review UX, Timeline/Projects/RAG 연결만 담당했다.
+  - `backend/app/connectors/google.py`, `backend/app/agents/mail_document_agent/`, `agent_slack/`, `backend/app/agents/slack_agent/`는 수정하지 않았다.
+- 주요 변경:
+  - `backend/app/agent_runtime/project_routing.py`에 `ProjectOption`, `ProjectRoutingCandidate`, `ProjectRoutingDecision`, `ProjectRoutingResult`, `ProjectRouterModel`, `route_projects_for_candidates`, `apply_project_routing_to_payload` 공용 계약을 추가했다.
+  - Gmail/Drive Mail/Document Agent ReviewItem 중 `project_assignment_method="llm_tool"`인 지식 후보는 `project_key`가 확정되지 않았거나 `project_needs_user_selection=true`이면 승인할 수 없도록 했다.
+  - Review 화면은 프로젝트 선택이 필요한 후보의 승인 버튼을 비활성화하고, 등록 프로젝트를 선택하면 같은 ReviewItem을 PATCH로 보정한 뒤 승인 가능하게 만든다.
+  - 승인된 Gmail/Drive 후보의 `project_key`는 Timeline/Projects 활동과 RAG indexing metadata까지 보존된다.
+- 검증:
+  - `uv run pytest backend/tests/test_agent_runtime_project_routing.py backend/tests/test_review.py backend/tests/test_review_knowledge_promotion.py backend/tests/test_project_memory_api.py backend/tests/test_rag_indexing.py -q` -> `74 passed`
+  - `uv run ruff check backend/app/agent_runtime/project_routing.py backend/app/knowledge/promotion.py backend/app/api/v1/review.py backend/app/projects/service.py backend/app/rag/indexing.py backend/tests/test_agent_runtime_project_routing.py backend/tests/test_review.py backend/tests/test_project_memory_api.py backend/tests/test_rag_indexing.py` -> `All checks passed!`
+  - `npm.cmd run lint` -> passed
+  - `npm.cmd run build` -> passed
+  - `npm.cmd run test:visual -- gmail-drive-project-routing-flow.spec.ts` -> desktop/mobile `2 passed`
+  - `npm.cmd run test:visual -- review-project-routing.spec.ts` -> desktop/mobile `2 passed`
 
 ## 2026-05-15 Slack 프로젝트 Router Tool Agent 인수인계
 

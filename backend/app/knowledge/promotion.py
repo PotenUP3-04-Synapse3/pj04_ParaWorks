@@ -13,11 +13,16 @@ PROMOTABLE_REVIEW_TYPES = {'decision_record', 'history_event', 'timeline_event',
 
 def build_promotion_preview(item: ReviewItem) -> dict:
     normalized_payload = _normalized_payload_for_item(item)
+    if _is_project_routed_memory_item(item):
+        normalized_payload['project_key'] = _string_payload(item, 'project_key')
+    required_fields = _required_fields_for_item(item)
     missing_required_fields = [
         field
         for field, value in normalized_payload.items()
-        if field in _required_fields_for_type(item.item_type) and not str(value).strip()
+        if field in required_fields and not str(value).strip()
     ]
+    if _requires_project_selection(item) and 'project_key' not in missing_required_fields:
+        missing_required_fields.append('project_key')
 
     return {
         'target_type': item.item_type if item.item_type in PROMOTABLE_REVIEW_TYPES else 'review_item',
@@ -30,6 +35,8 @@ def build_promotion_preview(item: ReviewItem) -> dict:
 def validate_review_item_for_approval(item: ReviewItem) -> None:
     preview = build_promotion_preview(item)
     if not preview['can_approve']:
+        if preview['missing_required_fields'] == ['project_key']:
+            raise ValueError('프로젝트를 선택해야 승인할 수 있습니다.')
         raise ValueError('Review item is missing required fields')
 
 
@@ -184,6 +191,26 @@ def _required_fields_for_type(item_type: str) -> tuple[str, ...]:
     if item_type == 'project_assignment':
         return ('title', 'project_key', 'project_name', 'source_id', 'evidence_reason')
     return ()
+
+
+def _required_fields_for_item(item: ReviewItem) -> tuple[str, ...]:
+    required = _required_fields_for_type(item.item_type)
+    if _is_project_routed_memory_item(item):
+        return (*required, 'project_key')
+    return required
+
+
+def _is_project_routed_memory_item(item: ReviewItem) -> bool:
+    return (
+        item.item_type in PROMOTABLE_REVIEW_TYPES
+        and item.payload.get('project_assignment_method') == 'llm_tool'
+    )
+
+
+def _requires_project_selection(item: ReviewItem) -> bool:
+    if not _is_project_routed_memory_item(item):
+        return False
+    return not _string_payload(item, 'project_key') or item.payload.get('project_needs_user_selection') is True
 
 
 def _string_payload(item: ReviewItem, key: str) -> str:
