@@ -124,24 +124,35 @@ export default function ProjectsPage() {
   }, [selectedProject, sourceFilter]);
 
   return (
-    <div data-testid="project-workspace" className="mx-auto w-full max-w-[1560px] px-4 pb-8 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-extrabold text-indigo-600">Project Workspace</p>
-          <h1 className="mt-1 text-4xl font-black tracking-tight text-slate-950">프로젝트</h1>
-          <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-slate-500">
-            사용자가 만든 프로젝트를 기준으로 Slack, Gmail, Drive, Calendar 근거와 승인된 활동을 모아봅니다.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => void loadProjects()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60">
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-            새로고침
-          </button>
-          <button type="button" onClick={() => setIsCreating(true)} className="inline-flex h-10 items-center gap-2 rounded-2xl bg-indigo-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-indigo-700">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            새 프로젝트
-          </button>
+    <div data-testid="project-workspace" className="mx-auto w-full max-w-[1560px] pb-8">
+      <header className="mb-5 rounded-[2rem] border border-white/80 bg-white/75 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.06)] backdrop-blur sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-indigo-500">Project Workspace</p>
+            <h1 className="mt-1 text-[2.25rem] font-extrabold tracking-tight text-slate-950">프로젝트</h1>
+            <p className="mt-3 max-w-3xl text-[15px] font-medium leading-7 text-slate-500">
+              사용자가 만든 프로젝트를 기준으로 Slack, Gmail, Drive, Calendar 근거와 승인된 활동을 모아봅니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void loadProjects()}
+              disabled={loading}
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 text-sm font-bold text-slate-700 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+              새로고침
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCreating(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-bold text-white shadow-[0_16px_36px_rgba(15,23,42,0.18)] transition hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              새 프로젝트
+            </button>
+          </div>
         </div>
       </header>
 
@@ -163,7 +174,7 @@ export default function ProjectsPage() {
 
       <section
         data-testid="project-workspace-grid"
-        className="grid grid-cols-1 gap-6 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_420px]"
+        className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_420px]"
       >
         <ProjectListPanel
           projects={projects}
@@ -204,26 +215,31 @@ function ProjectCreateCard({
   onCancel: () => void;
 }) {
   return (
-    <section className="mb-6 rounded-3xl border border-white/70 bg-white p-5 shadow-sm">
+    <section className="mb-6 rounded-[2rem] border border-white/80 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur">
       <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_1fr_auto] md:items-end">
-        <label className="text-sm font-extrabold text-slate-900">
+        <label className="text-sm font-bold text-slate-900">
           프로젝트명
-          <input value={name} onChange={(event) => onChangeName(event.target.value)} placeholder="예: 고객 포털 개편" className="mt-1 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-indigo-500" />
+          <input
+            value={name}
+            onChange={(event) => onChangeName(event.target.value)}
+            placeholder="예: 고객 포털 개편"
+            className="mt-1 h-11 w-full rounded-full border border-slate-200/80 bg-white px-4 text-sm font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+          />
         </label>
-        <label className="text-sm font-extrabold text-slate-900">
+        <label className="text-sm font-bold text-slate-900">
           간단한 설명
           <input
             value={summary}
             onChange={(event) => onChangeSummary(event.target.value)}
             placeholder="프로젝트 목적과 주요 키워드를 적어 주세요."
-            className="mt-1 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-indigo-500"
+            className="mt-1 h-11 w-full rounded-full border border-slate-200/80 bg-white px-4 text-sm font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
           />
         </label>
         <div className="flex gap-2">
-          <button type="button" onClick={onCreate} disabled={createPending} className="inline-flex h-10 items-center gap-2 rounded-2xl bg-indigo-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60">
+          <button type="button" onClick={onCreate} disabled={createPending} className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-bold text-white shadow-[0_14px_32px_rgba(15,23,42,0.16)] transition hover:bg-indigo-700 disabled:opacity-60">
             생성
           </button>
-          <button type="button" onClick={onCancel} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 shadow-sm transition hover:bg-slate-50">
+          <button type="button" onClick={onCancel} className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
             취소
           </button>
         </div>
@@ -235,11 +251,16 @@ function ProjectCreateCard({
 
 function ProjectOverviewHero({ project }: { project: ProjectMemory }) {
   return (
-    <section data-testid="project-overview-hero" className="mb-6 overflow-hidden rounded-3xl border border-white/70 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <section
+      data-testid="project-overview-hero"
+      className="relative mb-6 overflow-hidden rounded-[2rem] border border-white/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(239,244,255,0.88)_52%,rgba(250,245,255,0.82))] p-6 shadow-[0_24px_70px_rgba(79,70,229,0.10)]"
+    >
+      <div className="pointer-events-none absolute -right-14 -top-16 h-48 w-48 rounded-full bg-indigo-200/30 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute bottom-0 right-28 h-28 w-28 rounded-full bg-cyan-200/20 blur-2xl" aria-hidden="true" />
+      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-wide text-indigo-600">{project.project_key}</p>
-          <h2 className="mt-1 break-keep text-3xl font-black tracking-tight text-slate-950 max-sm:break-normal">{project.name}</h2>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">{project.project_key}</p>
+          <h2 className="mt-2 break-keep text-3xl font-extrabold tracking-tight text-slate-950 max-sm:break-normal">{project.name}</h2>
           <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-slate-500">{project.summary}</p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:min-w-[330px]">
@@ -254,9 +275,9 @@ function ProjectOverviewHero({ project }: { project: ProjectMemory }) {
 
 function ProjectEmptyOverview() {
   return (
-    <section data-testid="project-overview-hero" className="mb-6 rounded-3xl border border-dashed border-indigo-100 bg-white p-6 shadow-sm">
-      <p className="text-xs font-black uppercase tracking-wide text-indigo-600">PROJECT WORKSPACE</p>
-      <h2 className="mt-2 text-2xl font-black text-slate-950">프로젝트를 선택해 주세요</h2>
+    <section data-testid="project-overview-hero" className="mb-6 rounded-[2rem] border border-dashed border-indigo-100 bg-white/75 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.05)]">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">PROJECT WORKSPACE</p>
+      <h2 className="mt-2 text-2xl font-extrabold text-slate-950">프로젝트를 선택해 주세요</h2>
       <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-500">
         프로젝트를 만들면 승인된 원본 근거와 활동 기록을 같은 화면에서 탐색할 수 있습니다.
       </p>
@@ -284,18 +305,18 @@ function ProjectListPanel({
   onCreate: () => void;
 }) {
   return (
-    <aside data-testid="project-list-panel" className="h-fit rounded-3xl border border-white/70 bg-white p-5 shadow-sm">
+    <aside data-testid="project-list-panel" className="h-fit rounded-[2rem] border border-white/80 bg-white/75 p-4 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-black text-slate-950">프로젝트 목록</h3>
-          <p className="mt-1 text-sm font-semibold text-slate-500">{projects.length.toLocaleString()}개 프로젝트</p>
+          <h3 className="text-base font-extrabold text-slate-950">프로젝트 목록</h3>
+          <p className="mt-1 text-sm font-medium text-slate-500">{projects.length.toLocaleString()}개 프로젝트</p>
         </div>
-        <button type="button" onClick={onCreate} className="grid h-10 w-10 place-items-center rounded-2xl bg-indigo-50 text-indigo-600 transition hover:bg-indigo-100" aria-label="새 프로젝트">
+        <button type="button" onClick={onCreate} className="grid h-10 w-10 place-items-center rounded-full bg-indigo-50 text-indigo-600 shadow-sm transition hover:bg-indigo-100" aria-label="새 프로젝트">
           <FolderKanban className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
 
-      <label className="flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm">
+      <label className="flex h-11 items-center gap-2 rounded-full border border-slate-200/80 bg-white px-3 text-sm shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
         <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
         <input value={query} onChange={(event) => onChangeQuery(event.target.value)} placeholder="프로젝트 검색" className="min-w-0 flex-1 bg-transparent font-semibold outline-none" />
       </label>
@@ -309,20 +330,20 @@ function ProjectListPanel({
             type="button"
             onClick={() => onSelect(project.project_key)}
             aria-pressed={project.project_key === selectedKey}
-            className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 ${
+            className={`w-full rounded-[1.35rem] border p-4 text-left transition-all duration-200 ${
               project.project_key === selectedKey
-                ? "border-indigo-100 bg-indigo-50/80 shadow-sm"
-                : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+                ? "border-indigo-100 bg-indigo-50/90 shadow-[0_16px_34px_rgba(79,70,229,0.10)]"
+                : "border-slate-200/50 bg-white/70 shadow-sm hover:-translate-y-0.5 hover:border-indigo-100 hover:bg-white hover:shadow-md"
             }`}
           >
             <div className="flex items-start justify-between gap-3">
-              <span className="min-w-0 break-keep text-sm font-black text-slate-950 max-sm:break-normal">{project.name}</span>
-              <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-slate-500 shadow-sm">
+              <span className="min-w-0 break-keep text-sm font-extrabold text-slate-950 max-sm:break-normal">{project.name}</span>
+              <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500 shadow-sm">
                 {project.evidence_count.toLocaleString()}
               </span>
             </div>
             <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{project.summary}</p>
-            <p className="mt-3 text-[11px] font-black text-indigo-600">
+            <p className="mt-3 text-[11px] font-extrabold text-indigo-600">
               근거 {project.evidence_count.toLocaleString()} · 활동 {project.activity_items.length.toLocaleString()} · 검토 대기 {project.pending_review_count.toLocaleString()}
             </p>
           </button>
@@ -342,7 +363,7 @@ function ProjectEvidencePanel({
   onChangeSourceFilter: (value: SourceFilter) => void;
 }) {
   return (
-    <section data-testid="project-evidence-panel" className="min-w-0 rounded-3xl border border-white/70 bg-white p-5 shadow-sm">
+    <section data-testid="project-evidence-panel" className="min-w-0 rounded-[2rem] border border-white/80 bg-white/75 p-4 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur sm:p-5">
       <PanelHeading
         title="연결된 원본 근거"
         description="프로젝트와 연결된 Drive, Gmail, Slack, Calendar 기반 원본 자료입니다."
@@ -354,8 +375,10 @@ function ProjectEvidencePanel({
             type="button"
             onClick={() => onChangeSourceFilter(filter)}
             aria-pressed={sourceFilter === filter}
-            className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
-              sourceFilter === filter ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+              sourceFilter === filter
+                ? "bg-slate-950 text-white shadow-[0_12px_26px_rgba(15,23,42,0.16)]"
+                : "bg-white text-slate-600 shadow-sm hover:bg-indigo-50 hover:text-indigo-700"
             }`}
           >
             {filter}
@@ -367,13 +390,16 @@ function ProjectEvidencePanel({
           <EmptyState text="아직 승인된 원본 근거가 없습니다. Review에서 프로젝트를 선택하고 승인하면 이곳에 쌓입니다." />
         ) : (
           evidence.map((item) => (
-            <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+            <article
+              key={item.id}
+              className={`rounded-[1.35rem] border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md ${sourceCardClass(item.source_type)}`}
+            >
               <div className="flex items-start justify-between gap-4">
-                <h4 className="line-clamp-2 min-w-0 text-base font-black leading-6 text-slate-950">{item.title}</h4>
+                <h4 className="line-clamp-2 min-w-0 text-base font-extrabold leading-6 text-slate-950">{item.title}</h4>
                 <SourceBadge sourceType={item.source_type} />
               </div>
               <p className="mt-3 line-clamp-3 text-sm font-medium leading-6 text-slate-600">{item.task_summary || item.source_snippet}</p>
-              <p className="mt-3 text-sm font-extrabold text-indigo-600">{item.evidence_reason}</p>
+              <p className="mt-3 rounded-2xl bg-white/65 px-3 py-2 text-sm font-bold text-indigo-600">{item.evidence_reason}</p>
               <SourceEvidenceLink href={item.source_url} label={`원본 근거 열기 ${item.title}`} />
             </article>
           ))
@@ -385,13 +411,13 @@ function ProjectEvidencePanel({
 
 function ProjectActivityPanel({ activityItems }: { activityItems: ProjectMemory["activity_items"] }) {
   return (
-    <section data-testid="project-activity-panel" className="min-w-0 rounded-3xl border border-white/70 bg-white p-5 shadow-sm xl:col-start-2 2xl:col-start-auto">
+    <section data-testid="project-activity-panel" className="min-w-0 rounded-[2rem] border border-white/80 bg-white/75 p-4 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur sm:p-5 xl:col-start-2 2xl:col-start-auto">
       <PanelHeading
         title="승인된 프로젝트 활동"
         description="Review에서 승인된 결정, 히스토리, 할 일, 타임라인 후보를 프로젝트별로 모은 기록입니다."
       />
       <div data-testid="project-activity-timeline" className="relative mt-5 space-y-4">
-        {activityItems.length > 0 ? <span className="absolute bottom-2 left-3 top-2 w-px bg-slate-200" aria-hidden="true" /> : null}
+        {activityItems.length > 0 ? <span className="absolute bottom-2 left-3 top-2 w-px bg-slate-200/80" aria-hidden="true" /> : null}
         {activityItems.length === 0 ? (
           <EmptyState text="아직 승인된 활동이 없습니다. Review에서 이 프로젝트를 선택하고 승인하면 여기에 쌓입니다." />
         ) : (
@@ -400,12 +426,12 @@ function ProjectActivityPanel({ activityItems }: { activityItems: ProjectMemory[
               <span className={`absolute left-0 top-5 grid h-6 w-6 place-items-center rounded-full ring-4 ring-white ${activityDotClass(item.item_type)}`}>
                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+              <article className={`rounded-[1.35rem] border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md ${activityCardClass(item.item_type)}`}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${activityBadgeClass(item.item_type)}`}>{itemTypeLabel(item.item_type)}</span>
-                  {item.completed_at ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-700">완료</span> : null}
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${activityBadgeClass(item.item_type)}`}>{itemTypeLabel(item.item_type)}</span>
+                  {item.completed_at ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">완료</span> : null}
                 </div>
-                <h4 className="mt-3 line-clamp-2 text-base font-black leading-6 text-slate-950">{item.title}</h4>
+                <h4 className="mt-3 line-clamp-2 text-base font-extrabold leading-6 text-slate-950">{item.title}</h4>
                 <p className="mt-2 line-clamp-3 text-sm font-medium leading-6 text-slate-600">{item.summary}</p>
                 <SourceEvidenceLink href={firstSourceLink(item.source_links)} label={`원본 근거 열기 ${item.title}`} />
               </article>
@@ -420,7 +446,7 @@ function ProjectActivityPanel({ activityItems }: { activityItems: ProjectMemory[
 function PanelHeading({ title, description }: { title: string; description: string }) {
   return (
     <div>
-      <h3 className="text-lg font-black text-slate-950">{title}</h3>
+      <h3 className="text-base font-extrabold text-slate-950">{title}</h3>
       <p className="mt-2 text-sm font-medium leading-6 text-slate-500">{description}</p>
     </div>
   );
@@ -428,26 +454,26 @@ function PanelHeading({ title, description }: { title: string; description: stri
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div data-testid="project-metric" className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-      <p className="text-[11px] font-black text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}</p>
+    <div data-testid="project-metric" className="min-w-0 rounded-[1.35rem] border border-white/80 bg-white/75 px-4 py-3 text-center shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+      <p className="text-[11px] font-bold text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-extrabold text-slate-950">{value.toLocaleString()}</p>
     </div>
   );
 }
 
 function SourceBadge({ sourceType }: { sourceType: string }) {
-  return <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${sourceBadgeClass(sourceType)}`}>{sourceLabel(sourceType)}</span>;
+  return <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${sourceBadgeClass(sourceType)}`}>{sourceLabel(sourceType)}</span>;
 }
 
 function EmptyWorkspace() {
   return (
-    <div className="rounded-2xl border border-dashed border-indigo-100 bg-indigo-50/40 p-4">
+    <div className="rounded-[1.35rem] border border-dashed border-indigo-100 bg-indigo-50/40 p-4">
       <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-indigo-600 shadow-sm">
           <Bot className="h-5 w-5" aria-hidden="true" />
         </span>
         <div>
-          <p className="text-sm font-black text-slate-950">프로젝트가 없습니다</p>
+          <p className="text-sm font-extrabold text-slate-950">프로젝트가 없습니다</p>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">새 프로젝트를 만든 뒤 Review에서 근거를 승인해 보세요.</p>
         </div>
       </div>
@@ -456,7 +482,7 @@ function EmptyWorkspace() {
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-medium leading-6 text-slate-500">{text}</p>;
+  return <p className="rounded-[1.35rem] border border-dashed border-slate-200 bg-white/70 p-5 text-sm font-medium leading-6 text-slate-500">{text}</p>;
 }
 
 function SourceEvidenceLink({ href, label }: { href: string; label: string }) {
@@ -467,7 +493,7 @@ function SourceEvidenceLink({ href, label }: { href: string; label: string }) {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}
-      className="mt-4 inline-flex items-center gap-1.5 text-sm font-black text-indigo-600 underline-offset-4 hover:underline"
+      className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-sm font-extrabold text-indigo-600 shadow-sm transition hover:bg-white"
     >
       <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
       원본 근거
@@ -488,19 +514,35 @@ function preferredProjectKey(projects: ProjectMemory[]) {
 }
 
 function sourceBadgeClass(sourceType: string) {
-  if (sourceType === "drive") return "bg-blue-50 text-blue-700";
-  if (sourceType === "slack") return "bg-violet-50 text-violet-700";
-  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "bg-rose-50 text-rose-700";
-  if (sourceType === "calendar") return "bg-emerald-50 text-emerald-700";
+  if (sourceType === "drive") return "bg-blue-100/80 text-blue-700";
+  if (sourceType === "slack") return "bg-violet-100/80 text-violet-700";
+  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "bg-rose-100/80 text-rose-700";
+  if (sourceType === "calendar") return "bg-emerald-100/80 text-emerald-700";
   return "bg-slate-100 text-slate-600";
 }
 
+function sourceCardClass(sourceType: string) {
+  if (sourceType === "drive") return "border-blue-100/80 bg-blue-50/45";
+  if (sourceType === "slack") return "border-violet-100/80 bg-violet-50/45";
+  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "border-rose-100/80 bg-rose-50/40";
+  if (sourceType === "calendar") return "border-emerald-100/80 bg-emerald-50/40";
+  return "border-slate-200/70 bg-white/80";
+}
+
 function activityBadgeClass(itemType: string) {
-  if (itemType === "todo") return "bg-emerald-50 text-emerald-700";
-  if (itemType === "timeline_event") return "bg-cyan-50 text-cyan-700";
-  if (itemType === "decision_record") return "bg-indigo-50 text-indigo-700";
-  if (itemType === "history_event") return "bg-amber-50 text-amber-700";
+  if (itemType === "todo") return "bg-emerald-100/80 text-emerald-700";
+  if (itemType === "timeline_event") return "bg-cyan-100/80 text-cyan-700";
+  if (itemType === "decision_record") return "bg-indigo-100/80 text-indigo-700";
+  if (itemType === "history_event") return "bg-amber-100/80 text-amber-700";
   return "bg-slate-100 text-slate-600";
+}
+
+function activityCardClass(itemType: string) {
+  if (itemType === "todo") return "border-emerald-100/80 bg-emerald-50/40";
+  if (itemType === "timeline_event") return "border-cyan-100/80 bg-cyan-50/40";
+  if (itemType === "decision_record") return "border-indigo-100/80 bg-indigo-50/40";
+  if (itemType === "history_event") return "border-amber-100/80 bg-amber-50/40";
+  return "border-slate-200/70 bg-white/80";
 }
 
 function activityDotClass(itemType: string) {

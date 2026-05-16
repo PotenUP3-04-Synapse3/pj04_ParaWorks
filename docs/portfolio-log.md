@@ -4340,3 +4340,14 @@ Cost/security note:
   - 기존 프로젝트 검색, 생성, 새로고침, 원본 근거 링크, source/type badge,
     empty state 흐름은 유지했다.
   - 검증: frontend lint/build 통과, Playwright 프로젝트 페이지 테스트 4개 통과.
+- `style: 프로젝트 워크스페이스 board UI 정교화`
+  - ParaWorks 사이드바와 전역 셸 동작은 그대로 두고 프로젝트 페이지 본문만 target
+    이미지의 calm kanban/workspace 톤으로 다듬었다.
+  - 페이지 헤더, 선택 프로젝트 summary, 프로젝트 목록 lane, 원본 근거 lane,
+    승인 활동 lane을 white/off-white glass surface, rounded board card, soft shadow,
+    pill chip 체계로 정리했다.
+  - Drive/Gmail/Slack/Calendar 원본 근거와 활동 유형별 카드에 아주 옅은 pastel
+    tint를 적용해 정보 구조는 유지하면서 workspace board 느낌을 강화했다.
+  - 기존 프로젝트 선택, 검색, 생성, 새로고침, source filter, 원본 근거 링크,
+    승인 활동 렌더링, responsive 3/2/1 column 흐름은 유지했다.
+  - 검증: frontend lint/build 통과, Playwright 프로젝트 페이지 테스트 4개 통과.

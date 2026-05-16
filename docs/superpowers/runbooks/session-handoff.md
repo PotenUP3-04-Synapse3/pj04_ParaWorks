@@ -2141,3 +2141,26 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 프로젝트 워크스페이스 board UI 정교화
+
+- 변경 요약:
+  - 사용자가 제공한 target UI를 참고해 프로젝트 페이지 본문을 calm kanban/workspace
+    스타일로 한 단계 더 다듬었다.
+  - 중요한 제약대로 `AppShell`과 ParaWorks 사이드바는 수정하지 않았다.
+  - 페이지 헤더는 soft glass card와 rounded action button으로 정리했다.
+  - 선택 프로젝트 overview는 subtle pastel gradient summary board로 바꾸고 metric
+    blocks를 white mini-stat 카드로 유지했다.
+  - 프로젝트 목록, 연결된 원본 근거, 승인된 프로젝트 활동은 각각 board lane처럼
+    보이도록 rounded container, diffuse shadow, pill chip, soft card rhythm을
+    적용했다.
+  - 원본 근거와 승인 활동 카드는 source/type별 very light pastel tint를 사용한다.
+  - 프로젝트 선택, 프로젝트 검색, source filter, 원본 링크, 활동 렌더링,
+    responsive 3/2/1 column 흐름은 기존 그대로 유지했다.
+- 검증:
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
