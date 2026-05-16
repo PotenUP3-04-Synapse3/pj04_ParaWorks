@@ -166,6 +166,30 @@ function agentDisplayName(agentName: string) {
   return labels[agentName] ?? agentName;
 }
 
+function primarySourceType(item: ReviewItem) {
+  const payloadSourceType = stringField(item.payload.source_type).trim();
+  if (payloadSourceType) return payloadSourceType;
+  return item.source_evidence?.find((row) => stringField(row.source_type).trim())?.source_type?.trim() ?? "";
+}
+
+function agentBadgeLabel(item: ReviewItem, agentName: string) {
+  const sourceType = primarySourceType(item);
+  if (sourceType === "slack" || agentName === "slack_agent") return "Slack Agent";
+  if (sourceType === "calendar") return "Calendar Agent";
+  if (sourceType === "drive") return "Google Drive Agent";
+  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "Mail Agent";
+  return agentDisplayName(agentName);
+}
+
+function agentBadgeClass(item: ReviewItem, agentName: string) {
+  const sourceType = primarySourceType(item);
+  if (sourceType === "slack" || agentName === "slack_agent") return "border border-violet-200 bg-violet-100/80 text-violet-700";
+  if (sourceType === "calendar") return "border border-emerald-200 bg-emerald-100/80 text-emerald-700";
+  if (sourceType === "drive") return "border border-blue-200 bg-blue-100/80 text-blue-700";
+  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "border border-rose-200 bg-rose-100/80 text-rose-700";
+  return "border border-slate-200 bg-slate-100 text-slate-700";
+}
+
 function routeLabel(route: string) {
   if (route === "/projects") return "프로젝트에서 보기";
   if (route === "/timeline") return "타임라인에서 보기";
@@ -662,7 +686,7 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 shadow-sm">
+      <section className="sticky top-24 z-10 rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)]/95 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button
@@ -854,9 +878,9 @@ export default function ReviewPage() {
                                 {item.permission_level}
                               </span>
                               {isAgentItem ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-[#21132b] px-2.5 py-1 text-xs font-semibold text-white">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${agentBadgeClass(item, agentName)}`}>
                                   <Sparkles className="h-3 w-3" aria-hidden="true" />
-                                  {agentDisplayName(agentName)}
+                                  {agentBadgeLabel(item, agentName)}
                                 </span>
                               ) : (
                                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">

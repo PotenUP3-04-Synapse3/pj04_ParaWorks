@@ -246,3 +246,111 @@ test("review bulk failure message is readable Korean", async ({ page }) => {
 
   await expect(page.getByText("승인 처리 중 1개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.")).toBeVisible();
 });
+
+test("review source agent badges distinguish Slack, mail, drive, and calendar with sticky action bar", async ({ page }) => {
+  const sourceItems = [
+    {
+      ...baseItem,
+      id: 901,
+      payload: { ...baseItem.payload, title: "Slack candidate", agent_name: "slack_agent", source_type: "slack" },
+      source_evidence: [{ source_type: "slack", source_snippet: "Slack evidence", permission_level: "internal" }],
+    },
+    {
+      ...baseItem,
+      id: 902,
+      payload: { ...baseItem.payload, title: "Mail candidate", agent_name: "mail_document_agent", source_type: "gmail" },
+      source_evidence: [{ source_type: "gmail", source_snippet: "Mail evidence", permission_level: "internal" }],
+    },
+    {
+      ...baseItem,
+      id: 903,
+      payload: { ...baseItem.payload, title: "Drive candidate", agent_name: "mail_document_agent", source_type: "drive" },
+      source_evidence: [{ source_type: "drive", source_snippet: "Drive evidence", permission_level: "internal" }],
+    },
+    {
+      ...baseItem,
+      id: 904,
+      payload: { ...baseItem.payload, title: "Calendar candidate", agent_name: "mail_document_agent", source_type: "calendar" },
+      source_evidence: [{ source_type: "calendar", source_snippet: "Calendar evidence", permission_level: "internal" }],
+    },
+  ];
+
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal", "restricted"],
+          name: "Admin",
+          title: "Admin",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { counts: { total: 0 }, notifications: [] } });
+  });
+  await page.route("**/api/v1/dashboard", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { pending_review_count: 4, source_counts: {} } });
+  });
+  await page.route("**/api/v1/projects/defined", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { projects: [] } });
+  });
+  await page.route("**/api/v1/review?status=pending_review**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        groups: [
+          {
+            group_id: "history_event:Source agent badges",
+            title: "Source agent badges",
+            item_type: "history_event",
+            status: "pending_review",
+            permission_level: "internal",
+            items: sourceItems,
+            total_count: sourceItems.length,
+            avg_confidence: 0.82,
+          },
+        ],
+        items: sourceItems,
+        total_count: sourceItems.length,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        include_previews: false,
+      },
+    });
+  });
+  await page.route("**/api/v1/review/*/promotion-preview", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { target_type: "history_event", can_approve: true, missing_required_fields: [], normalized_payload: {} },
+    });
+  });
+
+  await page.goto("/review");
+  const actionBarStyle = await page.getByTestId("review-select-all").locator("xpath=ancestor::section[1]").evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { position: style.position, top: style.top };
+  });
+  expect(actionBarStyle.position).toBe("sticky");
+  expect(actionBarStyle.top).not.toBe("auto");
+
+  await page.locator(".group-container > div:first-child").click();
+  const badgeLabels = ["Slack Agent", "Mail Agent", "Google Drive Agent", "Calendar Agent"];
+  for (const label of badgeLabels) {
+    await expect(page.getByText(label, { exact: true })).toBeVisible();
+  }
+
+  const badgeColors = await Promise.all(
+    badgeLabels.map((label) =>
+      page.getByText(label, { exact: true }).evaluate((element) => window.getComputedStyle(element).backgroundColor),
+    ),
+  );
+  expect(new Set(badgeColors).size).toBe(badgeLabels.length);
+});

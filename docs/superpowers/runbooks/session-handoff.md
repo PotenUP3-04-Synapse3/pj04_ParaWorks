@@ -2200,3 +2200,29 @@ tests passed with 53 tests; ruff passed.
   - UI 라벨/링크만 교체했으며 dashboard data/API 흐름은 수정하지 않았다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 검토사항 Agent 배지 source별 분리와 sticky action bar
+
+- 변경 요약:
+  - `frontend/src/app/review/page.tsx`에 `primarySourceType`, `agentBadgeLabel`,
+    `agentBadgeClass` helper를 추가했다.
+  - Agent 배지는 `payload.agent_name`만 보지 않고 `payload.source_type`을 우선,
+    없으면 `source_evidence[].source_type`을 fallback으로 사용한다.
+  - `mail_document_agent`라도 source가 `gmail`/`gmail_attachment`이면 `Mail Agent`,
+    `drive`면 `Google Drive Agent`, `calendar`면 `Calendar Agent`로 표시한다.
+  - `slack_agent` 또는 `source_type=slack`은 `Slack Agent`로 표시한다.
+  - 색상은 프로젝트 페이지 source badge와 맞춰 Slack violet, Mail rose,
+    Google Drive blue, Calendar emerald 계열을 사용한다.
+  - Review bulk action bar는 `fixed`가 아니라 `sticky top-24`로 바꿔 전역 topbar
+    아래에서 문서 흐름 안에 머물며 따라오게 했다.
+  - `frontend/e2e/review-bulk-actions.spec.ts`에 source별 Agent label/color와
+    sticky action bar 회귀 테스트를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop` → `3 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - Review API payload shape은 변경하지 않았다. UI에서 기존 payload/source evidence를
+    해석하는 방식만 보강했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

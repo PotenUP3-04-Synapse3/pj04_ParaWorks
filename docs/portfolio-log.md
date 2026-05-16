@@ -4364,3 +4364,13 @@ Cost/security note:
     이동하게 했다.
   - 검증: 대시보드 Playwright 회귀 테스트에 두 링크의 라벨과 href를 고정하고
     frontend lint/build 통과.
+- `fix: 검토사항 Agent 배지 source별 분리와 sticky action bar`
+  - Review item의 Agent 배지를 `agent_name`만 보지 않고 `payload.source_type`과
+    `source_evidence.source_type`을 함께 사용해 Slack, Mail, Google Drive,
+    Calendar Agent로 구분했다.
+  - 배지 색상은 프로젝트 페이지 source badge와 맞춰 Slack violet, Mail rose,
+    Drive blue, Calendar emerald 계열로 통일했다.
+  - 검토사항 상단 bulk action bar를 `fixed`가 아닌 sticky로 바꿔 스크롤 시
+    문서 흐름 안에서 따라오게 했다.
+  - 검증: Review Playwright 회귀 테스트에 source별 Agent label/color와 sticky
+    action bar를 고정하고 frontend lint/build 통과.
