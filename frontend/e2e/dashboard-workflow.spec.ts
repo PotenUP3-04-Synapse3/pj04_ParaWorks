@@ -84,6 +84,8 @@ test("dashboard renders polished SaaS layout with interactive calendar", async (
   await expect(page.getByText("프로젝트 리스크 리뷰 일정 확인")).toBeVisible();
   await expect(page.getByText("신규 기능 요구사항 워크숍 일정")).toBeVisible();
   await expect(page.getByText("개발 릴리즈 체크리스트 일정")).toBeVisible();
+  await expect(page.getByTestId("dashboard-review-count")).toHaveText("30");
+  await expect(page.getByTestId("dashboard-review-card").locator(".dashboard-review-row")).toHaveCount(3);
   await expect(page.getByTestId("dashboard-calendar")).toBeVisible();
   await expect(page.getByTestId("dashboard-calendar")).toHaveCSS("position", "static");
   const heroBox = await page.locator(".dashboard-hero").boundingBox();

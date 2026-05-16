@@ -30,23 +30,19 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
     source_counts = dict(
         db.execute(select(Source.source_type, func.count(Source.id)).group_by(Source.source_type)).all()
     )
-    if settings.paraworks_demo_mode:
-        pending_review_count = db.scalar(
-            select(func.count(ReviewItem.id)).where(ReviewItem.status == 'pending_review')
-        )
-    else:
-        pending_review_items = db.scalars(
-            select(ReviewItem).where(ReviewItem.status == 'pending_review')
-        ).all()
-        pending_review_count = len(filter_review_items(pending_review_items))
+    raw_pending_review_items = db.scalars(
+        select(ReviewItem).where(ReviewItem.status == 'pending_review')
+    ).all()
+    visible_pending_review_items = (
+        raw_pending_review_items
+        if settings.paraworks_demo_mode
+        else filter_review_items(raw_pending_review_items)
+    )
+    sorted_pending_review_items = _sort_review_items_for_queue(visible_pending_review_items)
+    pending_review_count = len(sorted_pending_review_items)
     recent_jobs = db.scalars(select(SyncJob).order_by(SyncJob.created_at.desc()).limit(5)).all()
 
-    pending_items = db.scalars(
-        select(ReviewItem)
-        .where(ReviewItem.status == 'pending_review')
-        .order_by(ReviewItem.id.desc())
-        .limit(3)
-    ).all()
+    pending_items = sorted_pending_review_items[:3]
 
     today = _today_kst()
     todo_candidates = db.scalars(
@@ -154,6 +150,21 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
 
 def _today_kst() -> str:
     return datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()
+
+
+def _sort_review_items_for_queue(items: list[ReviewItem]) -> list[ReviewItem]:
+    return sorted(items, key=_review_queue_sort_key)
+
+
+def _review_queue_sort_key(item: ReviewItem) -> tuple[int, int]:
+    priority = {
+        'decision_record': 0,
+        'todo': 1,
+        'history_event': 2,
+        'timeline_event': 3,
+        'project_assignment': 10,
+    }.get(item.item_type, 5)
+    return (priority, -item.id)
 
 
 def _today_calendar_events(db: Session, calendar_events: list[dict] | None = None) -> list[dict]:

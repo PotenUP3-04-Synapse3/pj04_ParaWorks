@@ -4303,3 +4303,15 @@ Cost/security note:
   - 검증: backend 관련 테스트 36개 통과, ruff 통과, frontend lint/build
     통과, Playwright 대시보드/타임라인/프로젝트 5개 통과, Docker Postgres
     migration 적용 확인.
+- `fix: 타임라인 날짜 탐색과 검토 카드 동기화 개선`
+  - 타임라인 상태 표시의 `approved`를 `승인됨`으로 한글화하고, 최근 7일은
+    기본 펼침, 이전 날짜는 접힘 상태로 시작하게 했다.
+  - 날짜가 많아질 때 스캔할 수 있도록 월별 sticky header, 좌측 날짜 인덱스,
+    `활동 있는 날짜만 보기 / 전체 날짜 보기` 토글을 추가했다.
+  - 검토사항 우클릭 메뉴를 항목 제목이 보이는 빠른 승인/반려 드롭다운으로
+    다듬고 화면 가장자리에서 잘리지 않게 위치를 보정했다.
+  - 대시보드 검토사항 카드는 Review Queue 정렬과 같은 pending item 3개만
+    표시하되 배지 숫자는 실제 pending review 총수를 사용하도록 맞췄다.
+  - 검증: `backend/tests/test_dashboard_api.py` 6개 통과, Python ruff 통과,
+    frontend lint/build 통과, Playwright 타임라인/대시보드/검토 bulk 테스트
+    8개 통과.

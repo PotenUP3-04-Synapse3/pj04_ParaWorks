@@ -267,9 +267,9 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          <section className="dashboard-card">
+          <section className="dashboard-card" data-testid="dashboard-review-card">
             <div className="dashboard-card-header">
-              <SectionTitle title="검토사항" count={`${visibleReviewItems.length}`} />
+              <SectionTitle title="검토사항" count={`${pendingReviewCount}`} countTestId="dashboard-review-count" />
               <Link href="/review" className="dashboard-link">
                 전체 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -534,11 +534,11 @@ function KpiCard({
   );
 }
 
-function SectionTitle({ title, count }: { title: string; count?: string }) {
+function SectionTitle({ title, count, countTestId }: { title: string; count?: string; countTestId?: string }) {
   return (
     <div className="dashboard-section-title">
       <h2>{title}</h2>
-      {count ? <span>{count}</span> : null}
+      {count ? <span data-testid={countTestId}>{count}</span> : null}
     </div>
   );
 }

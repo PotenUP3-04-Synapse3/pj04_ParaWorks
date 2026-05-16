@@ -168,6 +168,8 @@ test("review queue supports Gmail-style selection, project routing, modal confir
 
   await page.getByTestId("review-item-801").click({ button: "right" });
   await expect(page.getByTestId("review-context-menu")).toBeVisible();
+  await expect(page.getByTestId("review-context-menu").getByText("빠른 처리")).toBeVisible();
+  await expect(page.getByTestId("review-context-menu").getByText("First candidate")).toBeVisible();
   await expect(page.getByTestId("review-context-reject")).toBeVisible();
 });
 

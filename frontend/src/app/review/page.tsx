@@ -515,7 +515,12 @@ export default function ReviewPage() {
 
   function openContextMenu(event: MouseEvent, item: ReviewItem) {
     event.preventDefault();
-    setContextMenu({ x: event.clientX, y: event.clientY, item });
+    const menuWidth = 240;
+    const menuHeight = 172;
+    const viewportPadding = 12;
+    const x = Math.min(event.clientX, window.innerWidth - menuWidth - viewportPadding);
+    const y = Math.min(event.clientY, window.innerHeight - menuHeight - viewportPadding);
+    setContextMenu({ x: Math.max(viewportPadding, x), y: Math.max(viewportPadding, y), item });
   }
 
   return (
@@ -1163,10 +1168,14 @@ export default function ReviewPage() {
       {typeof document !== "undefined" && contextMenu ? createPortal((
         <div
           data-testid="review-context-menu"
-          className="fixed z-[110] w-44 overflow-hidden rounded-xl border border-[var(--line-soft)] bg-white p-1 text-sm font-semibold text-[var(--ink)] shadow-xl"
+          className="fixed z-[110] w-60 overflow-hidden rounded-2xl border border-[var(--line-soft)] bg-white p-2 text-sm font-semibold text-[var(--ink)] shadow-2xl ring-1 ring-slate-950/5"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
+          <div className="border-b border-[var(--line-soft)] px-3 py-2">
+            <p className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--ink-muted)]">빠른 처리</p>
+            <p className="mt-1 truncate text-sm font-extrabold text-[var(--ink)]">{itemTitle(contextMenu.item)}</p>
+          </div>
           <button
             type="button"
             data-testid="review-context-approve"
@@ -1175,10 +1184,15 @@ export default function ReviewPage() {
               setContextMenu(undefined);
               void runStatusAction(item, "approve");
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-strong)]"
+            className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-emerald-700 transition hover:bg-emerald-50"
           >
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            승인
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-100">
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block">승인</span>
+              <span className="block text-[11px] font-semibold text-emerald-600">선택 항목을 지식 후보로 확정</span>
+            </span>
           </button>
           <button
             type="button"
@@ -1188,10 +1202,15 @@ export default function ReviewPage() {
               setContextMenu(undefined);
               void runStatusAction(item, "reject");
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-strong)]"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-rose-700 transition hover:bg-rose-50"
           >
-            <XCircle className="h-4 w-4" aria-hidden="true" />
-            반려
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-rose-100">
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block">반려</span>
+              <span className="block text-[11px] font-semibold text-rose-600">큐에서 제외하고 감사 기록 남김</span>
+            </span>
           </button>
         </div>
       ), document.body) : null}

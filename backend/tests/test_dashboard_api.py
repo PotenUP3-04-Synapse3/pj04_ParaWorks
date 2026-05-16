@@ -1,7 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from backend.app.models import DecisionRecord, Project, Source, TimelineEvent, Todo
+from backend.app.models import (
+    DecisionRecord,
+    Project,
+    ReviewItem,
+    Source,
+    TimelineEvent,
+    Todo,
+)
 
 
 def test_dashboard_recent_timeline_uses_existing_model_fields(client, db_session) -> None:
@@ -274,6 +281,52 @@ def test_dashboard_today_events_lists_today_calendar_sources_only(client, db_ses
             'source_url': 'https://calendar.google.com/event?eid=today-fallback',
             'permission_level': 'restricted',
         },
+    ]
+
+
+def test_dashboard_pending_items_match_review_queue_order_and_count(client, db_session) -> None:
+    review_items = [
+        ReviewItem(
+            item_type='timeline_event',
+            payload={'title': 'Timeline item'},
+            status='pending_review',
+            confidence_score=0.9,
+            permission_level='internal',
+        ),
+        ReviewItem(
+            item_type='todo',
+            payload={'title': 'Todo item'},
+            status='pending_review',
+            confidence_score=0.9,
+            permission_level='internal',
+        ),
+        ReviewItem(
+            item_type='decision_record',
+            payload={'title': 'Decision item'},
+            status='pending_review',
+            confidence_score=0.9,
+            permission_level='internal',
+        ),
+        ReviewItem(
+            item_type='history_event',
+            payload={'title': 'History item'},
+            status='pending_review',
+            confidence_score=0.9,
+            permission_level='internal',
+        ),
+    ]
+    db_session.add_all(review_items)
+    db_session.commit()
+
+    response = client.get('/api/v1/dashboard')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['pending_review_count'] == 4
+    assert [item['title'] for item in payload['pending_items']] == [
+        'Decision item',
+        'Todo item',
+        'History item',
     ]
 
 

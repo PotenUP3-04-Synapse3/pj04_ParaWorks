@@ -2052,3 +2052,31 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - 실행 중인 backend 서버가 이전 코드로 떠 있으면 새 `/api/v1/todos/{id}/complete` endpoint가 없으므로 서버 재시작이 필요하다.
   - 현재 임시 Python 테스트 환경은 `.tmp/uv-test-venv`를 사용했다. 기본 `.venv`는 기존 uv Python 경로 문제로 바로 실행되지 않았다.
+
+## 2026-05-16 타임라인 날짜 UX, Review 우클릭 메뉴, 대시보드 검토 동기화
+
+- 변경 요약:
+  - 타임라인 status UI에서 `approved`는 `승인됨`으로 표시한다.
+  - 타임라인 날짜 그룹은 최근 7일의 활동 날짜만 기본 펼침 상태로 두고, 더
+    오래된 날짜는 접힌 상태로 시작한다.
+  - 월 단위 sticky header와 좌측 미니 날짜 인덱스를 추가했다. 인덱스 날짜를
+    누르면 해당 날짜 그룹으로 스크롤하고 자동으로 펼친다.
+  - `전체 날짜 보기` 토글을 켜면 활동이 없는 날짜도 인덱스와 그룹에 표시한다.
+  - Review item 우클릭 메뉴는 항목 제목, 승인, 반려 설명을 포함하는 작은
+    드롭다운 UI로 바뀌었고 viewport 바깥으로 넘치지 않게 좌표를 보정한다.
+  - Dashboard 검토사항 카드는 `/api/v1/dashboard`의 `pending_review_count`
+    전체 값을 배지로 쓰고, 목록은 Review Queue 우선순위 정렬 기준 상위 3개만
+    표시한다.
+- 검증:
+  - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_dashboard_api.py` → `6 passed`
+  - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop` → `2 passed`
+- 주의:
+  - 기본 `python -m pytest`는 로컬 환경에서 `pydantic_settings`가 없어 실패했다.
+    repo `.venv` 실행은 sandbox 권한 문제로 escalated 실행이 필요했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

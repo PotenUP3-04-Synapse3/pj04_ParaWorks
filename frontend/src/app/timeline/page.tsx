@@ -46,12 +46,27 @@ type ProjectTimeline = {
   histories: TimelineHistory[];
 };
 
+type TimelineDateGroupData = {
+  dateKey: string;
+  dateLabel: string;
+  monthKey: string;
+  monthLabel: string;
+  items: TimelineHistory[];
+};
+
+type TimelineMonthGroupData = {
+  monthKey: string;
+  monthLabel: string;
+  dateGroups: TimelineDateGroupData[];
+};
+
 export default function TimelinePage() {
   const [projectTimelines, setProjectTimelines] = useState<ProjectTimeline[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | undefined>();
-  const [expandedDateLabel, setExpandedDateLabel] = useState<string | null | undefined>();
+  const [expandedDateKeys, setExpandedDateKeys] = useState<Set<string>>(() => new Set());
   const [expandedItemGroups, setExpandedItemGroups] = useState<Set<string>>(() => new Set());
+  const [showAllDates, setShowAllDates] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -74,7 +89,9 @@ export default function TimelinePage() {
         const defaultProject = firstProjectWithHistories(projects);
         setProjectTimelines(projects);
         setSelectedProjectId((current) => current || defaultProject?.id || "");
-        setExpandedDateLabel((current) => current ?? firstDateLabel(defaultProject?.histories ?? []));
+        setExpandedDateKeys((current) =>
+          current.size > 0 ? current : defaultExpandedDateKeys(groupHistoriesByDate(defaultProject?.histories ?? [])),
+        );
       })
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : "Failed to load timeline.");
@@ -99,20 +116,15 @@ export default function TimelinePage() {
   const selectedHistory = selectedProject?.histories.find((history) => history.id === selectedHistoryId);
   const historyCount = selectedProject?.histories.length ?? 0;
   const groupedHistories = useMemo(
-    () => groupHistoriesByDate(filteredHistories),
-    [filteredHistories],
+    () => groupHistoriesByDate(filteredHistories, showAllDates),
+    [filteredHistories, showAllDates],
   );
+  const groupedHistoriesByMonth = useMemo(() => groupDateGroupsByMonth(groupedHistories), [groupedHistories]);
 
   useEffect(() => {
-    const firstLabel = firstDateLabel(filteredHistories);
-    setExpandedDateLabel((current) => {
-      if (current && groupedHistories.some((group) => group.dateLabel === current)) {
-        return current;
-      }
-      return firstLabel;
-    });
+    setExpandedDateKeys(defaultExpandedDateKeys(groupedHistories));
     setExpandedItemGroups(new Set());
-  }, [filteredHistories, groupedHistories]);
+  }, [groupedHistories]);
 
   if (loading || !selectedProject) {
     return (
@@ -160,7 +172,7 @@ export default function TimelinePage() {
             onClick={() => {
               setSelectedProjectId(project.id);
               setSelectedHistoryId(undefined);
-              setExpandedDateLabel(firstDateLabel(project.histories));
+              setExpandedDateKeys(defaultExpandedDateKeys(groupHistoriesByDate(project.histories, showAllDates)));
               setExpandedItemGroups(new Set());
             }}
           >
@@ -172,13 +184,15 @@ export default function TimelinePage() {
       <section className={`timeline-history-layout ${selectedHistory ? "history-open" : ""}`}>
         <TimelineListPanel
           histories={filteredHistories}
-          groupedHistories={groupedHistories}
-          expandedDateLabel={expandedDateLabel}
+          groupedHistoriesByMonth={groupedHistoriesByMonth}
+          expandedDateKeys={expandedDateKeys}
           expandedItemGroups={expandedItemGroups}
           selectedHistoryId={selectedHistoryId}
+          showAllDates={showAllDates}
           periodFilter={periodFilter}
           sourceFilter={sourceFilter}
           statusFilter={statusFilter}
+          onToggleShowAllDates={() => setShowAllDates((current) => !current)}
           onChangePeriod={setPeriodFilter}
           onChangeSource={setSourceFilter}
           onChangeStatus={setStatusFilter}
@@ -187,25 +201,38 @@ export default function TimelinePage() {
             setSourceFilter("all");
             setStatusFilter("all");
           }}
-          onToggleDate={(dateLabel) => {
-            setExpandedDateLabel((current) => (current === dateLabel ? null : dateLabel));
+          onToggleDate={(dateKey) => {
+            setExpandedDateKeys((current) => {
+              const next = new Set(current);
+              if (next.has(dateKey)) {
+                next.delete(dateKey);
+              } else {
+                next.add(dateKey);
+              }
+              return next;
+            });
             setExpandedItemGroups((current) => {
               const next = new Set(current);
-              next.delete(dateLabel);
+              next.delete(dateKey);
               return next;
             });
             setSelectedHistoryId(undefined);
           }}
-          onToggleMore={(dateLabel) => {
+          onToggleMore={(dateKey) => {
             setExpandedItemGroups((current) => {
               const next = new Set(current);
-              if (next.has(dateLabel)) {
-                next.delete(dateLabel);
+              if (next.has(dateKey)) {
+                next.delete(dateKey);
               } else {
-                next.add(dateLabel);
+                next.add(dateKey);
               }
               return next;
             });
+          }}
+          onJumpDate={(dateKey) => {
+            setExpandedDateKeys((current) => new Set(current).add(dateKey));
+            setSelectedHistoryId(undefined);
+            document.getElementById(`timeline-date-${dateKey}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
           }}
           onSelectHistory={(historyId) => {
             setSelectedHistoryId((current) => (current === historyId ? undefined : historyId));
@@ -264,35 +291,41 @@ export default function TimelinePage() {
 
 function TimelineListPanel({
   histories,
-  groupedHistories,
-  expandedDateLabel,
+  groupedHistoriesByMonth,
+  expandedDateKeys,
   expandedItemGroups,
   selectedHistoryId,
+  showAllDates,
   periodFilter,
   sourceFilter,
   statusFilter,
+  onToggleShowAllDates,
   onChangePeriod,
   onChangeSource,
   onChangeStatus,
   onResetFilters,
   onToggleDate,
   onToggleMore,
+  onJumpDate,
   onSelectHistory,
 }: {
   histories: TimelineHistory[];
-  groupedHistories: ReturnType<typeof groupHistoriesByDate>;
-  expandedDateLabel: string | null | undefined;
+  groupedHistoriesByMonth: TimelineMonthGroupData[];
+  expandedDateKeys: Set<string>;
   expandedItemGroups: Set<string>;
   selectedHistoryId?: string;
+  showAllDates: boolean;
   periodFilter: PeriodFilter;
   sourceFilter: SourceFilter;
   statusFilter: StatusFilter;
+  onToggleShowAllDates: () => void;
   onChangePeriod: (value: PeriodFilter) => void;
   onChangeSource: (value: SourceFilter) => void;
   onChangeStatus: (value: StatusFilter) => void;
   onResetFilters: () => void;
-  onToggleDate: (dateLabel: string) => void;
-  onToggleMore: (dateLabel: string) => void;
+  onToggleDate: (dateKey: string) => void;
+  onToggleMore: (dateKey: string) => void;
+  onJumpDate: (dateKey: string) => void;
   onSelectHistory: (historyId: string) => void;
 }) {
   return (
@@ -302,26 +335,48 @@ function TimelineListPanel({
         periodFilter={periodFilter}
         sourceFilter={sourceFilter}
         statusFilter={statusFilter}
+        showAllDates={showAllDates}
+        onToggleShowAllDates={onToggleShowAllDates}
         onChangePeriod={onChangePeriod}
         onChangeSource={onChangeSource}
         onChangeStatus={onChangeStatus}
         onResetFilters={onResetFilters}
       />
 
-      <div className="space-y-4 border-t border-line bg-white px-3 py-4 sm:px-5">
+      <div className="border-t border-line bg-white px-3 py-4 sm:px-5">
         {histories.length > 0 ? (
-          groupedHistories.map((group) => (
-            <TimelineDateGroup
-              key={group.dateLabel}
-              group={group}
-              isExpanded={expandedDateLabel === group.dateLabel}
-              isShowingAll={expandedItemGroups.has(group.dateLabel)}
-              selectedHistoryId={selectedHistoryId}
-              onToggleDate={onToggleDate}
-              onToggleMore={onToggleMore}
-              onSelectHistory={onSelectHistory}
+          <div className="grid gap-4 lg:grid-cols-[168px_minmax(0,1fr)]">
+            <TimelineDateIndex
+              monthGroups={groupedHistoriesByMonth}
+              expandedDateKeys={expandedDateKeys}
+              onJumpDate={onJumpDate}
             />
-          ))
+            <div className="min-w-0 space-y-5">
+              {groupedHistoriesByMonth.map((monthGroup) => (
+                <section key={monthGroup.monthKey} className="space-y-4">
+                  <div
+                    data-testid={`timeline-month-header-${monthGroup.monthKey}`}
+                    className="sticky top-3 z-20 flex items-center justify-between rounded-lg border border-line bg-white/95 px-3 py-2 text-[12px] font-extrabold text-ink shadow-xs backdrop-blur"
+                  >
+                    <span>{monthGroup.monthLabel}</span>
+                    <span className="text-muted">{monthGroup.dateGroups.length.toLocaleString()}일</span>
+                  </div>
+                  {monthGroup.dateGroups.map((group) => (
+                    <TimelineDateGroup
+                      key={group.dateKey}
+                      group={group}
+                      isExpanded={expandedDateKeys.has(group.dateKey)}
+                      isShowingAll={expandedItemGroups.has(group.dateKey)}
+                      selectedHistoryId={selectedHistoryId}
+                      onToggleDate={onToggleDate}
+                      onToggleMore={onToggleMore}
+                      onSelectHistory={onSelectHistory}
+                    />
+                  ))}
+                </section>
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="rounded-lg border border-dashed border-line bg-surface-soft p-5 text-[13px] text-muted">
             조건에 맞는 승인 타임라인 항목이 없습니다. 필터를 초기화하거나 Review에서 프로젝트 타임라인 후보를 승인해 주세요.
@@ -337,6 +392,8 @@ function TimelineSummaryBar({
   periodFilter,
   sourceFilter,
   statusFilter,
+  showAllDates,
+  onToggleShowAllDates,
   onChangePeriod,
   onChangeSource,
   onChangeStatus,
@@ -346,6 +403,8 @@ function TimelineSummaryBar({
   periodFilter: PeriodFilter;
   sourceFilter: SourceFilter;
   statusFilter: StatusFilter;
+  showAllDates: boolean;
+  onToggleShowAllDates: () => void;
   onChangePeriod: (value: PeriodFilter) => void;
   onChangeSource: (value: SourceFilter) => void;
   onChangeStatus: (value: StatusFilter) => void;
@@ -366,6 +425,8 @@ function TimelineSummaryBar({
         periodFilter={periodFilter}
         sourceFilter={sourceFilter}
         statusFilter={statusFilter}
+        showAllDates={showAllDates}
+        onToggleShowAllDates={onToggleShowAllDates}
         onChangePeriod={onChangePeriod}
         onChangeSource={onChangeSource}
         onChangeStatus={onChangeStatus}
@@ -379,6 +440,8 @@ function TimelineFilterControls({
   periodFilter,
   sourceFilter,
   statusFilter,
+  showAllDates,
+  onToggleShowAllDates,
   onChangePeriod,
   onChangeSource,
   onChangeStatus,
@@ -387,6 +450,8 @@ function TimelineFilterControls({
   periodFilter: PeriodFilter;
   sourceFilter: SourceFilter;
   statusFilter: StatusFilter;
+  showAllDates: boolean;
+  onToggleShowAllDates: () => void;
   onChangePeriod: (value: PeriodFilter) => void;
   onChangeSource: (value: SourceFilter) => void;
   onChangeStatus: (value: StatusFilter) => void;
@@ -438,9 +503,18 @@ function TimelineFilterControls({
         onChange={(event) => onChangeStatus(event.target.value as StatusFilter)}
       >
         <option value="all">상태 전체</option>
-        <option value="approved">approved</option>
+        <option value="approved">승인됨</option>
         <option value="완료">완료</option>
       </select>
+      <button
+        type="button"
+        data-testid="timeline-date-density-toggle"
+        aria-pressed={showAllDates}
+        onClick={onToggleShowAllDates}
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-[12px] font-extrabold text-ink shadow-xs transition hover:border-[var(--line-hover)] hover:bg-surface-soft"
+      >
+        {showAllDates ? "활동 있는 날짜만 보기" : "전체 날짜 보기"}
+      </button>
       <button
         type="button"
         onClick={onResetFilters}
@@ -453,6 +527,53 @@ function TimelineFilterControls({
   );
 }
 
+function TimelineDateIndex({
+  monthGroups,
+  expandedDateKeys,
+  onJumpDate,
+}: {
+  monthGroups: TimelineMonthGroupData[];
+  expandedDateKeys: Set<string>;
+  onJumpDate: (dateKey: string) => void;
+}) {
+  return (
+    <aside
+      data-testid="timeline-date-index"
+      className="hidden h-fit rounded-lg border border-line bg-[var(--glass-elevated)] p-3 lg:sticky lg:top-3 lg:block"
+      aria-label="타임라인 날짜 인덱스"
+    >
+      <div className="space-y-4">
+        {monthGroups.map((month) => (
+          <div key={month.monthKey} className="space-y-2">
+            <p className="px-1 text-[12px] font-extrabold text-ink">{month.monthLabel}</p>
+            <div className="space-y-1">
+              {month.dateGroups.map((dateGroup) => {
+                const hasItems = dateGroup.items.length > 0;
+                return (
+                  <button
+                    key={dateGroup.dateKey}
+                    type="button"
+                    data-testid={`timeline-date-index-${dateGroup.dateKey}`}
+                    className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] font-bold transition ${
+                      expandedDateKeys.has(dateGroup.dateKey)
+                        ? "bg-[var(--primary-soft)] text-[var(--primary-dark)]"
+                        : "text-muted hover:bg-white hover:text-ink"
+                    }`}
+                    onClick={() => onJumpDate(dateGroup.dateKey)}
+                  >
+                    <span>{shortDateLabel(dateGroup.dateKey)}</span>
+                    <span className={`h-1.5 w-1.5 rounded-full ${hasItems ? "bg-[var(--primary)]" : "bg-slate-300"}`} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function TimelineDateGroup({
   group,
   isExpanded,
@@ -462,19 +583,19 @@ function TimelineDateGroup({
   onToggleMore,
   onSelectHistory,
 }: {
-  group: ReturnType<typeof groupHistoriesByDate>[number];
+  group: TimelineDateGroupData;
   isExpanded: boolean;
   isShowingAll: boolean;
   selectedHistoryId?: string;
-  onToggleDate: (dateLabel: string) => void;
-  onToggleMore: (dateLabel: string) => void;
+  onToggleDate: (dateKey: string) => void;
+  onToggleMore: (dateKey: string) => void;
   onSelectHistory: (historyId: string) => void;
 }) {
   const visibleItems = isShowingAll ? group.items : group.items.slice(0, 3);
   const hiddenCount = group.items.length - visibleItems.length;
 
   return (
-    <section className="relative pl-8">
+    <section id={`timeline-date-${group.dateKey}`} className="relative scroll-mt-20 pl-8">
       <span className="absolute left-3 top-4 h-full border-l border-dashed border-slate-200" aria-hidden="true" />
       <span
         className={`absolute left-[7px] top-[18px] z-10 grid h-4 w-4 place-items-center rounded-full border bg-white ${
@@ -492,12 +613,12 @@ function TimelineDateGroup({
             ? "border-[var(--primary-soft)] bg-white text-ink"
             : "border-line bg-[var(--glass-elevated)] text-ink hover:border-[var(--line-hover)] hover:bg-white"
         }`}
-        onClick={() => onToggleDate(group.dateLabel)}
+        onClick={() => onToggleDate(group.dateKey)}
       >
         <span className="flex min-w-0 items-center gap-2">
           <h3 className="truncate text-[15px] font-extrabold text-ink">{group.dateLabel}</h3>
           <span className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-extrabold text-[var(--primary-dark)]">
-            {group.items.length.toLocaleString()}건
+            {group.items.length > 0 ? `${group.items.length.toLocaleString()}건` : "활동 없음"}
           </span>
         </span>
         <ChevronDown
@@ -507,19 +628,23 @@ function TimelineDateGroup({
       </button>
       {isExpanded ? (
         <div className="mt-3 space-y-2">
-          {visibleItems.map((item) => (
+          {visibleItems.length > 0 ? visibleItems.map((item) => (
             <TimelineEventRow
               key={item.id}
               item={item}
               isSelected={selectedHistoryId === item.id}
               onSelectHistory={onSelectHistory}
             />
-          ))}
+          )) : (
+            <div className="rounded-lg border border-dashed border-line bg-surface-soft p-4 text-[13px] font-semibold text-muted">
+              이 날짜의 활동이 없습니다.
+            </div>
+          )}
           {group.items.length > 3 ? (
             <button
               type="button"
               className="ml-1 inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-[12px] font-extrabold text-[var(--primary-dark)] hover:underline"
-              onClick={() => onToggleMore(group.dateLabel)}
+              onClick={() => onToggleMore(group.dateKey)}
             >
               {isShowingAll ? (
                 <>
@@ -564,7 +689,7 @@ function TimelineEventRow({
           {item.source}
         </span>
         <span className={`rounded-md border px-2 py-1 text-[11px] font-extrabold ${statusChipClass(item.status)}`}>
-          {item.status}
+          {statusLabel(item.status)}
         </span>
         <button
           type="button"
@@ -627,17 +752,58 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
   };
 }
 
-function groupHistoriesByDate(histories: TimelineHistory[]) {
+function groupHistoriesByDate(histories: TimelineHistory[], includeEmptyDates = false): TimelineDateGroupData[] {
   const groups = new Map<string, TimelineHistory[]>();
   for (const history of [...histories].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {
-    const label = formatDate(history.createdAt);
-    groups.set(label, [...(groups.get(label) ?? []), history]);
+    const key = dateKeyForValue(history.createdAt);
+    groups.set(key, [...(groups.get(key) ?? []), history]);
   }
-  return Array.from(groups.entries()).map(([dateLabel, items]) => ({ dateLabel, items }));
+
+  if (includeEmptyDates && groups.size > 0) {
+    const keys = Array.from(groups.keys()).sort();
+    const start = dateFromKey(keys[0]);
+    const end = dateFromKey(keys[keys.length - 1]);
+    for (const date = end; date >= start; date.setDate(date.getDate() - 1)) {
+      const key = dateKeyForValue(date.toISOString());
+      if (!groups.has(key)) groups.set(key, []);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([dateKey, items]) => ({
+      dateKey,
+      dateLabel: formatDateFromKey(dateKey),
+      monthKey: dateKey.slice(0, 7),
+      monthLabel: formatMonthFromKey(dateKey),
+      items,
+    }));
 }
 
-function firstDateLabel(histories: TimelineHistory[]) {
-  return groupHistoriesByDate(histories)[0]?.dateLabel ?? null;
+function groupDateGroupsByMonth(groups: TimelineDateGroupData[]): TimelineMonthGroupData[] {
+  const monthGroups = new Map<string, TimelineDateGroupData[]>();
+  for (const group of groups) {
+    monthGroups.set(group.monthKey, [...(monthGroups.get(group.monthKey) ?? []), group]);
+  }
+  return Array.from(monthGroups.entries()).map(([monthKey, dateGroups]) => ({
+    monthKey,
+    monthLabel: dateGroups[0]?.monthLabel ?? monthKey,
+    dateGroups,
+  }));
+}
+
+function defaultExpandedDateKeys(groups: TimelineDateGroupData[]) {
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  const recentWithItems = groups
+    .filter((group) => {
+      const timestamp = dateFromKey(group.dateKey).getTime();
+      return group.items.length > 0 && now - timestamp <= sevenDays && now >= timestamp;
+    })
+    .map((group) => group.dateKey);
+  if (recentWithItems.length > 0) return new Set(recentWithItems);
+  const firstActive = groups.find((group) => group.items.length > 0)?.dateKey;
+  return firstActive ? new Set([firstActive]) : new Set<string>();
 }
 
 function firstProjectWithHistories(projects: ProjectTimeline[]) {
@@ -663,6 +829,11 @@ function isPastCalendarTimeline(source: TimelineSource, occurredAt: string) {
 function statusChipClass(status: TimelineHistory["status"]) {
   if (status === "approved") return "border-emerald-100 bg-emerald-50 text-emerald-700";
   return "border-blue-100 bg-blue-50 text-blue-700";
+}
+
+function statusLabel(status: TimelineHistory["status"]) {
+  if (status === "approved") return "승인됨";
+  return status;
 }
 
 function previewForProjectItem(item: ProjectTimelineItem, source: TimelineSource) {
@@ -706,6 +877,40 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "long",
+    day: "numeric",
+    timeZone: "Asia/Seoul",
+  }).format(date);
+}
+
+function dateKeyForValue(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "0000-00-00";
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+}
+
+function dateFromKey(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00+09:00`);
+}
+
+function formatDateFromKey(dateKey: string) {
+  return formatDate(`${dateKey}T00:00:00+09:00`);
+}
+
+function formatMonthFromKey(dateKey: string) {
+  const date = dateFromKey(dateKey);
+  if (Number.isNaN(date.getTime())) return "날짜 미상";
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    timeZone: "Asia/Seoul",
+  }).format(date);
+}
+
+function shortDateLabel(dateKey: string) {
+  const date = dateFromKey(dateKey);
+  if (Number.isNaN(date.getTime())) return dateKey;
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
     day: "numeric",
     timeZone: "Asia/Seoul",
   }).format(date);
