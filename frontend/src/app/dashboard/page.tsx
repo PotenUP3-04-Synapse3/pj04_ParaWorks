@@ -63,7 +63,6 @@ export default function DashboardPage() {
   const [completingTaskIds, setCompletingTaskIds] = useState<Set<number>>(() => new Set());
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [visibleMonth, setVisibleMonth] = useState(() => firstDayOfMonth(new Date()));
-  const [calendarSelectionTouched, setCalendarSelectionTouched] = useState(false);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -156,17 +155,6 @@ export default function DashboardPage() {
     () => buildCalendarDays(visibleMonth, selectedDate, calendarEvents),
     [calendarEvents, selectedDate, visibleMonth],
   );
-
-  useEffect(() => {
-    if (calendarSelectionTouched || calendarEvents.size === 0 || calendarEvents.has(selectedDate)) {
-      return;
-    }
-    const [firstEventDate] = Array.from(calendarEvents.keys()).sort();
-    if (firstEventDate) {
-      setSelectedDate(firstEventDate);
-      setVisibleMonth(firstDayOfMonth(new Date(`${firstEventDate}T00:00:00+09:00`)));
-    }
-  }, [calendarEvents, calendarSelectionTouched, selectedDate]);
 
   async function completeTask(taskId: number) {
     setCompletingTaskIds((current) => new Set(current).add(taskId));
@@ -358,7 +346,6 @@ export default function DashboardPage() {
                       day.isSelected ? "selected" : "",
                     ].join(" ")}
                     onClick={() => {
-                      setCalendarSelectionTouched(true);
                       setSelectedDate(day.key);
                     }}
                   >

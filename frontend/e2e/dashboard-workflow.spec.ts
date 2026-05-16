@@ -268,3 +268,43 @@ test("dashboard completes approved todo through the API and hides it", async ({ 
   await expect(page.getByText("오늘 고객사 공유본 보내기")).toBeHidden();
   await expect(page.getByText("오늘 처리할 승인된 할 일이 없습니다.")).toBeVisible();
 });
+
+test("dashboard calendar keeps today selected when synced events start in a previous month", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-05-17T09:00:00+09:00"));
+
+  await page.route("**/api/v1/dashboard", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        source_counts: {},
+        pending_review_count: 0,
+        recent_jobs: [],
+        pending_items: [],
+        today_todos: [],
+        today_events: [],
+        calendar_events: [
+          {
+            id: 401,
+            title: "지난달 연동 일정",
+            start: "2026-04-17T10:00:00+09:00",
+            end: "2026-04-17T11:00:00+09:00",
+            location: "",
+            organizer: "calendar@example.com",
+            attendee_summary: "",
+            source_url: "https://calendar.google.com/event?eid=april",
+            permission_level: "internal",
+          },
+        ],
+        assigned_projects: [],
+        recent_decisions: [],
+        recent_timeline: [],
+      },
+    });
+  });
+
+  await page.goto("/dashboard");
+
+  await expect(page.getByTestId("dashboard-calendar").getByRole("heading", { name: "2026년 5월" })).toBeVisible();
+  await expect(page.getByText("5월 17일 일")).toBeVisible();
+  await expect(page.getByTestId("calendar-day-2026-05-17")).toHaveClass(/selected/);
+});

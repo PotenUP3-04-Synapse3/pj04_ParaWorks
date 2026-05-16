@@ -2329,3 +2329,26 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꿔 빌드 후 해당
     생성 변경은 되돌렸다.
+
+## 2026-05-17 대시보드 캘린더 refresh 오늘 날짜 유지
+
+- 변경 요약:
+  - `frontend/src/app/dashboard/page.tsx`에서 캘린더 선택 날짜에 일정이 없으면
+    연동 일정 중 가장 빠른 날짜로 자동 이동하던 effect를 제거했다.
+  - 원인은 2026-05-17 오늘 일정이 없고 연동 데이터의 가장 빠른 일정이
+    2026-04-17일 때, 새로고침 후 `selectedDate`와 `visibleMonth`가 함께
+    4월로 바뀌는 로직이었다.
+  - 사용자가 날짜를 클릭해 선택하는 동작은 그대로 유지하고, 연동된 과거/미래
+    일정은 해당 월로 이동했을 때 dot과 일정 목록으로 확인하도록 했다.
+  - `frontend/e2e/dashboard-calendar-state.spec.ts`를 추가해 이 자동 이동 로직이
+    다시 들어오지 않도록 source-level 회귀 테스트를 둔다.
+  - `frontend/e2e/dashboard-workflow.spec.ts`에는 이전 월에만 일정이 있어도
+    2026년 5월과 5월 17일 선택 상태를 유지하는 브라우저 회귀 케이스를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- dashboard-calendar-state.spec.ts --project=chromium-desktop` → `1 passed`
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop -g "previous month"` → `1 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸면 빌드 후 해당
+    생성 변경은 되돌린다.
