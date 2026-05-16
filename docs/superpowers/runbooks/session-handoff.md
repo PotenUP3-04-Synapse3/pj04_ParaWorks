@@ -69,6 +69,25 @@ Updated: 2026-05-16
     because Node hit an `EPERM` reading `C:\Users\hanvv\AppData`; browser
     verification used escalated Playwright instead.
 
+## 2026-05-16 Dashboard calendar week order polish
+
+- Scope:
+  - Dashboard calendar UI only; no backend/API changes.
+- Changes:
+  - `WEEKDAY_LABELS` now renders `일, 월, 화, 수, 목, 금, 토`.
+  - `buildCalendarDays()` now starts each 42-day grid from the Sunday before or
+    on the first of the visible month.
+  - `.dashboard-calendar-day.today` and `.selected` styles are separated so
+    today's date remains softly highlighted when another date is selected.
+- Verification:
+  - RED Playwright regression first failed on the old Monday-start weekday
+    order.
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop`
+    -> 2 passed.
+  - `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - `npm.cmd run build` -> passed.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Symptom:

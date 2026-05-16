@@ -2785,7 +2785,13 @@ button:disabled,
     color: #8b95a7;
   }
 
-  .dashboard-calendar-day.today,
+  .dashboard-calendar-day.today {
+    border: 1px solid rgba(49, 86, 246, 0.2);
+    background: #eef4ff;
+    color: #3156f6;
+    box-shadow: 0 8px 18px rgba(49, 86, 246, 0.12);
+  }
+
   .dashboard-calendar-day.selected {
     background: linear-gradient(135deg, #3156f6, #7c3aed);
     color: #ffffff;

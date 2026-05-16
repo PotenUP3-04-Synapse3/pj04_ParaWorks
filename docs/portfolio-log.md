@@ -34,6 +34,16 @@ demo story changes.
   existing timeline warnings only, frontend production build passed, and
   viewport measurements passed for 2560, 1920, 1440, 1366, 1024, and 768 widths.
 
+## 2026-05-16 Dashboard calendar week order polish
+
+- Changed the Dashboard calendar from Monday-start weeks to Sunday-start weeks
+  so the grid reads Sunday through Saturday.
+- Split today's visual state from the selected date state: today stays visible
+  with a softer highlight when another date is selected, while the selected date
+  keeps the stronger gradient emphasis.
+- Verification: Dashboard Playwright workflow passed, frontend lint passed with
+  existing timeline warnings only, and frontend production build passed.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Fixed Google Calendar sync recovery when Google rejects an old per-calendar

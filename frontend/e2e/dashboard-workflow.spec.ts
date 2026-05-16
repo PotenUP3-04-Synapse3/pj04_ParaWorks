@@ -95,6 +95,18 @@ test("dashboard renders polished SaaS layout with interactive calendar", async (
   expect(heroCopyBox && heroIllustrationBox ? heroCopyBox.x + heroCopyBox.width < heroIllustrationBox.x : false).toBeTruthy();
   expect(calendarBox?.height).toBeLessThanOrEqual(620);
   await expect(page.getByTestId("dashboard-calendar").getByRole("heading", { name: "2026년 5월" })).toBeVisible();
+  await expect(page.locator(".dashboard-calendar-weekdays span")).toHaveText(["일", "월", "화", "수", "목", "금", "토"]);
+  const selectedDateStyle = await page.getByTestId("calendar-day-2026-05-15").evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { backgroundColor: style.backgroundColor, backgroundImage: style.backgroundImage };
+  });
+  const todayDateStyle = await page.getByTestId("calendar-day-2026-05-16").evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { backgroundColor: style.backgroundColor, backgroundImage: style.backgroundImage };
+  });
+  expect(selectedDateStyle.backgroundImage).toContain("linear-gradient");
+  expect(todayDateStyle.backgroundImage).toBe("none");
+  expect(todayDateStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   await expect(page.getByText("09:00")).toBeVisible();
   await expect(page.getByText("Teacher's Day")).toBeVisible();
   await expect(page.getByText("16:30")).toBeVisible();

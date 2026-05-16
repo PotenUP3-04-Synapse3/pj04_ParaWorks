@@ -54,7 +54,7 @@ type CalendarDay = {
 
 type ReviewListItem = readonly [id: number, title: string, source: string, due: string, priority: string];
 
-const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -576,9 +576,8 @@ function dateKey(value: Date) {
 
 function buildCalendarDays(month: Date, selectedDate: string, events: Map<string, CalendarEventItem[]>): CalendarDay[] {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const mondayOffset = (first.getDay() + 6) % 7;
   const start = new Date(first);
-  start.setDate(first.getDate() - mondayOffset);
+  start.setDate(first.getDate() - first.getDay());
   const today = dateKey(new Date());
 
   return Array.from({ length: 42 }, (_, index) => {
