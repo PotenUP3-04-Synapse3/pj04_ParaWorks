@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
+import { sourceFamilyLabel, sourceTypeFromUrl } from "@/lib/sourceLabels";
 import type {
   ReviewItem,
   ReviewGroup,
@@ -128,7 +129,10 @@ function projectAssignmentFields(item: ReviewItem) {
   };
 }
 
-function agentDisplayName(agentName: string) {
+function agentDisplayName(agentName: string, item?: ReviewItem) {
+  if (agentName === "mail_document_agent" && item) {
+    return mailDocumentSourceLabel(item) || "Mail/Docs Agent";
+  }
   const labels: Record<string, string> = {
     project_classifier: "프로젝트 분류기",
     slack_agent: "Slack Agent",
@@ -136,6 +140,14 @@ function agentDisplayName(agentName: string) {
     memory_extraction_agent: "Memory Agent",
   };
   return labels[agentName] ?? agentName;
+}
+
+function mailDocumentSourceLabel(item: ReviewItem) {
+  const evidenceTypes = (item.source_evidence ?? []).map((row) => row.source_type);
+  const payloadTypes = Array.isArray(item.payload.source_types) ? item.payload.source_types : [];
+  const payloadType = stringField(item.payload.source_type);
+  const urlTypes = (item.source_links ?? []).map((link) => sourceTypeFromUrl(link));
+  return sourceFamilyLabel([...evidenceTypes, ...payloadTypes, payloadType, ...urlTypes]);
 }
 
 function routeLabel(route: string) {
@@ -528,7 +540,7 @@ export default function ReviewPage() {
                               {isAgentItem ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-[#21132b] px-2.5 py-1 text-xs font-semibold text-white">
                                   <Sparkles className="h-3 w-3" aria-hidden="true" />
-                                  {agentDisplayName(agentName)}
+                                  {agentDisplayName(agentName, item)}
                                 </span>
                               ) : (
                                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">

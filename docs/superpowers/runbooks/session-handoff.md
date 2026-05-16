@@ -1,6 +1,28 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-15
+Updated: 2026-05-16
+
+## 2026-05-16 Review Mail Docs Calendar source labels
+
+- Scope:
+  - Only `/review` UX and Review API source-evidence fallback were changed.
+  - Slack Agent, RAG orchestration, connector ingestion, and project routing
+    were intentionally left untouched.
+- Backend:
+  - `backend/app/api/v1/review.py` no longer falls back missing
+    `source_type` to `slack`.
+  - Source evidence now resolves metadata by source id as well as URL, then
+    falls back to indexed `ReviewItem.payload.source_types`, scalar
+    `payload.source_type`, and source URL heuristics.
+- Frontend:
+  - `frontend/src/lib/sourceLabels.ts` centralizes source-family labels.
+  - `/review` card agent badges show `Mail`, `Docs`, `Calendar`, or combined
+    labels for `mail_document_agent` items.
+  - Gmail attachments map to `Mail`.
+- Tests added:
+  - Backend regression in `backend/tests/test_review.py`.
+  - Playwright regression in
+    `frontend/e2e/review-mail-docs-source-labels.spec.ts`.
 
 ## 2026-05-15 Google Calendar updatedMin fallback
 

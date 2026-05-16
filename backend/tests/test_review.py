@@ -443,6 +443,37 @@ def test_review_item_response_includes_structured_source_evidence(client, db_ses
     ]
 
 
+def test_mail_document_review_source_evidence_uses_indexed_source_type_fallback(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='history_event',
+        payload={
+            'title': 'Mail docs calendar source labels',
+            'summary': 'Review evidence should keep each Google source family visible.',
+            'agent_name': 'mail_document_agent',
+            'source_ids': ['gmail:message-1', 'drive:file-1', 'calendar:primary:event-1'],
+            'source_types': ['gmail', 'drive', 'calendar'],
+        },
+        source_links=[],
+        source_snippets=['Mail thread evidence.', 'Drive document evidence.', 'Calendar event evidence.'],
+        confidence_score=0.84,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review')
+
+    assert response.status_code == 200
+    body = response.json()['items'][0]
+    assert [row['source_id'] for row in body['source_evidence']] == [
+        'gmail:message-1',
+        'drive:file-1',
+        'calendar:primary:event-1',
+    ]
+    assert [row['source_type'] for row in body['source_evidence']] == ['gmail', 'drive', 'calendar']
+
+
 def test_approve_review_item_rejects_missing_required_fields(client, db_session) -> None:
     item = ReviewItem(
         item_type='decision_record',

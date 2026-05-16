@@ -1,10 +1,21 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-15
+Last updated: 2026-05-16
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-16 Review Mail Docs Calendar source labels
+
+- Improved `/review` so Mail/Docs agent candidates show source-family badges
+  (`Mail`, `Docs`, `Calendar`, or combined labels such as `Mail + Docs`) in
+  the card header instead of always showing `Mail/Docs Agent`.
+- Hardened Review API source-evidence fallback so Mail/Docs/Calendar rows keep
+  indexed `source_types` and source-id evidence summary metadata instead of
+  defaulting missing source type data to Slack.
+- Verification: added backend regression coverage for indexed source-type
+  fallback and Playwright coverage for the card-level source badges.
 
 ## 2026-05-15 Google Calendar updatedMin fallback
 

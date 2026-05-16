@@ -3,6 +3,7 @@
 import { ExternalLink, FileText, GitBranch, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReviewSourceEvidence } from "@/lib/api/types";
+import { sourceTypeLabel as sharedSourceTypeLabel } from "@/lib/sourceLabels";
 
 type SourceEvidenceDrawerProps = {
   evidence?: ReviewSourceEvidence[];
@@ -222,6 +223,10 @@ function fallbackEvidenceRows(
 }
 
 function sourceTypeLabel(sourceType: string) {
+  return sharedSourceTypeLabel(sourceType) ?? legacySourceTypeLabel(sourceType);
+}
+
+function legacySourceTypeLabel(sourceType: string) {
   if (sourceType === "gmail") return "Gmail";
   if (sourceType === "gmail_attachment") return "Gmail 첨부";
   if (sourceType === "drive") return "Drive";
