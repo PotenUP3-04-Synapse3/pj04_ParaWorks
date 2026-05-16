@@ -177,6 +177,79 @@ test("Timeline groups approved project items by date", async ({ page }) => {
   await popup.close();
 });
 
+test("Timeline filters hide reviewing and Source while past Calendar items show completed", async ({ page }) => {
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal"],
+          name: "Admin",
+          title: "Admin",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { unread_count: 0, notifications: [] } });
+  });
+  await page.route("**/api/v1/projects", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        project_count: 1,
+        hidden_project_count: 0,
+        hidden_evidence_count: 0,
+        projects: [
+          {
+            project_key: "calendar-project",
+            name: "Calendar Project",
+            summary: "Calendar evidence",
+            source_types: ["calendar"],
+            evidence_count: 1,
+            permission_level: "internal",
+            latest_timestamp: "2026-05-15T08:00:00+09:00",
+            pending_review_count: 0,
+            evidence: [],
+            activity_items: [],
+            timeline_items: [
+              {
+                id: "timeline_event:calendar-past",
+                item_type: "timeline_event",
+                title: "Past calendar meeting",
+                summary: "Meeting already happened.",
+                source_links: ["https://calendar.google.com/event?eid=past"],
+                source_snippets: ["Calendar evidence"],
+                confidence_score: 0.9,
+                permission_level: "internal",
+                review_status: "approved",
+                created_at: "2026-05-15T08:00:00+09:00",
+                occurred_at: "2026-05-15T08:00:00+09:00",
+                evidence_reason: "Calendar event",
+                project_key: "calendar-project",
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+
+  await page.goto("/timeline");
+
+  await expect(page.getByRole("heading", { name: "Past calendar meeting" })).toBeVisible();
+  await expect(page.locator("#timeline-status-filter option")).toHaveText(["상태 전체", "approved", "완료"]);
+  await expect(page.locator("#timeline-source-filter option")).toHaveText(["소스 전체", "Slack", "Gmail", "Drive", "Calendar"]);
+  await expect(page.locator("span", { hasText: /^완료$/ })).toBeVisible();
+  await page.locator("#timeline-status-filter").selectOption("완료");
+  await expect(page.getByRole("heading", { name: "Past calendar meeting" })).toBeVisible();
+});
+
 test("Timeline opens on the first project that has approved timeline items", async ({ page }) => {
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({

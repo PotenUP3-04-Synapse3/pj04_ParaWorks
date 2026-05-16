@@ -65,6 +65,28 @@ Updated: 2026-05-16
     warnings only.
   - GREEN: `npm.cmd run build` -> passed.
 
+## 2026-05-16 Timeline calendar status and filter cleanup
+
+- Scope:
+  - Timeline page only.
+- Changes:
+  - `frontend/src/app/timeline/page.tsx` now marks Calendar-sourced timeline
+    items as `완료` when their `occurred_at` or `created_at` timestamp is before
+    the current time.
+  - Timeline status filters now expose only `상태 전체`, `approved`, and `완료`.
+  - Timeline source filters now expose only `소스 전체`, `Slack`, `Gmail`,
+    `Drive`, and `Calendar`; the fallback `Source` label is still used on rows
+    when a source cannot be classified, but it is not a filter option.
+  - Removed unused Timeline icon imports that had been producing lint warnings.
+- Verification:
+  - RED Timeline Playwright test first failed because `reviewing` was still in
+    the status dropdown.
+  - GREEN:
+    `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop`
+    -> 3 passed.
+  - GREEN: `npm.cmd run lint` -> passed with no warnings.
+  - GREEN: `npm.cmd run build` -> passed.
+
 ## 2026-05-16 Docker Postgres port fallback
 
 - Symptom:

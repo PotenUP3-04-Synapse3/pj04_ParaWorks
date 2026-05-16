@@ -3,14 +3,9 @@
 import {
   CalendarDays,
   ChevronDown,
-  Code2,
   ExternalLink,
   Eye,
-  FileClock,
-  FileText,
   GitBranch,
-  Mail,
-  MessageSquare,
   RotateCcw,
   SlidersHorizontal,
   X,
@@ -39,7 +34,7 @@ type TimelineHistory = {
   title: string;
   summary: string;
   history: string;
-  status: "approved" | "reviewing" | "완료";
+  status: "approved" | "완료";
   sourceUrl: string;
   preview: string;
   snippets: { author: string; body: string; time: string }[];
@@ -431,7 +426,6 @@ function TimelineFilterControls({
         <option value="Gmail">Gmail</option>
         <option value="Drive">Drive</option>
         <option value="Calendar">Calendar</option>
-        <option value="Source">Source</option>
       </select>
       <label className="sr-only" htmlFor="timeline-status-filter">
         상태 필터
@@ -445,7 +439,6 @@ function TimelineFilterControls({
       >
         <option value="all">상태 전체</option>
         <option value="approved">approved</option>
-        <option value="reviewing">reviewing</option>
         <option value="완료">완료</option>
       </select>
       <button
@@ -613,6 +606,7 @@ function TimelineSourceIcon({ item }: { item: TimelineHistory }) {
 function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
   const occurredAt = item.occurred_at || item.created_at;
   const source = sourceFromLinks(item.source_links);
+  const status = item.completed_at || isPastCalendarTimeline(source, occurredAt) ? "완료" : "approved";
   return {
     id: item.id,
     itemType: item.item_type,
@@ -622,7 +616,7 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
     title: item.title,
     summary: item.summary,
     history: item.summary || "No approved timeline summary.",
-    status: item.completed_at ? "완료" : item.review_status === "approved" ? "approved" : "reviewing",
+    status,
     sourceUrl: item.source_links[0] ?? "",
     preview: previewForProjectItem(item, source),
     snippets: item.source_snippets.map((snippet) => ({
@@ -659,10 +653,16 @@ function sourceFromLinks(links: string[]): TimelineSource {
   return "Source";
 }
 
+function isPastCalendarTimeline(source: TimelineSource, occurredAt: string) {
+  if (source !== "Calendar") return false;
+  const timestamp = Date.parse(occurredAt);
+  if (Number.isNaN(timestamp)) return false;
+  return timestamp < Date.now();
+}
+
 function statusChipClass(status: TimelineHistory["status"]) {
   if (status === "approved") return "border-emerald-100 bg-emerald-50 text-emerald-700";
-  if (status === "완료") return "border-blue-100 bg-blue-50 text-blue-700";
-  return "border-amber-100 bg-amber-50 text-amber-700";
+  return "border-blue-100 bg-blue-50 text-blue-700";
 }
 
 function previewForProjectItem(item: ProjectTimelineItem, source: TimelineSource) {

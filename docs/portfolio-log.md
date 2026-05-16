@@ -76,6 +76,17 @@ demo story changes.
   lint passed with existing timeline warnings only, and frontend production
   build passed.
 
+## 2026-05-16 Timeline calendar status and filter cleanup
+
+- Calendar-backed timeline items whose event time is already in the past now
+  render as completed in the Timeline page, matching user expectations for
+  historical schedule entries.
+- Removed the unavailable `reviewing` status filter and the generic `Source`
+  source filter option from the Timeline filter controls.
+- Cleaned up unused Timeline icon imports so frontend lint is quiet.
+- Verification: Timeline Playwright coverage passed with 3 tests, frontend
+  lint passed with no warnings, and frontend production build passed.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Fixed Google Calendar sync recovery when Google rejects an old per-calendar
