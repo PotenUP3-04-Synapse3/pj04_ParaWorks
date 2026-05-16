@@ -275,3 +275,66 @@ def test_dashboard_today_events_lists_today_calendar_sources_only(client, db_ses
             'permission_level': 'restricted',
         },
     ]
+
+
+def test_dashboard_calendar_events_include_synced_events_beyond_today(client, db_session) -> None:
+    today = datetime.now(ZoneInfo('Asia/Seoul')).date()
+    tomorrow_start = f'{(today + timedelta(days=1)).isoformat()}T14:00:00+09:00'
+    next_week_start = f'{(today + timedelta(days=7)).isoformat()}T10:00:00+09:00'
+    tomorrow_event = Source(
+        source_type='calendar',
+        source_id='calendar:primary:tomorrow-dashboard',
+        source_url='https://calendar.google.com/event?eid=tomorrow-dashboard',
+        title='Tomorrow dashboard event',
+        author='organizer@example.com',
+        permission_level='internal',
+        raw_metadata={
+            'event_start': tomorrow_start,
+            'event_end': f'{(today + timedelta(days=1)).isoformat()}T15:00:00+09:00',
+            'organizer_email': 'organizer@example.com',
+            'calendar_attendee_summary': '1 accepted',
+        },
+    )
+    next_week_event = Source(
+        source_type='calendar',
+        source_id='calendar:primary:next-week-dashboard',
+        source_url='https://calendar.google.com/event?eid=next-week-dashboard',
+        title='Next week dashboard event',
+        permission_level='internal',
+        raw_metadata={
+            'event_start': next_week_start,
+            'event_end': f'{(today + timedelta(days=7)).isoformat()}T11:00:00+09:00',
+        },
+    )
+    db_session.add_all([next_week_event, tomorrow_event])
+    db_session.commit()
+
+    response = client.get('/api/v1/dashboard')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['today_events'] == []
+    assert payload['calendar_events'] == [
+        {
+            'id': tomorrow_event.id,
+            'title': 'Tomorrow dashboard event',
+            'start': tomorrow_start,
+            'end': f'{(today + timedelta(days=1)).isoformat()}T15:00:00+09:00',
+            'location': '',
+            'organizer': 'organizer@example.com',
+            'attendee_summary': '1 accepted',
+            'source_url': 'https://calendar.google.com/event?eid=tomorrow-dashboard',
+            'permission_level': 'internal',
+        },
+        {
+            'id': next_week_event.id,
+            'title': 'Next week dashboard event',
+            'start': next_week_start,
+            'end': f'{(today + timedelta(days=7)).isoformat()}T11:00:00+09:00',
+            'location': '',
+            'organizer': '',
+            'attendee_summary': '',
+            'source_url': 'https://calendar.google.com/event?eid=next-week-dashboard',
+            'permission_level': 'internal',
+        },
+    ]

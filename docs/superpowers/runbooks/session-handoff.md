@@ -2,6 +2,44 @@
 
 Updated: 2026-05-16
 
+## 2026-05-16 Dashboard calendar sync and Review bulk actions
+
+- Scope:
+  - Dashboard Calendar API/UI, connector duplicate filtering, and Review Queue
+    bulk action UX.
+- Changes:
+  - `backend/app/api/v1/dashboard.py` now returns both `today_events` and
+    `calendar_events`. The former remains today's KPI/list source; the latter
+    feeds the interactive calendar so synced events on other dates are visible.
+  - `frontend/src/app/dashboard/page.tsx` consumes `calendar_events` with a
+    `today_events` fallback and refreshes Dashboard state when
+    `REVIEW_QUEUE_UPDATED_EVENT` fires, keeping review counts aligned with the
+    sidebar.
+  - `backend/app/ingestion/sync.py` filters unchanged duplicate source events
+    before calling ingestion, while still reporting skipped counts from the
+    fetched connector payload.
+  - `frontend/src/app/review/page.tsx` adds Gmail-style top selection, selected
+    bulk approve/reject, project assignment before bulk processing,
+    duplicate/similar bulk approve/reject, right-click approve/reject, and an
+    in-app confirmation modal instead of the old browser confirm path.
+- Verification:
+  - RED backend dashboard test failed on missing `calendar_events` before the
+    API change.
+  - RED Review Playwright test failed on missing `review-select-all` before the
+    bulk UI change.
+  - GREEN:
+    `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_review.py`
+    -> 33 passed.
+  - GREEN:
+    `uv run ruff check backend/app/api/v1/dashboard.py backend/app/ingestion/sync.py backend/tests/test_dashboard_api.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_review.py`
+    -> passed.
+  - GREEN:
+    `npm.cmd run test:visual -- review-bulk-actions.spec.ts dashboard-workflow.spec.ts --project=chromium-desktop`
+    -> 3 passed.
+  - GREEN: `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - GREEN: `npm.cmd run build` -> passed.
+
 ## 2026-05-16 Docker Postgres port fallback
 
 - Symptom:

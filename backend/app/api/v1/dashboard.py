@@ -59,7 +59,8 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         [item for item in todo_candidates if _is_due_from_today(item.due_date or '', today)],
         key=lambda item: (item.due_date or '', item.id),
     )[:5]
-    today_events = _today_calendar_events(db)
+    calendar_events = _calendar_events(db)
+    today_events = _today_calendar_events(db, calendar_events)
     project_names = _project_names_by_key(db)
 
     assigned_projects = build_project_memory(db)
@@ -114,6 +115,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
             for item in todo_items
         ],
         'today_events': today_events,
+        'calendar_events': calendar_events,
         'assigned_projects': [
             {
                 'project_key': project.project_key,
@@ -154,11 +156,25 @@ def _today_kst() -> str:
     return datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()
 
 
-def _today_calendar_events(db: Session) -> list[dict]:
+def _today_calendar_events(db: Session, calendar_events: list[dict] | None = None) -> list[dict]:
     kst = ZoneInfo('Asia/Seoul')
     today = datetime.now(kst).date()
     day_start = datetime.combine(today, datetime.min.time(), tzinfo=kst)
     day_end = day_start + timedelta(days=1)
+    events = calendar_events if calendar_events is not None else _calendar_events(db)
+    today_events: list[tuple[datetime, dict]] = []
+    for event in events:
+        starts_at = _parse_calendar_datetime(event.get('start'))
+        if starts_at is None:
+            continue
+        starts_at_kst = starts_at.astimezone(kst)
+        if day_start <= starts_at_kst < day_end:
+            today_events.append((starts_at_kst, event))
+    return [event for _, event in sorted(today_events, key=lambda item: (item[0], item[1]['id']))[:5]]
+
+
+def _calendar_events(db: Session) -> list[dict]:
+    kst = ZoneInfo('Asia/Seoul')
     calendar_sources = db.scalars(
         select(Source).where(Source.source_type == 'calendar')
     ).all()
@@ -169,8 +185,6 @@ def _today_calendar_events(db: Session) -> list[dict]:
         if starts_at is None:
             continue
         starts_at_kst = starts_at.astimezone(kst)
-        if not (day_start <= starts_at_kst < day_end):
-            continue
         events.append(
             (
                 starts_at_kst,
@@ -187,7 +201,7 @@ def _today_calendar_events(db: Session) -> list[dict]:
                 },
             )
         )
-    return [event for _, event in sorted(events, key=lambda item: (item[0], item[1]['id']))[:5]]
+    return [event for _, event in sorted(events, key=lambda item: (item[0], item[1]['id']))[:200]]
 
 
 def _parse_calendar_datetime(value: object) -> datetime | None:

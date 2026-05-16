@@ -56,9 +56,10 @@ def sync_connector_events(
             events = connector.fetch_events_since(_latest_cursors_by_partition(db, connector.source_type))
         else:
             events = connector.fetch_events()
-        skipped_events = _count_same_content_signature_events(db, events)
+        changed_events = _changed_content_signature_events(db, events)
+        skipped_events = len(events) - len(changed_events)
         parser_status_counts = _parser_status_counts(events)
-        ingestion_result = ingest_events_with_result(db, events)
+        ingestion_result = ingest_events_with_result(db, changed_events)
     except Exception as exc:
         job.status = 'failed'
         job.message = f'failed: {exc}'
@@ -108,28 +109,30 @@ def _latest_cursors_by_partition(db: Session, source_type: str) -> dict[str, str
     return {partition: cursor for partition, (_, cursor) in latest.items()}
 
 
-def _count_same_content_signature_events(db: Session, events: list) -> int:
+def _changed_content_signature_events(db: Session, events: list) -> list:
     if not events:
-        return 0
+        return []
     sources_by_id = {
         source.source_id: source
         for source in db.scalars(
             select(Source).where(Source.source_id.in_([event.source_id for event in events]))
         ).all()
     }
-    skipped = 0
+    changed = []
     for event in events:
         source = sources_by_id.get(event.source_id)
         if source is None:
+            changed.append(event)
             continue
         existing_signature = (source.raw_metadata or {}).get('content_signature')
         incoming_signature = event.raw_metadata.get('content_signature')
         if existing_signature and incoming_signature:
-            if existing_signature == incoming_signature:
-                skipped += 1
-        else:
-            skipped += 1
-    return skipped
+            if existing_signature != incoming_signature:
+                changed.append(event)
+            continue
+        # Without a comparable signature, the ingestion boundary treats the
+        # existing source as unchanged to avoid repeated review extraction.
+    return changed
 
 
 def _parser_status_counts(events: list) -> dict[str, int]:

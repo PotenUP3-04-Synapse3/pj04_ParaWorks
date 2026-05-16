@@ -3,18 +3,20 @@
 import {
   Bot,
   CheckCircle2,
+  CheckSquare,
   Coins,
   FileSearch,
   Pencil,
   RefreshCw,
   Sparkles,
+  Square,
   XCircle,
   ChevronDown,
   ChevronRight,
   Layers,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
@@ -192,6 +194,18 @@ type PromotionNotice = {
   result: ReviewPromotionResult;
 };
 
+type BulkConfirmState = {
+  action: "approve" | "reject";
+  itemIds: number[];
+  scope: "selected" | "loaded" | "similar";
+};
+
+type ReviewContextMenu = {
+  x: number;
+  y: number;
+  item: ReviewItem;
+};
+
 export default function ReviewPage() {
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -211,6 +225,10 @@ export default function ReviewPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [loadedOffset, setLoadedOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(() => new Set());
+  const [bulkProjectKey, setBulkProjectKey] = useState("");
+  const [bulkConfirm, setBulkConfirm] = useState<BulkConfirmState>();
+  const [contextMenu, setContextMenu] = useState<ReviewContextMenu>();
 
   const loadItems = useCallback(async (nextOffset = 0, append = false) => {
     setLoading(true);
@@ -237,6 +255,20 @@ export default function ReviewPage() {
   useEffect(() => {
     void loadItems();
   }, [loadItems]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeMenu = () => setContextMenu(undefined);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu]);
 
   async function loadPreviewsForItems(items: ReviewItem[]) {
     const missingItems = items.filter((item) => !previews[item.id]);
@@ -321,6 +353,52 @@ export default function ReviewPage() {
     }
   }
 
+  function openBulkConfirm(action: "approve" | "reject", itemIds: number[], scope: BulkConfirmState["scope"]) {
+    if (itemIds.length === 0) return;
+    setBulkConfirm({ action, itemIds, scope });
+  }
+
+  async function executeBulkAction(confirmState: BulkConfirmState) {
+    const { action, itemIds } = confirmState;
+    const label = action === "approve" ? "?뱀씤" : "諛섎젮";
+    setPendingAction(`bulk:${action}`);
+    setError(undefined);
+    try {
+      if (bulkProjectKey) {
+        await Promise.all(
+          itemIds.map((itemId) =>
+            apiPatch<ReviewItem>(`/api/v1/review/${itemId}`, {
+              payload: {
+                project_key: bulkProjectKey,
+                project_needs_user_selection: false,
+              },
+            }),
+          ),
+        );
+      }
+      const result = await apiPost<ReviewBulkActionResponse>("/api/v1/review/bulk", {
+        action,
+        item_ids: itemIds,
+      });
+      await loadItems();
+      notifyReviewQueueUpdated();
+      setSelectedItemIds((current) => {
+        const next = new Set(current);
+        for (const itemId of itemIds) next.delete(itemId);
+        return next;
+      });
+      setBulkConfirm(undefined);
+      if (result.failed_items.length > 0) {
+        setError(`${label} 泥섎━ 以?${result.failed_items.length}媛???ぉ? 嫄대꼫?곗뿀?듬땲?? ?꾩닔 ?뺣낫? 洹쇨굅瑜??뺤씤??二쇱꽭??`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `紐⑤몢 ${label} 泥섎━?섏? 紐삵뻽?듬땲??`);
+    } finally {
+      setPendingAction(undefined);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function runBulkAction(action: "approve" | "reject") {
     const itemIds = groups.flatMap((group) => group.items.map((item) => item.id));
     if (itemIds.length === 0) return;
@@ -373,7 +451,41 @@ export default function ReviewPage() {
   }
   const totalAgentItems = groups.reduce((acc, g) => acc + g.items.filter(i => Boolean(i.payload.agent_name)).length, 0);
   const loadedItemCount = groups.reduce((acc, group) => acc + group.items.length, 0);
+  const loadedItems = groups.flatMap((group) => group.items);
+  const loadedItemIds = loadedItems.map((item) => item.id);
+  const selectedLoadedIds = loadedItemIds.filter((itemId) => selectedItemIds.has(itemId));
+  const duplicateItemIds = groups
+    .filter((group) => group.total_count > 1)
+    .flatMap((group) => group.items.map((item) => item.id));
+  const allLoadedSelected = loadedItemCount > 0 && selectedLoadedIds.length === loadedItemCount;
+  const someLoadedSelected = selectedLoadedIds.length > 0 && !allLoadedSelected;
   const authRequired = error ? error.includes("Authentication required") || error.includes("401") : false;
+
+  function toggleAllLoadedSelection() {
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      if (allLoadedSelected) {
+        for (const itemId of loadedItemIds) next.delete(itemId);
+      } else {
+        for (const itemId of loadedItemIds) next.add(itemId);
+      }
+      return next;
+    });
+  }
+
+  function toggleItemSelection(itemId: number) {
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+
+  function openContextMenu(event: MouseEvent, item: ReviewItem) {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY, item });
+  }
 
   return (
     <div className="reference-dashboard space-y-5">
@@ -392,7 +504,7 @@ export default function ReviewPage() {
           </span>
           <button
             type="button"
-            onClick={() => void runBulkAction("approve")}
+            onClick={() => openBulkConfirm("approve", loadedItemIds, "loaded")}
             disabled={Boolean(pendingAction) || loadedItemCount === 0}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
           >
@@ -401,7 +513,7 @@ export default function ReviewPage() {
           </button>
           <button
             type="button"
-            onClick={() => void runBulkAction("reject")}
+            onClick={() => openBulkConfirm("reject", loadedItemIds, "loaded")}
             disabled={Boolean(pendingAction) || loadedItemCount === 0}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
           >
@@ -465,6 +577,79 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
+      <section className="rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="review-select-all"
+              aria-label={allLoadedSelected ? "로드된 검토 항목 선택 해제" : "로드된 검토 항목 전체 선택"}
+              aria-pressed={allLoadedSelected}
+              onClick={toggleAllLoadedSelection}
+              disabled={loadedItemCount === 0}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white text-[var(--ink)] shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {allLoadedSelected || someLoadedSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            </button>
+            <span data-testid="review-selected-count" className="text-sm font-bold text-[var(--ink)]">
+              선택 {selectedLoadedIds.length}개
+            </span>
+            <select
+              data-testid="review-bulk-project"
+              value={bulkProjectKey}
+              onChange={(event) => setBulkProjectKey(event.target.value)}
+              className="h-9 min-w-[180px] rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none focus:border-[#21132b]"
+            >
+              <option value="">프로젝트 선택</option>
+              {definedProjects.map((project) => (
+                <option key={project.project_key} value={project.project_key}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="review-bulk-approve"
+              onClick={() => openBulkConfirm("approve", selectedLoadedIds, "selected")}
+              disabled={Boolean(pendingAction) || selectedLoadedIds.length === 0}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
+            >
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              선택 승인
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkConfirm("reject", selectedLoadedIds, "selected")}
+              disabled={Boolean(pendingAction) || selectedLoadedIds.length === 0}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+              선택 반려
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkConfirm("approve", duplicateItemIds, "similar")}
+              disabled={Boolean(pendingAction) || duplicateItemIds.length === 0}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" />
+              중복/유사 승인
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkConfirm("reject", duplicateItemIds, "similar")}
+              disabled={Boolean(pendingAction) || duplicateItemIds.length === 0}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+              중복/유사 반려
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="space-y-4">
         {groups.map((group) => {
           const isExpanded = expandedGroups[group.group_id];
@@ -518,8 +703,23 @@ export default function ReviewPage() {
                     const assignmentFields = projectAssignmentFields(item);
 
                     return (
-                      <div key={item.id} className="p-5">
+                      <div
+                        key={item.id}
+                        data-testid={`review-item-${item.id}`}
+                        className="p-5"
+                        onContextMenu={(event) => openContextMenu(event, item)}
+                      >
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                          <button
+                            type="button"
+                            data-testid={`review-select-${item.id}`}
+                            aria-label={`${itemTitle(item)} 선택`}
+                            aria-pressed={selectedItemIds.has(item.id)}
+                            onClick={() => toggleItemSelection(item.id)}
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white text-[var(--ink)] shadow-sm hover:bg-[var(--glass-strong)]"
+                          >
+                            {selectedItemIds.has(item.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                          </button>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--ink-muted)]">
@@ -885,6 +1085,87 @@ export default function ReviewPage() {
           </div>
         ) : null}
       </section>
+
+      {contextMenu ? (
+        <div
+          data-testid="review-context-menu"
+          className="fixed z-50 w-44 overflow-hidden rounded-xl border border-[var(--line-soft)] bg-white p-1 text-sm font-semibold text-[var(--ink)] shadow-xl"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            data-testid="review-context-approve"
+            onClick={() => {
+              const item = contextMenu.item;
+              setContextMenu(undefined);
+              void runStatusAction(item, "approve");
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-strong)]"
+          >
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            승인
+          </button>
+          <button
+            type="button"
+            data-testid="review-context-reject"
+            onClick={() => {
+              const item = contextMenu.item;
+              setContextMenu(undefined);
+              void runStatusAction(item, "reject");
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-strong)]"
+          >
+            <XCircle className="h-4 w-4" aria-hidden="true" />
+            반려
+          </button>
+        </div>
+      ) : null}
+
+      {bulkConfirm ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+          <div
+            data-testid="review-bulk-confirm"
+            className="w-full max-w-md rounded-2xl border border-white/70 bg-white p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--workspace-rail-active)] text-white">
+                {bulkConfirm.action === "approve" ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-extrabold text-[var(--ink)]">
+                  {bulkConfirm.scope === "loaded" ? "현재 로드된" : bulkConfirm.scope === "similar" ? "중복/유사" : "선택한"} 검토 항목 {bulkConfirm.itemIds.length}개를 모두{" "}
+                  {bulkConfirm.action === "approve" ? "승인" : "반려"}할까요?
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+                  {bulkProjectKey ? "선택한 프로젝트를 먼저 반영한 뒤 처리합니다." : "프로젝트가 필요한 항목은 승인 단계에서 검증됩니다."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBulkConfirm(undefined)}
+                disabled={Boolean(pendingAction)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-bulk-action"
+                onClick={() => void executeBulkAction(bulkConfirm)}
+                disabled={Boolean(pendingAction)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
+              >
+                {pendingAction?.startsWith("bulk:") ? "처리 중" : "확인"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

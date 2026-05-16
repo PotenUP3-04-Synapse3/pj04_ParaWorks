@@ -20,8 +20,9 @@ import {
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api/client";
+import { REVIEW_QUEUE_UPDATED_EVENT } from "@/lib/reviewQueueEvents";
 import type { DashboardResponse } from "@/lib/api/types";
 
 type TodayTask = {
@@ -67,9 +68,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
 
-  useEffect(() => {
+  const loadDashboard = useCallback(async () => {
     let active = true;
-    apiGet<DashboardResponse>("/api/v1/dashboard")
+    setLoading(true);
+    await apiGet<DashboardResponse>("/api/v1/dashboard")
       .then((response) => {
         if (active) setDashboard(response);
       })
@@ -84,6 +86,19 @@ export default function DashboardPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadDashboard();
+    const refreshDashboard = () => {
+      if (active) void loadDashboard();
+    };
+    window.addEventListener(REVIEW_QUEUE_UPDATED_EVENT, refreshDashboard);
+    return () => {
+      active = false;
+      window.removeEventListener(REVIEW_QUEUE_UPDATED_EVENT, refreshDashboard);
+    };
+  }, [loadDashboard]);
 
   const pendingReviewCount = dashboard?.pending_review_count ?? 0;
   const syncDateStr = new Date().toLocaleDateString("ko-KR", {
@@ -110,7 +125,7 @@ export default function DashboardPage() {
 
   const calendarEvents = useMemo(() => {
     const events = new Map<string, CalendarEventItem[]>();
-    for (const event of dashboard?.today_events ?? []) {
+    for (const event of dashboard?.calendar_events ?? dashboard?.today_events ?? []) {
       const key = dateKey(new Date(event.start));
       const row: CalendarEventItem = {
         id: event.id,
@@ -122,7 +137,7 @@ export default function DashboardPage() {
       events.set(key, [...(events.get(key) ?? []), row]);
     }
     return events;
-  }, [dashboard?.today_events]);
+  }, [dashboard?.calendar_events, dashboard?.today_events]);
 
   const selectedDateEvents = calendarEvents.get(selectedDate) ?? [];
   const visibleAssignedProjects = dashboard?.assigned_projects ?? [];

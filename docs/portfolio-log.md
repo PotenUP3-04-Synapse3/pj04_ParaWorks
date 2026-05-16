@@ -44,6 +44,23 @@ demo story changes.
 - Verification: Dashboard Playwright workflow passed, frontend lint passed with
   existing timeline warnings only, and frontend production build passed.
 
+## 2026-05-16 Dashboard calendar sync and Review bulk actions
+
+- Extended the Dashboard API with `calendar_events` so synced Google Calendar
+  events outside today can appear in the calendar grid, while `today_events`
+  continues to drive the "today schedule" KPI.
+- Made the Dashboard listen to the shared Review Queue update event so the
+  review badge count shown in dashboard content refreshes with the sidebar.
+- Hardened connector sync so duplicate source events with unchanged content
+  signatures are not passed into ingestion or downstream review extraction.
+- Added Review Queue bulk selection with a Gmail-style top checkbox, project
+  selection before bulk processing, duplicate/similar bulk actions, right-click
+  approve/reject actions, and an in-app confirmation modal.
+- Verification: backend dashboard/ingestion/review tests passed with 33 tests,
+  ruff passed for touched backend files, Review/Dashboard Playwright tests
+  passed with 3 tests, frontend lint passed with existing timeline warnings
+  only, and frontend production build passed.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Fixed Google Calendar sync recovery when Google rejects an old per-calendar
