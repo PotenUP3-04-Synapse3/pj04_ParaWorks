@@ -36,6 +36,39 @@ Updated: 2026-05-16
     path and project uv trampoline were denied by the local Windows environment;
     the static test functions were executed directly with the available Python.
 
+## 2026-05-16 Dashboard responsive UI polish
+
+- Scope:
+  - Dashboard-only frontend polish in `frontend/src/app/dashboard/page.tsx` and
+    `frontend/src/app/globals.css`; no backend API or data contract changes.
+- Changes:
+  - Hero card now separates `dashboard-hero-copy` from
+    `dashboard-hero-illustration`, with lucide/CSS mock workspace cards,
+    avatars, chat, document, AI, and review visual elements.
+  - Dashboard content grid is one column by default and becomes
+    `main + 340px utility column` only at `min-width: 1280px`.
+  - Hero illustration is hidden at tablet widths; Korean hero text uses
+    wrapping-friendly sizing and no truncation.
+  - Calendar card is kept in normal document flow with `overflow: visible`, and
+    popovers clamp left/right edge alignment.
+  - Initial selected calendar date now moves to the first event-bearing date if
+    today's selected date has no events and the user has not clicked a date yet.
+- Verification:
+  - RED Playwright regression first failed because `.dashboard-hero-copy` did
+    not exist.
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop`
+    -> 2 passed.
+  - `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - `npm.cmd run build` -> passed.
+  - Playwright viewport measurements passed for 2560, 1920, 1440, 1366, 1024,
+    and 768 widths: no horizontal overflow, compact hero height, no hero
+    copy/illustration overlap, right column flows below wide desktop.
+- Note:
+  - The Codex in-app browser plugin could not start in this Windows sandbox
+    because Node hit an `EPERM` reading `C:\Users\hanvv\AppData`; browser
+    verification used escalated Playwright instead.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Symptom:

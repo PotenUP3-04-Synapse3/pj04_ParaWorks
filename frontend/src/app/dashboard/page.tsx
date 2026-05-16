@@ -9,12 +9,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  FileText,
   FolderKanban,
   Inbox,
   LayoutDashboard,
   Link2,
+  MessageCircle,
   Settings,
   Sparkles,
+  UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -59,6 +62,7 @@ export default function DashboardPage() {
   const [completingTaskIds, setCompletingTaskIds] = useState<Set<number>>(() => new Set());
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [visibleMonth, setVisibleMonth] = useState(() => firstDayOfMonth(new Date()));
+  const [calendarSelectionTouched, setCalendarSelectionTouched] = useState(false);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -136,6 +140,17 @@ export default function DashboardPage() {
     () => buildCalendarDays(visibleMonth, selectedDate, calendarEvents),
     [calendarEvents, selectedDate, visibleMonth],
   );
+
+  useEffect(() => {
+    if (calendarSelectionTouched || calendarEvents.size === 0 || calendarEvents.has(selectedDate)) {
+      return;
+    }
+    const [firstEventDate] = Array.from(calendarEvents.keys()).sort();
+    if (firstEventDate) {
+      setSelectedDate(firstEventDate);
+      setVisibleMonth(firstDayOfMonth(new Date(`${firstEventDate}T00:00:00+09:00`)));
+    }
+  }, [calendarEvents, calendarSelectionTouched, selectedDate]);
 
   async function completeTask(taskId: number) {
     setCompletingTaskIds((current) => new Set(current).add(taskId));
@@ -326,7 +341,10 @@ export default function DashboardPage() {
                       day.isToday ? "today" : "",
                       day.isSelected ? "selected" : "",
                     ].join(" ")}
-                    onClick={() => setSelectedDate(day.key)}
+                    onClick={() => {
+                      setCalendarSelectionTouched(true);
+                      setSelectedDate(day.key);
+                    }}
                   >
                     <span>{day.day}</span>
                     {day.events.length ? <i aria-hidden="true" /> : null}
@@ -405,8 +423,8 @@ export default function DashboardPage() {
 function HeroCard() {
   return (
     <section className="dashboard-hero">
-      <div>
-        <p>AI Workspace</p>
+      <div className="dashboard-hero-copy">
+        <p>AI WORKSPACE</p>
         <h2>오늘도 좋은 흐름으로 시작해볼까요?</h2>
         <span>처리할 업무와 검토사항, 일정을 한눈에 확인하고 우선순위를 정리하세요.</span>
         <a href="#dashboard-tasks" className="dashboard-hero-button">
@@ -414,18 +432,63 @@ function HeroCard() {
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
       </div>
-      <div className="dashboard-hero-graphic" aria-hidden="true">
-        <span className="graphic-card one">
-          <CheckCircle2 className="h-5 w-5" />
-        </span>
-        <span className="graphic-card two">
-          <Bot className="h-5 w-5" />
-        </span>
-        <span className="graphic-card three">
-          <CalendarDays className="h-5 w-5" />
-        </span>
-      </div>
+      <HeroIllustration />
     </section>
+  );
+}
+
+function HeroIllustration() {
+  return (
+    <div className="dashboard-hero-illustration" aria-hidden="true">
+      <div className="hero-orbit one" />
+      <div className="hero-orbit two" />
+      <div className="hero-workspace-panel">
+        <div className="hero-panel-top">
+          <div className="hero-avatar-cluster">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="hero-window-actions">
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
+        <div className="hero-chat-row">
+          <span className="hero-icon-bubble">
+            <MessageCircle className="h-4 w-4" />
+          </span>
+          <div>
+            <i className="wide" />
+            <i />
+          </div>
+        </div>
+        <div className="hero-card-stack">
+          <span>
+            <CheckCircle2 className="h-4 w-4" />
+            검토 완료
+          </span>
+          <span>
+            <FileText className="h-4 w-4" />
+            회의록 요약
+          </span>
+          <span>
+            <UsersRound className="h-4 w-4" />
+            팀 공유
+          </span>
+        </div>
+      </div>
+      <div className="hero-floating-card hero-floating-check">
+        <CheckCircle2 className="h-6 w-6" />
+      </div>
+      <div className="hero-floating-card hero-floating-bot">
+        <Bot className="h-7 w-7" />
+      </div>
+      <div className="hero-floating-card hero-floating-doc">
+        <FileText className="h-6 w-6" />
+      </div>
+    </div>
   );
 }
 

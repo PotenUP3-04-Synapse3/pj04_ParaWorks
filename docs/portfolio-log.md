@@ -20,6 +20,20 @@ demo story changes.
   helper scripts; the Docker database path and full backend/frontend startup
   were verified locally.
 
+## 2026-05-16 Dashboard SaaS responsive polish
+
+- Reworked the Dashboard hero into a compact AI workspace card with separate
+  text and right-side collaboration mock illustration areas, preserving the
+  existing Korean copy and dashboard data flow.
+- Changed the Dashboard content layout so the right utility column sits beside
+  the main content only on wide screens, then flows below the main stack on
+  laptop/tablet widths without squeezing the hero or KPI cards.
+- Hardened the Calendar card hover popover and selected-date behavior so
+  current date and event-bearing selected date can diverge safely.
+- Verification: Dashboard Playwright workflow passed, frontend lint passed with
+  existing timeline warnings only, frontend production build passed, and
+  viewport measurements passed for 2560, 1920, 1440, 1366, 1024, and 768 widths.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Fixed Google Calendar sync recovery when Google rejects an old per-calendar
