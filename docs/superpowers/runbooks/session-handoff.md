@@ -2304,3 +2304,28 @@ tests passed with 53 tests; ruff passed.
     UI 스코프 테스트와 integrations 동기화 흐름은 통과했다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
     생성 변경은 되돌렸다.
+
+## 2026-05-16 AI 비서 채팅 히스토리 접기 컨트롤 복구
+
+- 변경 요약:
+  - `frontend/src/app/search/page.tsx`에서 채팅 히스토리 open/close 컨트롤을
+    명시적으로 다시 분리했다.
+  - 기존 패널 안 `대화 목록 접기` 버튼은 toggle 대신 `setSidebarCollapsed(true)`를
+    호출한다.
+  - 히스토리가 펼쳐진 상태에서도 채팅 본문 좌상단에 `히스토리 접기` 버튼을 보여
+    사용자가 본문에서 바로 다시 접을 수 있게 했다.
+  - AI 비서 root에 `data-assistant-hydrated`를 추가해 상호작용 테스트가 hydration
+    이후 실행되도록 했다.
+  - `frontend/e2e/assistant-memory.spec.ts`에 AppShell dashboard/notifications
+    배지 조회 mock을 보강하고, 펼침 -> 접힘 -> 재펼침 회귀를 추가했다.
+  - `frontend/e2e/utility-workspace-style.spec.ts`는 open/collapse 컨트롤 계약을
+    확인한다.
+- 검증:
+  - `npm.cmd run test:visual -- utility-workspace-style.spec.ts` → `4 passed`
+  - `npm.cmd run test:visual -- assistant-memory.spec.ts utility-workspace-style.spec.ts --project=chromium-desktop` → `3 passed`
+  - `npm.cmd run test:visual -- assistant-memory.spec.ts utility-workspace-style.spec.ts --project=chromium-mobile` → `3 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꿔 빌드 후 해당
+    생성 변경은 되돌렸다.

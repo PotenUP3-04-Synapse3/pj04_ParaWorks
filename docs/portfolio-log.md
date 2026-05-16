@@ -4405,3 +4405,12 @@ Cost/security note:
     스타일 스코프를 유지하는지 회귀 검증한다.
   - 검증: frontend lint/build 통과, Playwright utility workspace + integrations
     sync modal 테스트 12개 통과.
+- `fix: AI 비서 채팅 히스토리 접기 컨트롤 복구`
+  - AI 비서 페이지에서 채팅 히스토리를 펼친 뒤 다시 접는 컨트롤을 명확히
+    복구했다.
+  - 기존 히스토리 패널 안의 작은 닫기 버튼은 명시적으로 `setSidebarCollapsed(true)`를
+    호출하도록 고정하고, 채팅 본문 좌상단에도 `히스토리 접기` 버튼을 추가했다.
+  - AI 비서 루트에 hydration 신호를 추가해 Playwright 상호작용 테스트가 실제
+    클라이언트 핸들러 연결 이후 실행되도록 했다.
+  - 검증: assistant memory + utility workspace Playwright 테스트 desktop/mobile
+    통과, frontend lint/build 통과.

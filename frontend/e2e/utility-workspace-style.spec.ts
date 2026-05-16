@@ -26,3 +26,14 @@ test("utility pages opt into the dashboard-grade workspace styling scope", async
   expect(globals).toContain(".utility-workspace .panel.reference-panel");
   expect(globals).toContain(".utility-workspace-chat");
 });
+
+test("AI assistant keeps explicit open and collapse controls for chat history", async () => {
+  const searchPage = await readFile(path.join(workspaceRoot, "src/app/search/page.tsx"), "utf8");
+
+  expect(searchPage).toContain("data-assistant-history-open");
+  expect(searchPage).toContain("data-assistant-history-collapse");
+  expect(searchPage).toContain("대화 목록 펼치기");
+  expect(searchPage).toContain("대화 목록 접기");
+  expect(searchPage).toContain("setSidebarCollapsed(false)");
+  expect(searchPage).toContain("setSidebarCollapsed(true)");
+});

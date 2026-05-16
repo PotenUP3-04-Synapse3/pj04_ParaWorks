@@ -61,6 +61,7 @@ function SearchPageContent() {
   const [copiedMessageId, setCopiedMessageId] = useState<number>();
   const [sendingEmailMessageId, setSendingEmailMessageId] = useState<number>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
   const loadingRef = useRef(false);
   const creatingConversationRef = useRef(false);
   const loadMessagesRequestRef = useRef(0);
@@ -296,8 +297,15 @@ function SearchPageContent() {
     }
   }, []);
 
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
   return (
-    <div className="reference-dashboard utility-workspace utility-workspace-chat h-[calc(100vh-7rem)] overflow-hidden">
+    <div
+      data-assistant-hydrated={hydrated ? "true" : "false"}
+      className="reference-dashboard utility-workspace utility-workspace-chat h-[calc(100vh-7rem)] overflow-hidden"
+    >
       <section
         className={`grid h-full min-h-0 transition-[grid-template-columns,gap] duration-300 ease-out ${
           sidebarCollapsed ? "gap-0 lg:grid-cols-[0_minmax(0,1fr)]" : "gap-3 lg:grid-cols-[280px_minmax(0,1fr)]"
@@ -320,7 +328,8 @@ function SearchPageContent() {
                 type="button"
                 title="대화 목록 접기"
                 aria-label="대화 목록 접기"
-                onClick={() => setSidebarCollapsed((current) => !current)}
+                data-assistant-history-collapse
+                onClick={() => setSidebarCollapsed(true)}
                 className="row-action h-9 w-9 p-0 transition-transform duration-200 group-hover:scale-105"
               >
                 <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
@@ -370,12 +379,26 @@ function SearchPageContent() {
               type="button"
               title="대화 목록 펼치기"
               aria-label="대화 목록 펼치기"
+              data-assistant-history-open
               onClick={() => setSidebarCollapsed(false)}
               className="group absolute left-4 top-4 z-10 rounded-full outline-none transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
             >
               <div className="grid h-10 w-10 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--primary-dark)] shadow-xs transition group-hover:bg-[var(--primary)] group-hover:text-white group-hover:shadow-panel-hover">
                 <MessageSquareText className="h-4 w-4" aria-hidden="true" />
               </div>
+            </button>
+          ) : null}
+          {!sidebarCollapsed ? (
+            <button
+              type="button"
+              title="대화 목록 접기"
+              aria-label="대화 목록 접기"
+              data-assistant-history-collapse
+              onClick={() => setSidebarCollapsed(true)}
+              className="absolute left-4 top-4 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 text-[12px] font-bold text-slate-600 shadow-xs backdrop-blur transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+            >
+              <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">히스토리 접기</span>
             </button>
           ) : null}
           {error ? (
