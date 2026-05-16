@@ -2226,3 +2226,34 @@ tests passed with 53 tests; ruff passed.
     해석하는 방식만 보강했다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 타임라인 Explorer UI 압축 리디자인
+
+- 변경 요약:
+  - `frontend/src/app/timeline/page.tsx`만 수정해 타임라인 본문을 soft SaaS
+    workspace 스타일로 재구성했다. ParaWorks sidebar/AppShell은 변경하지 않았다.
+  - 상단에 `timeline-summary-strip`을 추가해 전체 히스토리, 승인됨, 주요 소스,
+    최근 날짜를 compact KPI로 보여준다.
+  - 프로젝트 선택은 rounded pill tab으로 바꿨고 각 프로젝트 history count badge를
+    표시한다.
+  - 필터 영역은 white/rounded toolbar 톤으로 정리하되 기존 기간/소스/상태 필터,
+    전체 날짜 보기, 필터 초기화 기능은 유지했다.
+  - 좌측 날짜 인덱스는 `xl` 이상에서만 보이는 sticky compact month navigator로
+    바꿨다. 기본은 최근 월만 펼치고 오래된 월은 접힘 상태다.
+  - 중앙 목록도 월별 header + 날짜 group card 구조로 바꿨다. 오래된 월은 collapsed
+    summary card로 보이고, 펼치면 날짜 그룹이 나타난다.
+  - 날짜 그룹은 기본 3개 항목만 노출하고 `N건 더 보기`로 확장한다.
+  - timeline item은 source icon, 1줄 title/preview, time, source badge,
+    status badge, detail icon 중심의 compact card로 정리했다.
+  - 상세 패널은 오른쪽 side panel로 유지하되 rounded/glass card 톤으로 조정했다.
+  - `frontend/e2e/timeline-project-date-groups.spec.ts`에 summary strip, 오래된 월
+    default collapse, month navigator expand/jump 회귀 검증을 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - API/data shape은 변경하지 않았다.
+  - 추가로 `npm.cmd run test:visual -- page-regression.spec.ts gmail-drive-project-routing-flow.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop`를 시도했다. Gmail/Drive flow는 통과했지만, `page-regression`은 기존 route inventory의 `/documents` 불일치와 auth 401 콘솔 에러로 실패했고, Slack flow는 `/integrations`의 `slack-card-actions`를 찾지 못해 타임라인 진입 전 실패했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

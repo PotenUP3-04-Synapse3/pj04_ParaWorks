@@ -4374,3 +4374,15 @@ Cost/security note:
     문서 흐름 안에서 따라오게 했다.
   - 검증: Review Playwright 회귀 테스트에 source별 Agent label/color와 sticky
     action bar를 고정하고 frontend lint/build 통과.
+- `style: 타임라인 Explorer UI 압축 리디자인`
+  - 타임라인 페이지 본문을 대시보드/프로젝트 페이지와 같은 soft SaaS workspace
+    톤으로 정리했다.
+  - summary strip, pill형 프로젝트 탭, compact filter toolbar, 월별 sticky header,
+    좌측 compact month navigator를 추가/정리했다.
+  - 기본 진입 시 최근 월과 최근 날짜만 펼치고 오래된 월/날짜는 접힘 상태로 두어
+    긴 로그 리스트 스크롤 압박을 줄였다.
+  - 날짜 그룹은 기본 3개 항목만 보여주고 `N건 더 보기`로 점진 확장하며, history
+    row는 source/status badge와 1줄 title/preview 중심 compact card로 정리했다.
+  - 기존 프로젝트 탭, 기간/소스/상태 필터, 전체 날짜 보기, 필터 초기화, 날짜
+    jump, source link detail panel, 더 보기 동작은 유지했다.
+  - 검증: 타임라인 Playwright 테스트 4개 통과, frontend lint/build 통과.

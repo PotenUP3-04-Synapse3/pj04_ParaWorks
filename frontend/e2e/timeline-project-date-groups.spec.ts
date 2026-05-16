@@ -134,6 +134,8 @@ test("Timeline groups approved project items by date", async ({ page }) => {
   await expect(page.getByText("오전 점검")).toBeHidden();
   await page.getByRole("button", { name: /1건 더 보기/ }).click();
   await expect(page.getByText("오전 점검")).toBeVisible();
+  await expect(page.getByText("전날 회의")).toBeHidden();
+  await page.getByRole("button", { name: /2026년 5월 13일/ }).click();
   await expect(page.getByText("전날 회의")).toBeVisible();
   await expect(page.getByText("Redis 점검")).toBeHidden();
   await expect(page.getByText("History: Redis 점검")).toBeHidden();
@@ -426,13 +428,21 @@ test("Timeline keeps dense dates readable with recent expansion, month headers, 
 
   await expect(page.locator("#timeline-status-filter option")).toHaveText(["상태 전체", "승인됨", "완료"]);
   await expect(page.getByTestId("timeline-date-index")).toBeVisible();
+  await expect(page.getByTestId("timeline-summary-strip")).toBeVisible();
   await expect(page.getByTestId("timeline-month-header-2026-05")).toBeVisible();
   await expect(page.getByTestId("timeline-month-header-2026-04")).toBeVisible();
   await expect(page.getByText("Recent sprint decision")).toBeVisible();
   await expect(page.getByText("Old May archive")).toBeHidden();
+  await expect(page.getByText("April archive")).toBeHidden();
+  await expect(page.getByTestId("timeline-date-index-2026-04-20")).toBeHidden();
 
   await page.getByTestId("timeline-date-index-2026-05-01").click();
   await expect(page.getByText("Old May archive")).toBeVisible();
+
+  await page.getByTestId("timeline-month-nav-2026-04").click();
+  await expect(page.getByTestId("timeline-date-index-2026-04-20")).toBeVisible();
+  await page.getByTestId("timeline-date-index-2026-04-20").click();
+  await expect(page.getByText("April archive")).toBeVisible();
 
   await page.getByTestId("timeline-date-density-toggle").click();
   await expect(page.getByTestId("timeline-date-index-2026-05-14")).toBeVisible();
