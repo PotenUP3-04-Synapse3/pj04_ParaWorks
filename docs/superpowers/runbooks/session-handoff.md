@@ -1,6 +1,40 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-15
+Updated: 2026-05-16
+
+## 2026-05-16 Docker Postgres port fallback
+
+- Symptom:
+  - `.\scripts\paraworks-docker.ps1` detected that `127.0.0.1:5432` was in use
+    but still printed `Using Postgres host port 5432 for ParaWorks`, then Docker
+    failed to bind Postgres on the same occupied or forbidden socket.
+- Root cause:
+  - `scripts/paraworks-docker.ps1` and the older `scripts/start-pgvector-dev.ps1`
+    set `$fallbackPort = 5432`, so the auto-fallback path selected the original
+    failing port.
+- Fix:
+  - Both PowerShell helpers now use `Get-AvailableHostPort -PreferredPort 5433`
+    and pick the next free host port when the default 5432 listener is not the
+    ParaWorks Postgres container.
+  - Helpers now detect and reuse an already-running ParaWorks Postgres host port
+    so repeated starts do not keep moving from `5433` to higher ports.
+  - `docs/superpowers/runbooks/pgvector-dev.md` now documents 5433 examples and
+    matching `DATABASE_URL` values for alternate host ports.
+- Verification:
+  - RED regression checks for the missing fallback failed before implementation.
+  - A second RED check captured the repeated-start port drift before the reuse
+    fix.
+  - GREEN direct static test execution passed for
+    `backend/tests/test_paraworks_docker_script.py` and
+    `backend/tests/test_pgvector_dev_runbook.py`.
+  - PowerShell parser checks passed for both helper scripts.
+  - Escalated local verification started Docker services, ran migrations/schema
+    checks, then started backend/frontend successfully; health and login smoke
+    both returned HTTP 200.
+- Note:
+  - `uv run pytest ...` could not run in this shell because the global uv cache
+    path and project uv trampoline were denied by the local Windows environment;
+    the static test functions were executed directly with the available Python.
 
 ## 2026-05-15 Google Calendar updatedMin fallback
 

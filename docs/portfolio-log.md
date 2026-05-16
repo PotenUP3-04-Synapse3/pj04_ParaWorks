@@ -1,10 +1,24 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-15
+Last updated: 2026-05-16
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-05-16 Docker Postgres port fallback
+
+- Fixed the production-like Docker helper so a non-ParaWorks listener on
+  `127.0.0.1:5432` now falls back to the next available host port starting at
+  `5433` instead of retrying the same occupied port.
+- Aligned the pgvector dev helper and runbook with the same available-port
+  behavior, preserving the compose `PARAWORKS_POSTGRES_PORT` override path.
+- Repeated helper runs now reuse an existing ParaWorks Postgres host port
+  instead of drifting from `5433` to higher ports.
+- Verification: regression checks failed before the script fix, then passed
+  through direct static test execution; PowerShell parser checks passed for both
+  helper scripts; the Docker database path and full backend/frontend startup
+  were verified locally.
 
 ## 2026-05-15 Google Calendar updatedMin fallback
 
