@@ -130,6 +130,10 @@ test("dashboard renders polished SaaS layout with interactive calendar", async (
   await expect(page.getByText("2개", { exact: true })).toBeVisible();
   await expect(page.getByLabel("오늘의 핵심 지표").getByText("담당 프로젝트", { exact: true })).toBeVisible();
   await expect(page.getByText("오늘 처리할 승인된 할 일이 없습니다.")).toBeVisible();
+  await expect(page.locator("#dashboard-tasks").getByRole("link", { name: /타임라인 보기/ })).toHaveAttribute("href", "/timeline");
+  await expect(
+    page.locator("section.dashboard-card").filter({ hasText: "담당 프로젝트" }).getByRole("link", { name: /프로젝트 보기/ }),
+  ).toHaveAttribute("href", "/projects");
   await expect(page.getByText("프로젝트 리스크 리뷰 일정 확인")).toBeVisible();
   await expect(page.getByText("신규 기능 요구사항 워크숍 일정")).toBeVisible();
   await expect(page.getByText("개발 릴리즈 체크리스트 일정")).toBeVisible();

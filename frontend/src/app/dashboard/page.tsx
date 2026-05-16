@@ -226,8 +226,8 @@ export default function DashboardPage() {
           <section className="dashboard-card" id="dashboard-tasks">
             <div className="dashboard-card-header">
               <SectionTitle title="오늘 해야 할 업무" count={`${visibleTodayTasks.length}`} />
-              <Link href="/projects" className="dashboard-link">
-                프로젝트 보기
+              <Link href="/timeline" className="dashboard-link">
+                타임라인 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
@@ -292,8 +292,8 @@ export default function DashboardPage() {
           <section className="dashboard-card">
             <div className="dashboard-card-header">
               <SectionTitle title="담당 프로젝트" count={`${visibleAssignedProjects.length}`} />
-              <Link href="/timeline" className="dashboard-link">
-                타임라인 보기
+              <Link href="/projects" className="dashboard-link">
+                프로젝트 보기
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>

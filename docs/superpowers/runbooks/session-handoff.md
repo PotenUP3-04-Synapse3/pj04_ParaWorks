@@ -2183,3 +2183,20 @@ tests passed with 53 tests; ruff passed.
   - `fixed` position은 사용하지 않았다. sticky는 grid document flow 안에서만 동작한다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 대시보드 업무/프로젝트 카드 링크 교체
+
+- 변경 요약:
+  - `frontend/src/app/dashboard/page.tsx`에서 `오늘 해야 할 업무` 카드 우측 링크를
+    `타임라인 보기` / `/timeline`으로 바꿨다.
+  - `담당 프로젝트` 카드 우측 링크를 `프로젝트 보기` / `/projects`로 바꿨다.
+  - `frontend/e2e/dashboard-workflow.spec.ts`에 두 카드의 링크 라벨과 href를
+    고정하는 회귀 테스트를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - UI 라벨/링크만 교체했으며 dashboard data/API 흐름은 수정하지 않았다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

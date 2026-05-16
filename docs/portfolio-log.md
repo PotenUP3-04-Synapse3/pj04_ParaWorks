@@ -4357,3 +4357,10 @@ Cost/security note:
   - 1280px 이상에서만 sticky를 적용하고, 목록 내부는 viewport 높이에 맞춰
     스크롤되게 해 노트북 화면에서 패널이 잘리지 않도록 했다.
   - 검증: sticky 회귀 Playwright 테스트 추가, frontend lint/build 통과.
+- `fix: 대시보드 업무/프로젝트 카드 링크 교체`
+  - 대시보드 `오늘 해야 할 업무` 카드의 우측 링크를 `타임라인 보기`로 바꾸고
+    `/timeline`으로 이동하게 했다.
+  - `담당 프로젝트` 카드의 우측 링크는 `프로젝트 보기`로 바꾸고 `/projects`로
+    이동하게 했다.
+  - 검증: 대시보드 Playwright 회귀 테스트에 두 링크의 라벨과 href를 고정하고
+    frontend lint/build 통과.
