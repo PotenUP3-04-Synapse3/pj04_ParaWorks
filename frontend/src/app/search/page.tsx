@@ -398,7 +398,7 @@ function SearchPageContent() {
               className="absolute left-4 top-4 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 text-[12px] font-bold text-slate-600 shadow-xs backdrop-blur transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
             >
               <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">히스토리 접기</span>
+              <span className="hidden sm:inline">접기</span>
             </button>
           ) : null}
           {error ? (

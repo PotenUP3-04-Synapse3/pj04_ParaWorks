@@ -34,6 +34,8 @@ test("AI assistant keeps explicit open and collapse controls for chat history", 
   expect(searchPage).toContain("data-assistant-history-collapse");
   expect(searchPage).toContain("대화 목록 펼치기");
   expect(searchPage).toContain("대화 목록 접기");
+  expect(searchPage).toContain(">접기<");
+  expect(searchPage).not.toContain("히스토리 접기");
   expect(searchPage).toContain("setSidebarCollapsed(false)");
   expect(searchPage).toContain("setSidebarCollapsed(true)");
 });
