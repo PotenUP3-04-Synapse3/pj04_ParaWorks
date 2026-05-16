@@ -43,7 +43,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
     pending_review_count = len(sorted_pending_review_items)
     recent_jobs = db.scalars(select(SyncJob).order_by(SyncJob.created_at.desc()).limit(5)).all()
 
-    pending_items = sorted_pending_review_items[:3]
+    pending_items = _unique_dashboard_review_items(sorted_pending_review_items)[:3]
 
     today = _today_kst()
     todo_candidates = db.scalars(
@@ -156,6 +156,18 @@ def _today_kst() -> str:
 
 def _sort_review_items_for_queue(items: list[ReviewItem]) -> list[ReviewItem]:
     return sorted(items, key=_review_queue_sort_key)
+
+
+def _unique_dashboard_review_items(items: list[ReviewItem]) -> list[ReviewItem]:
+    seen_group_keys: set[str] = set()
+    unique_items: list[ReviewItem] = []
+    for item in items:
+        group_key = f'{item.item_type}:{review_item_display_title(item)}'
+        if group_key in seen_group_keys:
+            continue
+        seen_group_keys.add(group_key)
+        unique_items.append(item)
+    return unique_items
 
 
 def _review_queue_sort_key(item: ReviewItem) -> tuple[int, int]:

@@ -2105,3 +2105,17 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 대시보드 검토사항 카드 중복 그룹 접기
+
+- 변경 요약:
+  - Dashboard API의 `pending_items`는 Review Queue와 같은
+    `item_type + display title` 그룹 기준으로 중복을 제거한 뒤 상위 3개를
+    내려준다.
+  - `pending_review_count`는 dedupe하지 않고 실제 pending review 총수를 유지한다.
+  - 이로써 `ParaWorks source 연결`에서 파생된 같은 display title 후보가 여러 개
+    있어도 대시보드 카드에는 하나만 표시된다.
+- 검증:
+  - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_dashboard_api.py` → `8 passed`
+  - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`

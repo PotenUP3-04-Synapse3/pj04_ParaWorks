@@ -4325,3 +4325,9 @@ Cost/security note:
     줄였다.
   - 검증: dashboard/review API 테스트 8개 통과, Python ruff 통과, frontend
     lint/build 통과, Playwright 대시보드/검토 bulk 테스트 4개 통과.
+- `fix: 대시보드 검토사항 카드 중복 그룹 접기`
+  - 대시보드 검토사항 카드의 목록을 Review Queue와 같은 display title + item type
+    그룹 기준으로 dedupe해 같은 후보가 여러 개 있어도 카드에는 하나만 보이게 했다.
+  - `pending_review_count` 배지는 실제 검토 대기 총수를 그대로 유지한다.
+  - 검증: `backend/tests/test_dashboard_api.py` 8개 통과, Python ruff 통과,
+    Playwright 대시보드 테스트 2개 통과.

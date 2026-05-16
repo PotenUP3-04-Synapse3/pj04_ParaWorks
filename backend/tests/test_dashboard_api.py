@@ -353,6 +353,44 @@ def test_dashboard_pending_items_use_review_display_title_and_deep_link(client, 
     assert pending_item['review_url'] == f'/review?itemId={item.id}'
 
 
+def test_dashboard_pending_items_collapse_duplicate_review_groups(client, db_session) -> None:
+    duplicate_items = [
+        ReviewItem(
+            item_type='decision_record',
+            payload={'title': 'ParaWorks source 연결', 'summary': '같은 검토 후보'},
+            status='pending_review',
+            confidence_score=0.9,
+            permission_level='internal',
+        ),
+        ReviewItem(
+            item_type='decision_record',
+            payload={'title': 'ParaWorks source 연결', 'summary': '같은 검토 후보'},
+            status='pending_review',
+            confidence_score=0.88,
+            permission_level='internal',
+        ),
+        ReviewItem(
+            item_type='todo',
+            payload={'title': '다른 검토 후보'},
+            status='pending_review',
+            confidence_score=0.82,
+            permission_level='internal',
+        ),
+    ]
+    db_session.add_all(duplicate_items)
+    db_session.commit()
+
+    response = client.get('/api/v1/dashboard')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['pending_review_count'] == 3
+    assert [item['title'] for item in payload['pending_items']] == [
+        '같은 검토 후보',
+        '다른 검토 후보',
+    ]
+
+
 def test_dashboard_calendar_events_include_synced_events_beyond_today(client, db_session) -> None:
     today = datetime.now(ZoneInfo('Asia/Seoul')).date()
     tomorrow_start = f'{(today + timedelta(days=1)).isoformat()}T14:00:00+09:00'
