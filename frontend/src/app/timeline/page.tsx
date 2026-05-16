@@ -359,7 +359,7 @@ function TimelineListPanel({
   onSelectHistory: (historyId: string) => void;
 }) {
   return (
-    <article className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/75 p-0 shadow-[0_24px_70px_rgba(15,23,42,0.06)] backdrop-blur">
+    <article className="overflow-visible rounded-[2rem] border border-white/80 bg-white/75 p-0 shadow-[0_24px_70px_rgba(15,23,42,0.06)] backdrop-blur">
       <TimelineSummaryBar
         count={histories.length}
         periodFilter={periodFilter}

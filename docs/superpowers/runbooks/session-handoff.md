@@ -2257,3 +2257,23 @@ tests passed with 53 tests; ruff passed.
   - 추가로 `npm.cmd run test:visual -- page-regression.spec.ts gmail-drive-project-routing-flow.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop`를 시도했다. Gmail/Drive flow는 통과했지만, `page-regression`은 기존 route inventory의 `/documents` 불일치와 auth 401 콘솔 에러로 실패했고, Slack flow는 `/integrations`의 `slack-card-actions`를 찾지 못해 타임라인 진입 전 실패했다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 타임라인 날짜 인덱스 sticky 동작 보정
+
+- 변경 요약:
+  - `aria-label="타임라인 날짜 인덱스"` aside는 이미 `xl:sticky xl:top-28`였지만,
+    상위 timeline list panel의 `overflow-hidden` 때문에 실제 페이지 스크롤에서는
+    sticky 기준이 깨져 위로 밀려났다.
+  - `frontend/src/app/timeline/page.tsx`의 timeline list panel root를
+    `overflow-visible`로 바꿔 날짜 인덱스가 fixed가 아닌 sticky로 자연스럽게
+    따라오도록 했다.
+  - `frontend/e2e/timeline-project-date-groups.spec.ts`에 computed position/top과
+    스크롤 후 y 좌표가 sticky top 근처에 유지되는 회귀 검증을 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `position: fixed`는 사용하지 않았다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

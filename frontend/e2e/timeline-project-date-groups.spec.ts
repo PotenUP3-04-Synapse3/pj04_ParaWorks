@@ -428,6 +428,13 @@ test("Timeline keeps dense dates readable with recent expansion, month headers, 
 
   await expect(page.locator("#timeline-status-filter option")).toHaveText(["상태 전체", "승인됨", "완료"]);
   await expect(page.getByTestId("timeline-date-index")).toBeVisible();
+  const initialDateIndexBox = await page.getByTestId("timeline-date-index").boundingBox();
+  const initialDateIndexStyle = await page.getByTestId("timeline-date-index").evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { position: style.position, top: style.top };
+  });
+  expect(initialDateIndexStyle.position).toBe("sticky");
+  expect(initialDateIndexStyle.top).not.toBe("auto");
   await expect(page.getByTestId("timeline-summary-strip")).toBeVisible();
   await expect(page.getByTestId("timeline-month-header-2026-05")).toBeVisible();
   await expect(page.getByTestId("timeline-month-header-2026-04")).toBeVisible();
@@ -446,4 +453,9 @@ test("Timeline keeps dense dates readable with recent expansion, month headers, 
 
   await page.getByTestId("timeline-date-density-toggle").click();
   await expect(page.getByTestId("timeline-date-index-2026-05-14")).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 700));
+  const scrolledDateIndexBox = await page.getByTestId("timeline-date-index").boundingBox();
+  expect(scrolledDateIndexBox?.y).toBeGreaterThanOrEqual(90);
+  expect(scrolledDateIndexBox?.y).toBeLessThan(initialDateIndexBox?.y ?? 9999);
+  expect(scrolledDateIndexBox?.y).toBeLessThanOrEqual(130);
 });

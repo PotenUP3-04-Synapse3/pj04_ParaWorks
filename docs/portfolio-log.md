@@ -4386,3 +4386,10 @@ Cost/security note:
   - 기존 프로젝트 탭, 기간/소스/상태 필터, 전체 날짜 보기, 필터 초기화, 날짜
     jump, source link detail panel, 더 보기 동작은 유지했다.
   - 검증: 타임라인 Playwright 테스트 4개 통과, frontend lint/build 통과.
+- `fix: 타임라인 날짜 인덱스 sticky 동작 보정`
+  - 타임라인 날짜 인덱스가 `position: sticky`여도 상위 `overflow-hidden` 때문에
+    페이지 스크롤을 따라오지 못하던 문제를 보정했다.
+  - timeline list panel을 `overflow-visible`로 바꿔 인덱스가 fixed overlay 없이
+    normal flow 안에서 전역 top bar 아래로 자연스럽게 붙게 했다.
+  - 검증: 스크롤 후 날짜 인덱스가 sticky top 근처에 유지되는 Playwright 회귀
+    테스트 추가, frontend lint/build 통과.
