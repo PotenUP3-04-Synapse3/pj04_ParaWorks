@@ -522,24 +522,30 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
     # 베이킹된 정보 로드
     source_authors = item.payload.get('source_authors', [])
     source_ids = item.payload.get('source_ids', [])
+    source_types = item.payload.get('source_types', [])
     
     evidence_count = max(len(links), len(snippets))
     agent_run_id = _agent_run_id(item)
-    summaries_by_url = _agent_evidence_summary_by_url(agent_run)
+    summaries_by_url, summaries_by_id = _agent_evidence_summary_lookup(agent_run)
     rows: list[dict] = []
 
     for index in range(evidence_count):
         source_url = links[index] if index < len(links) else None
-        summary = summaries_by_url.get(source_url) or {}
+        payload_source_id = _indexed_string(source_ids, index)
+        summary = summaries_by_id.get(payload_source_id) or summaries_by_url.get(source_url) or {}
         
         # ID 및 작성자 정보 폴백 로직
         source_id = (
-            source_ids[index] if index < len(source_ids) else 
-            summary.get('source_id')
+            payload_source_id or summary.get('source_id')
         )
         author = (
-            source_authors[index] if index < len(source_authors) else 
-            summary.get('author') or "Unknown"
+            _indexed_string(source_authors, index) or summary.get('author') or "Unknown"
+        )
+        source_type = (
+            summary.get('source_type')
+            or _indexed_string(source_types, index)
+            or item.payload.get('source_type')
+            or _source_type_from_url(source_url)
         )
         
         if index < len(snippets):
@@ -552,7 +558,7 @@ def _source_evidence_response(item: ReviewItem, agent_run: AgentRun | None) -> l
             'rank': index + 1,
             'source_id': source_id,
             'source_url': source_url,
-            'source_type': summary.get('source_type') or item.payload.get('source_type') or 'slack',
+            'source_type': source_type,
             'source_snippet': source_snippet,
             'permission_level': item.permission_level,
             'confidence_score': item.confidence_score,
@@ -589,6 +595,29 @@ def _calendar_attendee_summary(summary: dict, payload: dict) -> str | None:
     return None
 
 
+def _indexed_string(value: object, index: int) -> str | None:
+    if isinstance(value, list) and index < len(value):
+        item = value[index]
+        if isinstance(item, str) and item.strip():
+            return item.strip()
+    return None
+
+
+def _source_type_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    lowered = url.lower()
+    if 'mail.google.com' in lowered or 'gmail.' in lowered:
+        return 'gmail'
+    if 'drive.google.com' in lowered or 'drive.' in lowered:
+        return 'drive'
+    if 'calendar.google.com' in lowered or 'calendar.' in lowered:
+        return 'calendar'
+    if 'slack.com' in lowered or 'slack.' in lowered:
+        return 'slack'
+    return None
+
+
 def _normalize_slack_url(url: str | None) -> str | None:
     """슬랙 URL에서 타임스탬프 부분을 추출하여 정규화합니다."""
     if not url or '/p' not in url:
@@ -604,20 +633,24 @@ def _normalize_slack_url(url: str | None) -> str | None:
     return ts_part.rstrip('0')
 
 
-def _agent_evidence_summary_by_url(agent_run: AgentRun | None) -> dict[str, dict]:
+def _agent_evidence_summary_lookup(agent_run: AgentRun | None) -> tuple[dict[str, dict], dict[str, dict]]:
     if agent_run is None:
-        return {}
+        return {}, {}
     raw_summary = (agent_run.metadata_ or {}).get('evidence_summary')
     if not isinstance(raw_summary, list):
-        return {}
-    result: dict[str, dict] = {}
+        return {}, {}
+    by_url: dict[str, dict] = {}
+    by_id: dict[str, dict] = {}
     for row in raw_summary:
         if not isinstance(row, dict):
             continue
         source_url = row.get('source_url')
         if isinstance(source_url, str):
-            result[source_url] = row
-    return result
+            by_url[source_url] = row
+        source_id = row.get('source_id')
+        if isinstance(source_id, str):
+            by_id[source_id] = row
+    return by_url, by_id
 
 
 def _int_or_default(value: object, default: int) -> int:
