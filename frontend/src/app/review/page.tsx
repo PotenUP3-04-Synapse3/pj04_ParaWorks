@@ -11,12 +11,11 @@ import {
   Sparkles,
   Square,
   XCircle,
-  ChevronDown,
-  ChevronRight,
   Layers,
 } from "lucide-react";
 import Link from "next/link";
 import { type MouseEvent, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
@@ -360,7 +359,8 @@ export default function ReviewPage() {
 
   async function executeBulkAction(confirmState: BulkConfirmState) {
     const { action, itemIds } = confirmState;
-    const label = action === "approve" ? "?뱀씤" : "諛섎젮";
+    const readableLabel = action === "approve" ? "승인" : "반려";
+    const label = action === "approve" ? "승인" : "반려";
     setPendingAction(`bulk:${action}`);
     setError(undefined);
     try {
@@ -389,7 +389,10 @@ export default function ReviewPage() {
       });
       setBulkConfirm(undefined);
       if (result.failed_items.length > 0) {
-        setError(`${label} 泥섎━ 以?${result.failed_items.length}媛???ぉ? 嫄대꼫?곗뿀?듬땲?? ?꾩닔 ?뺣낫? 洹쇨굅瑜??뺤씤??二쇱꽭??`);
+        setError(`${label} 처리 중 ${result.failed_items.length}개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`);
+      }
+      if (result.failed_items.length > 0) {
+        setError(`${readableLabel} 처리 중 ${result.failed_items.length}개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : `紐⑤몢 ${label} 泥섎━?섏? 紐삵뻽?듬땲??`);
@@ -482,6 +485,34 @@ export default function ReviewPage() {
     });
   }
 
+  function groupItemIds(group: ReviewGroup) {
+    return group.items.map((item) => item.id);
+  }
+
+  function isGroupFullySelected(group: ReviewGroup) {
+    const itemIds = groupItemIds(group);
+    return itemIds.length > 0 && itemIds.every((itemId) => selectedItemIds.has(itemId));
+  }
+
+  function isGroupPartiallySelected(group: ReviewGroup) {
+    const itemIds = groupItemIds(group);
+    return itemIds.some((itemId) => selectedItemIds.has(itemId)) && !isGroupFullySelected(group);
+  }
+
+  function toggleGroupSelection(event: MouseEvent, group: ReviewGroup) {
+    event.stopPropagation();
+    const itemIds = groupItemIds(group);
+    const shouldClear = isGroupFullySelected(group);
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      for (const itemId of itemIds) {
+        if (shouldClear) next.delete(itemId);
+        else next.add(itemId);
+      }
+      return next;
+    });
+  }
+
   function openContextMenu(event: MouseEvent, item: ReviewItem) {
     event.preventDefault();
     setContextMenu({ x: event.clientX, y: event.clientY, item });
@@ -504,6 +535,7 @@ export default function ReviewPage() {
           </span>
           <button
             type="button"
+            data-testid="review-approve-loaded"
             onClick={() => openBulkConfirm("approve", loadedItemIds, "loaded")}
             disabled={Boolean(pendingAction) || loadedItemCount === 0}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
@@ -513,6 +545,7 @@ export default function ReviewPage() {
           </button>
           <button
             type="button"
+            data-testid="review-reject-loaded"
             onClick={() => openBulkConfirm("reject", loadedItemIds, "loaded")}
             disabled={Boolean(pendingAction) || loadedItemCount === 0}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
@@ -632,7 +665,7 @@ export default function ReviewPage() {
               type="button"
               onClick={() => openBulkConfirm("approve", duplicateItemIds, "similar")}
               disabled={Boolean(pendingAction) || duplicateItemIds.length === 0}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+              className="hidden h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
             >
               <Layers className="h-4 w-4" aria-hidden="true" />
               중복/유사 승인
@@ -641,7 +674,7 @@ export default function ReviewPage() {
               type="button"
               onClick={() => openBulkConfirm("reject", duplicateItemIds, "similar")}
               disabled={Boolean(pendingAction) || duplicateItemIds.length === 0}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+              className="hidden h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
             >
               <XCircle className="h-4 w-4" aria-hidden="true" />
               중복/유사 반려
@@ -654,6 +687,8 @@ export default function ReviewPage() {
         {groups.map((group) => {
           const isExpanded = expandedGroups[group.group_id];
           const hasMultiple = group.total_count > 1;
+          const groupSelected = isGroupFullySelected(group);
+          const groupPartiallySelected = isGroupPartiallySelected(group);
 
           return (
             <div key={group.group_id} className="group-container overflow-hidden rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-sm">
@@ -663,7 +698,16 @@ export default function ReviewPage() {
                 className="flex cursor-pointer items-center justify-between border-b border-[var(--line-soft)] bg-[var(--glass-strong)] px-4 py-3 hover:bg-[var(--glass-stronger)]"
               >
                 <div className="flex items-center gap-3">
-                  {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                  <button
+                    type="button"
+                    data-testid={`review-group-select-${group.group_id}`}
+                    aria-label={`${group.title} 선택`}
+                    aria-pressed={groupSelected}
+                    onClick={(event) => toggleGroupSelection(event, group)}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white text-[var(--ink)] shadow-sm hover:bg-[var(--glass-strong)]"
+                  >
+                    {groupSelected || groupPartiallySelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  </button>
                   <span className="rounded-full border border-[var(--line-soft)] bg-white/50 px-2.5 py-0.5 text-xs font-bold text-[var(--ink-muted)]">
                     {itemTypeLabel(group.item_type)}
                   </span>
@@ -676,6 +720,36 @@ export default function ReviewPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
+                  {hasMultiple ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid={`review-group-similar-approve-${group.group_id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openBulkConfirm("approve", groupItemIds(group), "similar");
+                        }}
+                        disabled={Boolean(pendingAction)}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#21132b] bg-[#21132b] px-2.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        중복/유사 승인
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`review-group-similar-reject-${group.group_id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openBulkConfirm("reject", groupItemIds(group), "similar");
+                        }}
+                        disabled={Boolean(pendingAction)}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--line-soft)] bg-white px-2.5 text-xs font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      >
+                        <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        중복/유사 반려
+                      </button>
+                    </div>
+                  ) : null}
                    <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink-muted)]">평균 신뢰도</p>
                       <p className="text-sm font-bold">{Math.round(group.avg_confidence * 100)}%</p>
@@ -1086,10 +1160,10 @@ export default function ReviewPage() {
         ) : null}
       </section>
 
-      {contextMenu ? (
+      {typeof document !== "undefined" && contextMenu ? createPortal((
         <div
           data-testid="review-context-menu"
-          className="fixed z-50 w-44 overflow-hidden rounded-xl border border-[var(--line-soft)] bg-white p-1 text-sm font-semibold text-[var(--ink)] shadow-xl"
+          className="fixed z-[110] w-44 overflow-hidden rounded-xl border border-[var(--line-soft)] bg-white p-1 text-sm font-semibold text-[var(--ink)] shadow-xl"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -1120,10 +1194,10 @@ export default function ReviewPage() {
             반려
           </button>
         </div>
-      ) : null}
+      ), document.body) : null}
 
-      {bulkConfirm ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+      {typeof document !== "undefined" && bulkConfirm ? createPortal((
+        <div data-testid="review-bulk-backdrop" className="fixed inset-0 z-[100] flex min-h-screen w-screen items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div
             data-testid="review-bulk-confirm"
             className="w-full max-w-md rounded-2xl border border-white/70 bg-white p-5 shadow-2xl"
@@ -1165,7 +1239,7 @@ export default function ReviewPage() {
             </div>
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
     </div>
   );
 }

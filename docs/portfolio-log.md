@@ -61,6 +61,21 @@ demo story changes.
   passed with 3 tests, frontend lint passed with existing timeline warnings
   only, and frontend production build passed.
 
+## 2026-05-16 Review bulk action UX follow-up
+
+- Moved group-level selection into the former expand-chevron position and
+  removed the visible chevron affordance from review group headers.
+- Scoped duplicate/similar approve and reject actions to each duplicate group,
+  placing those actions beside the group confidence summary instead of in the
+  global toolbar.
+- Rendered review context menus and bulk confirmation dialogs through a body
+  portal so modal backdrops cover the full viewport.
+- Fixed the bulk approval failure warning copy so skipped project-unclassified
+  items show readable Korean guidance.
+- Verification: Review bulk Playwright coverage passed with 2 tests, frontend
+  lint passed with existing timeline warnings only, and frontend production
+  build passed.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Fixed Google Calendar sync recovery when Google rejects an old per-calendar

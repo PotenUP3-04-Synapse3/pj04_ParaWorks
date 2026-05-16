@@ -40,6 +40,31 @@ Updated: 2026-05-16
     warnings only.
   - GREEN: `npm.cmd run build` -> passed.
 
+## 2026-05-16 Review bulk action UX follow-up
+
+- Scope:
+  - Follow-up UX corrections for Review Queue bulk actions.
+- Changes:
+  - Review group headers no longer show the expand chevron; the left-most
+    control is now a checkbox-style group selection button.
+  - Duplicate/similar approve and reject buttons are shown only on duplicate
+    group headers, positioned before the average confidence block.
+  - Bulk confirm dialogs and right-click context menus are rendered through
+    `createPortal(..., document.body)` so fixed backdrops cover the full
+    viewport instead of the page content column.
+  - Bulk failure copy now uses readable Korean:
+    `승인 처리 중 N개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`
+- Verification:
+  - RED Review Playwright test first failed because group-level checkbox and
+    group-level duplicate/similar buttons were missing, and because the modal
+    backdrop started below the viewport top.
+  - GREEN:
+    `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop`
+    -> 2 passed.
+  - GREEN: `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - GREEN: `npm.cmd run build` -> passed.
+
 ## 2026-05-16 Docker Postgres port fallback
 
 - Symptom:

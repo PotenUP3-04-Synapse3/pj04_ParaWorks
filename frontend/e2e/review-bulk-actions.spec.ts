@@ -138,7 +138,16 @@ test("review queue supports Gmail-style selection, project routing, modal confir
   });
 
   await page.goto("/review");
-  await page.locator(".group-container > div:first-child").click();
+  const groupHeader = page.locator(".group-container > div:first-child");
+  await expect(groupHeader.locator(".lucide-chevron-right, .lucide-chevron-down")).toHaveCount(0);
+  await page.getByTestId("review-group-select-history_event:Duplicated candidate").click();
+  await expect(page.getByTestId("review-selected-count")).toContainText("2");
+  await page.getByTestId("review-group-similar-approve-history_event:Duplicated candidate").click();
+  await expect(page.getByTestId("review-bulk-confirm")).toContainText("2");
+  await page.getByRole("button", { name: "취소" }).click();
+  await page.getByTestId("review-group-select-history_event:Duplicated candidate").click();
+  await expect(page.getByTestId("review-selected-count")).toContainText("0");
+  await groupHeader.click();
 
   await page.getByTestId("review-select-all").click();
   await expect(page.getByTestId("review-selected-count")).toContainText("2");
@@ -146,6 +155,12 @@ test("review queue supports Gmail-style selection, project routing, modal confir
   await page.getByTestId("review-bulk-approve").click();
   await expect(page.getByTestId("review-bulk-confirm")).toBeVisible();
   await expect(page.getByTestId("review-bulk-confirm")).toContainText("2");
+  const backdropBox = await page.getByTestId("review-bulk-backdrop").boundingBox();
+  const viewport = page.viewportSize();
+  expect(backdropBox?.x).toBe(0);
+  expect(backdropBox?.y).toBe(0);
+  expect(backdropBox?.width).toBe(viewport?.width);
+  expect(backdropBox?.height).toBe(viewport?.height);
   await page.getByTestId("confirm-bulk-action").click();
 
   expect(patchedProjects).toEqual({ 801: "project-alpha", 802: "project-alpha" });
@@ -154,4 +169,78 @@ test("review queue supports Gmail-style selection, project routing, modal confir
   await page.getByTestId("review-item-801").click({ button: "right" });
   await expect(page.getByTestId("review-context-menu")).toBeVisible();
   await expect(page.getByTestId("review-context-reject")).toBeVisible();
+});
+
+test("review bulk failure message is readable Korean", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("paraworks-demo-user", "demo-admin"));
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        user: {
+          id: "demo-admin",
+          email: "admin@paraworks.com",
+          role: "admin",
+          permission_levels: ["public", "internal", "restricted"],
+          name: "Admin",
+          title: "Admin",
+          department: "Platform",
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { counts: { total: 0 }, notifications: [] } });
+  });
+  await page.route("**/api/v1/dashboard", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { pending_review_count: 1, source_counts: {} } });
+  });
+  await page.route("**/api/v1/projects/defined", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { projects: [] } });
+  });
+  await page.route("**/api/v1/review?status=pending_review**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        groups: [
+          {
+            group_id: "history_event:Needs project",
+            title: "Needs project",
+            item_type: "history_event",
+            status: "pending_review",
+            permission_level: "internal",
+            items: [firstItem],
+            total_count: 1,
+            avg_confidence: 0.82,
+          },
+        ],
+        items: [firstItem],
+        total_count: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        include_previews: false,
+      },
+    });
+  });
+  await page.route("**/api/v1/review/bulk", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        action: "approve",
+        approved_count: 0,
+        rejected_count: 0,
+        failed_items: [{ id: 801, detail: "project_key required" }],
+        skipped_items: [],
+        approved_item_ids: [],
+        rejected_item_ids: [],
+      },
+    });
+  });
+
+  await page.goto("/review");
+  await page.getByTestId("review-approve-loaded").click();
+  await page.getByTestId("confirm-bulk-action").click();
+
+  await expect(page.getByText("승인 처리 중 1개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.")).toBeVisible();
 });
