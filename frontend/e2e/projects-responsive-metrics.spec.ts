@@ -175,4 +175,14 @@ test("Projects page presents a responsive workspace layout", async ({ page }) =>
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
   expect(gridColumns).toBeLessThanOrEqual(2);
+
+  const projectListStyle = await page.getByTestId("project-list-panel").evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      position: style.position,
+      top: style.top,
+    };
+  });
+  expect(projectListStyle.position).toBe("sticky");
+  expect(projectListStyle.top).not.toBe("auto");
 });

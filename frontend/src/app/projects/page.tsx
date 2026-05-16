@@ -305,7 +305,7 @@ function ProjectListPanel({
   onCreate: () => void;
 }) {
   return (
-    <aside data-testid="project-list-panel" className="h-fit rounded-[2rem] border border-white/80 bg-white/75 p-4 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+    <aside data-testid="project-list-panel" className="h-fit rounded-[2rem] border border-white/80 bg-white/75 p-4 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur xl:sticky xl:top-28 xl:self-start">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-extrabold text-slate-950">프로젝트 목록</h3>
@@ -321,7 +321,7 @@ function ProjectListPanel({
         <input value={query} onChange={(event) => onChangeQuery(event.target.value)} placeholder="프로젝트 검색" className="min-w-0 flex-1 bg-transparent font-semibold outline-none" />
       </label>
 
-      <div className="mt-4 max-h-[620px] space-y-2 overflow-y-auto pr-1">
+      <div className="mt-4 max-h-[620px] space-y-2 overflow-y-auto pr-1 xl:max-h-[calc(100vh-18rem)]">
         {loading ? <EmptyState text="불러오는 중입니다." /> : null}
         {!loading && filteredProjects.length === 0 ? <EmptyWorkspace /> : null}
         {filteredProjects.map((project) => (

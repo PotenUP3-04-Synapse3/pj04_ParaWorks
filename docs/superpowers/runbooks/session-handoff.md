@@ -2164,3 +2164,22 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 프로젝트 목록 sticky follow
+
+- 변경 요약:
+  - `frontend/src/app/projects/page.tsx`의 `ProjectListPanel`을 `xl` 이상에서
+    `position: sticky`로 동작하게 했다.
+  - top offset은 전역 sticky top bar 아래에 걸리도록 `xl:top-28`을 사용했다.
+  - 프로젝트 목록 내부 스크롤은 `xl:max-h-[calc(100vh-18rem)]`로 제한해 낮은
+    노트북 화면에서도 패널이 viewport 밖으로 길게 밀리지 않게 했다.
+  - `frontend/e2e/projects-responsive-metrics.spec.ts`에 desktop project list가
+    sticky position과 top offset을 갖는지 확인하는 회귀 테스트를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `fixed` position은 사용하지 않았다. sticky는 grid document flow 안에서만 동작한다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

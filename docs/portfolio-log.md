@@ -4351,3 +4351,9 @@ Cost/security note:
   - 기존 프로젝트 선택, 검색, 생성, 새로고침, source filter, 원본 근거 링크,
     승인 활동 렌더링, responsive 3/2/1 column 흐름은 유지했다.
   - 검증: frontend lint/build 통과, Playwright 프로젝트 페이지 테스트 4개 통과.
+- `style: 프로젝트 목록 sticky follow 적용`
+  - 프로젝트 페이지의 프로젝트 목록 lane을 `fixed`가 아닌 normal flow 기반
+    `sticky` 패널로 바꿔 스크롤 시 부드럽게 따라오도록 했다.
+  - 1280px 이상에서만 sticky를 적용하고, 목록 내부는 viewport 높이에 맞춰
+    스크롤되게 해 노트북 화면에서 패널이 잘리지 않도록 했다.
+  - 검증: sticky 회귀 Playwright 테스트 추가, frontend lint/build 통과.
