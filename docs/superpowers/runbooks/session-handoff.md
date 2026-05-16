@@ -2080,3 +2080,28 @@ tests passed with 53 tests; ruff passed.
     repo `.venv` 실행은 sandbox 권한 문제로 escalated 실행이 필요했다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 대시보드 검토사항 카드 deep link와 표시 제목 정합성
+
+- 변경 요약:
+  - `backend/app/services/review_display.py`를 추가해 ReviewItem 표시 제목을
+    공용으로 계산한다.
+  - `ParaWorks source 연결`, `source 연결`, `untitled`, `unknown` 같은 낮은
+    정보량 제목은 실제 검토자가 볼 수 있는 `summary`, `decision_summary`,
+    `reason`, `task_summary`, `source_title` 등으로 대체한다.
+  - Dashboard API의 `pending_items`는 공용 display title과
+    `review_url=/review?itemId={id}`를 내려준다.
+  - Review API 그룹 제목도 같은 display title을 사용한다.
+  - Dashboard 검토사항 카드 항목은 `review_url`로 이동한다.
+  - Review 페이지는 `itemId`/`item_id` query를 읽고 해당 item이 포함된 그룹을
+    자동으로 펼친 뒤 항목 위치로 스크롤한다.
+- 검증:
+  - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_review.py::test_review_list_uses_display_title_when_payload_title_is_low_signal backend/tests/test_dashboard_api.py` → `8 passed`
+  - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/app/api/v1/review.py backend/app/services/review_display.py backend/tests/test_dashboard_api.py backend/tests/test_review.py` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

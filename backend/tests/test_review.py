@@ -235,6 +235,27 @@ def test_review_list_prioritizes_knowledge_candidates_before_project_assignments
     ]
 
 
+def test_review_list_uses_display_title_when_payload_title_is_low_signal(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='decision_record',
+        payload={'title': 'ParaWorks source 연결', 'summary': '실제 검토 큐 표시 제목'},
+        source_links=['https://slack.mock/archives/C123/p1'],
+        source_snippets=['Evidence snippet.'],
+        confidence_score=0.91,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review&limit=1')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['groups'][0]['title'] == '실제 검토 큐 표시 제목'
+    assert body['groups'][0]['group_id'] == 'decision_record:실제 검토 큐 표시 제목'
+
+
 def test_request_more_evidence_changes_status(client) -> None:
     client.post('/api/v1/integrations/slack/sync')
     item = client.get('/api/v1/review?status=pending_review').json()['items'][0]

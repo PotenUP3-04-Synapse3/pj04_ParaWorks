@@ -33,6 +33,19 @@ import type {
 
 const REVIEW_PAGE_SIZE = 50;
 
+const LOW_SIGNAL_REVIEW_TITLES = new Set(["paraworks source 연결", "source 연결", "untitled", "unknown"]);
+const DISPLAY_TITLE_KEYS = [
+  "title",
+  "summary",
+  "decision_summary",
+  "reason",
+  "priority_reason",
+  "task_summary",
+  "source_title",
+  "project_assignment_summary",
+  "evidence_reason",
+  "recommended_next_step",
+] as const;
 
 function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -60,10 +73,24 @@ function needsProjectSelection(item: ReviewItem, preview?: ReviewPromotionPrevie
 
 function itemTitle(item: ReviewItem | ReviewGroup) {
   if ('payload' in item) {
-    const title = stringField(item.payload.title);
-    return title || `Review item ${item.id}`;
+    return displayTitleFromPayload(item.payload, item.id);
   }
   return item.title;
+}
+
+function displayTitleFromPayload(payload: ReviewItem["payload"], itemId: number) {
+  const title = stringField(payload.title).trim();
+  if (title && !isLowSignalReviewTitle(title)) return title;
+  for (const key of DISPLAY_TITLE_KEYS.slice(1)) {
+    const value = stringField(payload[key]).trim();
+    if (value && !isLowSignalReviewTitle(value)) return value.split(/\s+/).join(" ");
+  }
+  return `Review item ${itemId}`;
+}
+
+function isLowSignalReviewTitle(value: string) {
+  const normalized = value.split(/\s+/).join(" ").toLowerCase();
+  return LOW_SIGNAL_REVIEW_TITLES.has(normalized) || normalized.endsWith(" source 연결");
 }
 
 function summaryKey(item: ReviewItem) {
@@ -228,6 +255,7 @@ export default function ReviewPage() {
   const [bulkProjectKey, setBulkProjectKey] = useState("");
   const [bulkConfirm, setBulkConfirm] = useState<BulkConfirmState>();
   const [contextMenu, setContextMenu] = useState<ReviewContextMenu>();
+  const [deepLinkedItemId, setDeepLinkedItemId] = useState<number>();
 
   const loadItems = useCallback(async (nextOffset = 0, append = false) => {
     setLoading(true);
@@ -254,6 +282,25 @@ export default function ReviewPage() {
   useEffect(() => {
     void loadItems();
   }, [loadItems]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const itemId = Number(params.get("itemId") ?? params.get("item_id"));
+    if (Number.isInteger(itemId) && itemId > 0) {
+      setDeepLinkedItemId(itemId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!deepLinkedItemId || groups.length === 0) return;
+    const targetGroup = groups.find((group) => group.items.some((item) => item.id === deepLinkedItemId));
+    if (!targetGroup) return;
+    setExpandedGroups((current) => ({ ...current, [targetGroup.group_id]: true }));
+    const timer = window.setTimeout(() => {
+      document.getElementById(`review-item-${deepLinkedItemId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [deepLinkedItemId, groups]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -780,12 +827,14 @@ export default function ReviewPage() {
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
                     const workFields = mailDocsWorkFields(item);
                     const assignmentFields = projectAssignmentFields(item);
+                    const isDeepLinked = deepLinkedItemId === item.id;
 
                     return (
                       <div
                         key={item.id}
+                        id={`review-item-${item.id}`}
                         data-testid={`review-item-${item.id}`}
-                        className="p-5"
+                        className={`scroll-mt-24 p-5 ${isDeepLinked ? "bg-white ring-2 ring-[var(--workspace-rail-active)] ring-inset" : ""}`}
                         onContextMenu={(event) => openContextMenu(event, item)}
                       >
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">

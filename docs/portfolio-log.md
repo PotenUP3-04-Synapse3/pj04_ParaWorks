@@ -4315,3 +4315,13 @@ Cost/security note:
   - 검증: `backend/tests/test_dashboard_api.py` 6개 통과, Python ruff 통과,
     frontend lint/build 통과, Playwright 타임라인/대시보드/검토 bulk 테스트
     8개 통과.
+- `fix: 대시보드 검토사항 카드 deep link와 표시 제목 정합성 개선`
+  - 대시보드 검토사항 카드의 각 항목 링크가 `/review?itemId=...`로 이동해
+    검토사항 페이지에서 해당 항목이 포함된 그룹을 자동으로 펼치고 스크롤한다.
+  - `ParaWorks source 연결`처럼 낮은 정보량의 payload title은 summary, reason,
+    task/source title 같은 실제 검토 큐 표시 텍스트로 대체하는 공용 display title
+    규칙을 추가했다.
+  - 대시보드 API와 Review API가 같은 display title 규칙을 사용해 목록 불일치를
+    줄였다.
+  - 검증: dashboard/review API 테스트 8개 통과, Python ruff 통과, frontend
+    lint/build 통과, Playwright 대시보드/검토 bulk 테스트 4개 통과.

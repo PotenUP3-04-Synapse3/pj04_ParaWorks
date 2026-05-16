@@ -69,6 +69,55 @@ test("dashboard renders polished SaaS layout with interactive calendar", async (
       },
     });
   });
+  await page.route("**/api/v1/projects/defined", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: { projects: [] } });
+  });
+  await page.route("**/api/v1/review?status=pending_review**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        groups: [
+          {
+            group_id: "timeline_event:프로젝트 리스크 리뷰 일정 확인",
+            title: "프로젝트 리스크 리뷰 일정 확인",
+            item_type: "timeline_event",
+            status: "pending_review",
+            permission_level: "internal",
+            items: [
+              {
+                id: 1,
+                item_type: "timeline_event",
+                payload: { title: "프로젝트 리스크 리뷰 일정 확인", summary: "검토 큐의 실제 항목입니다." },
+                source_links: [],
+                source_snippets: [],
+                source_evidence: [],
+                agent_run_id: null,
+                agent_run_details: { model_name: null, prompt_version: null, estimated_cost_usd: null, total_tokens: 0 },
+                confidence_score: 0.92,
+                permission_level: "internal",
+                status: "pending_review",
+                reviewer_id: null,
+              },
+            ],
+            total_count: 1,
+            avg_confidence: 0.92,
+          },
+        ],
+        items: [],
+        total_count: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        include_previews: false,
+      },
+    });
+  });
+  await page.route("**/api/v1/review/*/promotion-preview", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { target_type: "timeline_event", can_approve: true, missing_required_fields: [], normalized_payload: {} },
+    });
+  });
 
   await page.goto("/dashboard");
 
@@ -86,6 +135,12 @@ test("dashboard renders polished SaaS layout with interactive calendar", async (
   await expect(page.getByText("개발 릴리즈 체크리스트 일정")).toBeVisible();
   await expect(page.getByTestId("dashboard-review-count")).toHaveText("30");
   await expect(page.getByTestId("dashboard-review-card").locator(".dashboard-review-row")).toHaveCount(3);
+  await expect(page.getByTestId("dashboard-review-link-1")).toHaveAttribute("href", "/review?itemId=1");
+  await page.getByTestId("dashboard-review-link-1").click();
+  await expect(page).toHaveURL(/\/review\?itemId=1$/);
+  await expect(page.getByTestId("review-item-1")).toBeVisible();
+  await expect(page.getByTestId("review-item-1")).toContainText("검토 큐의 실제 항목입니다.");
+  await page.goBack();
   await expect(page.getByTestId("dashboard-calendar")).toBeVisible();
   await expect(page.getByTestId("dashboard-calendar")).toHaveCSS("position", "static");
   const heroBox = await page.locator(".dashboard-hero").boundingBox();

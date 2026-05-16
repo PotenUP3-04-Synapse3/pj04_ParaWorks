@@ -53,7 +53,7 @@ type CalendarDay = {
   events: CalendarEventItem[];
 };
 
-type ReviewListItem = readonly [id: number, title: string, source: string, due: string, priority: string];
+type ReviewListItem = readonly [id: number, title: string, source: string, due: string, priority: string, href: string];
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -149,6 +149,7 @@ export default function DashboardPage() {
       item.item_type,
       "기한 없음",
       item.confidence_score > 0.8 ? "높음" : "보통",
+      item.review_url ?? `/review?itemId=${item.id}`,
     ]) ?? [];
 
   const calendarDays = useMemo(
@@ -276,8 +277,8 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="dashboard-review-table">
-              {visibleReviewItems.map(([id, title, source, due, priority]) => (
-                <Link href="/review" key={id} className="dashboard-review-row">
+              {visibleReviewItems.map(([id, title, source, due, priority, href]) => (
+                <Link href={href} key={id} data-testid={`dashboard-review-link-${id}`} className="dashboard-review-row">
                   <span className="dashboard-review-title">{title}</span>
                   <span className="dashboard-source-badge">{source}</span>
                   <span className="dashboard-review-muted">{due}</span>

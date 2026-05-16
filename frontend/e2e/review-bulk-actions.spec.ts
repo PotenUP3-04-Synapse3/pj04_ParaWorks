@@ -164,7 +164,7 @@ test("review queue supports Gmail-style selection, project routing, modal confir
   await page.getByTestId("confirm-bulk-action").click();
 
   expect(patchedProjects).toEqual({ 801: "project-alpha", 802: "project-alpha" });
-  expect(bulkPayload).toEqual({ action: "approve", item_ids: [801, 802] });
+  await expect.poll(() => bulkPayload).toEqual({ action: "approve", item_ids: [801, 802] });
 
   await page.getByTestId("review-item-801").click({ button: "right" });
   await expect(page.getByTestId("review-context-menu")).toBeVisible();

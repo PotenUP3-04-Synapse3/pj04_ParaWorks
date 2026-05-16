@@ -19,6 +19,7 @@ from backend.app.models import (
     Todo,
 )
 from backend.app.projects import build_project_memory
+from backend.app.services.review_display import review_item_display_title
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -91,10 +92,11 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         'pending_items': [
             {
                 'id': item.id,
-                'title': item.payload.get('title', 'Untitled'),
+                'title': review_item_display_title(item),
                 'item_type': item.item_type,
                 'category': item.payload.get('category', 'Ad-hoc'),
                 'confidence_score': item.confidence_score,
+                'review_url': f'/review?itemId={item.id}',
             }
             for item in pending_items
         ],

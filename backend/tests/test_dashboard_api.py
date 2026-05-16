@@ -330,6 +330,29 @@ def test_dashboard_pending_items_match_review_queue_order_and_count(client, db_s
     ]
 
 
+def test_dashboard_pending_items_use_review_display_title_and_deep_link(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='decision_record',
+        payload={
+            'title': 'ParaWorks source 연결',
+            'summary': '실제 검토 큐에 보이는 결정 후보',
+        },
+        status='pending_review',
+        confidence_score=0.9,
+        permission_level='internal',
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    response = client.get('/api/v1/dashboard')
+
+    assert response.status_code == 200
+    pending_item = response.json()['pending_items'][0]
+    assert pending_item['id'] == item.id
+    assert pending_item['title'] == '실제 검토 큐에 보이는 결정 후보'
+    assert pending_item['review_url'] == f'/review?itemId={item.id}'
+
+
 def test_dashboard_calendar_events_include_synced_events_beyond_today(client, db_session) -> None:
     today = datetime.now(ZoneInfo('Asia/Seoul')).date()
     tomorrow_start = f'{(today + timedelta(days=1)).isoformat()}T14:00:00+09:00'

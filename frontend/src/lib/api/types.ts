@@ -16,6 +16,7 @@ export type DashboardResponse = {
     item_type: string;
     category: string;
     confidence_score: number;
+    review_url?: string;
   }[];
   today_todos: {
     id: number;
