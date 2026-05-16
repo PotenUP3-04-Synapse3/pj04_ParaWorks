@@ -236,6 +236,44 @@ def test_projects_reclassify_creates_pending_review_without_tokens(
     assert item.source_snippets
 
 
+def test_calendar_project_assignment_summary_uses_event_title_not_raw_metadata(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Project(
+            project_key='demo-data',
+            name='더미 데이터',
+            summary='데모용 더미 데이터 일정',
+        )
+    )
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='calendar',
+                source_id='calendar-bike-maintenance',
+                title='자전거 정비 예약',
+                body=(
+                    '자전거 정비 예약\n\n'
+                    'Description: <p>더미 데이터: 타이어 점검, 브레이크 조정, 체인 오일링. '
+                    'Marker: DUMMY-DATA-FUTURE-14D-20</p>\n'
+                    'Location: 동네 정비소\n'
+                    'Start: 2026-05-16T14:00:00+09:00\n'
+                    'End: 2026-05-16T15:00:00+09:00'
+                ),
+                source_url='https://calendar.google.com/event?eid=bike',
+            )
+        ],
+    )
+
+    [candidate] = build_project_assignment_candidates(db_session)
+
+    assert candidate.task_summary == '자전거 정비 예약'
+    assert 'Description:' not in candidate.task_summary
+    assert '<p>' not in candidate.task_summary
+    assert 'Start:' not in candidate.task_summary
+
+
 def test_project_define_does_not_backfill_slack_project_assignments(
     client: TestClient,
     db_session: Session,

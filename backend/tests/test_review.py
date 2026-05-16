@@ -129,6 +129,43 @@ def test_patch_review_item_requires_registered_project_key(client, db_session) -
     assert valid.json()['payload']['project_name'] == '고객 포털 개편'
 
 
+def test_project_assignment_group_title_sanitizes_calendar_metadata(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='project_assignment',
+        payload={
+            'agent_name': 'project_classifier',
+            'title': '케크 source 연결',
+            'summary': (
+                '자전거 정비 예약 Description: <p>더미 데이터: 타이어 점검, 브레이크 조정. '
+                'Marker: DUMMY-DATA-FUTURE-14D-20</p> Location: 동네 정비소 '
+                'Start: 2026-05-16T14:00:00+09:00 End: 2026-05-16T15:00:00+09:00'
+            ),
+            'task_summary': (
+                '자전거 정비 예약 Description: <p>더미 데이터: 타이어 점검, 브레이크 조정. '
+                'Marker: DUMMY-DATA-FUTURE-14D-20</p> Location: 동네 정비소 '
+                'Start: 2026-05-16T14:00:00+09:00 End: 2026-05-16T15:00:00+09:00'
+            ),
+            'source_title': '자전거 정비 예약',
+            'source_type': 'calendar',
+        },
+        source_links=['https://calendar.google.com/event?eid=bike'],
+        source_snippets=['자전거 정비 예약'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review')
+
+    assert response.status_code == 200
+    group = response.json()['groups'][0]
+    assert group['title'] == '자전거 정비 예약'
+    assert 'Description:' not in group['title']
+    assert '<p>' not in group['title']
+
+
 def test_slack_agent_review_item_requires_project_before_approval(client, db_session) -> None:
     db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Redis work'))
     item = ReviewItem(

@@ -116,7 +116,7 @@ test("Review page labels deterministic project classifier metadata without unkno
 
   await page.locator(".group-container > div:first-child").click();
 
-  await expect(page.getByText("프로젝트 분류기")).toBeVisible();
+  await expect(page.getByText("Slack Agent")).toBeVisible();
   await expect(page.getByText("규칙 기반 프로젝트 연결")).toBeVisible();
   await expect(page.getByText("추가 LLM 비용 없음")).toBeVisible();
   await expect(page.getByText("프로젝트 연결 후보")).toBeVisible();

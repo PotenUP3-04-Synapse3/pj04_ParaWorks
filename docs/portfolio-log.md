@@ -4421,3 +4421,10 @@ Cost/security note:
     해당 월로 이동했을 때 dot/목록으로만 확인되도록 했다.
   - 회귀 테스트로 이전 월에만 연동 일정이 있어도 2026년 5월과 5월 17일 선택 상태를
     유지하는 케이스를 추가했다.
+- `fix: 검토사항 프로젝트 연결 캘린더 raw metadata 표시 정리`
+  - Calendar source로 생성된 프로젝트 연결 후보가 `Description`, HTML 태그,
+    `Location`, `Start`, `End` 메타데이터를 제목처럼 노출하던 문제를 수정했다.
+  - 프로젝트 분류기 생성 단계에서 캘린더 후보 summary를 이벤트 제목 중심으로 정제하고,
+    Review API와 프론트 표시 단계도 기존 raw payload를 방어적으로 정리한다.
+  - 검증: 관련 backend Review/Project 테스트 45개 통과, Review Playwright 테스트 4개 통과,
+    frontend lint/build 통과, 수정 파일 ruff 통과.

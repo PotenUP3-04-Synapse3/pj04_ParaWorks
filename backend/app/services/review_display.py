@@ -1,3 +1,6 @@
+import html
+import re
+
 from backend.app.models import ReviewItem
 
 LOW_SIGNAL_REVIEW_TITLES = {
@@ -26,16 +29,25 @@ def review_item_display_title(item: ReviewItem) -> str:
 
 
 def review_payload_display_title(payload: dict, item_id: int) -> str:
-    title = _text_field(payload.get('title'))
+    title = clean_review_display_text(_text_field(payload.get('title')))
     if title and not _is_low_signal_title(title):
         return title
 
     for key in DISPLAY_TITLE_KEYS[1:]:
-        value = _text_field(payload.get(key))
+        value = clean_review_display_text(_text_field(payload.get(key)))
         if value and not _is_low_signal_title(value):
             return _one_line(value)
 
     return f'Review item {item_id}'
+
+
+def clean_review_display_text(value: str) -> str:
+    cleaned = html.unescape(re.sub(r'<[^>]+>', ' ', value))
+    cleaned = _one_line(cleaned)
+    metadata_match = re.search(r'\s(?:Description|Location|Start|End|Marker):\s', cleaned, flags=re.IGNORECASE)
+    if metadata_match and cleaned[: metadata_match.start()].strip():
+        return cleaned[: metadata_match.start()].strip()
+    return cleaned
 
 
 def _text_field(value: object) -> str:

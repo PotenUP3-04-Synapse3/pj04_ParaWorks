@@ -51,8 +51,18 @@ function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function cleanReviewDisplayText(value: string) {
+  const withoutTags = value.replace(/<[^>]+>/g, " ");
+  const cleaned = withoutTags.split(/\s+/).join(" ").trim();
+  const metadataMatch = cleaned.match(/\s(?:Description|Location|Start|End|Marker):\s/i);
+  if (metadataMatch?.index && metadataMatch.index > 0) {
+    return cleaned.slice(0, metadataMatch.index).trim();
+  }
+  return cleaned;
+}
+
 function knownStringField(value: unknown) {
-  const text = stringField(value).trim();
+  const text = cleanReviewDisplayText(stringField(value));
   if (!text || text.toLowerCase() === "unknown") return "";
   return text;
 }
@@ -79,10 +89,10 @@ function itemTitle(item: ReviewItem | ReviewGroup) {
 }
 
 function displayTitleFromPayload(payload: ReviewItem["payload"], itemId: number) {
-  const title = stringField(payload.title).trim();
+  const title = cleanReviewDisplayText(stringField(payload.title));
   if (title && !isLowSignalReviewTitle(title)) return title;
   for (const key of DISPLAY_TITLE_KEYS.slice(1)) {
-    const value = stringField(payload[key]).trim();
+    const value = cleanReviewDisplayText(stringField(payload[key]));
     if (value && !isLowSignalReviewTitle(value)) return value.split(/\s+/).join(" ");
   }
   return `Review item ${itemId}`;
@@ -102,7 +112,7 @@ function summaryKey(item: ReviewItem) {
 }
 
 function itemSummary(item: ReviewItem) {
-  const summary = stringField(item.payload[summaryKey(item)]);
+  const summary = cleanReviewDisplayText(stringField(item.payload[summaryKey(item)]));
   return summary || "요약을 생성하지 못했습니다. 근거를 확인한 뒤 수정하거나 추가 근거를 요청하세요.";
 }
 
@@ -141,11 +151,11 @@ function projectRoutingReason(item: ReviewItem) {
 
 function projectAssignmentFields(item: ReviewItem) {
   if (item.item_type !== "project_assignment") return undefined;
-  const projectName = stringField(item.payload.project_name).trim();
-  const taskSummary = stringField(item.payload.task_summary).trim() || itemSummary(item);
-  const evidenceReason = stringField(item.payload.evidence_reason).trim();
-  const sourceTitle = stringField(item.payload.source_title).trim();
-  const sourceType = stringField(item.payload.source_type).trim();
+  const projectName = cleanReviewDisplayText(stringField(item.payload.project_name));
+  const taskSummary = cleanReviewDisplayText(stringField(item.payload.task_summary)) || itemSummary(item);
+  const evidenceReason = cleanReviewDisplayText(stringField(item.payload.evidence_reason));
+  const sourceTitle = cleanReviewDisplayText(stringField(item.payload.source_title));
+  const sourceType = cleanReviewDisplayText(stringField(item.payload.source_type));
   if (!projectName && !taskSummary && !evidenceReason && !sourceTitle && !sourceType) return undefined;
   return {
     projectName,

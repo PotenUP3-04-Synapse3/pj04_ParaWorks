@@ -2352,3 +2352,37 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸면 빌드 후 해당
     생성 변경은 되돌린다.
+
+## 2026-05-17 검토사항 프로젝트 연결 캘린더 raw metadata 표시 정리
+
+- 변경 요약:
+  - 증상: 검토사항 페이지의 `<프로젝트 연결>` 그룹 제목에
+    `Description: <p>...`, `Marker`, `Location`, `Start`, `End`가 그대로 붙어
+    긴 raw 캘린더 본문처럼 보였다.
+  - 원인: Google Calendar sync가 `Source.body`를 `제목 + Description + Location +
+    Start + End` 형태로 보존하고, 프로젝트 분류기가 이 chunk snippet 전체를
+    `summary/task_summary`로 저장했다. Review API는 `프로젝트 source 연결`을 낮은
+    신호 제목으로 보고 summary를 그룹 제목으로 선택했다.
+  - `backend/app/projects/classifier.py`에서 프로젝트 연결 후보의 task summary를
+    HTML 태그와 캘린더 metadata label 이전의 실제 이벤트 제목 중심으로 정리한다.
+  - `backend/app/services/review_display.py`에서 기존 DB에 이미 raw summary가 들어간
+    ReviewItem도 API group title에서 깨끗하게 보이도록 display text sanitizer를
+    적용했다.
+  - `frontend/src/app/review/page.tsx`에서도 item title, 상세 summary, 프로젝트 연결
+    후보 필드를 같은 방식으로 정리해 mock/API payload가 raw여도 UI가 무너지지 않게 했다.
+  - `frontend/e2e/review-agent-metadata.spec.ts`는 source별 Agent 배지 정책에 맞춰
+    `project_classifier` + Slack source를 `Slack Agent`로 기대하도록 갱신했다.
+- 검증:
+  - RED 확인: 신규 backend 회귀 테스트 2개가 기존 코드에서 실패함을 확인.
+  - `uv run pytest backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_calendar_metadata backend/tests/test_project_memory_api.py::test_calendar_project_assignment_summary_uses_event_title_not_raw_metadata -q` → `2 passed`
+  - `uv run pytest backend/tests/test_review.py backend/tests/test_project_memory_api.py -q` → `45 passed`
+  - `uv run ruff check --no-fix backend/app/projects/classifier.py backend/app/services/review_display.py backend/tests/test_project_memory_api.py backend/tests/test_review.py` → 통과
+  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts review-bulk-actions.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `uv run ruff check backend`는 저장소 기존 B008/N806/F841 이슈 때문에 실패하며,
+    현재 설정상 관련 없는 파일 자동 수정도 발생할 수 있다. 이번 작업에서는 자동 수정된
+    무관 파일을 되돌리고 수정 파일만 `--no-fix`로 검사했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.

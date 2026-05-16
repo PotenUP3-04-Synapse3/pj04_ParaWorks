@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.agents.slack_agent.quality import classify_slack_work_signal
 from backend.app.models import DocumentChunk, Project, ReviewItem, Source
+from backend.app.services.review_display import clean_review_display_text
 
 
 @dataclass(frozen=True)
@@ -276,10 +277,11 @@ def _slack_message_signal_text(text: str) -> str:
 
 
 def _task_summary(source: Source, snippet: str) -> str:
-    cleaned = ' '.join(snippet.split())
-    if cleaned and cleaned != source.title:
+    cleaned = clean_review_display_text(snippet)
+    source_title = clean_review_display_text(source.title)
+    if cleaned and cleaned != source_title:
         return cleaned[:160]
-    return source.title
+    return source_title or source.title
 
 
 def _source_timestamp(source: Source) -> str:
