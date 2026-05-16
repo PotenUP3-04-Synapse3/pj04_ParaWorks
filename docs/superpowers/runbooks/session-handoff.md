@@ -2119,3 +2119,25 @@ tests passed with 53 tests; ruff passed.
   - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_dashboard_api.py` → `8 passed`
   - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` → 통과
   - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+
+## 2026-05-16 프로젝트 워크스페이스 UI 리디자인
+
+- 변경 요약:
+  - `frontend/src/app/projects/page.tsx`를 dashboard 계열 디자인 톤의 workspace
+    구조로 재구성했다.
+  - 상단 header 아래 선택 프로젝트 overview hero를 추가해 프로젝트명, 설명,
+    근거 수, 활동 수, 검토 대기 수를 먼저 보여준다.
+  - 본문은 project list, evidence panel, activity timeline panel로 나뉜다.
+  - 프로젝트 목록은 선택 상태를 indigo soft background로 강조하고, 많은 프로젝트가
+    있을 때 내부 스크롤을 사용한다.
+  - 원본 근거 패널은 전체/Drive/Gmail/Slack/Calendar filter tab과 hover card
+    스타일을 제공한다.
+  - 승인 활동 패널은 subtle vertical timeline 구조와 activity type badge를 사용한다.
+  - 반응형은 `2xl` 3영역, `xl` 2영역+활동 하단, 그 이하는 세로 stack이다.
+- 검증:
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `4 passed`
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.

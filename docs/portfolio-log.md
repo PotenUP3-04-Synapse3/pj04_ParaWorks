@@ -4331,3 +4331,12 @@ Cost/security note:
   - `pending_review_count` 배지는 실제 검토 대기 총수를 그대로 유지한다.
   - 검증: `backend/tests/test_dashboard_api.py` 8개 통과, Python ruff 통과,
     Playwright 대시보드 테스트 2개 통과.
+- `style: 프로젝트 워크스페이스 UI 리디자인`
+  - 프로젝트 페이지를 대시보드와 같은 SaaS workspace 톤으로 재구성했다.
+  - 선택 프로젝트 overview hero, metric mini cards, 강조된 프로젝트 목록,
+    source filter tab이 있는 원본 근거 패널, timeline형 승인 활동 패널을 추가했다.
+  - 2XL에서는 3영역, 1440/1366급에서는 2영역+활동 하단, 태블릿 이하에서는
+    세로 stack으로 전환되게 했다.
+  - 기존 프로젝트 검색, 생성, 새로고침, 원본 근거 링크, source/type badge,
+    empty state 흐름은 유지했다.
+  - 검증: frontend lint/build 통과, Playwright 프로젝트 페이지 테스트 4개 통과.
