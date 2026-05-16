@@ -810,7 +810,7 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="reference-dashboard space-y-5">
+    <div className="reference-dashboard utility-workspace space-y-5">
       {syncProgress && syncModalOpen ? (
         <SyncProgressModal
           progress={syncProgress}

@@ -297,7 +297,7 @@ function SearchPageContent() {
   }, []);
 
   return (
-    <div className="reference-dashboard h-[calc(100vh-7rem)] overflow-hidden">
+    <div className="reference-dashboard utility-workspace utility-workspace-chat h-[calc(100vh-7rem)] overflow-hidden">
       <section
         className={`grid h-full min-h-0 transition-[grid-template-columns,gap] duration-300 ease-out ${
           sidebarCollapsed ? "gap-0 lg:grid-cols-[0_minmax(0,1fr)]" : "gap-3 lg:grid-cols-[280px_minmax(0,1fr)]"
@@ -473,7 +473,7 @@ function SearchPageContent() {
 }
 
 function SearchPageFallback() {
-  return <div className="panel reference-panel p-8 text-[13px] text-muted">AI 비서 화면을 준비하고 있습니다.</div>;
+  return <div className="panel reference-panel utility-workspace p-8 text-[13px] text-muted">AI 비서 화면을 준비하고 있습니다.</div>;
 }
 
 function AssistantBubble({

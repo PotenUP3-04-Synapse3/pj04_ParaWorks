@@ -11,7 +11,7 @@ export default async function NotificationsPage() {
 
   if (!data) {
     return (
-      <div className="reference-dashboard space-y-4">
+      <div className="reference-dashboard utility-workspace space-y-4">
         <div className="page-heading reference-heading">
           <div>
             <p className="text-[13px] font-bold text-[var(--primary-dark)]">Agent Alerts</p>
@@ -25,7 +25,7 @@ export default async function NotificationsPage() {
   }
 
   return (
-    <div className="reference-dashboard space-y-4">
+    <div className="reference-dashboard utility-workspace space-y-4">
       <div className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Agent Alerts</p>

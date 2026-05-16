@@ -4393,3 +4393,15 @@ Cost/security note:
     normal flow 안에서 전역 top bar 아래로 자연스럽게 붙게 했다.
   - 검증: 스크롤 후 날짜 인덱스가 sticky top 근처에 유지되는 Playwright 회귀
     테스트 추가, frontend lint/build 통과.
+- `style: 유틸리티 워크스페이스 페이지 SaaS 톤 정리`
+  - AI 비서, 에이전트 실행 기록, 연동 관리, 알림, 관리자 콘솔 페이지를
+    `utility-workspace` 스코프로 묶고 대시보드/프로젝트/타임라인과 같은 soft SaaS
+    workspace surface 체계로 정리했다.
+  - 사이드바와 각 페이지의 API/data/동작은 유지하고, page header, summary badge,
+    panel/card, integration card, admin table, AI chat shell, action button 스타일만
+    white/off-white glass surface, rounded card, subtle shadow, pill control 톤으로
+    업그레이드했다.
+  - `frontend/e2e/utility-workspace-style.spec.ts`를 추가해 다섯 페이지가 공통
+    스타일 스코프를 유지하는지 회귀 검증한다.
+  - 검증: frontend lint/build 통과, Playwright utility workspace + integrations
+    sync modal 테스트 12개 통과.

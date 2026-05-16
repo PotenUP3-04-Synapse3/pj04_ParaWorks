@@ -2277,3 +2277,30 @@ tests passed with 53 tests; ruff passed.
   - `position: fixed`는 사용하지 않았다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
     해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 유틸리티 워크스페이스 페이지 SaaS 톤 정리
+
+- 변경 요약:
+  - `frontend/src/app/search/page.tsx`, `agent-runs/page.tsx`,
+    `integrations/page.tsx`, `notifications/page.tsx`, `admin/page.tsx`의 page root에
+    `utility-workspace` 스코프를 추가했다.
+  - AI 비서 페이지는 추가로 `utility-workspace-chat` 스코프를 사용해 conversation
+    rail과 chat surface만 대시보드급 rounded/glass 스타일로 보정한다.
+  - `frontend/src/app/globals.css`에 scoped styles를 추가해 page heading, utility
+    badge, panel/reference card, integration card, admin metric/table, chat shell,
+    action button을 soft SaaS workspace 톤으로 통일했다.
+  - 기능/API/data shape은 변경하지 않았다. 사이드바/AppShell 구조도 그대로다.
+  - `frontend/e2e/utility-workspace-style.spec.ts`를 추가해 다섯 페이지가 공통 UI
+    스코프를 유지하는지 source-level 회귀 테스트를 둔다.
+- 검증:
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run test:visual -- utility-workspace-style.spec.ts integration-sync-modal.spec.ts` → `12 passed`
+  - `npm.cmd run build` → 통과
+- 주의:
+  - 추가 확인 중 `assistant-memory.spec.ts`와 `orchestration.spec.ts`를 함께 실행해
+    보았으나, 전자는 AppShell의 `/api/v1/dashboard`, `/api/v1/notifications` 조회를
+    테스트 allowlist가 막는 기존 목킹 범위 문제로 중단됐고, 후자는 `/agent-runs`
+    서버 데이터/권한 의존성 때문에 `app-shell`을 찾지 못했다. 이번 커밋 범위의
+    UI 스코프 테스트와 integrations 동기화 흐름은 통과했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.

@@ -3559,6 +3559,179 @@ button:disabled,
     box-shadow: var(--shadow-xs);
   }
 
+  .utility-workspace {
+    width: 100%;
+    max-width: 1560px;
+    padding-bottom: 2rem;
+  }
+
+  .utility-workspace .page-heading.reference-heading {
+    align-items: flex-end;
+    margin-bottom: 1.35rem;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    border-radius: 2rem;
+    background:
+      radial-gradient(circle at 88% 12%, rgba(124, 58, 237, 0.12), transparent 28%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 255, 0.88));
+    padding: 1.5rem;
+    box-shadow: 0 24px 70px rgba(38, 54, 92, 0.1);
+    backdrop-filter: blur(18px);
+  }
+
+  .utility-workspace .reference-heading h1 {
+    margin-top: 0.2rem;
+    color: #0f172a;
+    font-size: clamp(1.75rem, 2vw, 2.35rem);
+    font-weight: 900;
+  }
+
+  .utility-workspace .reference-heading p {
+    max-width: 48rem;
+    color: #64748b;
+    line-height: 1.75;
+  }
+
+  .utility-workspace .page-heading > div:not(:first-child):last-child {
+    border-color: rgba(226, 232, 240, 0.78);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #475569;
+    box-shadow: 0 14px 32px rgba(38, 54, 92, 0.08);
+  }
+
+  .utility-workspace .panel.reference-panel,
+  .utility-workspace .integration-glass-card,
+  .utility-workspace .source-metric-card,
+  .utility-workspace .shadow-panel,
+  .utility-workspace .liquid-surface {
+    border-color: rgba(226, 232, 240, 0.74) !important;
+    border-radius: 1.5rem !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 252, 255, 0.88)) !important;
+    box-shadow: 0 18px 52px rgba(38, 54, 92, 0.09) !important;
+    backdrop-filter: blur(16px);
+  }
+
+  .utility-workspace .panel.reference-panel:hover,
+  .utility-workspace .integration-glass-card:hover {
+    border-color: rgba(129, 140, 248, 0.45) !important;
+    box-shadow: 0 22px 64px rgba(38, 54, 92, 0.12) !important;
+  }
+
+  .utility-workspace .source-metric-card {
+    min-height: 7.25rem;
+    padding: 1.1rem;
+  }
+
+  .utility-workspace .source-metric-card b {
+    margin-top: 0.9rem;
+    color: #0f172a;
+    font-size: 1.95rem;
+  }
+
+  .utility-workspace .badge,
+  .utility-workspace .filter-pill,
+  .utility-workspace .admin-permission-pill,
+  .utility-workspace .admin-status-pill {
+    border-radius: 999px;
+  }
+
+  .utility-workspace .admin-table thead {
+    background: #f8fafc;
+  }
+
+  .utility-workspace .admin-table th,
+  .utility-workspace .admin-table td {
+    border-color: rgba(226, 232, 240, 0.78);
+  }
+
+  .utility-workspace .admin-table tbody tr {
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .utility-workspace .admin-table tbody tr:hover {
+    background: rgba(238, 242, 255, 0.72);
+  }
+
+  .utility-workspace .admin-select {
+    border-color: rgba(203, 213, 225, 0.86);
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.86);
+  }
+
+  .utility-workspace .activity-toolbar {
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+    background: rgba(248, 250, 252, 0.68);
+  }
+
+  .utility-workspace .liquid-primary,
+  .utility-workspace .primary-action {
+    border-radius: 999px;
+    border-color: #2563eb;
+    background: linear-gradient(135deg, #2563eb, #6366f1);
+    color: #fff;
+    box-shadow: 0 14px 32px rgba(37, 99, 235, 0.2);
+  }
+
+  .utility-workspace .liquid-control,
+  .utility-workspace .row-action {
+    border-color: rgba(226, 232, 240, 0.9);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.86);
+  }
+
+  .utility-workspace-chat {
+    max-width: 1560px;
+  }
+
+  .utility-workspace-chat > section {
+    gap: 1rem;
+  }
+
+  .utility-workspace-chat aside.panel.reference-panel {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 249, 255, 0.9)) !important;
+  }
+
+  .utility-workspace-chat main {
+    border: 1px solid rgba(226, 232, 240, 0.76);
+    border-radius: 2rem !important;
+    background:
+      radial-gradient(circle at 96% 8%, rgba(99, 102, 241, 0.11), transparent 26%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+    box-shadow: 0 24px 70px rgba(38, 54, 92, 0.12) !important;
+  }
+
+  .utility-workspace-chat form {
+    border-top: 1px solid rgba(226, 232, 240, 0.78);
+  }
+
+  .utility-workspace-chat textarea {
+    color: #0f172a;
+  }
+
+  .utility-workspace-chat [aria-label="대화 히스토리"] button {
+    border: 1px solid transparent;
+  }
+
+  .utility-workspace-chat [aria-label="대화 히스토리"] button:hover {
+    border-color: rgba(226, 232, 240, 0.92);
+    background: rgba(248, 250, 252, 0.9);
+  }
+
+  @media (max-width: 1023px) {
+    .utility-workspace .page-heading.reference-heading {
+      align-items: flex-start;
+      border-radius: 1.5rem;
+      padding: 1.15rem;
+    }
+
+    .utility-workspace-chat {
+      height: auto !important;
+      min-height: calc(100vh - 6rem);
+    }
+  }
+
   .shadow-sm,
   .shadow-md,
   .shadow-lg {

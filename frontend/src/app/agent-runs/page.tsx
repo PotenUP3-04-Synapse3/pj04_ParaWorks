@@ -85,7 +85,7 @@ export default async function AgentRunsPage() {
   const jobStatusCounts = countJobStatuses(ragIndexing.latest_jobs);
 
   return (
-    <div className="reference-dashboard space-y-5">
+    <div className="reference-dashboard utility-workspace space-y-5">
       <section className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Agent Operations</p>
@@ -271,7 +271,7 @@ type MetricIcon = typeof Bot;
 
 function AdminOnlyNotice() {
   return (
-    <section className="liquid-surface rounded-lg p-6">
+    <section className="liquid-surface utility-workspace rounded-lg p-6">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" aria-hidden="true" />
         <div>
