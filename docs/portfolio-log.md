@@ -4434,3 +4434,12 @@ Cost/security note:
     제거하고, 사용자가 입력한 프로젝트 설명만 보이도록 했다.
   - 프로젝트 상세/metric 정보는 유지하고 목록 하단의 `근거 · 활동 · 검토 대기` 수치도 그대로 둔다.
   - 검증: Projects Playwright 테스트 4개 통과, frontend lint/build 통과.
+- `fix: 검토사항 프로젝트 연결 메일/Drive metadata 표시 정리`
+  - Gmail 규칙 기반 프로젝트 연결 후보에서 `From`, `Date` 헤더와 깨진 발신자명이
+    제목/연결 내용에 붙어 보이던 문제를 캘린더 raw metadata 정리와 같은 경로로 해결했다.
+  - Drive와 Gmail 첨부의 `Mime type`, `Owner`, `Parent subject`, `Attachment size` 같은
+    metadata label도 프로젝트 연결 후보 표시와 생성 summary에서 제거한다.
+  - Calendar/메일/Drive/첨부 회귀 테스트를 추가했고, Slack은 metadata header를 붙이지 않는
+    connector 구조라 기존 메시지 본문/스레드 정리 흐름을 유지했다.
+  - 검증: 관련 backend Review/Project 테스트 47개 통과, Review Playwright 테스트 4개 통과,
+    frontend lint/build 통과, 수정 파일 ruff 통과.

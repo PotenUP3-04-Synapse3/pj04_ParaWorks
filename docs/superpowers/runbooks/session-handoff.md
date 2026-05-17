@@ -2406,3 +2406,40 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
     생성 변경은 되돌렸다.
+
+## 2026-05-17 검토사항 프로젝트 연결 메일/Drive metadata 표시 정리
+
+- 변경 요약:
+  - 증상: 검토사항 페이지의 `<프로젝트 연결>` 항목 제목/연결 내용에 Gmail `From`,
+    `Date` 헤더와 깨진 발신자 문자열이 붙어 보였다.
+  - 원인: Gmail connector가 `Subject + From + Date + body`를 Source body로 보존하고,
+    프로젝트 분류기가 첫 chunk snippet 전체를 `summary/task_summary`로 저장했다.
+    Review display title은 낮은 신호 제목인 `프로젝트 source 연결` 대신 summary를
+    사용하므로 raw header가 화면에 올라왔다.
+  - `backend/app/services/review_display.py`의 display sanitizer를 확장해
+    `From`, `Date`, `Mime type`, `Owner`, `Last modifier`, `Modified`,
+    `Parent subject`, `Attachment size` label 이후 metadata를 제거한다.
+  - `Google Drive file changed:`와 `Gmail attachment:` prefix도 표시용 summary에서
+    제거해 Drive/첨부도 실제 파일명/제목 중심으로 보이게 했다.
+  - `backend/app/projects/classifier.py`는 이미 해당 sanitizer를 공유하므로 새로 생성되는
+    규칙 기반 프로젝트 연결 후보의 `task_summary`도 메일/Drive/첨부 metadata 없이 저장된다.
+  - `frontend/src/app/review/page.tsx`도 같은 표시 방어 로직을 사용해 raw mock/API payload가
+    와도 상세 `연결 내용`, `원본`, item summary가 UI를 밀지 않도록 했다.
+- 확인한 source별 상태:
+  - Gmail: `From`/`Date` 제거, subject만 표시.
+  - Google Calendar: 기존 `Description`/`Location`/`Start`/`End` 제거 유지.
+  - Google Drive: `Google Drive file changed:` prefix와 `Mime type`/`Owner`/`Modified` 제거.
+  - Gmail attachment: `Gmail attachment:` prefix와 `Parent subject`/`Mime type`/`Attachment size` 제거.
+  - Slack: connector body가 메시지/스레드 본문이라 같은 header metadata 증상은 없고 기존 Slack 업무 신호 필터/표시 흐름 유지.
+- 검증:
+  - RED 확인: 신규 Gmail/Drive metadata 회귀 테스트 2개가 기존 코드에서 실패함을 확인.
+  - `uv run pytest backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_mail_and_drive_metadata backend/tests/test_project_memory_api.py::test_project_assignment_summary_strips_mail_and_drive_metadata -q` → `2 passed`
+  - `uv run pytest backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_mail_and_drive_metadata backend/tests/test_project_memory_api.py::test_project_assignment_summary_strips_mail_and_drive_metadata backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_calendar_metadata backend/tests/test_project_memory_api.py::test_calendar_project_assignment_summary_uses_event_title_not_raw_metadata -q` → `4 passed`
+  - `uv run pytest backend/tests/test_review.py backend/tests/test_project_memory_api.py -q` → `47 passed`
+  - `uv run ruff check --no-fix backend/app/projects/classifier.py backend/app/services/review_display.py backend/tests/test_project_memory_api.py backend/tests/test_review.py` → 통과
+  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts review-bulk-actions.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.

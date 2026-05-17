@@ -52,13 +52,14 @@ function stringField(value: unknown) {
 }
 
 function cleanReviewDisplayText(value: string) {
-  const withoutTags = value.replace(/<[^>]+>/g, " ");
+  const withoutTags = value.replace(/\\n/g, " ").replace(/<[^>]+>/g, " ");
   const cleaned = withoutTags.split(/\s+/).join(" ").trim();
-  const metadataMatch = cleaned.match(/\s(?:Description|Location|Start|End|Marker):\s/i);
-  if (metadataMatch?.index && metadataMatch.index > 0) {
-    return cleaned.slice(0, metadataMatch.index).trim();
+  const withoutSourcePrefix = cleaned.replace(/^(?:Google Drive file changed|Gmail attachment):\s*/i, "").trim();
+  const metadataMatch = withoutSourcePrefix.match(/(?:^|\s)(?:Description|Location|Start|End|Marker|From|Date|Mime type|Owner|Last modifier|Modified|Parent subject|Attachment size):\s/i);
+  if (metadataMatch?.index !== undefined) {
+    return withoutSourcePrefix.slice(0, metadataMatch.index).trim();
   }
-  return cleaned;
+  return withoutSourcePrefix;
 }
 
 function knownStringField(value: unknown) {

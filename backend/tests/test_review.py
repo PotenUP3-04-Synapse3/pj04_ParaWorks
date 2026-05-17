@@ -166,6 +166,68 @@ def test_project_assignment_group_title_sanitizes_calendar_metadata(client, db_s
     assert '<p>' not in group['title']
 
 
+def test_project_assignment_group_title_sanitizes_mail_and_drive_metadata(client, db_session) -> None:
+    items = [
+        ReviewItem(
+            item_type='project_assignment',
+            payload={
+                'agent_name': 'project_classifier',
+                'title': 'ParaWorks source 연결',
+                'summary': (
+                    'ParaWorks 회사 소개서 전달드립니다 From: í•œìŠ¹í—Œ Date: Fri, 15 May 2026 01:58:19 -0700 '
+                    'ParaWorks 소개서를 공유합니다.'
+                ),
+                'task_summary': (
+                    'ParaWorks 회사 소개서 전달드립니다 From: í•œìŠ¹í—Œ Date: Fri, 15 May 2026 01:58:19 -0700 '
+                    'ParaWorks 소개서를 공유합니다.'
+                ),
+                'source_title': 'ParaWorks 회사 소개서 전달드립니다',
+                'source_type': 'gmail',
+            },
+            source_links=['https://mail.google.com/mail/u/0/#inbox/gmail-paraworks-intro'],
+            source_snippets=['ParaWorks 회사 소개서 전달드립니다'],
+            confidence_score=0.88,
+            permission_level='internal',
+            status='pending_review',
+        ),
+        ReviewItem(
+            item_type='project_assignment',
+            payload={
+                'agent_name': 'project_classifier',
+                'title': 'Project Alpha source 연결',
+                'summary': (
+                    'Google Drive file changed: Project Alpha rollout plan Mime type: application/pdf '
+                    'Owner: owner@example.com Modified: 2026-05-15T02:00:00Z'
+                ),
+                'task_summary': (
+                    'Google Drive file changed: Project Alpha rollout plan Mime type: application/pdf '
+                    'Owner: owner@example.com Modified: 2026-05-15T02:00:00Z'
+                ),
+                'source_title': 'Project Alpha rollout plan',
+                'source_type': 'drive',
+            },
+            source_links=['https://drive.google.com/file/d/project-alpha-plan/view'],
+            source_snippets=['Project Alpha rollout plan'],
+            confidence_score=0.88,
+            permission_level='internal',
+            status='pending_review',
+        ),
+    ]
+    db_session.add_all(items)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review')
+
+    assert response.status_code == 200
+    titles = {group['title'] for group in response.json()['groups']}
+    assert 'ParaWorks 회사 소개서 전달드립니다' in titles
+    assert 'Project Alpha rollout plan' in titles
+    assert all('From:' not in title for title in titles)
+    assert all('Date:' not in title for title in titles)
+    assert all('Mime type:' not in title for title in titles)
+    assert all('Google Drive file changed:' not in title for title in titles)
+
+
 def test_slack_agent_review_item_requires_project_before_approval(client, db_session) -> None:
     db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Redis work'))
     item = ReviewItem(

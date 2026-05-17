@@ -23,6 +23,15 @@ DISPLAY_TITLE_KEYS = (
     'recommended_next_step',
 )
 
+METADATA_LABEL_PATTERN = re.compile(
+    r'(?:^|\s)(?:Description|Location|Start|End|Marker|From|Date|Mime type|Owner|Last modifier|Modified|Parent subject|Attachment size):\s',
+    flags=re.IGNORECASE,
+)
+SOURCE_PREFIX_PATTERN = re.compile(
+    r'^(?:Google Drive file changed|Gmail attachment):\s*',
+    flags=re.IGNORECASE,
+)
+
 
 def review_item_display_title(item: ReviewItem) -> str:
     return review_payload_display_title(item.payload, item.id)
@@ -42,11 +51,13 @@ def review_payload_display_title(payload: dict, item_id: int) -> str:
 
 
 def clean_review_display_text(value: str) -> str:
-    cleaned = html.unescape(re.sub(r'<[^>]+>', ' ', value))
+    cleaned = value.replace('\\n', ' ')
+    cleaned = html.unescape(re.sub(r'<[^>]+>', ' ', cleaned))
     cleaned = _one_line(cleaned)
-    metadata_match = re.search(r'\s(?:Description|Location|Start|End|Marker):\s', cleaned, flags=re.IGNORECASE)
-    if metadata_match and cleaned[: metadata_match.start()].strip():
-        return cleaned[: metadata_match.start()].strip()
+    cleaned = SOURCE_PREFIX_PATTERN.sub('', cleaned).strip()
+    metadata_match = METADATA_LABEL_PATTERN.search(cleaned)
+    if metadata_match:
+        return SOURCE_PREFIX_PATTERN.sub('', cleaned[: metadata_match.start()].strip()).strip()
     return cleaned
 
 
