@@ -19,6 +19,7 @@ import { createPortal } from "react-dom";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
+import { sourceFamilyLabel, sourceTypeFromUrl } from "@/lib/sourceLabels";
 import type {
   ReviewItem,
   ReviewGroup,
@@ -167,7 +168,10 @@ function projectAssignmentFields(item: ReviewItem) {
   };
 }
 
-function agentDisplayName(agentName: string) {
+function agentDisplayName(agentName: string, item?: ReviewItem) {
+  if (agentName === "mail_document_agent" && item) {
+    return mailDocumentSourceLabel(item) || "Mail/Docs Agent";
+  }
   const labels: Record<string, string> = {
     project_classifier: "프로젝트 분류기",
     slack_agent: "Slack Agent",
@@ -177,19 +181,59 @@ function agentDisplayName(agentName: string) {
   return labels[agentName] ?? agentName;
 }
 
+function mailDocumentSourceLabel(item: ReviewItem) {
+  return sourceFamilyLabel(sourceTypesForItem(item));
+}
+
+function sourceTypesForItem(item: ReviewItem) {
+  const evidenceTypes = (item.source_evidence ?? []).map((row) => row.source_type);
+  const payloadTypes = Array.isArray(item.payload.source_types) ? item.payload.source_types : [];
+  const payloadType = stringField(item.payload.source_type);
+  const urlTypes = (item.source_links ?? []).map((link) => sourceTypeFromUrl(link));
+  return [...evidenceTypes, ...payloadTypes, payloadType, ...urlTypes];
+}
+
+type ReviewSourceType = "slack" | "calendar" | "drive" | "gmail" | "gmail_attachment" | "";
+
+function normalizeReviewSourceType(value: unknown): ReviewSourceType {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "slack" ||
+    normalized === "calendar" ||
+    normalized === "drive" ||
+    normalized === "gmail" ||
+    normalized === "gmail_attachment"
+  ) {
+    return normalized;
+  }
+  return "";
+}
+
+function firstReviewSourceType(values: unknown[]): ReviewSourceType {
+  return values.map(normalizeReviewSourceType).find(Boolean) || "";
+}
+
 function primarySourceType(item: ReviewItem) {
-  const payloadSourceType = stringField(item.payload.source_type).trim();
-  if (payloadSourceType) return payloadSourceType;
-  return item.source_evidence?.find((row) => stringField(row.source_type).trim())?.source_type?.trim() ?? "";
+  const payloadType = firstReviewSourceType([item.payload.source_type]);
+  if (payloadType) return payloadType;
+  const payloadTypes = Array.isArray(item.payload.source_types) ? firstReviewSourceType(item.payload.source_types) : "";
+  if (payloadTypes) return payloadTypes;
+  const evidenceType = firstReviewSourceType((item.source_evidence ?? []).map((row) => row.source_type));
+  if (evidenceType) return evidenceType;
+  return firstReviewSourceType((item.source_links ?? []).map((link) => sourceTypeFromUrl(link)));
 }
 
 function agentBadgeLabel(item: ReviewItem, agentName: string) {
+  if (agentName === "mail_document_agent" && Array.isArray(item.payload.source_types)) {
+    return mailDocumentSourceLabel(item) || "Mail/Docs Agent";
+  }
   const sourceType = primarySourceType(item);
   if (sourceType === "slack" || agentName === "slack_agent") return "Slack Agent";
   if (sourceType === "calendar") return "Calendar Agent";
   if (sourceType === "drive") return "Google Drive Agent";
   if (sourceType === "gmail" || sourceType === "gmail_attachment") return "Mail Agent";
-  return agentDisplayName(agentName);
+  return agentDisplayName(agentName, item);
 }
 
 function agentBadgeClass(item: ReviewItem, agentName: string) {

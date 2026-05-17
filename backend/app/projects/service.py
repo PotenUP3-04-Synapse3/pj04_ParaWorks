@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -289,11 +289,25 @@ def _memory_records_for_project(
 
 
 def _timeline_items_from_records(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
-    return [
-        item
-        for item in records
-        if item.item_type == 'timeline_event' or (item.item_type == 'todo' and item.completed_at)
+    completed_todos = [
+        item for item in records if item.item_type == 'todo' and item.completed_at
     ]
+    timeline_items: list[ProjectTimelineItem] = []
+    for item in records:
+        if item.item_type != 'timeline_event':
+            continue
+        completed_todo = _matching_completed_todo_for_timeline(item, completed_todos)
+        if completed_todo:
+            timeline_items.append(
+                replace(
+                    item,
+                    completed_at=completed_todo.completed_at,
+                    completed_by=completed_todo.completed_by,
+                )
+            )
+        else:
+            timeline_items.append(item)
+    return timeline_items
 
 
 def _dedupe_activity_items(records: list[ProjectTimelineItem]) -> list[ProjectTimelineItem]:
@@ -366,6 +380,32 @@ def _activity_signature(item: ProjectTimelineItem) -> str:
             ' '.join(item.summary.split()).strip().lower(),
         ]
     )
+
+
+def _matching_completed_todo_for_timeline(
+    timeline_item: ProjectTimelineItem,
+    completed_todos: list[ProjectTimelineItem],
+) -> ProjectTimelineItem | None:
+    timeline_title = _normalized_todo_timeline_title(timeline_item.title)
+    timeline_links = {link for link in timeline_item.source_links if link.strip()}
+    for todo in completed_todos:
+        if todo.project_key != timeline_item.project_key:
+            continue
+        if todo.title.strip() != timeline_title:
+            continue
+        todo_links = {link for link in todo.source_links if link.strip()}
+        if timeline_links and todo_links and timeline_links.isdisjoint(todo_links):
+            continue
+        return todo
+    return None
+
+
+def _normalized_todo_timeline_title(title: str) -> str:
+    cleaned = title.strip()
+    for prefix in ('[할 일]', '[할일]', '할 일:', '할일:'):
+        if cleaned.startswith(prefix):
+            return cleaned[len(prefix):].strip()
+    return cleaned
 
 
 def _source_lookup_by_url(db: Session) -> dict[str, Source]:

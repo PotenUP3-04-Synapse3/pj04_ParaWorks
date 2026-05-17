@@ -10,20 +10,22 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import Image, { type ImageProps } from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import type { ProjectTimelineItem, ProjectsResponse } from "@/lib/api/types";
-import Image from "next/image";
 import todoIcon from "@/app/timeline/icons/todo.png";
 import slackIcon from "@/app/timeline/icons/slack.svg";
-import gmailIcon from "@/app/timeline/icons/gmail.svg";
+import gmailIcon from "@/app/timeline/icons/gmail.png";
 import driveIcon from "@/app/timeline/icons/drive.svg";
 import calendarIcon from "@/app/timeline/icons/calendar.svg";
 
 type TimelineSource = "Slack" | "Gmail" | "Drive" | "Calendar" | "Source";
+type FilterableTimelineSource = Exclude<TimelineSource, "Source">;
 type PeriodFilter = "all" | "7d" | "30d";
-type SourceFilter = "all" | TimelineSource;
-type StatusFilter = "all" | TimelineHistory["status"];
+type SourceFilter = "all" | FilterableTimelineSource;
+type TimelineStatus = "승인" | "완료";
+type StatusFilter = "all" | TimelineStatus;
 
 type TimelineHistory = {
   id: string;
@@ -34,7 +36,7 @@ type TimelineHistory = {
   title: string;
   summary: string;
   history: string;
-  status: "approved" | "완료";
+  status: TimelineStatus;
   sourceUrl: string;
   preview: string;
   snippets: { author: string; body: string; time: string }[];
@@ -442,7 +444,7 @@ function TimelineListPanel({
 }
 
 function TimelineStatStrip({ histories }: { histories: TimelineHistory[] }) {
-  const approvedCount = histories.filter((history) => history.status === "approved" || history.status === "완료").length;
+  const approvedCount = histories.filter((history) => history.status === "승인" || history.status === "완료").length;
   const sourceCounts = histories.reduce<Record<string, number>>((acc, history) => {
     acc[history.source] = (acc[history.source] ?? 0) + 1;
     return acc;
@@ -585,7 +587,7 @@ function TimelineFilterControls({
         onChange={(event) => onChangeStatus(event.target.value as StatusFilter)}
       >
         <option value="all">상태 전체</option>
-        <option value="approved">승인됨</option>
+        <option value="승인">승인됨</option>
         <option value="완료">완료</option>
       </select>
       <button
@@ -826,7 +828,7 @@ function TimelineEventRow({
   );
 }
 
-const sourceIconImages: Record<string, string> = {
+const sourceIconImages: Record<string, ImageProps["src"]> = {
   Slack: slackIcon,
   Gmail: gmailIcon,
   Drive: driveIcon,
@@ -852,7 +854,7 @@ function TimelineSourceIcon({ item }: { item: TimelineHistory }) {
 function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHistory {
   const occurredAt = item.occurred_at || item.created_at;
   const source = sourceFromLinks(item.source_links);
-  const status = item.completed_at || isPastCalendarTimeline(source, occurredAt) ? "완료" : "approved";
+  const status: TimelineStatus = item.completed_at || isPastCalendarTimeline(source, occurredAt) ? "완료" : "승인";
   return {
     id: item.id,
     itemType: item.item_type,
@@ -861,7 +863,7 @@ function timelineHistoryFromProjectItem(item: ProjectTimelineItem): TimelineHist
     source,
     title: item.title,
     summary: item.summary,
-    history: item.summary || "No approved timeline summary.",
+    history: item.summary || "승인된 타임라인 요약이 없습니다.",
     status,
     sourceUrl: item.source_links[0] ?? "",
     preview: previewForProjectItem(item, source),
@@ -960,11 +962,6 @@ function isPastCalendarTimeline(source: TimelineSource, occurredAt: string) {
   return timestamp < Date.now();
 }
 
-function statusChipClass(status: TimelineHistory["status"]) {
-  if (status === "approved") return "border-emerald-100 bg-emerald-50 text-emerald-700";
-  return "border-blue-100 bg-blue-50 text-blue-700";
-}
-
 function sourceBadgeClass(source: TimelineSource) {
   if (source === "Drive") return "border-blue-100 bg-blue-50 text-blue-700";
   if (source === "Slack") return "border-violet-100 bg-violet-50 text-violet-700";
@@ -981,8 +978,13 @@ function sourceIconClass(source: TimelineSource) {
   return "bg-slate-50 text-slate-600";
 }
 
-function statusLabel(status: TimelineHistory["status"]) {
-  if (status === "approved") return "승인됨";
+function statusChipClass(status: TimelineStatus) {
+  if (status === "승인") return "border-emerald-100 bg-emerald-50 text-emerald-700";
+  return "border-blue-100 bg-blue-50 text-blue-700";
+}
+
+function statusLabel(status: TimelineStatus) {
+  if (status === "승인") return "승인됨";
   return status;
 }
 

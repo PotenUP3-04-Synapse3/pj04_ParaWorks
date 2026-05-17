@@ -173,6 +173,28 @@ Updated: 2026-05-16
     warnings only.
   - `npm.cmd run build` -> passed.
 
+## 2026-05-16 Review Mail Docs Calendar source labels
+
+- Scope:
+  - Only `/review` UX and Review API source-evidence fallback were changed.
+  - Slack Agent, RAG orchestration, connector ingestion, and project routing
+    were intentionally left untouched.
+- Backend:
+  - `backend/app/api/v1/review.py` no longer falls back missing
+    `source_type` to `slack`.
+  - Source evidence now resolves metadata by source id as well as URL, then
+    falls back to indexed `ReviewItem.payload.source_types`, scalar
+    `payload.source_type`, and source URL heuristics.
+- Frontend:
+  - `frontend/src/lib/sourceLabels.ts` centralizes source-family labels.
+  - `/review` card agent badges show `Mail`, `Docs`, `Calendar`, or combined
+    labels for `mail_document_agent` items.
+  - Gmail attachments map to `Mail`.
+- Tests added:
+  - Backend regression in `backend/tests/test_review.py`.
+  - Playwright regression in
+    `frontend/e2e/review-mail-docs-source-labels.spec.ts`.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Symptom:
@@ -2443,3 +2465,19 @@ tests passed with 53 tests; ruff passed.
 - 주의:
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
     생성 변경은 되돌렸다.
+
+## 2026-05-15 타임라인 상태 한글화 및 완료 todo 병합
+
+- 변경 요약:
+  - 타임라인 상태 필터 옵션과 row chip을 `승인됨`, `완료`로 한글화했다.
+  - `/projects`의 `timeline_items`는 더 이상 완료된 `todo` record를 별도 타임라인 row로 포함하지 않는다.
+  - 완료된 `Todo`는 같은 프로젝트, 같은 source link, `[할 일] {todo.title}` 제목을 가진 기존 `TimelineEvent`와 매칭된다.
+  - 매칭된 기존 타임라인 이벤트에 `completed_at`, `completed_by`를 병합해 프론트에서 `완료` 상태로 표시한다.
+- 주의:
+  - 기존 `TimelineEvent`가 없는 legacy todo는 타임라인에 새로 추가하지 않는다. 프로젝트 활동 목록에는 계속 todo로 표시된다.
+- 검증:
+  - `uv run ... pytest backend/tests/test_todos_api.py backend/tests/test_project_memory_api.py backend/tests/test_dashboard_api.py -q` → `32 passed`
+  - `uv run ... ruff check backend/app/projects/service.py backend/tests/test_todos_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts dashboard-workflow.spec.ts --project=chromium-desktop` → `3 passed`

@@ -87,6 +87,17 @@ demo story changes.
 - Verification: Timeline Playwright coverage passed with 3 tests, frontend
   lint passed with no warnings, and frontend production build passed.
 
+## 2026-05-16 Review Mail Docs Calendar source labels
+
+- Improved `/review` so Mail/Docs agent candidates show source-family badges
+  (`Mail`, `Docs`, `Calendar`, or combined labels such as `Mail + Docs`) in
+  the card header instead of always showing `Mail/Docs Agent`.
+- Hardened Review API source-evidence fallback so Mail/Docs/Calendar rows keep
+  indexed `source_types` and source-id evidence summary metadata instead of
+  defaulting missing source type data to Slack.
+- Verification: added backend regression coverage for indexed source-type
+  fallback and Playwright coverage for the card-level source badges.
+
 ## 2026-05-15 Google Calendar updatedMin fallback
 
 - Fixed Google Calendar sync recovery when Google rejects an old per-calendar
@@ -4443,3 +4454,10 @@ Cost/security note:
     connector 구조라 기존 메시지 본문/스레드 정리 흐름을 유지했다.
   - 검증: 관련 backend Review/Project 테스트 47개 통과, Review Playwright 테스트 4개 통과,
     frontend lint/build 통과, 수정 파일 ruff 통과.
+- `fix: 타임라인 완료 상태 병합 및 상태 한글화`
+  - 타임라인 상태 필터와 row chip을 `승인됨`, `완료`로 한글화했다.
+  - 완료된 todo를 타임라인에 새 항목으로 추가하지 않고, 같은 프로젝트/source link의
+    기존 `[할 일] ...` 타임라인 이벤트에 `completed_at`, `completed_by`를
+    병합해 화면에서 `완료`로 보이게 했다.
+  - 검증: backend 프로젝트/대시보드/todo 테스트 32개 통과, ruff 통과,
+    frontend lint/build 통과, Playwright 대시보드/타임라인 3개 통과.

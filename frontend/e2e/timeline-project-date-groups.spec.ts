@@ -125,6 +125,16 @@ test("Timeline groups approved project items by date", async ({ page }) => {
 
   await page.goto("/timeline");
 
+  await expect(page.getByLabel("소스 필터")).toContainText("소스 전체");
+  await expect(page.getByLabel("소스 필터")).toContainText("Slack");
+  await expect(page.getByLabel("소스 필터")).toContainText("Gmail");
+  await expect(page.getByLabel("소스 필터")).toContainText("Drive");
+  await expect(page.getByLabel("소스 필터")).toContainText("Calendar");
+  await expect(page.getByLabel("소스 필터")).not.toContainText("Source");
+  await expect(page.getByLabel("상태 필터")).toContainText("상태 전체");
+  await expect(page.getByLabel("상태 필터")).toContainText("승인");
+  await expect(page.getByLabel("상태 필터")).toContainText("완료");
+  await expect(page.getByLabel("상태 필터")).not.toContainText("검토 중");
   await expect(page.getByRole("heading", { name: /5월 14일/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /5월 13일/ })).toBeVisible();
   await expect(page.getByText("2026년 5월 15일")).toBeHidden();
