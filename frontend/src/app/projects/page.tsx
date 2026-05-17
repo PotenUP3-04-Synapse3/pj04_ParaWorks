@@ -46,6 +46,13 @@ function itemTypeLabel(itemType: string) {
   }[itemType] ?? itemType.replaceAll("_", " ");
 }
 
+function projectListDescription(summary: string) {
+  const cleaned = summary
+    .replace(/\s*승인된 원본 근거\s*[\d,]+건과\s*승인된 프로젝트 활동\s*[\d,]+건이 연결되어 있습니다\.?/g, "")
+    .trim();
+  return cleaned || summary;
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectMemory[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -342,7 +349,7 @@ function ProjectListPanel({
                 {project.evidence_count.toLocaleString()}
               </span>
             </div>
-            <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{project.summary}</p>
+            <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{projectListDescription(project.summary)}</p>
             <p className="mt-3 text-[11px] font-extrabold text-indigo-600">
               근거 {project.evidence_count.toLocaleString()} · 활동 {project.activity_items.length.toLocaleString()} · 검토 대기 {project.pending_review_count.toLocaleString()}
             </p>

@@ -4428,3 +4428,9 @@ Cost/security note:
     Review API와 프론트 표시 단계도 기존 raw payload를 방어적으로 정리한다.
   - 검증: 관련 backend Review/Project 테스트 45개 통과, Review Playwright 테스트 4개 통과,
     frontend lint/build 통과, 수정 파일 ruff 통과.
+- `fix: 프로젝트 목록 설명에서 자동 연결 통계 문구 제거`
+  - 프로젝트 페이지 좌측 프로젝트 목록 카드의 설명란에서
+    `승인된 원본 근거 00건과 승인된 프로젝트 활동 00건이 연결되어 있습니다.` 자동 문구를
+    제거하고, 사용자가 입력한 프로젝트 설명만 보이도록 했다.
+  - 프로젝트 상세/metric 정보는 유지하고 목록 하단의 `근거 · 활동 · 검토 대기` 수치도 그대로 둔다.
+  - 검증: Projects Playwright 테스트 4개 통과, frontend lint/build 통과.

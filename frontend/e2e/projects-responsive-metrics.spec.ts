@@ -166,6 +166,8 @@ test("Projects page presents a responsive workspace layout", async ({ page }) =>
   await expect(page.getByTestId("project-workspace")).toBeVisible();
   await expect(page.getByTestId("project-overview-hero")).toContainText("케크");
   await expect(page.getByTestId("project-list-panel")).toContainText("2개 프로젝트");
+  await expect(page.getByTestId("project-list-panel")).toContainText("변시 사업부");
+  await expect(page.getByTestId("project-list-panel")).not.toContainText("승인된 원본 근거 71건과 승인된 프로젝트 활동 75건이 연결되어 있습니다.");
   await expect(page.getByTestId("project-evidence-panel")).toContainText("연결된 원본 근거");
   await expect(page.getByTestId("project-evidence-tabs")).toContainText("Drive");
   await expect(page.getByTestId("project-activity-panel")).toContainText("승인된 프로젝트 활동");

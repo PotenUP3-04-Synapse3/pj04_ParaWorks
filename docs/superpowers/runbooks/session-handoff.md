@@ -2386,3 +2386,23 @@ tests passed with 53 tests; ruff passed.
     무관 파일을 되돌리고 수정 파일만 `--no-fix`로 검사했다.
   - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
     생성 변경은 되돌렸다.
+
+## 2026-05-17 프로젝트 목록 설명 자동 연결 통계 문구 제거
+
+- 변경 요약:
+  - `frontend/src/app/projects/page.tsx`의 좌측 프로젝트 목록 카드에서
+    `project.summary` 뒤에 붙어 내려오는 `승인된 원본 근거 N건과 승인된 프로젝트 활동 N건이
+    연결되어 있습니다.` 문구를 표시하지 않도록 했다.
+  - 이 처리는 프로젝트 목록 카드 전용 표시 함수로 제한했다. 프로젝트 상세 summary, evidence/activity
+    metric, 목록 하단 `근거 · 활동 · 검토 대기` 수치는 유지한다.
+  - `frontend/e2e/projects-responsive-metrics.spec.ts`에 프로젝트 목록 패널에서 자동 연결
+    통계 문구가 노출되지 않는 회귀 검증을 추가했다.
+- 검증:
+  - RED 확인: 새 기대값이 기존 코드에서 실패함을 확인.
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts --project=chromium-desktop -g "responsive workspace"` → `1 passed`
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.
