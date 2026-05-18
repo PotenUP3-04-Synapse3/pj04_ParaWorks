@@ -6,6 +6,87 @@ This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
 
+## 2026-05-16 Docker Postgres port fallback
+
+- Fixed the production-like Docker helper so a non-ParaWorks listener on
+  `127.0.0.1:5432` now falls back to the next available host port starting at
+  `5433` instead of retrying the same occupied port.
+- Aligned the pgvector dev helper and runbook with the same available-port
+  behavior, preserving the compose `PARAWORKS_POSTGRES_PORT` override path.
+- Repeated helper runs now reuse an existing ParaWorks Postgres host port
+  instead of drifting from `5433` to higher ports.
+- Verification: regression checks failed before the script fix, then passed
+  through direct static test execution; PowerShell parser checks passed for both
+  helper scripts; the Docker database path and full backend/frontend startup
+  were verified locally.
+
+## 2026-05-16 Dashboard SaaS responsive polish
+
+- Reworked the Dashboard hero into a compact AI workspace card with separate
+  text and right-side collaboration mock illustration areas, preserving the
+  existing Korean copy and dashboard data flow.
+- Changed the Dashboard content layout so the right utility column sits beside
+  the main content only on wide screens, then flows below the main stack on
+  laptop/tablet widths without squeezing the hero or KPI cards.
+- Hardened the Calendar card hover popover and selected-date behavior so
+  current date and event-bearing selected date can diverge safely.
+- Verification: Dashboard Playwright workflow passed, frontend lint passed with
+  existing timeline warnings only, frontend production build passed, and
+  viewport measurements passed for 2560, 1920, 1440, 1366, 1024, and 768 widths.
+
+## 2026-05-16 Dashboard calendar week order polish
+
+- Changed the Dashboard calendar from Monday-start weeks to Sunday-start weeks
+  so the grid reads Sunday through Saturday.
+- Split today's visual state from the selected date state: today stays visible
+  with a softer highlight when another date is selected, while the selected date
+  keeps the stronger gradient emphasis.
+- Verification: Dashboard Playwright workflow passed, frontend lint passed with
+  existing timeline warnings only, and frontend production build passed.
+
+## 2026-05-16 Dashboard calendar sync and Review bulk actions
+
+- Extended the Dashboard API with `calendar_events` so synced Google Calendar
+  events outside today can appear in the calendar grid, while `today_events`
+  continues to drive the "today schedule" KPI.
+- Made the Dashboard listen to the shared Review Queue update event so the
+  review badge count shown in dashboard content refreshes with the sidebar.
+- Hardened connector sync so duplicate source events with unchanged content
+  signatures are not passed into ingestion or downstream review extraction.
+- Added Review Queue bulk selection with a Gmail-style top checkbox, project
+  selection before bulk processing, duplicate/similar bulk actions, right-click
+  approve/reject actions, and an in-app confirmation modal.
+- Verification: backend dashboard/ingestion/review tests passed with 33 tests,
+  ruff passed for touched backend files, Review/Dashboard Playwright tests
+  passed with 3 tests, frontend lint passed with existing timeline warnings
+  only, and frontend production build passed.
+
+## 2026-05-16 Review bulk action UX follow-up
+
+- Moved group-level selection into the former expand-chevron position and
+  removed the visible chevron affordance from review group headers.
+- Scoped duplicate/similar approve and reject actions to each duplicate group,
+  placing those actions beside the group confidence summary instead of in the
+  global toolbar.
+- Rendered review context menus and bulk confirmation dialogs through a body
+  portal so modal backdrops cover the full viewport.
+- Fixed the bulk approval failure warning copy so skipped project-unclassified
+  items show readable Korean guidance.
+- Verification: Review bulk Playwright coverage passed with 2 tests, frontend
+  lint passed with existing timeline warnings only, and frontend production
+  build passed.
+
+## 2026-05-16 Timeline calendar status and filter cleanup
+
+- Calendar-backed timeline items whose event time is already in the past now
+  render as completed in the Timeline page, matching user expectations for
+  historical schedule entries.
+- Removed the unavailable `reviewing` status filter and the generic `Source`
+  source filter option from the Timeline filter controls.
+- Cleaned up unused Timeline icon imports so frontend lint is quiet.
+- Verification: Timeline Playwright coverage passed with 3 tests, frontend
+  lint passed with no warnings, and frontend production build passed.
+
 ## 2026-05-16 Review Mail Docs Calendar source labels
 
 - Improved `/review` so Mail/Docs agent candidates show source-family badges
@@ -4233,8 +4314,148 @@ Cost/security note:
   - 검증: backend 관련 테스트 36개 통과, ruff 통과, frontend lint/build
     통과, Playwright 대시보드/타임라인/프로젝트 5개 통과, Docker Postgres
     migration 적용 확인.
+- `fix: 타임라인 날짜 탐색과 검토 카드 동기화 개선`
+  - 타임라인 상태 표시의 `approved`를 `승인됨`으로 한글화하고, 최근 7일은
+    기본 펼침, 이전 날짜는 접힘 상태로 시작하게 했다.
+  - 날짜가 많아질 때 스캔할 수 있도록 월별 sticky header, 좌측 날짜 인덱스,
+    `활동 있는 날짜만 보기 / 전체 날짜 보기` 토글을 추가했다.
+  - 검토사항 우클릭 메뉴를 항목 제목이 보이는 빠른 승인/반려 드롭다운으로
+    다듬고 화면 가장자리에서 잘리지 않게 위치를 보정했다.
+  - 대시보드 검토사항 카드는 Review Queue 정렬과 같은 pending item 3개만
+    표시하되 배지 숫자는 실제 pending review 총수를 사용하도록 맞췄다.
+  - 검증: `backend/tests/test_dashboard_api.py` 6개 통과, Python ruff 통과,
+    frontend lint/build 통과, Playwright 타임라인/대시보드/검토 bulk 테스트
+    8개 통과.
+- `fix: 대시보드 검토사항 카드 deep link와 표시 제목 정합성 개선`
+  - 대시보드 검토사항 카드의 각 항목 링크가 `/review?itemId=...`로 이동해
+    검토사항 페이지에서 해당 항목이 포함된 그룹을 자동으로 펼치고 스크롤한다.
+  - `ParaWorks source 연결`처럼 낮은 정보량의 payload title은 summary, reason,
+    task/source title 같은 실제 검토 큐 표시 텍스트로 대체하는 공용 display title
+    규칙을 추가했다.
+  - 대시보드 API와 Review API가 같은 display title 규칙을 사용해 목록 불일치를
+    줄였다.
+  - 검증: dashboard/review API 테스트 8개 통과, Python ruff 통과, frontend
+    lint/build 통과, Playwright 대시보드/검토 bulk 테스트 4개 통과.
+- `fix: 대시보드 검토사항 카드 중복 그룹 접기`
+  - 대시보드 검토사항 카드의 목록을 Review Queue와 같은 display title + item type
+    그룹 기준으로 dedupe해 같은 후보가 여러 개 있어도 카드에는 하나만 보이게 했다.
+  - `pending_review_count` 배지는 실제 검토 대기 총수를 그대로 유지한다.
+  - 검증: `backend/tests/test_dashboard_api.py` 8개 통과, Python ruff 통과,
+    Playwright 대시보드 테스트 2개 통과.
+- `style: 프로젝트 워크스페이스 UI 리디자인`
+  - 프로젝트 페이지를 대시보드와 같은 SaaS workspace 톤으로 재구성했다.
+  - 선택 프로젝트 overview hero, metric mini cards, 강조된 프로젝트 목록,
+    source filter tab이 있는 원본 근거 패널, timeline형 승인 활동 패널을 추가했다.
+  - 2XL에서는 3영역, 1440/1366급에서는 2영역+활동 하단, 태블릿 이하에서는
+    세로 stack으로 전환되게 했다.
+  - 기존 프로젝트 검색, 생성, 새로고침, 원본 근거 링크, source/type badge,
+    empty state 흐름은 유지했다.
+  - 검증: frontend lint/build 통과, Playwright 프로젝트 페이지 테스트 4개 통과.
+- `style: 프로젝트 워크스페이스 board UI 정교화`
+  - ParaWorks 사이드바와 전역 셸 동작은 그대로 두고 프로젝트 페이지 본문만 target
+    이미지의 calm kanban/workspace 톤으로 다듬었다.
+  - 페이지 헤더, 선택 프로젝트 summary, 프로젝트 목록 lane, 원본 근거 lane,
+    승인 활동 lane을 white/off-white glass surface, rounded board card, soft shadow,
+    pill chip 체계로 정리했다.
+  - Drive/Gmail/Slack/Calendar 원본 근거와 활동 유형별 카드에 아주 옅은 pastel
+    tint를 적용해 정보 구조는 유지하면서 workspace board 느낌을 강화했다.
+  - 기존 프로젝트 선택, 검색, 생성, 새로고침, source filter, 원본 근거 링크,
+    승인 활동 렌더링, responsive 3/2/1 column 흐름은 유지했다.
+  - 검증: frontend lint/build 통과, Playwright 프로젝트 페이지 테스트 4개 통과.
+- `style: 프로젝트 목록 sticky follow 적용`
+  - 프로젝트 페이지의 프로젝트 목록 lane을 `fixed`가 아닌 normal flow 기반
+    `sticky` 패널로 바꿔 스크롤 시 부드럽게 따라오도록 했다.
+  - 1280px 이상에서만 sticky를 적용하고, 목록 내부는 viewport 높이에 맞춰
+    스크롤되게 해 노트북 화면에서 패널이 잘리지 않도록 했다.
+  - 검증: sticky 회귀 Playwright 테스트 추가, frontend lint/build 통과.
+- `fix: 대시보드 업무/프로젝트 카드 링크 교체`
+  - 대시보드 `오늘 해야 할 업무` 카드의 우측 링크를 `타임라인 보기`로 바꾸고
+    `/timeline`으로 이동하게 했다.
+  - `담당 프로젝트` 카드의 우측 링크는 `프로젝트 보기`로 바꾸고 `/projects`로
+    이동하게 했다.
+  - 검증: 대시보드 Playwright 회귀 테스트에 두 링크의 라벨과 href를 고정하고
+    frontend lint/build 통과.
+- `fix: 검토사항 Agent 배지 source별 분리와 sticky action bar`
+  - Review item의 Agent 배지를 `agent_name`만 보지 않고 `payload.source_type`과
+    `source_evidence.source_type`을 함께 사용해 Slack, Mail, Google Drive,
+    Calendar Agent로 구분했다.
+  - 배지 색상은 프로젝트 페이지 source badge와 맞춰 Slack violet, Mail rose,
+    Drive blue, Calendar emerald 계열로 통일했다.
+  - 검토사항 상단 bulk action bar를 `fixed`가 아닌 sticky로 바꿔 스크롤 시
+    문서 흐름 안에서 따라오게 했다.
+  - 검증: Review Playwright 회귀 테스트에 source별 Agent label/color와 sticky
+    action bar를 고정하고 frontend lint/build 통과.
+- `style: 타임라인 Explorer UI 압축 리디자인`
+  - 타임라인 페이지 본문을 대시보드/프로젝트 페이지와 같은 soft SaaS workspace
+    톤으로 정리했다.
+  - summary strip, pill형 프로젝트 탭, compact filter toolbar, 월별 sticky header,
+    좌측 compact month navigator를 추가/정리했다.
+  - 기본 진입 시 최근 월과 최근 날짜만 펼치고 오래된 월/날짜는 접힘 상태로 두어
+    긴 로그 리스트 스크롤 압박을 줄였다.
+  - 날짜 그룹은 기본 3개 항목만 보여주고 `N건 더 보기`로 점진 확장하며, history
+    row는 source/status badge와 1줄 title/preview 중심 compact card로 정리했다.
+  - 기존 프로젝트 탭, 기간/소스/상태 필터, 전체 날짜 보기, 필터 초기화, 날짜
+    jump, source link detail panel, 더 보기 동작은 유지했다.
+  - 검증: 타임라인 Playwright 테스트 4개 통과, frontend lint/build 통과.
+- `fix: 타임라인 날짜 인덱스 sticky 동작 보정`
+  - 타임라인 날짜 인덱스가 `position: sticky`여도 상위 `overflow-hidden` 때문에
+    페이지 스크롤을 따라오지 못하던 문제를 보정했다.
+  - timeline list panel을 `overflow-visible`로 바꿔 인덱스가 fixed overlay 없이
+    normal flow 안에서 전역 top bar 아래로 자연스럽게 붙게 했다.
+  - 검증: 스크롤 후 날짜 인덱스가 sticky top 근처에 유지되는 Playwright 회귀
+    테스트 추가, frontend lint/build 통과.
+- `style: 유틸리티 워크스페이스 페이지 SaaS 톤 정리`
+  - AI 비서, 에이전트 실행 기록, 연동 관리, 알림, 관리자 콘솔 페이지를
+    `utility-workspace` 스코프로 묶고 대시보드/프로젝트/타임라인과 같은 soft SaaS
+    workspace surface 체계로 정리했다.
+  - 사이드바와 각 페이지의 API/data/동작은 유지하고, page header, summary badge,
+    panel/card, integration card, admin table, AI chat shell, action button 스타일만
+    white/off-white glass surface, rounded card, subtle shadow, pill control 톤으로
+    업그레이드했다.
+  - `frontend/e2e/utility-workspace-style.spec.ts`를 추가해 다섯 페이지가 공통
+    스타일 스코프를 유지하는지 회귀 검증한다.
+  - 검증: frontend lint/build 통과, Playwright utility workspace + integrations
+    sync modal 테스트 12개 통과.
+- `fix: AI 비서 채팅 히스토리 접기 컨트롤 복구`
+  - AI 비서 페이지에서 채팅 히스토리를 펼친 뒤 다시 접는 컨트롤을 명확히
+    복구했다.
+  - 기존 히스토리 패널 안의 작은 닫기 버튼은 명시적으로 `setSidebarCollapsed(true)`를
+    호출하도록 고정하고, 채팅 본문 좌상단에도 `히스토리 접기` 버튼을 추가했다.
+  - AI 비서 루트에 hydration 신호를 추가해 Playwright 상호작용 테스트가 실제
+    클라이언트 핸들러 연결 이후 실행되도록 했다.
+  - 검증: assistant memory + utility workspace Playwright 테스트 desktop/mobile
+    통과, frontend lint/build 통과.
+- `fix: 대시보드 캘린더 refresh 시 오늘 날짜 유지`
+  - 대시보드 캘린더가 선택 날짜에 일정이 없을 때 연동 일정 중 가장 빠른 날짜를
+    자동 선택하던 로직을 제거했다.
+  - 2026-05-17 새로고침 시 오늘 날짜를 유지하고, 2026-04-17 같은 과거 연동 일정은
+    해당 월로 이동했을 때 dot/목록으로만 확인되도록 했다.
+  - 회귀 테스트로 이전 월에만 연동 일정이 있어도 2026년 5월과 5월 17일 선택 상태를
+    유지하는 케이스를 추가했다.
+- `fix: 검토사항 프로젝트 연결 캘린더 raw metadata 표시 정리`
+  - Calendar source로 생성된 프로젝트 연결 후보가 `Description`, HTML 태그,
+    `Location`, `Start`, `End` 메타데이터를 제목처럼 노출하던 문제를 수정했다.
+  - 프로젝트 분류기 생성 단계에서 캘린더 후보 summary를 이벤트 제목 중심으로 정제하고,
+    Review API와 프론트 표시 단계도 기존 raw payload를 방어적으로 정리한다.
+  - 검증: 관련 backend Review/Project 테스트 45개 통과, Review Playwright 테스트 4개 통과,
+    frontend lint/build 통과, 수정 파일 ruff 통과.
+- `fix: 프로젝트 목록 설명에서 자동 연결 통계 문구 제거`
+  - 프로젝트 페이지 좌측 프로젝트 목록 카드의 설명란에서
+    `승인된 원본 근거 00건과 승인된 프로젝트 활동 00건이 연결되어 있습니다.` 자동 문구를
+    제거하고, 사용자가 입력한 프로젝트 설명만 보이도록 했다.
+  - 프로젝트 상세/metric 정보는 유지하고 목록 하단의 `근거 · 활동 · 검토 대기` 수치도 그대로 둔다.
+  - 검증: Projects Playwright 테스트 4개 통과, frontend lint/build 통과.
+- `fix: 검토사항 프로젝트 연결 메일/Drive metadata 표시 정리`
+  - Gmail 규칙 기반 프로젝트 연결 후보에서 `From`, `Date` 헤더와 깨진 발신자명이
+    제목/연결 내용에 붙어 보이던 문제를 캘린더 raw metadata 정리와 같은 경로로 해결했다.
+  - Drive와 Gmail 첨부의 `Mime type`, `Owner`, `Parent subject`, `Attachment size` 같은
+    metadata label도 프로젝트 연결 후보 표시와 생성 summary에서 제거한다.
+  - Calendar/메일/Drive/첨부 회귀 테스트를 추가했고, Slack은 metadata header를 붙이지 않는
+    connector 구조라 기존 메시지 본문/스레드 정리 흐름을 유지했다.
+  - 검증: 관련 backend Review/Project 테스트 47개 통과, Review Playwright 테스트 4개 통과,
+    frontend lint/build 통과, 수정 파일 ruff 통과.
 - `fix: 타임라인 완료 상태 병합 및 상태 한글화`
-  - 타임라인 상태 필터와 row chip을 `승인`, `검토 중`, `완료`로 한글화했다.
+  - 타임라인 상태 필터와 row chip을 `승인됨`, `완료`로 한글화했다.
   - 완료된 todo를 타임라인에 새 항목으로 추가하지 않고, 같은 프로젝트/source link의
     기존 `[할 일] ...` 타임라인 이벤트에 `completed_at`, `completed_by`를
     병합해 화면에서 `완료`로 보이게 했다.

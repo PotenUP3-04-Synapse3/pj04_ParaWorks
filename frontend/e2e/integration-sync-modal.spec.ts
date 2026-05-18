@@ -18,6 +18,26 @@ const preflight = {
   requires_paid_confirmation: true,
 };
 
+const slackConnection = {
+  connector_type: "slack",
+  workspace_id: "T123",
+  workspace_name: "ParaWorks Demo",
+  status: "connected",
+  credential_status: "available",
+  masked_bot_token: "xoxb...demo",
+  scopes: ["channels:history"],
+};
+
+const gmailConnection = {
+  connector_type: "gmail",
+  workspace_id: "google-user-123",
+  workspace_name: "para@example.com",
+  status: "connected",
+  credential_status: "available",
+  masked_bot_token: "1//0...gmail",
+  scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+};
+
 test("Integrations page keeps every connector card visible while manifests are loading", async ({
   page,
 }) => {
@@ -135,7 +155,7 @@ test("Slack sync blocks the page with a progress modal and then reports the revi
     });
   });
   await page.route("**/api/v1/integrations/connections", async (route) => {
-    await route.fulfill({ contentType: "application/json", json: [] });
+    await route.fulfill({ contentType: "application/json", json: [slackConnection] });
   });
   await page.route("**/api/v1/dashboard", async (route) => {
     await route.fulfill({
@@ -297,7 +317,7 @@ test("Slack sync recovers when the final POST response is lost after the backend
     });
   });
   await page.route("**/api/v1/integrations/connections", async (route) => {
-    await route.fulfill({ contentType: "application/json", json: [] });
+    await route.fulfill({ contentType: "application/json", json: [slackConnection] });
   });
   await page.route("**/api/v1/dashboard", async (route) => {
     await route.fulfill({
@@ -434,7 +454,7 @@ test("Slack sync polling timeout stays in background-running state instead of fa
     });
   });
   await page.route("**/api/v1/integrations/connections", async (route) => {
-    await route.fulfill({ contentType: "application/json", json: [] });
+    await route.fulfill({ contentType: "application/json", json: [slackConnection] });
   });
   await page.route("**/api/v1/dashboard", async (route) => {
     await route.fulfill({
@@ -545,7 +565,12 @@ test("Slack sync polling timeout stays in background-running state instead of fa
   await page.getByRole("button", { name: "백그라운드에서 계속 진행" }).click();
   await expect(modal).toBeHidden();
 
-  await expect(page.getByTestId("background-sync-progress")).toHaveCount(0);
+  const backgroundProgress = page.getByTestId("background-sync-progress");
+  await expect(backgroundProgress).toBeVisible();
+  await expect(backgroundProgress.getByTestId("sync-progress-percent")).toContainText("75%");
+  await backgroundProgress.getByRole("button", { name: "진행률 보기" }).click();
+  await expect(modal).toBeVisible();
+  await expect(modal.getByTestId("sync-progress-percent")).toContainText("75%");
   await expect(page.getByTestId("source-operations-panel")).toBeVisible();
 });
 
@@ -591,7 +616,7 @@ test("Gmail sync uses async job polling so the modal reflects runtime progress",
     });
   });
   await page.route("**/api/v1/integrations/connections", async (route) => {
-    await route.fulfill({ contentType: "application/json", json: [] });
+    await route.fulfill({ contentType: "application/json", json: [gmailConnection] });
   });
   await page.route("**/api/v1/dashboard", async (route) => {
     await route.fulfill({

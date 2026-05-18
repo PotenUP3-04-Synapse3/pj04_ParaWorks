@@ -810,7 +810,7 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="reference-dashboard space-y-5">
+    <div className="reference-dashboard utility-workspace space-y-5">
       {syncProgress && syncModalOpen ? (
         <SyncProgressModal
           progress={syncProgress}
@@ -1011,7 +1011,10 @@ export default function IntegrationsPage() {
             <p className="mt-1 text-xs text-[var(--ink-muted)]">수집된 근거의 소스 분포</p>
           </div>
 
-          <div className="p-4">
+          <div className="space-y-3 p-4">
+            {syncProgress?.backgrounded ? (
+              <BackgroundSyncProgressCard progress={syncProgress} onOpen={() => setSyncModalOpen(true)} />
+            ) : null}
             <SourceOperationsPanel summary={dashboardSummary} />
           </div>
         </aside>
@@ -1193,6 +1196,51 @@ function SyncStep({ label, active, done }: { label: string; active: boolean; don
 /**
  * 소스별 데이터 수집 현황을 보여주는 패널 컴포넌트
  */
+function BackgroundSyncProgressCard({
+  progress,
+  onOpen,
+}: {
+  progress: SyncProgressState;
+  onOpen: () => void;
+}) {
+  const isRunning = progress.status === "running";
+  const isComplete = progress.status === "complete";
+  const statusLabel = isComplete ? "완료" : progress.status === "error" ? "오류" : "진행 중";
+  const message = isComplete
+    ? `${progress.displayName} 동기화가 완료되었습니다.`
+    : progress.errorMessage || progress.lastMessage || SYNC_RUNNING_STAGES[progress.stageIndex];
+
+  return (
+    <div
+      data-testid="background-sync-progress"
+      className="rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] p-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-[var(--workspace-rail-active)]">동기화 진행률</p>
+          <h4 className="mt-1 truncate text-sm font-semibold text-[var(--ink-strong)]">
+            {progress.displayName} {statusLabel}
+          </h4>
+        </div>
+        <RefreshCw
+          className={`h-4 w-4 shrink-0 text-[var(--workspace-accent)] ${isRunning ? "animate-spin" : ""}`}
+          aria-hidden="true"
+        />
+      </div>
+      <ProgressBar progressPct={progress.progressPct} />
+      <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--ink-muted)]">{message}</p>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="liquid-control mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold"
+      >
+        진행률 보기
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function SourceOperationsPanel({ summary }: { summary?: DashboardResponse }) {
   const counts = summary?.source_counts ?? {
     slack: 0,

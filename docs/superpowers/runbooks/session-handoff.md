@@ -2,6 +2,177 @@
 
 Updated: 2026-05-16
 
+## 2026-05-16 Dashboard calendar sync and Review bulk actions
+
+- Scope:
+  - Dashboard Calendar API/UI, connector duplicate filtering, and Review Queue
+    bulk action UX.
+- Changes:
+  - `backend/app/api/v1/dashboard.py` now returns both `today_events` and
+    `calendar_events`. The former remains today's KPI/list source; the latter
+    feeds the interactive calendar so synced events on other dates are visible.
+  - `frontend/src/app/dashboard/page.tsx` consumes `calendar_events` with a
+    `today_events` fallback and refreshes Dashboard state when
+    `REVIEW_QUEUE_UPDATED_EVENT` fires, keeping review counts aligned with the
+    sidebar.
+  - `backend/app/ingestion/sync.py` filters unchanged duplicate source events
+    before calling ingestion, while still reporting skipped counts from the
+    fetched connector payload.
+  - `frontend/src/app/review/page.tsx` adds Gmail-style top selection, selected
+    bulk approve/reject, project assignment before bulk processing,
+    duplicate/similar bulk approve/reject, right-click approve/reject, and an
+    in-app confirmation modal instead of the old browser confirm path.
+- Verification:
+  - RED backend dashboard test failed on missing `calendar_events` before the
+    API change.
+  - RED Review Playwright test failed on missing `review-select-all` before the
+    bulk UI change.
+  - GREEN:
+    `uv run pytest backend/tests/test_dashboard_api.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_review.py`
+    -> 33 passed.
+  - GREEN:
+    `uv run ruff check backend/app/api/v1/dashboard.py backend/app/ingestion/sync.py backend/tests/test_dashboard_api.py backend/tests/test_connector_ingestion_contract.py backend/tests/test_review.py`
+    -> passed.
+  - GREEN:
+    `npm.cmd run test:visual -- review-bulk-actions.spec.ts dashboard-workflow.spec.ts --project=chromium-desktop`
+    -> 3 passed.
+  - GREEN: `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - GREEN: `npm.cmd run build` -> passed.
+
+## 2026-05-16 Review bulk action UX follow-up
+
+- Scope:
+  - Follow-up UX corrections for Review Queue bulk actions.
+- Changes:
+  - Review group headers no longer show the expand chevron; the left-most
+    control is now a checkbox-style group selection button.
+  - Duplicate/similar approve and reject buttons are shown only on duplicate
+    group headers, positioned before the average confidence block.
+  - Bulk confirm dialogs and right-click context menus are rendered through
+    `createPortal(..., document.body)` so fixed backdrops cover the full
+    viewport instead of the page content column.
+  - Bulk failure copy now uses readable Korean:
+    `승인 처리 중 N개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`
+- Verification:
+  - RED Review Playwright test first failed because group-level checkbox and
+    group-level duplicate/similar buttons were missing, and because the modal
+    backdrop started below the viewport top.
+  - GREEN:
+    `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop`
+    -> 2 passed.
+  - GREEN: `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - GREEN: `npm.cmd run build` -> passed.
+
+## 2026-05-16 Timeline calendar status and filter cleanup
+
+- Scope:
+  - Timeline page only.
+- Changes:
+  - `frontend/src/app/timeline/page.tsx` now marks Calendar-sourced timeline
+    items as `완료` when their `occurred_at` or `created_at` timestamp is before
+    the current time.
+  - Timeline status filters now expose only `상태 전체`, `approved`, and `완료`.
+  - Timeline source filters now expose only `소스 전체`, `Slack`, `Gmail`,
+    `Drive`, and `Calendar`; the fallback `Source` label is still used on rows
+    when a source cannot be classified, but it is not a filter option.
+  - Removed unused Timeline icon imports that had been producing lint warnings.
+- Verification:
+  - RED Timeline Playwright test first failed because `reviewing` was still in
+    the status dropdown.
+  - GREEN:
+    `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop`
+    -> 3 passed.
+  - GREEN: `npm.cmd run lint` -> passed with no warnings.
+  - GREEN: `npm.cmd run build` -> passed.
+
+## 2026-05-16 Docker Postgres port fallback
+
+- Symptom:
+  - `.\scripts\paraworks-docker.ps1` detected that `127.0.0.1:5432` was in use
+    but still printed `Using Postgres host port 5432 for ParaWorks`, then Docker
+    failed to bind Postgres on the same occupied or forbidden socket.
+- Root cause:
+  - `scripts/paraworks-docker.ps1` and the older `scripts/start-pgvector-dev.ps1`
+    set `$fallbackPort = 5432`, so the auto-fallback path selected the original
+    failing port.
+- Fix:
+  - Both PowerShell helpers now use `Get-AvailableHostPort -PreferredPort 5433`
+    and pick the next free host port when the default 5432 listener is not the
+    ParaWorks Postgres container.
+  - Helpers now detect and reuse an already-running ParaWorks Postgres host port
+    so repeated starts do not keep moving from `5433` to higher ports.
+  - `docs/superpowers/runbooks/pgvector-dev.md` now documents 5433 examples and
+    matching `DATABASE_URL` values for alternate host ports.
+- Verification:
+  - RED regression checks for the missing fallback failed before implementation.
+  - A second RED check captured the repeated-start port drift before the reuse
+    fix.
+  - GREEN direct static test execution passed for
+    `backend/tests/test_paraworks_docker_script.py` and
+    `backend/tests/test_pgvector_dev_runbook.py`.
+  - PowerShell parser checks passed for both helper scripts.
+  - Escalated local verification started Docker services, ran migrations/schema
+    checks, then started backend/frontend successfully; health and login smoke
+    both returned HTTP 200.
+- Note:
+  - `uv run pytest ...` could not run in this shell because the global uv cache
+    path and project uv trampoline were denied by the local Windows environment;
+    the static test functions were executed directly with the available Python.
+
+## 2026-05-16 Dashboard responsive UI polish
+
+- Scope:
+  - Dashboard-only frontend polish in `frontend/src/app/dashboard/page.tsx` and
+    `frontend/src/app/globals.css`; no backend API or data contract changes.
+- Changes:
+  - Hero card now separates `dashboard-hero-copy` from
+    `dashboard-hero-illustration`, with lucide/CSS mock workspace cards,
+    avatars, chat, document, AI, and review visual elements.
+  - Dashboard content grid is one column by default and becomes
+    `main + 340px utility column` only at `min-width: 1280px`.
+  - Hero illustration is hidden at tablet widths; Korean hero text uses
+    wrapping-friendly sizing and no truncation.
+  - Calendar card is kept in normal document flow with `overflow: visible`, and
+    popovers clamp left/right edge alignment.
+  - Initial selected calendar date now moves to the first event-bearing date if
+    today's selected date has no events and the user has not clicked a date yet.
+- Verification:
+  - RED Playwright regression first failed because `.dashboard-hero-copy` did
+    not exist.
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop`
+    -> 2 passed.
+  - `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - `npm.cmd run build` -> passed.
+  - Playwright viewport measurements passed for 2560, 1920, 1440, 1366, 1024,
+    and 768 widths: no horizontal overflow, compact hero height, no hero
+    copy/illustration overlap, right column flows below wide desktop.
+- Note:
+  - The Codex in-app browser plugin could not start in this Windows sandbox
+    because Node hit an `EPERM` reading `C:\Users\hanvv\AppData`; browser
+    verification used escalated Playwright instead.
+
+## 2026-05-16 Dashboard calendar week order polish
+
+- Scope:
+  - Dashboard calendar UI only; no backend/API changes.
+- Changes:
+  - `WEEKDAY_LABELS` now renders `일, 월, 화, 수, 목, 금, 토`.
+  - `buildCalendarDays()` now starts each 42-day grid from the Sunday before or
+    on the first of the visible month.
+  - `.dashboard-calendar-day.today` and `.selected` styles are separated so
+    today's date remains softly highlighted when another date is selected.
+- Verification:
+  - RED Playwright regression first failed on the old Monday-start weekday
+    order.
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop`
+    -> 2 passed.
+  - `npm.cmd run lint` -> passed with pre-existing timeline unused-import
+    warnings only.
+  - `npm.cmd run build` -> passed.
+
 ## 2026-05-16 Review Mail Docs Calendar source labels
 
 - Scope:
@@ -1904,10 +2075,401 @@ tests passed with 53 tests; ruff passed.
   - 실행 중인 backend 서버가 이전 코드로 떠 있으면 새 `/api/v1/todos/{id}/complete` endpoint가 없으므로 서버 재시작이 필요하다.
   - 현재 임시 Python 테스트 환경은 `.tmp/uv-test-venv`를 사용했다. 기본 `.venv`는 기존 uv Python 경로 문제로 바로 실행되지 않았다.
 
+## 2026-05-16 타임라인 날짜 UX, Review 우클릭 메뉴, 대시보드 검토 동기화
+
+- 변경 요약:
+  - 타임라인 status UI에서 `approved`는 `승인됨`으로 표시한다.
+  - 타임라인 날짜 그룹은 최근 7일의 활동 날짜만 기본 펼침 상태로 두고, 더
+    오래된 날짜는 접힌 상태로 시작한다.
+  - 월 단위 sticky header와 좌측 미니 날짜 인덱스를 추가했다. 인덱스 날짜를
+    누르면 해당 날짜 그룹으로 스크롤하고 자동으로 펼친다.
+  - `전체 날짜 보기` 토글을 켜면 활동이 없는 날짜도 인덱스와 그룹에 표시한다.
+  - Review item 우클릭 메뉴는 항목 제목, 승인, 반려 설명을 포함하는 작은
+    드롭다운 UI로 바뀌었고 viewport 바깥으로 넘치지 않게 좌표를 보정한다.
+  - Dashboard 검토사항 카드는 `/api/v1/dashboard`의 `pending_review_count`
+    전체 값을 배지로 쓰고, 목록은 Review Queue 우선순위 정렬 기준 상위 3개만
+    표시한다.
+- 검증:
+  - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_dashboard_api.py` → `6 passed`
+  - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` → 통과
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop` → `2 passed`
+- 주의:
+  - 기본 `python -m pytest`는 로컬 환경에서 `pydantic_settings`가 없어 실패했다.
+    repo `.venv` 실행은 sandbox 권한 문제로 escalated 실행이 필요했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 대시보드 검토사항 카드 deep link와 표시 제목 정합성
+
+- 변경 요약:
+  - `backend/app/services/review_display.py`를 추가해 ReviewItem 표시 제목을
+    공용으로 계산한다.
+  - `ParaWorks source 연결`, `source 연결`, `untitled`, `unknown` 같은 낮은
+    정보량 제목은 실제 검토자가 볼 수 있는 `summary`, `decision_summary`,
+    `reason`, `task_summary`, `source_title` 등으로 대체한다.
+  - Dashboard API의 `pending_items`는 공용 display title과
+    `review_url=/review?itemId={id}`를 내려준다.
+  - Review API 그룹 제목도 같은 display title을 사용한다.
+  - Dashboard 검토사항 카드 항목은 `review_url`로 이동한다.
+  - Review 페이지는 `itemId`/`item_id` query를 읽고 해당 item이 포함된 그룹을
+    자동으로 펼친 뒤 항목 위치로 스크롤한다.
+- 검증:
+  - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_review.py::test_review_list_uses_display_title_when_payload_title_is_low_signal backend/tests/test_dashboard_api.py` → `8 passed`
+  - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/app/api/v1/review.py backend/app/services/review_display.py backend/tests/test_dashboard_api.py backend/tests/test_review.py` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 대시보드 검토사항 카드 중복 그룹 접기
+
+- 변경 요약:
+  - Dashboard API의 `pending_items`는 Review Queue와 같은
+    `item_type + display title` 그룹 기준으로 중복을 제거한 뒤 상위 3개를
+    내려준다.
+  - `pending_review_count`는 dedupe하지 않고 실제 pending review 총수를 유지한다.
+  - 이로써 `ParaWorks source 연결`에서 파생된 같은 display title 후보가 여러 개
+    있어도 대시보드 카드에는 하나만 표시된다.
+- 검증:
+  - `.\\.venv\\Scripts\\python.exe -m pytest backend/tests/test_dashboard_api.py` → `8 passed`
+  - `.\\.venv\\Scripts\\python.exe -m ruff check backend/app/api/v1/dashboard.py backend/tests/test_dashboard_api.py` → 통과
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+
+## 2026-05-16 프로젝트 워크스페이스 UI 리디자인
+
+- 변경 요약:
+  - `frontend/src/app/projects/page.tsx`를 dashboard 계열 디자인 톤의 workspace
+    구조로 재구성했다.
+  - 상단 header 아래 선택 프로젝트 overview hero를 추가해 프로젝트명, 설명,
+    근거 수, 활동 수, 검토 대기 수를 먼저 보여준다.
+  - 본문은 project list, evidence panel, activity timeline panel로 나뉜다.
+  - 프로젝트 목록은 선택 상태를 indigo soft background로 강조하고, 많은 프로젝트가
+    있을 때 내부 스크롤을 사용한다.
+  - 원본 근거 패널은 전체/Drive/Gmail/Slack/Calendar filter tab과 hover card
+    스타일을 제공한다.
+  - 승인 활동 패널은 subtle vertical timeline 구조와 activity type badge를 사용한다.
+  - 반응형은 `2xl` 3영역, `xl` 2영역+활동 하단, 그 이하는 세로 stack이다.
+- 검증:
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `4 passed`
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 프로젝트 워크스페이스 board UI 정교화
+
+- 변경 요약:
+  - 사용자가 제공한 target UI를 참고해 프로젝트 페이지 본문을 calm kanban/workspace
+    스타일로 한 단계 더 다듬었다.
+  - 중요한 제약대로 `AppShell`과 ParaWorks 사이드바는 수정하지 않았다.
+  - 페이지 헤더는 soft glass card와 rounded action button으로 정리했다.
+  - 선택 프로젝트 overview는 subtle pastel gradient summary board로 바꾸고 metric
+    blocks를 white mini-stat 카드로 유지했다.
+  - 프로젝트 목록, 연결된 원본 근거, 승인된 프로젝트 활동은 각각 board lane처럼
+    보이도록 rounded container, diffuse shadow, pill chip, soft card rhythm을
+    적용했다.
+  - 원본 근거와 승인 활동 카드는 source/type별 very light pastel tint를 사용한다.
+  - 프로젝트 선택, 프로젝트 검색, source filter, 원본 링크, 활동 렌더링,
+    responsive 3/2/1 column 흐름은 기존 그대로 유지했다.
+- 검증:
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 프로젝트 목록 sticky follow
+
+- 변경 요약:
+  - `frontend/src/app/projects/page.tsx`의 `ProjectListPanel`을 `xl` 이상에서
+    `position: sticky`로 동작하게 했다.
+  - top offset은 전역 sticky top bar 아래에 걸리도록 `xl:top-28`을 사용했다.
+  - 프로젝트 목록 내부 스크롤은 `xl:max-h-[calc(100vh-18rem)]`로 제한해 낮은
+    노트북 화면에서도 패널이 viewport 밖으로 길게 밀리지 않게 했다.
+  - `frontend/e2e/projects-responsive-metrics.spec.ts`에 desktop project list가
+    sticky position과 top offset을 갖는지 확인하는 회귀 테스트를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `fixed` position은 사용하지 않았다. sticky는 grid document flow 안에서만 동작한다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 대시보드 업무/프로젝트 카드 링크 교체
+
+- 변경 요약:
+  - `frontend/src/app/dashboard/page.tsx`에서 `오늘 해야 할 업무` 카드 우측 링크를
+    `타임라인 보기` / `/timeline`으로 바꿨다.
+  - `담당 프로젝트` 카드 우측 링크를 `프로젝트 보기` / `/projects`로 바꿨다.
+  - `frontend/e2e/dashboard-workflow.spec.ts`에 두 카드의 링크 라벨과 href를
+    고정하는 회귀 테스트를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop` → `2 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - UI 라벨/링크만 교체했으며 dashboard data/API 흐름은 수정하지 않았다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 검토사항 Agent 배지 source별 분리와 sticky action bar
+
+- 변경 요약:
+  - `frontend/src/app/review/page.tsx`에 `primarySourceType`, `agentBadgeLabel`,
+    `agentBadgeClass` helper를 추가했다.
+  - Agent 배지는 `payload.agent_name`만 보지 않고 `payload.source_type`을 우선,
+    없으면 `source_evidence[].source_type`을 fallback으로 사용한다.
+  - `mail_document_agent`라도 source가 `gmail`/`gmail_attachment`이면 `Mail Agent`,
+    `drive`면 `Google Drive Agent`, `calendar`면 `Calendar Agent`로 표시한다.
+  - `slack_agent` 또는 `source_type=slack`은 `Slack Agent`로 표시한다.
+  - 색상은 프로젝트 페이지 source badge와 맞춰 Slack violet, Mail rose,
+    Google Drive blue, Calendar emerald 계열을 사용한다.
+  - Review bulk action bar는 `fixed`가 아니라 `sticky top-24`로 바꿔 전역 topbar
+    아래에서 문서 흐름 안에 머물며 따라오게 했다.
+  - `frontend/e2e/review-bulk-actions.spec.ts`에 source별 Agent label/color와
+    sticky action bar 회귀 테스트를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- review-bulk-actions.spec.ts --project=chromium-desktop` → `3 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - Review API payload shape은 변경하지 않았다. UI에서 기존 payload/source evidence를
+    해석하는 방식만 보강했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 타임라인 Explorer UI 압축 리디자인
+
+- 변경 요약:
+  - `frontend/src/app/timeline/page.tsx`만 수정해 타임라인 본문을 soft SaaS
+    workspace 스타일로 재구성했다. ParaWorks sidebar/AppShell은 변경하지 않았다.
+  - 상단에 `timeline-summary-strip`을 추가해 전체 히스토리, 승인됨, 주요 소스,
+    최근 날짜를 compact KPI로 보여준다.
+  - 프로젝트 선택은 rounded pill tab으로 바꿨고 각 프로젝트 history count badge를
+    표시한다.
+  - 필터 영역은 white/rounded toolbar 톤으로 정리하되 기존 기간/소스/상태 필터,
+    전체 날짜 보기, 필터 초기화 기능은 유지했다.
+  - 좌측 날짜 인덱스는 `xl` 이상에서만 보이는 sticky compact month navigator로
+    바꿨다. 기본은 최근 월만 펼치고 오래된 월은 접힘 상태다.
+  - 중앙 목록도 월별 header + 날짜 group card 구조로 바꿨다. 오래된 월은 collapsed
+    summary card로 보이고, 펼치면 날짜 그룹이 나타난다.
+  - 날짜 그룹은 기본 3개 항목만 노출하고 `N건 더 보기`로 확장한다.
+  - timeline item은 source icon, 1줄 title/preview, time, source badge,
+    status badge, detail icon 중심의 compact card로 정리했다.
+  - 상세 패널은 오른쪽 side panel로 유지하되 rounded/glass card 톤으로 조정했다.
+  - `frontend/e2e/timeline-project-date-groups.spec.ts`에 summary strip, 오래된 월
+    default collapse, month navigator expand/jump 회귀 검증을 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - API/data shape은 변경하지 않았다.
+  - 추가로 `npm.cmd run test:visual -- page-regression.spec.ts gmail-drive-project-routing-flow.spec.ts slack-project-routing-flow.spec.ts --project=chromium-desktop`를 시도했다. Gmail/Drive flow는 통과했지만, `page-regression`은 기존 route inventory의 `/documents` 불일치와 auth 401 콘솔 에러로 실패했고, Slack flow는 `/integrations`의 `slack-card-actions`를 찾지 못해 타임라인 진입 전 실패했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 타임라인 날짜 인덱스 sticky 동작 보정
+
+- 변경 요약:
+  - `aria-label="타임라인 날짜 인덱스"` aside는 이미 `xl:sticky xl:top-28`였지만,
+    상위 timeline list panel의 `overflow-hidden` 때문에 실제 페이지 스크롤에서는
+    sticky 기준이 깨져 위로 밀려났다.
+  - `frontend/src/app/timeline/page.tsx`의 timeline list panel root를
+    `overflow-visible`로 바꿔 날짜 인덱스가 fixed가 아닌 sticky로 자연스럽게
+    따라오도록 했다.
+  - `frontend/e2e/timeline-project-date-groups.spec.ts`에 computed position/top과
+    스크롤 후 y 좌표가 sticky top 근처에 유지되는 회귀 검증을 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- timeline-project-date-groups.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `position: fixed`는 사용하지 않았다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후
+    해당 생성 변경은 되돌렸다.
+
+## 2026-05-16 유틸리티 워크스페이스 페이지 SaaS 톤 정리
+
+- 변경 요약:
+  - `frontend/src/app/search/page.tsx`, `agent-runs/page.tsx`,
+    `integrations/page.tsx`, `notifications/page.tsx`, `admin/page.tsx`의 page root에
+    `utility-workspace` 스코프를 추가했다.
+  - AI 비서 페이지는 추가로 `utility-workspace-chat` 스코프를 사용해 conversation
+    rail과 chat surface만 대시보드급 rounded/glass 스타일로 보정한다.
+  - `frontend/src/app/globals.css`에 scoped styles를 추가해 page heading, utility
+    badge, panel/reference card, integration card, admin metric/table, chat shell,
+    action button을 soft SaaS workspace 톤으로 통일했다.
+  - 기능/API/data shape은 변경하지 않았다. 사이드바/AppShell 구조도 그대로다.
+  - `frontend/e2e/utility-workspace-style.spec.ts`를 추가해 다섯 페이지가 공통 UI
+    스코프를 유지하는지 source-level 회귀 테스트를 둔다.
+- 검증:
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run test:visual -- utility-workspace-style.spec.ts integration-sync-modal.spec.ts` → `12 passed`
+  - `npm.cmd run build` → 통과
+- 주의:
+  - 추가 확인 중 `assistant-memory.spec.ts`와 `orchestration.spec.ts`를 함께 실행해
+    보았으나, 전자는 AppShell의 `/api/v1/dashboard`, `/api/v1/notifications` 조회를
+    테스트 allowlist가 막는 기존 목킹 범위 문제로 중단됐고, 후자는 `/agent-runs`
+    서버 데이터/권한 의존성 때문에 `app-shell`을 찾지 못했다. 이번 커밋 범위의
+    UI 스코프 테스트와 integrations 동기화 흐름은 통과했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.
+
+## 2026-05-16 AI 비서 채팅 히스토리 접기 컨트롤 복구
+
+- 변경 요약:
+  - `frontend/src/app/search/page.tsx`에서 채팅 히스토리 open/close 컨트롤을
+    명시적으로 다시 분리했다.
+  - 기존 패널 안 `대화 목록 접기` 버튼은 toggle 대신 `setSidebarCollapsed(true)`를
+    호출한다.
+  - 히스토리가 펼쳐진 상태에서도 채팅 본문 좌상단에 `히스토리 접기` 버튼을 보여
+    사용자가 본문에서 바로 다시 접을 수 있게 했다.
+  - AI 비서 root에 `data-assistant-hydrated`를 추가해 상호작용 테스트가 hydration
+    이후 실행되도록 했다.
+  - `frontend/e2e/assistant-memory.spec.ts`에 AppShell dashboard/notifications
+    배지 조회 mock을 보강하고, 펼침 -> 접힘 -> 재펼침 회귀를 추가했다.
+  - `frontend/e2e/utility-workspace-style.spec.ts`는 open/collapse 컨트롤 계약을
+    확인한다.
+- 검증:
+  - `npm.cmd run test:visual -- utility-workspace-style.spec.ts` → `4 passed`
+  - `npm.cmd run test:visual -- assistant-memory.spec.ts utility-workspace-style.spec.ts --project=chromium-desktop` → `3 passed`
+  - `npm.cmd run test:visual -- assistant-memory.spec.ts utility-workspace-style.spec.ts --project=chromium-mobile` → `3 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꿔 빌드 후 해당
+    생성 변경은 되돌렸다.
+
+## 2026-05-17 대시보드 캘린더 refresh 오늘 날짜 유지
+
+- 변경 요약:
+  - `frontend/src/app/dashboard/page.tsx`에서 캘린더 선택 날짜에 일정이 없으면
+    연동 일정 중 가장 빠른 날짜로 자동 이동하던 effect를 제거했다.
+  - 원인은 2026-05-17 오늘 일정이 없고 연동 데이터의 가장 빠른 일정이
+    2026-04-17일 때, 새로고침 후 `selectedDate`와 `visibleMonth`가 함께
+    4월로 바뀌는 로직이었다.
+  - 사용자가 날짜를 클릭해 선택하는 동작은 그대로 유지하고, 연동된 과거/미래
+    일정은 해당 월로 이동했을 때 dot과 일정 목록으로 확인하도록 했다.
+  - `frontend/e2e/dashboard-calendar-state.spec.ts`를 추가해 이 자동 이동 로직이
+    다시 들어오지 않도록 source-level 회귀 테스트를 둔다.
+  - `frontend/e2e/dashboard-workflow.spec.ts`에는 이전 월에만 일정이 있어도
+    2026년 5월과 5월 17일 선택 상태를 유지하는 브라우저 회귀 케이스를 추가했다.
+- 검증:
+  - `npm.cmd run test:visual -- dashboard-calendar-state.spec.ts --project=chromium-desktop` → `1 passed`
+  - `npm.cmd run test:visual -- dashboard-workflow.spec.ts --project=chromium-desktop -g "previous month"` → `1 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸면 빌드 후 해당
+    생성 변경은 되돌린다.
+
+## 2026-05-17 검토사항 프로젝트 연결 캘린더 raw metadata 표시 정리
+
+- 변경 요약:
+  - 증상: 검토사항 페이지의 `<프로젝트 연결>` 그룹 제목에
+    `Description: <p>...`, `Marker`, `Location`, `Start`, `End`가 그대로 붙어
+    긴 raw 캘린더 본문처럼 보였다.
+  - 원인: Google Calendar sync가 `Source.body`를 `제목 + Description + Location +
+    Start + End` 형태로 보존하고, 프로젝트 분류기가 이 chunk snippet 전체를
+    `summary/task_summary`로 저장했다. Review API는 `프로젝트 source 연결`을 낮은
+    신호 제목으로 보고 summary를 그룹 제목으로 선택했다.
+  - `backend/app/projects/classifier.py`에서 프로젝트 연결 후보의 task summary를
+    HTML 태그와 캘린더 metadata label 이전의 실제 이벤트 제목 중심으로 정리한다.
+  - `backend/app/services/review_display.py`에서 기존 DB에 이미 raw summary가 들어간
+    ReviewItem도 API group title에서 깨끗하게 보이도록 display text sanitizer를
+    적용했다.
+  - `frontend/src/app/review/page.tsx`에서도 item title, 상세 summary, 프로젝트 연결
+    후보 필드를 같은 방식으로 정리해 mock/API payload가 raw여도 UI가 무너지지 않게 했다.
+  - `frontend/e2e/review-agent-metadata.spec.ts`는 source별 Agent 배지 정책에 맞춰
+    `project_classifier` + Slack source를 `Slack Agent`로 기대하도록 갱신했다.
+- 검증:
+  - RED 확인: 신규 backend 회귀 테스트 2개가 기존 코드에서 실패함을 확인.
+  - `uv run pytest backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_calendar_metadata backend/tests/test_project_memory_api.py::test_calendar_project_assignment_summary_uses_event_title_not_raw_metadata -q` → `2 passed`
+  - `uv run pytest backend/tests/test_review.py backend/tests/test_project_memory_api.py -q` → `45 passed`
+  - `uv run ruff check --no-fix backend/app/projects/classifier.py backend/app/services/review_display.py backend/tests/test_project_memory_api.py backend/tests/test_review.py` → 통과
+  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts review-bulk-actions.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `uv run ruff check backend`는 저장소 기존 B008/N806/F841 이슈 때문에 실패하며,
+    현재 설정상 관련 없는 파일 자동 수정도 발생할 수 있다. 이번 작업에서는 자동 수정된
+    무관 파일을 되돌리고 수정 파일만 `--no-fix`로 검사했다.
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.
+
+## 2026-05-17 프로젝트 목록 설명 자동 연결 통계 문구 제거
+
+- 변경 요약:
+  - `frontend/src/app/projects/page.tsx`의 좌측 프로젝트 목록 카드에서
+    `project.summary` 뒤에 붙어 내려오는 `승인된 원본 근거 N건과 승인된 프로젝트 활동 N건이
+    연결되어 있습니다.` 문구를 표시하지 않도록 했다.
+  - 이 처리는 프로젝트 목록 카드 전용 표시 함수로 제한했다. 프로젝트 상세 summary, evidence/activity
+    metric, 목록 하단 `근거 · 활동 · 검토 대기` 수치는 유지한다.
+  - `frontend/e2e/projects-responsive-metrics.spec.ts`에 프로젝트 목록 패널에서 자동 연결
+    통계 문구가 노출되지 않는 회귀 검증을 추가했다.
+- 검증:
+  - RED 확인: 새 기대값이 기존 코드에서 실패함을 확인.
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts --project=chromium-desktop -g "responsive workspace"` → `1 passed`
+  - `npm.cmd run test:visual -- projects-responsive-metrics.spec.ts projects-source-links.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.
+
+## 2026-05-17 검토사항 프로젝트 연결 메일/Drive metadata 표시 정리
+
+- 변경 요약:
+  - 증상: 검토사항 페이지의 `<프로젝트 연결>` 항목 제목/연결 내용에 Gmail `From`,
+    `Date` 헤더와 깨진 발신자 문자열이 붙어 보였다.
+  - 원인: Gmail connector가 `Subject + From + Date + body`를 Source body로 보존하고,
+    프로젝트 분류기가 첫 chunk snippet 전체를 `summary/task_summary`로 저장했다.
+    Review display title은 낮은 신호 제목인 `프로젝트 source 연결` 대신 summary를
+    사용하므로 raw header가 화면에 올라왔다.
+  - `backend/app/services/review_display.py`의 display sanitizer를 확장해
+    `From`, `Date`, `Mime type`, `Owner`, `Last modifier`, `Modified`,
+    `Parent subject`, `Attachment size` label 이후 metadata를 제거한다.
+  - `Google Drive file changed:`와 `Gmail attachment:` prefix도 표시용 summary에서
+    제거해 Drive/첨부도 실제 파일명/제목 중심으로 보이게 했다.
+  - `backend/app/projects/classifier.py`는 이미 해당 sanitizer를 공유하므로 새로 생성되는
+    규칙 기반 프로젝트 연결 후보의 `task_summary`도 메일/Drive/첨부 metadata 없이 저장된다.
+  - `frontend/src/app/review/page.tsx`도 같은 표시 방어 로직을 사용해 raw mock/API payload가
+    와도 상세 `연결 내용`, `원본`, item summary가 UI를 밀지 않도록 했다.
+- 확인한 source별 상태:
+  - Gmail: `From`/`Date` 제거, subject만 표시.
+  - Google Calendar: 기존 `Description`/`Location`/`Start`/`End` 제거 유지.
+  - Google Drive: `Google Drive file changed:` prefix와 `Mime type`/`Owner`/`Modified` 제거.
+  - Gmail attachment: `Gmail attachment:` prefix와 `Parent subject`/`Mime type`/`Attachment size` 제거.
+  - Slack: connector body가 메시지/스레드 본문이라 같은 header metadata 증상은 없고 기존 Slack 업무 신호 필터/표시 흐름 유지.
+- 검증:
+  - RED 확인: 신규 Gmail/Drive metadata 회귀 테스트 2개가 기존 코드에서 실패함을 확인.
+  - `uv run pytest backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_mail_and_drive_metadata backend/tests/test_project_memory_api.py::test_project_assignment_summary_strips_mail_and_drive_metadata -q` → `2 passed`
+  - `uv run pytest backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_mail_and_drive_metadata backend/tests/test_project_memory_api.py::test_project_assignment_summary_strips_mail_and_drive_metadata backend/tests/test_review.py::test_project_assignment_group_title_sanitizes_calendar_metadata backend/tests/test_project_memory_api.py::test_calendar_project_assignment_summary_uses_event_title_not_raw_metadata -q` → `4 passed`
+  - `uv run pytest backend/tests/test_review.py backend/tests/test_project_memory_api.py -q` → `47 passed`
+  - `uv run ruff check --no-fix backend/app/projects/classifier.py backend/app/services/review_display.py backend/tests/test_project_memory_api.py backend/tests/test_review.py` → 통과
+  - `npm.cmd run test:visual -- review-agent-metadata.spec.ts review-bulk-actions.spec.ts --project=chromium-desktop` → `4 passed`
+  - `npm.cmd run lint` → 통과
+  - `npm.cmd run build` → 통과
+- 주의:
+  - `next build`가 `frontend/next-env.d.ts`를 `.next/types`로 바꾸므로 빌드 후 해당
+    생성 변경은 되돌렸다.
+
 ## 2026-05-15 타임라인 상태 한글화 및 완료 todo 병합
 
 - 변경 요약:
-  - 타임라인 상태 필터 옵션과 row chip을 `승인`, `검토 중`, `완료`로 한글화했다.
+  - 타임라인 상태 필터 옵션과 row chip을 `승인됨`, `완료`로 한글화했다.
   - `/projects`의 `timeline_items`는 더 이상 완료된 `todo` record를 별도 타임라인 row로 포함하지 않는다.
   - 완료된 `Todo`는 같은 프로젝트, 같은 source link, `[할 일] {todo.title}` 제목을 가진 기존 `TimelineEvent`와 매칭된다.
   - 매칭된 기존 타임라인 이벤트에 `completed_at`, `completed_by`를 병합해 프론트에서 `완료` 상태로 표시한다.

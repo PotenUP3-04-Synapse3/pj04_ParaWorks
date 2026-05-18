@@ -72,6 +72,30 @@ test("search page behaves like a persisted assistant with compact history and fo
     });
   });
 
+  await page.route("**/api/v1/dashboard", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        pending_review_count: 0,
+        today_events: [],
+        today_tasks: [],
+        assigned_projects: [],
+        recent_review_items: [],
+      },
+    });
+  });
+
+  await page.route("**/api/v1/notifications", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        counts: { total: 0, review: 0, agent_runs: 0 },
+        unread_count: 0,
+        notifications: [],
+      },
+    });
+  });
+
   await page.route("**/api/v1/assistant/conversations", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
@@ -154,6 +178,8 @@ test("search page behaves like a persisted assistant with compact history and fo
     const url = new URL(request.url());
     const expectedRoutes = new Set([
       "GET /api/v1/auth/me",
+      "GET /api/v1/dashboard",
+      "GET /api/v1/notifications",
       "GET /api/v1/assistant/conversations",
       "POST /api/v1/assistant/conversations",
       "GET /api/v1/assistant/conversations/10/messages",
@@ -171,6 +197,7 @@ test("search page behaves like a persisted assistant with compact history and fo
   });
 
   await page.goto("/search");
+  await expect(page.locator("[data-assistant-hydrated]")).toHaveAttribute("data-assistant-hydrated", "true");
 
   await expect(page.getByText("회사 기억 준비 중")).toHaveCount(0);
   await expect(page.getByText("ParaWorks RAG")).toHaveCount(0);
@@ -184,6 +211,10 @@ test("search page behaves like a persisted assistant with compact history and fo
   await page.getByRole("button", { name: "대화 목록 펼치기" }).click();
   await expect(history).toHaveAttribute("data-expanded", "true");
   await expect(history).toHaveClass(/w-full/);
+  await page.locator("[data-assistant-history-collapse]").last().click();
+  await expect(history).toHaveAttribute("data-expanded", "false");
+  await page.getByRole("button", { name: "대화 목록 펼치기" }).click();
+  await expect(history).toHaveAttribute("data-expanded", "true");
   await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");
   await history.getByRole("button", { name: "Redis 작업 상태" }).click();
   await expect(historyItems.getByRole("button").nth(0)).toContainText("기획팀 회의");

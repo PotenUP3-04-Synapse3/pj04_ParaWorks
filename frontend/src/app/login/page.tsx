@@ -164,7 +164,7 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <button type="submit" className="login-submit" disabled={loading || !email.trim()}>
+              <button type="submit" className="login-submit" data-testid="login-submit" disabled={loading || !email.trim()}>
                 {loading ? "로그인 중" : "로그인"}
               </button>
             </form>
@@ -223,6 +223,15 @@ export default function LoginPage() {
           </div>
         </section>
       </section>
+
+      {loading ? (
+        <div className="login-loading-overlay" data-testid="login-loading-overlay" role="status" aria-live="polite">
+          <div className="login-loading-card" data-testid="login-loading-card">
+            <span className="login-loading-spinner" aria-hidden="true" />
+            <strong>로그인 중</strong>
+          </div>
+        </div>
+      ) : null}
 
       <footer className="login-footer">
         <p>© 2026 Synapse3 Inc. All rights reserved.</p>

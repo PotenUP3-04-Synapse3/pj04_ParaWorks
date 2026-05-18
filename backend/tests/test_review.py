@@ -129,6 +129,105 @@ def test_patch_review_item_requires_registered_project_key(client, db_session) -
     assert valid.json()['payload']['project_name'] == '고객 포털 개편'
 
 
+def test_project_assignment_group_title_sanitizes_calendar_metadata(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='project_assignment',
+        payload={
+            'agent_name': 'project_classifier',
+            'title': '케크 source 연결',
+            'summary': (
+                '자전거 정비 예약 Description: <p>더미 데이터: 타이어 점검, 브레이크 조정. '
+                'Marker: DUMMY-DATA-FUTURE-14D-20</p> Location: 동네 정비소 '
+                'Start: 2026-05-16T14:00:00+09:00 End: 2026-05-16T15:00:00+09:00'
+            ),
+            'task_summary': (
+                '자전거 정비 예약 Description: <p>더미 데이터: 타이어 점검, 브레이크 조정. '
+                'Marker: DUMMY-DATA-FUTURE-14D-20</p> Location: 동네 정비소 '
+                'Start: 2026-05-16T14:00:00+09:00 End: 2026-05-16T15:00:00+09:00'
+            ),
+            'source_title': '자전거 정비 예약',
+            'source_type': 'calendar',
+        },
+        source_links=['https://calendar.google.com/event?eid=bike'],
+        source_snippets=['자전거 정비 예약'],
+        confidence_score=0.88,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review')
+
+    assert response.status_code == 200
+    group = response.json()['groups'][0]
+    assert group['title'] == '자전거 정비 예약'
+    assert 'Description:' not in group['title']
+    assert '<p>' not in group['title']
+
+
+def test_project_assignment_group_title_sanitizes_mail_and_drive_metadata(client, db_session) -> None:
+    items = [
+        ReviewItem(
+            item_type='project_assignment',
+            payload={
+                'agent_name': 'project_classifier',
+                'title': 'ParaWorks source 연결',
+                'summary': (
+                    'ParaWorks 회사 소개서 전달드립니다 From: í•œìŠ¹í—Œ Date: Fri, 15 May 2026 01:58:19 -0700 '
+                    'ParaWorks 소개서를 공유합니다.'
+                ),
+                'task_summary': (
+                    'ParaWorks 회사 소개서 전달드립니다 From: í•œìŠ¹í—Œ Date: Fri, 15 May 2026 01:58:19 -0700 '
+                    'ParaWorks 소개서를 공유합니다.'
+                ),
+                'source_title': 'ParaWorks 회사 소개서 전달드립니다',
+                'source_type': 'gmail',
+            },
+            source_links=['https://mail.google.com/mail/u/0/#inbox/gmail-paraworks-intro'],
+            source_snippets=['ParaWorks 회사 소개서 전달드립니다'],
+            confidence_score=0.88,
+            permission_level='internal',
+            status='pending_review',
+        ),
+        ReviewItem(
+            item_type='project_assignment',
+            payload={
+                'agent_name': 'project_classifier',
+                'title': 'Project Alpha source 연결',
+                'summary': (
+                    'Google Drive file changed: Project Alpha rollout plan Mime type: application/pdf '
+                    'Owner: owner@example.com Modified: 2026-05-15T02:00:00Z'
+                ),
+                'task_summary': (
+                    'Google Drive file changed: Project Alpha rollout plan Mime type: application/pdf '
+                    'Owner: owner@example.com Modified: 2026-05-15T02:00:00Z'
+                ),
+                'source_title': 'Project Alpha rollout plan',
+                'source_type': 'drive',
+            },
+            source_links=['https://drive.google.com/file/d/project-alpha-plan/view'],
+            source_snippets=['Project Alpha rollout plan'],
+            confidence_score=0.88,
+            permission_level='internal',
+            status='pending_review',
+        ),
+    ]
+    db_session.add_all(items)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review')
+
+    assert response.status_code == 200
+    titles = {group['title'] for group in response.json()['groups']}
+    assert 'ParaWorks 회사 소개서 전달드립니다' in titles
+    assert 'Project Alpha rollout plan' in titles
+    assert all('From:' not in title for title in titles)
+    assert all('Date:' not in title for title in titles)
+    assert all('Mime type:' not in title for title in titles)
+    assert all('Google Drive file changed:' not in title for title in titles)
+
+
 def test_slack_agent_review_item_requires_project_before_approval(client, db_session) -> None:
     db_session.add(Project(project_key='project-alpha', name='Project Alpha', summary='Redis work'))
     item = ReviewItem(
@@ -233,6 +332,27 @@ def test_review_list_prioritizes_knowledge_candidates_before_project_assignments
         'decision_record',
         'project_assignment',
     ]
+
+
+def test_review_list_uses_display_title_when_payload_title_is_low_signal(client, db_session) -> None:
+    item = ReviewItem(
+        item_type='decision_record',
+        payload={'title': 'ParaWorks source 연결', 'summary': '실제 검토 큐 표시 제목'},
+        source_links=['https://slack.mock/archives/C123/p1'],
+        source_snippets=['Evidence snippet.'],
+        confidence_score=0.91,
+        permission_level='internal',
+        status='pending_review',
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    response = client.get('/api/v1/review?status=pending_review&limit=1')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['groups'][0]['title'] == '실제 검토 큐 표시 제목'
+    assert body['groups'][0]['group_id'] == 'decision_record:실제 검토 큐 표시 제목'
 
 
 def test_request_more_evidence_changes_status(client) -> None:

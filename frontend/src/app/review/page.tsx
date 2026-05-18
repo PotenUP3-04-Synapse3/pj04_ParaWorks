@@ -3,18 +3,19 @@
 import {
   Bot,
   CheckCircle2,
+  CheckSquare,
   Coins,
   FileSearch,
   Pencil,
   RefreshCw,
   Sparkles,
+  Square,
   XCircle,
-  ChevronDown,
-  ChevronRight,
   Layers,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { SourceEvidenceDrawer } from "@/components/shared/SourceEvidenceDrawer";
 import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import { notifyReviewQueueUpdated } from "@/lib/reviewQueueEvents";
@@ -33,13 +34,37 @@ import type {
 
 const REVIEW_PAGE_SIZE = 50;
 
+const LOW_SIGNAL_REVIEW_TITLES = new Set(["paraworks source 연결", "source 연결", "untitled", "unknown"]);
+const DISPLAY_TITLE_KEYS = [
+  "title",
+  "summary",
+  "decision_summary",
+  "reason",
+  "priority_reason",
+  "task_summary",
+  "source_title",
+  "project_assignment_summary",
+  "evidence_reason",
+  "recommended_next_step",
+] as const;
 
 function stringField(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function cleanReviewDisplayText(value: string) {
+  const withoutTags = value.replace(/\\n/g, " ").replace(/<[^>]+>/g, " ");
+  const cleaned = withoutTags.split(/\s+/).join(" ").trim();
+  const withoutSourcePrefix = cleaned.replace(/^(?:Google Drive file changed|Gmail attachment):\s*/i, "").trim();
+  const metadataMatch = withoutSourcePrefix.match(/(?:^|\s)(?:Description|Location|Start|End|Marker|From|Date|Mime type|Owner|Last modifier|Modified|Parent subject|Attachment size):\s/i);
+  if (metadataMatch?.index !== undefined) {
+    return withoutSourcePrefix.slice(0, metadataMatch.index).trim();
+  }
+  return withoutSourcePrefix;
+}
+
 function knownStringField(value: unknown) {
-  const text = stringField(value).trim();
+  const text = cleanReviewDisplayText(stringField(value));
   if (!text || text.toLowerCase() === "unknown") return "";
   return text;
 }
@@ -60,10 +85,24 @@ function needsProjectSelection(item: ReviewItem, preview?: ReviewPromotionPrevie
 
 function itemTitle(item: ReviewItem | ReviewGroup) {
   if ('payload' in item) {
-    const title = stringField(item.payload.title);
-    return title || `Review item ${item.id}`;
+    return displayTitleFromPayload(item.payload, item.id);
   }
   return item.title;
+}
+
+function displayTitleFromPayload(payload: ReviewItem["payload"], itemId: number) {
+  const title = cleanReviewDisplayText(stringField(payload.title));
+  if (title && !isLowSignalReviewTitle(title)) return title;
+  for (const key of DISPLAY_TITLE_KEYS.slice(1)) {
+    const value = cleanReviewDisplayText(stringField(payload[key]));
+    if (value && !isLowSignalReviewTitle(value)) return value.split(/\s+/).join(" ");
+  }
+  return `Review item ${itemId}`;
+}
+
+function isLowSignalReviewTitle(value: string) {
+  const normalized = value.split(/\s+/).join(" ").toLowerCase();
+  return LOW_SIGNAL_REVIEW_TITLES.has(normalized) || normalized.endsWith(" source 연결");
 }
 
 function summaryKey(item: ReviewItem) {
@@ -75,7 +114,7 @@ function summaryKey(item: ReviewItem) {
 }
 
 function itemSummary(item: ReviewItem) {
-  const summary = stringField(item.payload[summaryKey(item)]);
+  const summary = cleanReviewDisplayText(stringField(item.payload[summaryKey(item)]));
   return summary || "요약을 생성하지 못했습니다. 근거를 확인한 뒤 수정하거나 추가 근거를 요청하세요.";
 }
 
@@ -114,11 +153,11 @@ function projectRoutingReason(item: ReviewItem) {
 
 function projectAssignmentFields(item: ReviewItem) {
   if (item.item_type !== "project_assignment") return undefined;
-  const projectName = stringField(item.payload.project_name).trim();
-  const taskSummary = stringField(item.payload.task_summary).trim() || itemSummary(item);
-  const evidenceReason = stringField(item.payload.evidence_reason).trim();
-  const sourceTitle = stringField(item.payload.source_title).trim();
-  const sourceType = stringField(item.payload.source_type).trim();
+  const projectName = cleanReviewDisplayText(stringField(item.payload.project_name));
+  const taskSummary = cleanReviewDisplayText(stringField(item.payload.task_summary)) || itemSummary(item);
+  const evidenceReason = cleanReviewDisplayText(stringField(item.payload.evidence_reason));
+  const sourceTitle = cleanReviewDisplayText(stringField(item.payload.source_title));
+  const sourceType = cleanReviewDisplayText(stringField(item.payload.source_type));
   if (!projectName && !taskSummary && !evidenceReason && !sourceTitle && !sourceType) return undefined;
   return {
     projectName,
@@ -143,11 +182,67 @@ function agentDisplayName(agentName: string, item?: ReviewItem) {
 }
 
 function mailDocumentSourceLabel(item: ReviewItem) {
+  return sourceFamilyLabel(sourceTypesForItem(item));
+}
+
+function sourceTypesForItem(item: ReviewItem) {
   const evidenceTypes = (item.source_evidence ?? []).map((row) => row.source_type);
   const payloadTypes = Array.isArray(item.payload.source_types) ? item.payload.source_types : [];
   const payloadType = stringField(item.payload.source_type);
   const urlTypes = (item.source_links ?? []).map((link) => sourceTypeFromUrl(link));
-  return sourceFamilyLabel([...evidenceTypes, ...payloadTypes, payloadType, ...urlTypes]);
+  return [...evidenceTypes, ...payloadTypes, payloadType, ...urlTypes];
+}
+
+type ReviewSourceType = "slack" | "calendar" | "drive" | "gmail" | "gmail_attachment" | "";
+
+function normalizeReviewSourceType(value: unknown): ReviewSourceType {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "slack" ||
+    normalized === "calendar" ||
+    normalized === "drive" ||
+    normalized === "gmail" ||
+    normalized === "gmail_attachment"
+  ) {
+    return normalized;
+  }
+  return "";
+}
+
+function firstReviewSourceType(values: unknown[]): ReviewSourceType {
+  return values.map(normalizeReviewSourceType).find(Boolean) || "";
+}
+
+function primarySourceType(item: ReviewItem) {
+  const payloadType = firstReviewSourceType([item.payload.source_type]);
+  if (payloadType) return payloadType;
+  const payloadTypes = Array.isArray(item.payload.source_types) ? firstReviewSourceType(item.payload.source_types) : "";
+  if (payloadTypes) return payloadTypes;
+  const evidenceType = firstReviewSourceType((item.source_evidence ?? []).map((row) => row.source_type));
+  if (evidenceType) return evidenceType;
+  return firstReviewSourceType((item.source_links ?? []).map((link) => sourceTypeFromUrl(link)));
+}
+
+function agentBadgeLabel(item: ReviewItem, agentName: string) {
+  if (agentName === "mail_document_agent" && Array.isArray(item.payload.source_types)) {
+    return mailDocumentSourceLabel(item) || "Mail/Docs Agent";
+  }
+  const sourceType = primarySourceType(item);
+  if (sourceType === "slack" || agentName === "slack_agent") return "Slack Agent";
+  if (sourceType === "calendar") return "Calendar Agent";
+  if (sourceType === "drive") return "Google Drive Agent";
+  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "Mail Agent";
+  return agentDisplayName(agentName, item);
+}
+
+function agentBadgeClass(item: ReviewItem, agentName: string) {
+  const sourceType = primarySourceType(item);
+  if (sourceType === "slack" || agentName === "slack_agent") return "border border-violet-200 bg-violet-100/80 text-violet-700";
+  if (sourceType === "calendar") return "border border-emerald-200 bg-emerald-100/80 text-emerald-700";
+  if (sourceType === "drive") return "border border-blue-200 bg-blue-100/80 text-blue-700";
+  if (sourceType === "gmail" || sourceType === "gmail_attachment") return "border border-rose-200 bg-rose-100/80 text-rose-700";
+  return "border border-slate-200 bg-slate-100 text-slate-700";
 }
 
 function routeLabel(route: string) {
@@ -204,6 +299,18 @@ type PromotionNotice = {
   result: ReviewPromotionResult;
 };
 
+type BulkConfirmState = {
+  action: "approve" | "reject";
+  itemIds: number[];
+  scope: "selected" | "loaded" | "similar";
+};
+
+type ReviewContextMenu = {
+  x: number;
+  y: number;
+  item: ReviewItem;
+};
+
 export default function ReviewPage() {
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -223,6 +330,11 @@ export default function ReviewPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [loadedOffset, setLoadedOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(() => new Set());
+  const [bulkProjectKey, setBulkProjectKey] = useState("");
+  const [bulkConfirm, setBulkConfirm] = useState<BulkConfirmState>();
+  const [contextMenu, setContextMenu] = useState<ReviewContextMenu>();
+  const [deepLinkedItemId, setDeepLinkedItemId] = useState<number>();
 
   const loadItems = useCallback(async (nextOffset = 0, append = false) => {
     setLoading(true);
@@ -249,6 +361,39 @@ export default function ReviewPage() {
   useEffect(() => {
     void loadItems();
   }, [loadItems]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const itemId = Number(params.get("itemId") ?? params.get("item_id"));
+    if (Number.isInteger(itemId) && itemId > 0) {
+      setDeepLinkedItemId(itemId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!deepLinkedItemId || groups.length === 0) return;
+    const targetGroup = groups.find((group) => group.items.some((item) => item.id === deepLinkedItemId));
+    if (!targetGroup) return;
+    setExpandedGroups((current) => ({ ...current, [targetGroup.group_id]: true }));
+    const timer = window.setTimeout(() => {
+      document.getElementById(`review-item-${deepLinkedItemId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [deepLinkedItemId, groups]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeMenu = () => setContextMenu(undefined);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu]);
 
   async function loadPreviewsForItems(items: ReviewItem[]) {
     const missingItems = items.filter((item) => !previews[item.id]);
@@ -333,6 +478,56 @@ export default function ReviewPage() {
     }
   }
 
+  function openBulkConfirm(action: "approve" | "reject", itemIds: number[], scope: BulkConfirmState["scope"]) {
+    if (itemIds.length === 0) return;
+    setBulkConfirm({ action, itemIds, scope });
+  }
+
+  async function executeBulkAction(confirmState: BulkConfirmState) {
+    const { action, itemIds } = confirmState;
+    const readableLabel = action === "approve" ? "승인" : "반려";
+    const label = action === "approve" ? "승인" : "반려";
+    setPendingAction(`bulk:${action}`);
+    setError(undefined);
+    try {
+      if (bulkProjectKey) {
+        await Promise.all(
+          itemIds.map((itemId) =>
+            apiPatch<ReviewItem>(`/api/v1/review/${itemId}`, {
+              payload: {
+                project_key: bulkProjectKey,
+                project_needs_user_selection: false,
+              },
+            }),
+          ),
+        );
+      }
+      const result = await apiPost<ReviewBulkActionResponse>("/api/v1/review/bulk", {
+        action,
+        item_ids: itemIds,
+      });
+      await loadItems();
+      notifyReviewQueueUpdated();
+      setSelectedItemIds((current) => {
+        const next = new Set(current);
+        for (const itemId of itemIds) next.delete(itemId);
+        return next;
+      });
+      setBulkConfirm(undefined);
+      if (result.failed_items.length > 0) {
+        setError(`${label} 처리 중 ${result.failed_items.length}개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`);
+      }
+      if (result.failed_items.length > 0) {
+        setError(`${readableLabel} 처리 중 ${result.failed_items.length}개 항목은 건너뛰었습니다. 필수 정보와 근거를 확인해 주세요.`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `紐⑤몢 ${label} 泥섎━?섏? 紐삵뻽?듬땲??`);
+    } finally {
+      setPendingAction(undefined);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function runBulkAction(action: "approve" | "reject") {
     const itemIds = groups.flatMap((group) => group.items.map((item) => item.id));
     if (itemIds.length === 0) return;
@@ -385,7 +580,74 @@ export default function ReviewPage() {
   }
   const totalAgentItems = groups.reduce((acc, g) => acc + g.items.filter(i => Boolean(i.payload.agent_name)).length, 0);
   const loadedItemCount = groups.reduce((acc, group) => acc + group.items.length, 0);
+  const loadedItems = groups.flatMap((group) => group.items);
+  const loadedItemIds = loadedItems.map((item) => item.id);
+  const selectedLoadedIds = loadedItemIds.filter((itemId) => selectedItemIds.has(itemId));
+  const duplicateItemIds = groups
+    .filter((group) => group.total_count > 1)
+    .flatMap((group) => group.items.map((item) => item.id));
+  const allLoadedSelected = loadedItemCount > 0 && selectedLoadedIds.length === loadedItemCount;
+  const someLoadedSelected = selectedLoadedIds.length > 0 && !allLoadedSelected;
   const authRequired = error ? error.includes("Authentication required") || error.includes("401") : false;
+
+  function toggleAllLoadedSelection() {
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      if (allLoadedSelected) {
+        for (const itemId of loadedItemIds) next.delete(itemId);
+      } else {
+        for (const itemId of loadedItemIds) next.add(itemId);
+      }
+      return next;
+    });
+  }
+
+  function toggleItemSelection(itemId: number) {
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+
+  function groupItemIds(group: ReviewGroup) {
+    return group.items.map((item) => item.id);
+  }
+
+  function isGroupFullySelected(group: ReviewGroup) {
+    const itemIds = groupItemIds(group);
+    return itemIds.length > 0 && itemIds.every((itemId) => selectedItemIds.has(itemId));
+  }
+
+  function isGroupPartiallySelected(group: ReviewGroup) {
+    const itemIds = groupItemIds(group);
+    return itemIds.some((itemId) => selectedItemIds.has(itemId)) && !isGroupFullySelected(group);
+  }
+
+  function toggleGroupSelection(event: MouseEvent, group: ReviewGroup) {
+    event.stopPropagation();
+    const itemIds = groupItemIds(group);
+    const shouldClear = isGroupFullySelected(group);
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      for (const itemId of itemIds) {
+        if (shouldClear) next.delete(itemId);
+        else next.add(itemId);
+      }
+      return next;
+    });
+  }
+
+  function openContextMenu(event: MouseEvent, item: ReviewItem) {
+    event.preventDefault();
+    const menuWidth = 240;
+    const menuHeight = 172;
+    const viewportPadding = 12;
+    const x = Math.min(event.clientX, window.innerWidth - menuWidth - viewportPadding);
+    const y = Math.min(event.clientY, window.innerHeight - menuHeight - viewportPadding);
+    setContextMenu({ x: Math.max(viewportPadding, x), y: Math.max(viewportPadding, y), item });
+  }
 
   return (
     <div className="reference-dashboard space-y-5">
@@ -404,7 +666,8 @@ export default function ReviewPage() {
           </span>
           <button
             type="button"
-            onClick={() => void runBulkAction("approve")}
+            data-testid="review-approve-loaded"
+            onClick={() => openBulkConfirm("approve", loadedItemIds, "loaded")}
             disabled={Boolean(pendingAction) || loadedItemCount === 0}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
           >
@@ -413,7 +676,8 @@ export default function ReviewPage() {
           </button>
           <button
             type="button"
-            onClick={() => void runBulkAction("reject")}
+            data-testid="review-reject-loaded"
+            onClick={() => openBulkConfirm("reject", loadedItemIds, "loaded")}
             disabled={Boolean(pendingAction) || loadedItemCount === 0}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--glass-elevated)] px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
           >
@@ -477,10 +741,85 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
+      <section className="sticky top-24 z-10 rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)]/95 p-3 shadow-sm backdrop-blur">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="review-select-all"
+              aria-label={allLoadedSelected ? "로드된 검토 항목 선택 해제" : "로드된 검토 항목 전체 선택"}
+              aria-pressed={allLoadedSelected}
+              onClick={toggleAllLoadedSelection}
+              disabled={loadedItemCount === 0}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white text-[var(--ink)] shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {allLoadedSelected || someLoadedSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            </button>
+            <span data-testid="review-selected-count" className="text-sm font-bold text-[var(--ink)]">
+              선택 {selectedLoadedIds.length}개
+            </span>
+            <select
+              data-testid="review-bulk-project"
+              value={bulkProjectKey}
+              onChange={(event) => setBulkProjectKey(event.target.value)}
+              className="h-9 min-w-[180px] rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none focus:border-[#21132b]"
+            >
+              <option value="">프로젝트 선택</option>
+              {definedProjects.map((project) => (
+                <option key={project.project_key} value={project.project_key}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="review-bulk-approve"
+              onClick={() => openBulkConfirm("approve", selectedLoadedIds, "selected")}
+              disabled={Boolean(pendingAction) || selectedLoadedIds.length === 0}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
+            >
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              선택 승인
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkConfirm("reject", selectedLoadedIds, "selected")}
+              disabled={Boolean(pendingAction) || selectedLoadedIds.length === 0}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+              선택 반려
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkConfirm("approve", duplicateItemIds, "similar")}
+              disabled={Boolean(pendingAction) || duplicateItemIds.length === 0}
+              className="hidden h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" />
+              중복/유사 승인
+            </button>
+            <button
+              type="button"
+              onClick={() => openBulkConfirm("reject", duplicateItemIds, "similar")}
+              disabled={Boolean(pendingAction) || duplicateItemIds.length === 0}
+              className="hidden h-9 items-center justify-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+              중복/유사 반려
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="space-y-4">
         {groups.map((group) => {
           const isExpanded = expandedGroups[group.group_id];
           const hasMultiple = group.total_count > 1;
+          const groupSelected = isGroupFullySelected(group);
+          const groupPartiallySelected = isGroupPartiallySelected(group);
 
           return (
             <div key={group.group_id} className="group-container overflow-hidden rounded-xl border border-[var(--line-soft)] bg-[var(--glass-elevated)] shadow-sm">
@@ -490,7 +829,16 @@ export default function ReviewPage() {
                 className="flex cursor-pointer items-center justify-between border-b border-[var(--line-soft)] bg-[var(--glass-strong)] px-4 py-3 hover:bg-[var(--glass-stronger)]"
               >
                 <div className="flex items-center gap-3">
-                  {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                  <button
+                    type="button"
+                    data-testid={`review-group-select-${group.group_id}`}
+                    aria-label={`${group.title} 선택`}
+                    aria-pressed={groupSelected}
+                    onClick={(event) => toggleGroupSelection(event, group)}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white text-[var(--ink)] shadow-sm hover:bg-[var(--glass-strong)]"
+                  >
+                    {groupSelected || groupPartiallySelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  </button>
                   <span className="rounded-full border border-[var(--line-soft)] bg-white/50 px-2.5 py-0.5 text-xs font-bold text-[var(--ink-muted)]">
                     {itemTypeLabel(group.item_type)}
                   </span>
@@ -503,6 +851,36 @@ export default function ReviewPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
+                  {hasMultiple ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid={`review-group-similar-approve-${group.group_id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openBulkConfirm("approve", groupItemIds(group), "similar");
+                        }}
+                        disabled={Boolean(pendingAction)}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#21132b] bg-[#21132b] px-2.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-neutral-400"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        중복/유사 승인
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`review-group-similar-reject-${group.group_id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openBulkConfirm("reject", groupItemIds(group), "similar");
+                        }}
+                        disabled={Boolean(pendingAction)}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--line-soft)] bg-white px-2.5 text-xs font-semibold text-ink shadow-sm hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:text-[var(--ink-muted)]"
+                      >
+                        <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        중복/유사 반려
+                      </button>
+                    </div>
+                  ) : null}
                    <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink-muted)]">평균 신뢰도</p>
                       <p className="text-sm font-bold">{Math.round(group.avg_confidence * 100)}%</p>
@@ -528,19 +906,36 @@ export default function ReviewPage() {
                     const evidenceRequestPending = pendingAction === `${item.id}:request-more-evidence`;
                     const workFields = mailDocsWorkFields(item);
                     const assignmentFields = projectAssignmentFields(item);
+                    const isDeepLinked = deepLinkedItemId === item.id;
 
                     return (
-                      <div key={item.id} className="p-5">
+                      <div
+                        key={item.id}
+                        id={`review-item-${item.id}`}
+                        data-testid={`review-item-${item.id}`}
+                        className={`scroll-mt-24 p-5 ${isDeepLinked ? "bg-white ring-2 ring-[var(--workspace-rail-active)] ring-inset" : ""}`}
+                        onContextMenu={(event) => openContextMenu(event, item)}
+                      >
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                          <button
+                            type="button"
+                            data-testid={`review-select-${item.id}`}
+                            aria-label={`${itemTitle(item)} 선택`}
+                            aria-pressed={selectedItemIds.has(item.id)}
+                            onClick={() => toggleItemSelection(item.id)}
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white text-[var(--ink)] shadow-sm hover:bg-[var(--glass-strong)]"
+                          >
+                            {selectedItemIds.has(item.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                          </button>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="rounded-full border border-[var(--line-soft)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--ink-muted)]">
                                 {item.permission_level}
                               </span>
                               {isAgentItem ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-[#21132b] px-2.5 py-1 text-xs font-semibold text-white">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${agentBadgeClass(item, agentName)}`}>
                                   <Sparkles className="h-3 w-3" aria-hidden="true" />
-                                  {agentDisplayName(agentName, item)}
+                                  {agentBadgeLabel(item, agentName)}
                                 </span>
                               ) : (
                                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -897,6 +1292,101 @@ export default function ReviewPage() {
           </div>
         ) : null}
       </section>
+
+      {typeof document !== "undefined" && contextMenu ? createPortal((
+        <div
+          data-testid="review-context-menu"
+          className="fixed z-[110] w-60 overflow-hidden rounded-2xl border border-[var(--line-soft)] bg-white p-2 text-sm font-semibold text-[var(--ink)] shadow-2xl ring-1 ring-slate-950/5"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="border-b border-[var(--line-soft)] px-3 py-2">
+            <p className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--ink-muted)]">빠른 처리</p>
+            <p className="mt-1 truncate text-sm font-extrabold text-[var(--ink)]">{itemTitle(contextMenu.item)}</p>
+          </div>
+          <button
+            type="button"
+            data-testid="review-context-approve"
+            onClick={() => {
+              const item = contextMenu.item;
+              setContextMenu(undefined);
+              void runStatusAction(item, "approve");
+            }}
+            className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-emerald-700 transition hover:bg-emerald-50"
+          >
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-100">
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block">승인</span>
+              <span className="block text-[11px] font-semibold text-emerald-600">선택 항목을 지식 후보로 확정</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            data-testid="review-context-reject"
+            onClick={() => {
+              const item = contextMenu.item;
+              setContextMenu(undefined);
+              void runStatusAction(item, "reject");
+            }}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-rose-700 transition hover:bg-rose-50"
+          >
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-rose-100">
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block">반려</span>
+              <span className="block text-[11px] font-semibold text-rose-600">큐에서 제외하고 감사 기록 남김</span>
+            </span>
+          </button>
+        </div>
+      ), document.body) : null}
+
+      {typeof document !== "undefined" && bulkConfirm ? createPortal((
+        <div data-testid="review-bulk-backdrop" className="fixed inset-0 z-[100] flex min-h-screen w-screen items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div
+            data-testid="review-bulk-confirm"
+            className="w-full max-w-md rounded-2xl border border-white/70 bg-white p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--workspace-rail-active)] text-white">
+                {bulkConfirm.action === "approve" ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-extrabold text-[var(--ink)]">
+                  {bulkConfirm.scope === "loaded" ? "현재 로드된" : bulkConfirm.scope === "similar" ? "중복/유사" : "선택한"} 검토 항목 {bulkConfirm.itemIds.length}개를 모두{" "}
+                  {bulkConfirm.action === "approve" ? "승인" : "반려"}할까요?
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+                  {bulkProjectKey ? "선택한 프로젝트를 먼저 반영한 뒤 처리합니다." : "프로젝트가 필요한 항목은 승인 단계에서 검증됩니다."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBulkConfirm(undefined)}
+                disabled={Boolean(pendingAction)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-[var(--line-soft)] bg-white px-3 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--glass-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-bulk-action"
+                onClick={() => void executeBulkAction(bulkConfirm)}
+                disabled={Boolean(pendingAction)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-[#21132b] bg-[#21132b] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
+              >
+                {pendingAction?.startsWith("bulk:") ? "처리 중" : "확인"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ), document.body) : null}
     </div>
   );
 }

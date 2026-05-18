@@ -117,12 +117,12 @@ export default function AdminPage() {
   }, [users]);
 
   if (loading) {
-    return <div className="panel reference-panel text-sm text-muted">{text.loading}</div>;
+    return <div className="panel reference-panel utility-workspace text-sm text-muted">{text.loading}</div>;
   }
 
   if (error) {
     return (
-      <div className="reference-dashboard space-y-5">
+      <div className="reference-dashboard utility-workspace space-y-5">
         <section className="panel reference-panel">
           <div className="flex items-start gap-3">
             <span className="source-icon calendar">
@@ -146,7 +146,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="reference-dashboard space-y-5">
+    <div className="reference-dashboard utility-workspace space-y-5">
       <section className="page-heading reference-heading">
         <div>
           <p className="text-[13px] font-bold text-[var(--primary-dark)]">Workspace Admin</p>

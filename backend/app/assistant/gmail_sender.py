@@ -1,6 +1,7 @@
 import base64
 from dataclasses import dataclass
 from email.message import EmailMessage
+from email.utils import parseaddr
 
 import httpx
 from sqlalchemy import select
@@ -50,7 +51,14 @@ class GmailDraftSender:
             response = self.http_client.post(
                 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
                 headers={'Authorization': f'Bearer {access_token}'},
-                json={'raw': _raw_gmail_message(to=to, subject=subject, body=body)},
+                json={
+                    'raw': _raw_gmail_message(
+                        to=to,
+                        subject=subject,
+                        body=body,
+                        from_address=_safe_from_address(connection.workspace_name),
+                    )
+                },
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -98,8 +106,15 @@ def _latest_connected_gmail_connection(db: Session) -> IntegrationConnection | N
     )
 
 
-def _raw_gmail_message(*, to: list[str], subject: str, body: str) -> str:
+def _safe_from_address(value: str) -> str | None:
+    _, address = parseaddr(value)
+    return address or None
+
+
+def _raw_gmail_message(*, to: list[str], subject: str, body: str, from_address: str | None = None) -> str:
     message = EmailMessage()
+    if from_address:
+        message['From'] = from_address
     message['To'] = ', '.join(to)
     message['Subject'] = subject
     message.set_content(body)

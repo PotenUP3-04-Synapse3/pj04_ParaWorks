@@ -39,6 +39,35 @@ function Test-HostPortInUse {
     return $null -ne $connection
 }
 
+function Get-AvailableHostPort {
+    param(
+        [int]$PreferredPort = 5433,
+        [int]$MaxPort = 5599
+    )
+    for ($candidatePort = $PreferredPort; $candidatePort -le $MaxPort; $candidatePort++) {
+        if (-not (Test-HostPortInUse -Port $candidatePort)) {
+            return $candidatePort
+        }
+    }
+
+    throw "No available host port found between $PreferredPort and $MaxPort."
+}
+
+function Get-ComposePostgresHostPort {
+    try {
+        $ports = docker ps --filter "name=paraworks-postgres" --format "{{.Ports}}"
+        $match = [regex]::Match($ports, "127\.0\.0\.1:(\d+)->5432")
+        if ($match.Success) {
+            return [int]$match.Groups[1].Value
+        }
+    }
+    catch {
+        return 0
+    }
+
+    return 0
+}
+
 function Get-ListeningProcessIds {
     param([int[]]$Ports)
     return @(
@@ -60,13 +89,7 @@ function Stop-ProcessIds {
 
 function Test-ComposePostgresOwnsPort {
     param([int]$Port)
-    try {
-        $ports = docker ps --filter "name=paraworks-postgres" --format "{{.Ports}}"
-        return ($ports -match "127\.0\.0\.1:$Port->5432")
-    }
-    catch {
-        return $false
-    }
+    return (Get-ComposePostgresHostPort) -eq $Port
 }
 
 function Start-DockerDesktop {
@@ -203,10 +226,17 @@ Start-DockerDesktop
 Wait-DockerReady
 
 if ([string]::IsNullOrWhiteSpace($DatabaseUrl)) {
-    $fallbackPort = 5432
     if ($PostgresPort -eq 5432 -and (Test-HostPortInUse -Port $PostgresPort) -and -not (Test-ComposePostgresOwnsPort -Port $PostgresPort)) {
-        Write-Warning "127.0.0.1:5432 is already in use. Using Postgres host port $fallbackPort for ParaWorks."
-        $PostgresPort = $fallbackPort
+        $existingComposePostgresPort = Get-ComposePostgresHostPort
+        if ($existingComposePostgresPort -gt 0) {
+            Write-Warning "127.0.0.1:5432 is already in use. Reusing Postgres host port $existingComposePostgresPort for ParaWorks."
+            $PostgresPort = $existingComposePostgresPort
+        }
+        else {
+            $fallbackPort = Get-AvailableHostPort -PreferredPort 5433
+            Write-Warning "127.0.0.1:5432 is already in use. Using Postgres host port $fallbackPort for ParaWorks."
+            $PostgresPort = $fallbackPort
+        }
     }
     $DatabaseUrl = "postgresql+psycopg://paraworks:paraworks@127.0.0.1:$PostgresPort/paraworks"
 }

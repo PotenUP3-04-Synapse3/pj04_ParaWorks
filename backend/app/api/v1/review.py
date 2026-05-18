@@ -22,6 +22,7 @@ from backend.app.schemas.review import (
     ReviewItemUpdate,
 )
 from backend.app.services.audit import record_audit_log
+from backend.app.services.review_display import review_item_display_title
 
 router = APIRouter(prefix='/review', tags=['review'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -86,7 +87,7 @@ def list_review_items(
     for item in visible_items:
         agent_run = agent_runs.get(_agent_run_id(item) or -1)
         response_item = _review_item_response(item, agent_run)
-        title = item.payload.get('title', f'Review item {item.id}')
+        title = review_item_display_title(item)
         group_key = f'{item.item_type}:{title}'
 
         if group_key not in groups:

@@ -19,6 +19,7 @@ from backend.app.models import (
     Todo,
 )
 from backend.app.projects import build_project_memory
+from backend.app.services.review_display import review_item_display_title
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -30,23 +31,19 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
     source_counts = dict(
         db.execute(select(Source.source_type, func.count(Source.id)).group_by(Source.source_type)).all()
     )
-    if settings.paraworks_demo_mode:
-        pending_review_count = db.scalar(
-            select(func.count(ReviewItem.id)).where(ReviewItem.status == 'pending_review')
-        )
-    else:
-        pending_review_items = db.scalars(
-            select(ReviewItem).where(ReviewItem.status == 'pending_review')
-        ).all()
-        pending_review_count = len(filter_review_items(pending_review_items))
+    raw_pending_review_items = db.scalars(
+        select(ReviewItem).where(ReviewItem.status == 'pending_review')
+    ).all()
+    visible_pending_review_items = (
+        raw_pending_review_items
+        if settings.paraworks_demo_mode
+        else filter_review_items(raw_pending_review_items)
+    )
+    sorted_pending_review_items = _sort_review_items_for_queue(visible_pending_review_items)
+    pending_review_count = len(sorted_pending_review_items)
     recent_jobs = db.scalars(select(SyncJob).order_by(SyncJob.created_at.desc()).limit(5)).all()
 
-    pending_items = db.scalars(
-        select(ReviewItem)
-        .where(ReviewItem.status == 'pending_review')
-        .order_by(ReviewItem.id.desc())
-        .limit(3)
-    ).all()
+    pending_items = _unique_dashboard_review_items(sorted_pending_review_items)[:3]
 
     today = _today_kst()
     todo_candidates = db.scalars(
@@ -59,7 +56,8 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         [item for item in todo_candidates if _is_due_from_today(item.due_date or '', today)],
         key=lambda item: (item.due_date or '', item.id),
     )[:5]
-    today_events = _today_calendar_events(db)
+    calendar_events = _calendar_events(db)
+    today_events = _today_calendar_events(db, calendar_events)
     project_names = _project_names_by_key(db)
 
     assigned_projects = build_project_memory(db)
@@ -94,10 +92,11 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
         'pending_items': [
             {
                 'id': item.id,
-                'title': item.payload.get('title', 'Untitled'),
+                'title': review_item_display_title(item),
                 'item_type': item.item_type,
                 'category': item.payload.get('category', 'Ad-hoc'),
                 'confidence_score': item.confidence_score,
+                'review_url': f'/review?itemId={item.id}',
             }
             for item in pending_items
         ],
@@ -114,6 +113,7 @@ def get_dashboard(db: DbSession, settings: AppSettings) -> dict:
             for item in todo_items
         ],
         'today_events': today_events,
+        'calendar_events': calendar_events,
         'assigned_projects': [
             {
                 'project_key': project.project_key,
@@ -154,11 +154,52 @@ def _today_kst() -> str:
     return datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat()
 
 
-def _today_calendar_events(db: Session) -> list[dict]:
+def _sort_review_items_for_queue(items: list[ReviewItem]) -> list[ReviewItem]:
+    return sorted(items, key=_review_queue_sort_key)
+
+
+def _unique_dashboard_review_items(items: list[ReviewItem]) -> list[ReviewItem]:
+    seen_group_keys: set[str] = set()
+    unique_items: list[ReviewItem] = []
+    for item in items:
+        group_key = f'{item.item_type}:{review_item_display_title(item)}'
+        if group_key in seen_group_keys:
+            continue
+        seen_group_keys.add(group_key)
+        unique_items.append(item)
+    return unique_items
+
+
+def _review_queue_sort_key(item: ReviewItem) -> tuple[int, int]:
+    priority = {
+        'decision_record': 0,
+        'todo': 1,
+        'history_event': 2,
+        'timeline_event': 3,
+        'project_assignment': 10,
+    }.get(item.item_type, 5)
+    return (priority, -item.id)
+
+
+def _today_calendar_events(db: Session, calendar_events: list[dict] | None = None) -> list[dict]:
     kst = ZoneInfo('Asia/Seoul')
     today = datetime.now(kst).date()
     day_start = datetime.combine(today, datetime.min.time(), tzinfo=kst)
     day_end = day_start + timedelta(days=1)
+    events = calendar_events if calendar_events is not None else _calendar_events(db)
+    today_events: list[tuple[datetime, dict]] = []
+    for event in events:
+        starts_at = _parse_calendar_datetime(event.get('start'))
+        if starts_at is None:
+            continue
+        starts_at_kst = starts_at.astimezone(kst)
+        if day_start <= starts_at_kst < day_end:
+            today_events.append((starts_at_kst, event))
+    return [event for _, event in sorted(today_events, key=lambda item: (item[0], item[1]['id']))[:5]]
+
+
+def _calendar_events(db: Session) -> list[dict]:
+    kst = ZoneInfo('Asia/Seoul')
     calendar_sources = db.scalars(
         select(Source).where(Source.source_type == 'calendar')
     ).all()
@@ -169,8 +210,6 @@ def _today_calendar_events(db: Session) -> list[dict]:
         if starts_at is None:
             continue
         starts_at_kst = starts_at.astimezone(kst)
-        if not (day_start <= starts_at_kst < day_end):
-            continue
         events.append(
             (
                 starts_at_kst,
@@ -187,7 +226,7 @@ def _today_calendar_events(db: Session) -> list[dict]:
                 },
             )
         )
-    return [event for _, event in sorted(events, key=lambda item: (item[0], item[1]['id']))[:5]]
+    return [event for _, event in sorted(events, key=lambda item: (item[0], item[1]['id']))[:200]]
 
 
 def _parse_calendar_datetime(value: object) -> datetime | None:

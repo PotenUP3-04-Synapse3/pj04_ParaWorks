@@ -39,3 +39,23 @@ def test_paraworks_docker_wraps_native_commands_with_exit_code_checks() -> None:
     assert 'function Invoke-Checked' in script
     assert 'if ($LASTEXITCODE -ne 0)' in script
     assert 'Invoke-Checked -ErrorMessage "Alembic migrations failed."' in script
+
+
+def test_paraworks_docker_falls_back_to_available_postgres_port() -> None:
+    script = (REPO_ROOT / 'scripts/paraworks-docker.ps1').read_text(encoding='utf-8')
+
+    assert 'function Get-AvailableHostPort' in script
+    assert '$fallbackPort = Get-AvailableHostPort -PreferredPort 5433' in script
+    assert '$fallbackPort = 5432' not in script
+    assert 'Using Postgres host port $fallbackPort for ParaWorks.' in script
+
+
+def test_paraworks_docker_reuses_existing_compose_postgres_port() -> None:
+    script = (REPO_ROOT / 'scripts/paraworks-docker.ps1').read_text(encoding='utf-8')
+
+    existing_port_check = script.index('$existingComposePostgresPort = Get-ComposePostgresHostPort')
+    existing_port_assignment = script.index('$PostgresPort = $existingComposePostgresPort')
+    fallback_port_assignment = script.index('$fallbackPort = Get-AvailableHostPort -PreferredPort 5433')
+
+    assert 'function Get-ComposePostgresHostPort' in script
+    assert existing_port_check < existing_port_assignment < fallback_port_assignment

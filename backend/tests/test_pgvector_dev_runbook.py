@@ -27,6 +27,33 @@ def test_pgvector_dev_script_uses_postgres_and_preserves_secret_boundary() -> No
     assert 'uv run python -m backend.app.db.init_db' in script
 
 
+def test_pgvector_dev_script_falls_back_to_available_postgres_port() -> None:
+    script = (REPO_ROOT / 'scripts/start-pgvector-dev.ps1').read_text(encoding='utf-8')
+
+    assert 'function Get-AvailableHostPort' in script
+    assert '$fallbackPort = Get-AvailableHostPort -PreferredPort 5433' in script
+    assert '$fallbackPort = 5432' not in script
+
+
+def test_pgvector_dev_script_reuses_existing_compose_postgres_port() -> None:
+    script = (REPO_ROOT / 'scripts/start-pgvector-dev.ps1').read_text(encoding='utf-8')
+
+    existing_port_check = script.index('$existingComposePostgresPort = Get-ComposePostgresHostPort')
+    existing_port_assignment = script.index('$PostgresPort = $existingComposePostgresPort')
+    fallback_port_assignment = script.index('$fallbackPort = Get-AvailableHostPort -PreferredPort 5433')
+
+    assert 'function Get-ComposePostgresHostPort' in script
+    assert existing_port_check < existing_port_assignment < fallback_port_assignment
+
+
+def test_pgvector_dev_runbook_documents_available_port_fallback() -> None:
+    runbook = (REPO_ROOT / 'docs/superpowers/runbooks/pgvector-dev.md').read_text(encoding='utf-8')
+
+    assert "PARAWORKS_POSTGRES_PORT='5433'" in runbook
+    assert 'falls back to the next available host port' in runbook
+    assert 'falls back to `5432`' not in runbook
+
+
 def test_pgvector_dev_checker_documents_schema_expectations() -> None:
     checker = (REPO_ROOT / 'scripts/check_pgvector_dev.py').read_text(encoding='utf-8')
 

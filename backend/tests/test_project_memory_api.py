@@ -236,6 +236,111 @@ def test_projects_reclassify_creates_pending_review_without_tokens(
     assert item.source_snippets
 
 
+def test_calendar_project_assignment_summary_uses_event_title_not_raw_metadata(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Project(
+            project_key='demo-data',
+            name='더미 데이터',
+            summary='데모용 더미 데이터 일정',
+        )
+    )
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='calendar',
+                source_id='calendar-bike-maintenance',
+                title='자전거 정비 예약',
+                body=(
+                    '자전거 정비 예약\n\n'
+                    'Description: <p>더미 데이터: 타이어 점검, 브레이크 조정, 체인 오일링. '
+                    'Marker: DUMMY-DATA-FUTURE-14D-20</p>\n'
+                    'Location: 동네 정비소\n'
+                    'Start: 2026-05-16T14:00:00+09:00\n'
+                    'End: 2026-05-16T15:00:00+09:00'
+                ),
+                source_url='https://calendar.google.com/event?eid=bike',
+            )
+        ],
+    )
+
+    [candidate] = build_project_assignment_candidates(db_session)
+
+    assert candidate.task_summary == '자전거 정비 예약'
+    assert 'Description:' not in candidate.task_summary
+    assert '<p>' not in candidate.task_summary
+    assert 'Start:' not in candidate.task_summary
+
+
+def test_project_assignment_summary_strips_mail_and_drive_metadata(
+    db_session: Session,
+) -> None:
+    db_session.add_all(
+        [
+            Project(project_key='paraworks', name='ParaWorks', summary='ParaWorks 소개서와 데모 운영'),
+            Project(project_key='project-alpha', name='Project Alpha', summary='Project Alpha Redis work'),
+        ]
+    )
+    ingest_events(
+        db_session,
+        [
+            _event(
+                source_type='gmail',
+                source_id='gmail-paraworks-intro',
+                title='ParaWorks 회사 소개서 전달드립니다',
+                body=(
+                    'ParaWorks 회사 소개서 전달드립니다\n\n'
+                    'From: í•œìŠ¹í—Œ <hanvv3@gmail.com>\n'
+                    'Date: Fri, 15 May 2026 01:58:19 -0700\n\n'
+                    'ParaWorks 소개서를 공유합니다.'
+                ),
+                source_url='https://mail.google.com/mail/u/0/#inbox/gmail-paraworks-intro',
+            ),
+            _event(
+                source_type='drive',
+                source_id='drive-project-alpha-plan',
+                title='Project Alpha rollout plan',
+                body=(
+                    'Google Drive file changed: Project Alpha rollout plan\n'
+                    'Mime type: application/vnd.google-apps.document\n'
+                    'Owner: owner@example.com\n'
+                    'Modified: 2026-05-15T02:00:00Z'
+                ),
+                source_url='https://drive.google.com/file/d/project-alpha-plan/view',
+            ),
+            _event(
+                source_type='gmail_attachment',
+                source_id='gmail_attachment-paraworks-deck',
+                title='ParaWorks 소개서.pdf',
+                body=(
+                    'Gmail attachment: ParaWorks 소개서.pdf\n'
+                    'Parent subject: ParaWorks 회사 소개서 전달드립니다\n'
+                    'Mime type: application/pdf\n'
+                    'Attachment size: 2048'
+                ),
+                source_url='https://mail.google.com/mail/u/0/#inbox/gmail-paraworks-intro',
+            ),
+        ],
+    )
+
+    summaries = {
+        candidate.source_id: candidate.task_summary
+        for candidate in build_project_assignment_candidates(db_session)
+    }
+
+    assert summaries['gmail-paraworks-intro'] == 'ParaWorks 회사 소개서 전달드립니다'
+    assert summaries['drive-project-alpha-plan'] == 'Project Alpha rollout plan'
+    assert summaries['gmail_attachment-paraworks-deck'] == 'ParaWorks 소개서.pdf'
+    for summary in summaries.values():
+        assert 'From:' not in summary
+        assert 'Date:' not in summary
+        assert 'Mime type:' not in summary
+        assert 'Parent subject:' not in summary
+        assert 'Attachment size:' not in summary
+
+
 def test_project_define_does_not_backfill_slack_project_assignments(
     client: TestClient,
     db_session: Session,

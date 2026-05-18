@@ -209,7 +209,7 @@ function ShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-app text-ink">
       {/* 데스크탑 사이드바 */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] border-r border-line bg-sidebar px-4 py-6 lg:flex lg:flex-col">
+      <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[240px] border-r border-white/70 bg-white/85 px-5 py-7 shadow-[18px_0_48px_rgba(15,23,42,0.05)] backdrop-blur lg:flex lg:flex-col">
         {/* 로고 영역 */}
         <Link href="/dashboard" className="flex items-start gap-3">
           <span className="brand-logo" aria-hidden="true">
@@ -221,7 +221,7 @@ function ShellContent({ children }: { children: ReactNode }) {
         </Link>
 
         {/* 네비게이션 메뉴 */}
-        <nav className="mt-6 flex-1 overflow-y-auto">
+        <nav className="app-sidebar-nav mt-6 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {visibleNavGroups.map((group, groupIndex) => (
             <div key={groupIndex} className="border-t border-line py-4 first:border-t-0 first:pt-0">
               <div className="space-y-2">
@@ -242,7 +242,7 @@ function ShellContent({ children }: { children: ReactNode }) {
         </nav>
 
         {/* 하단 계정/프로필 영역 */}
-        <div className="relative mt-4 flex items-center justify-between rounded-lg bg-white p-2 shadow-sm border border-line/50">
+        <div className="relative mt-4 flex items-center justify-between rounded-2xl border border-[#e7ebf4] bg-white p-2.5 shadow-[0_18px_38px_rgba(15,23,42,0.07)]">
           <button
             type="button"
             className={`flex min-w-0 flex-1 items-center gap-2 p-1 text-left outline-none transition-opacity hover:opacity-80 ${
@@ -324,10 +324,10 @@ function ShellContent({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="lg:pl-[216px]">
+      <div className="lg:pl-[240px]">
         {/* 상단 헤더 */}
-        <header className="sticky top-0 z-20 bg-app/95 px-4 py-4 backdrop-blur md:px-6 lg:px-6">
-          <div className="flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-20 bg-[#f3f5fa]/90 px-4 py-5 backdrop-blur md:px-8 lg:px-8">
+          <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
             {/* 모바일 로고 */}
             <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
               <span className="brand-logo small" aria-hidden="true">
@@ -337,7 +337,7 @@ function ShellContent({ children }: { children: ReactNode }) {
             </Link>
 
             {/* 통합 검색창 */}
-            <form onSubmit={submitSearch} className="top-search ml-auto min-w-0 flex-1 md:max-w-[470px]">
+            <form onSubmit={submitSearch} className="top-search ml-auto min-w-0 flex-1 md:max-w-[620px]">
               <button type="submit" className="top-search-icon-button" aria-label="AI 비서에게 질문">
                 <Search className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -358,12 +358,33 @@ function ShellContent({ children }: { children: ReactNode }) {
                 <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
                 {badgeCounts.notifications ? <span>{badgeCounts.notifications}</span> : null}
               </Link>
+              <button
+                type="button"
+                className="hidden items-center gap-2 rounded-full border border-[#e0e6f0] bg-white py-1.5 pl-1.5 pr-3 shadow-[0_12px_30px_rgba(15,23,42,0.06)] md:flex"
+                onClick={() => {
+                  if (accountDisplay.isLoggedIn) {
+                    router.push("/account");
+                  } else {
+                    router.push("/login");
+                  }
+                }}
+                aria-label="사용자 프로필"
+              >
+                <span className="avatar-photo" aria-hidden="true">
+                  {accountDisplay.avatarUrl ? (
+                    <Image src={accountDisplay.avatarUrl} alt="" width={34} height={34} />
+                  ) : (
+                    <span>{accountDisplay.initial}</span>
+                  )}
+                </span>
+                <span className="max-w-[8rem] truncate text-[13px] font-extrabold text-ink">{accountDisplay.name}</span>
+              </button>
             </div>
           </div>
         </header>
 
         {/* 메인 콘텐츠 영역 */}
-        <main className="w-full px-4 pb-8 pt-1 md:px-6 lg:px-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1500px] px-4 pb-10 pt-1 md:px-8 lg:px-8">{children}</main>
       </div>
     </div>
   );
