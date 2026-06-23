@@ -1,10 +1,23 @@
 # ParaWorks Portfolio Log
 
-Last updated: 2026-05-16
+Last updated: 2026-06-23
 
 This document records ParaWorks work in a portfolio-friendly format. Keep adding
 short entries here whenever the product, architecture, UX, verification, or
 demo story changes.
+
+## 2026-06-23 README Docker startup refresh
+
+- Replaced the outdated pgvector-only README quickstart with the current
+  production-like `scripts/paraworks-docker.ps1` path.
+- Documented that Docker Compose starts PostgreSQL + pgvector, Redis, and MinIO,
+  while the helper starts FastAPI and Next.js as local dev processes after
+  schema checks, migrations, seed data, and backend health are ready.
+- Added current stop/down, port fallback, database-only, pgvector-only, and
+  SQLite smoke-mode guidance.
+- Verification: `docker compose config` succeeded with Docker config access
+  warnings from `C:\Users\user\.docker\config.json`; focused helper/runbook
+  tests passed with 12 tests.
 
 ## 2026-05-16 Docker Postgres port fallback
 

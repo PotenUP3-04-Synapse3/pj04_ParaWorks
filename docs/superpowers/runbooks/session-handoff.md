@@ -1,6 +1,24 @@
 # ParaWorks Harness Session Handoff
 
-Updated: 2026-05-16
+Updated: 2026-06-23
+
+## 2026-06-23 README Docker startup refresh
+
+- `README.md` now points new local runs at
+  `powershell -ExecutionPolicy Bypass -File .\scripts\paraworks-docker.ps1`
+  instead of the older pgvector-only helper.
+- The README distinguishes the production-like Docker-backed path from SQLite
+  smoke mode: Docker Compose provides PostgreSQL + pgvector, Redis, and MinIO;
+  FastAPI and Next.js still run as local dev processes started by the helper.
+- It documents `-Stop`, `-Down`, `-SkipApp`, explicit backend/frontend ports,
+  Postgres/Redis port overrides, and the automatic Postgres fallback starting
+  at host port `5433`.
+- Verification:
+  - `docker compose config` succeeded, with Docker config access warnings from
+    `C:\Users\user\.docker\config.json`.
+  - `uv run pytest backend/tests/test_paraworks_docker_script.py backend/tests/test_pgvector_dev_runbook.py -q`
+    passed with 12 tests after rerunning outside the sandbox because the first
+    run could not open the uv cache under `C:\Users\user\AppData\Local\uv`.
 
 ## 2026-05-16 Dashboard calendar sync and Review bulk actions
 
